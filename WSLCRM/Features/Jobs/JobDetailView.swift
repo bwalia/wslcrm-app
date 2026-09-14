@@ -30,6 +30,10 @@ private struct JobDetailContent: View {
     @State private var editMode: EditMode = .inactive
     @State private var cancellingJob = false
     @State private var cancelReason = ""
+    @State private var addingItem = false
+    @State private var bookingVisit = false
+    @State private var invoicing = false
+    @Environment(SessionStore.self) private var session
 
     var body: some View {
         content
@@ -48,6 +52,45 @@ private struct JobDetailContent: View {
                 Button("Keep job", role: .cancel) {}
             } message: {
                 Text("Scheduled and en-route visits will also be cancelled.")
+            }
+            .sheet(isPresented: $addingItem) {
+                if let detail = model.detail {
+                    AddJobItemSheet(detail: detail) { Task { await model.load() } }
+                }
+            }
+            .sheet(isPresented: $bookingVisit) {
+                if let detail = model.detail {
+                    BookVisitSheet(detail: detail) { Task { await model.load() } }
+                }
+            }
+            .sheet(isPresented: $invoicing) {
+                if let detail = model.detail {
+                    JobInvoiceSheet(detail: detail) { Task { await model.load() } }
+                }
+            }
+            .toolbar {
+                if let detail = model.detail {
+                    let policy = model.policy
+                    let canBook = detail.job.status.isOpen && session.permissions.can(.create, .fsVisits)
+                    if policy.canAddItem(in: detail) || canBook || policy.canCreateInvoice(for: detail) {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Menu {
+                                if policy.canAddItem(in: detail) {
+                                    Button("Add part or item", systemImage: "shippingbox") { addingItem = true }
+                                }
+                                if canBook {
+                                    Button("Book visit", systemImage: "calendar.badge.plus") { bookingVisit = true }
+                                }
+                                if policy.canCreateInvoice(for: detail) {
+                                    Button("Invoice job", systemImage: "doc.text") { invoicing = true }
+                                }
+                            } label: {
+                                Label("More actions", systemImage: "ellipsis.circle")
+                            }
+                            .accessibilityIdentifier("job.moreActions")
+                        }
+                    }
+                }
             }
     }
 

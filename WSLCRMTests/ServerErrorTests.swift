@@ -1,7 +1,8 @@
 import XCTest
 @testable import WSLCRM
 
-/// Error bodies captured from int-opsapi.workstation.co.uk.
+/// Error bodies: the catalogued, plain and `{error,reason}` shapes were captured from
+/// int-opsapi.workstation.co.uk; the others mirror the Lua handlers that emit them.
 final class ServerErrorTests: XCTestCase {
     func testCataloguedErrorEnvelope() throws {
         let body = try Fixture.data("error_catalogued_validation")
@@ -28,8 +29,8 @@ final class ServerErrorTests: XCTestCase {
     }
 
     func testSuccessFalseEnvelope() {
-        let error = ServerError.parse(status: 422, data: Data(#"{"success":false,"error":"Cannot complete job: 2 phases are not finished. Pass force=true to override."}"#.utf8))
-        XCTAssertEqual(error.message, "Cannot complete job: 2 phases are not finished. Pass force=true to override.")
+        let error = ServerError.parse(status: 422, data: Data(#"{"success":false,"error":"Job has 2 unfinished phase(s) and 1 open visit(s) — finish them or pass force=true"}"#.utf8))
+        XCTAssertEqual(error.message, "Job has 2 unfinished phase(s) and 1 open visit(s) — finish them or pass force=true")
         XCTAssertTrue(error.suggestsForce)
     }
 
@@ -47,6 +48,31 @@ final class ServerErrorTests: XCTestCase {
         XCTAssertEqual(error.correlationId, "abc-123")
     }
 
+    @MainActor
+    func testForcePromptMessageIsHumanised() {
+        XCTAssertEqual(JobDetailViewModel.ForcePrompt.humanize("Job has 2 unfinished phase(s) and 1 open visit(s) — finish them or pass force=true"),
+                       "Job has 2 unfinished phase(s) and 1 open visit(s).")
+        XCTAssertEqual(JobDetailViewModel.ForcePrompt.humanize("Something else — entirely"), "Something else — entirely")
+    }
+
+    func testSignoffRequiredIsNotAForcePrompt() {
+        let error = ServerError.parse(status: 422, data: Data(#"{"success":false,"error":"This phase requires customer sign-off — provide signoff_name"}"#.utf8))
+        XCTAssertFalse(error.suggestsForce, "force never bypasses sign-off")
+    }
+
+    func testRateLimitBodyRetryAfter() {
+        let apiError = APIError.from(status: 429, data: Data(#"{"error":"Too many requests. Please try again later.","retry_after":42}"#.utf8), headers: [:])
+        guard case .rateLimited(_, let retry) = apiError else { return XCTFail("Expected rateLimited") }
+        XCTAssertEqual(retry, 42)
+    }
+
+    func testSystem500ObjectEnvelopeUsesRequestIdHeader() {
+        let body = #"{"error":{"code":"SYSTEM_500","message":"Something went wrong on our side.","category":"error"}}"#
+        let error = ServerError.parse(status: 500, data: Data(body.utf8), headers: ["X-Request-ID": "req-99"])
+        XCTAssertEqual(error.code, "SYSTEM_500")
+        XCTAssertEqual(error.correlationId, "req-99")
+    }
+
     func testNonJSONBodyFallsBackToStatusText() {
         let error = ServerError.parse(status: 502, data: Data("<html>Bad gateway</html>".utf8))
         XCTAssertEqual(error.status, 502)
@@ -58,6 +84,15 @@ final class ServerErrorTests: XCTestCase {
         XCTAssertTrue({ if case .notFound = APIError.from(status: 404, data: Data(), headers: [:]) { return true }; return false }())
         XCTAssertTrue({ if case .server = APIError.from(status: 503, data: Data(), headers: [:]) { return true }; return false }())
         XCTAssertTrue({ if case .rateLimited(_, let retry) = APIError.from(status: 429, data: Data(), headers: ["Retry-After": "30"]) { return retry == 30 }; return false }())
+    }
+
+    func testUnauthorizedMessages() {
+        let credentials = APIError.from(status: 401, data: try! Fixture.data("error_catalogued_validation"), headers: [:])
+        XCTAssertEqual(credentials.localizedDescription, "Some of the details you entered don't look right. Please review and try again.")
+        let otp = APIError.from(status: 401, data: Data(#"{"error":"Invalid code. 3 attempt(s) remaining."}"#.utf8), headers: [:])
+        XCTAssertEqual(otp.localizedDescription, "Invalid code. 3 attempt(s) remaining.")
+        let token = APIError.from(status: 401, data: Data(#"{"error":"Invalid or expired token","reason":"jwt expired"}"#.utf8), headers: [:])
+        XCTAssertEqual(token.localizedDescription, "Your session has expired. Please sign in again.")
     }
 
     func testURLErrorMapping() {

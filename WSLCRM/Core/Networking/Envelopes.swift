@@ -41,7 +41,28 @@ enum Envelope {
         }
     }
 
-    /// Customers and products: `{ "data": [...], "total": N }`
+    /// Orders (`GET /api/v2/orders`): paging keys at the top level —
+    /// `{ data, total, page, per_page, total_pages, has_next, has_prev, user_role }`.
+    struct Orders<T: Decodable & Sendable>: Decodable, Sendable {
+        let data: [T]
+        let total: Int
+        let page: Int?
+        let perPage: Int?
+        let totalPages: Int?
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            data = try c.decode(LossyArray<T>.self, forKey: .data).elements
+            total = c.decodeFlexibleInt(forKey: .total) ?? data.count
+            page = c.decodeFlexibleInt(forKey: .page)
+            perPage = c.decodeFlexibleInt(forKey: .perPage)
+            totalPages = c.decodeFlexibleInt(forKey: .totalPages)
+        }
+
+        enum CodingKeys: String, CodingKey { case data, total, page, perPage, totalPages }
+    }
+
+    /// Customers and products: `{ "data": [...], "total": N }` (no `success`, no page metadata).
     struct DataTotal<T: Decodable & Sendable>: Decodable, Sendable {
         let data: [T]
         let total: Int
@@ -55,13 +76,14 @@ enum Envelope {
         enum CodingKeys: String, CodingKey { case data, total }
     }
 
-    /// Invoices: `{ "success": true, "data": ... }` with camelCase paging keys.
+    /// Invoices: `{ "success": true, "data": ..., "meta": { total, page, perPage, totalPages } }` —
+    /// camelCase paging keys, and the list is requested with `perPage` (not `per_page`).
     struct Invoices<T: Decodable & Sendable>: Decodable, Sendable {
         let success: Bool?
         let data: T
-        let pagination: Pagination?
+        let meta: Meta?
 
-        struct Pagination: Decodable, Sendable {
+        struct Meta: Decodable, Sendable {
             let total: Int?
             let page: Int?
             let perPage: Int?

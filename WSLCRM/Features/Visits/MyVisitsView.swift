@@ -60,7 +60,7 @@ final class MyVisitsViewModel {
         let requestedRange = range
         let interval = requestedRange.interval()
         do {
-            let fetched = try await api.visits(VisitListQuery(mine: true, from: interval.from, to: interval.to))
+            let fetched = try await fetchVisits(range: requestedRange, interval: interval)
             guard requestedRange == range else { return }
             state = .loaded(fetched.value.items)
             loadedRange = requestedRange
@@ -75,6 +75,47 @@ final class MyVisitsViewModel {
             } else {
                 state = .failed(apiError)
             }
+        }
+    }
+
+    /// Network first. Offline with nothing cached for this exact range, falls back to the cached
+    /// wider window (today ⊂ next 7 days) so an engineer who synced yesterday still sees today's visits.
+    private func fetchVisits(range: Range, interval: (from: Date, to: Date)) async throws -> Fetched<Page<Visit>> {
+        do {
+            let fetched = try await api.visits(VisitListQuery(mine: true, from: interval.from, to: interval.to))
+            if !fetched.isFromCache, range == .today {
+                // Warm the week so tomorrow's "Today" also works offline.
+                let week = Range.upcoming.interval()
+                let api = self.api
+                Task.detached(priority: .utility) { _ = try? await api.visits(VisitListQuery(mine: true, from: week.from, to: week.to)) }
+            }
+            return fetched
+        } catch let error as APIError where error.isConnectivityProblem && range == .today {
+            for wider in [Range.upcoming, .recent] {
+                let window = wider.interval()
+                if let cached = try? await api.visits(VisitListQuery(mine: true, from: window.from, to: window.to)) {
+                    var page = cached.value
+                    page.items = page.items.filter {
+                        guard let start = $0.scheduledStart else { return false }
+                        return start >= interval.from && start < interval.to
+                    }
+                    return Fetched(value: page, cachedAt: cached.cachedAt ?? Date.distantPast)
+                }
+            }
+            // Yesterday's "Next 7 days" was keyed on yesterday's start-of-day; try that window too.
+            let calendar = Calendar.current
+            if let yesterday = calendar.date(byAdding: .day, value: -1, to: Date()) {
+                let window = Range.upcoming.interval(now: yesterday)
+                if let cached = try? await api.visits(VisitListQuery(mine: true, from: window.from, to: window.to)) {
+                    var page = cached.value
+                    page.items = page.items.filter {
+                        guard let start = $0.scheduledStart else { return false }
+                        return start >= interval.from && start < interval.to
+                    }
+                    return Fetched(value: page, cachedAt: cached.cachedAt ?? Date.distantPast)
+                }
+            }
+            throw error
         }
     }
 

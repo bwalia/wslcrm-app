@@ -65,7 +65,7 @@ targets:
         basedOnDependencyAnalysis: false
         script: |
           if [ -z "${API_BASE_URL}" ]; then
-            echo "error: API_BASE_URL is empty for configuration ${CONFIGURATION}. For Prod builds pass WSLCRM_PROD_API_BASE_URL=https:/\$()/host (see README)."
+            echo "error: API_BASE_URL is empty for configuration ${CONFIGURATION}. Pass WSLCRM_PROD_API_BASE_URL=https://your-host to xcodebuild, or set it in Config/Prod.local.xcconfig (see README)."
             exit 1
           fi
           case "${API_BASE_URL}" in

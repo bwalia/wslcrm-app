@@ -128,7 +128,7 @@ final class SessionStore {
     func signIn(identifier: String, password: String) async throws {
         signedOutReason = nil
         let response = try await auth.login(identifier: identifier, password: password)
-        if let sessionToken = response.sessionToken, response.requires2fa ?? true {
+        if let sessionToken = response.sessionToken, response.requires2Fa ?? true {
             phase = .twoFactor(TwoFactorChallenge(sessionToken: sessionToken, email: response.email, startedAt: Date()))
         } else if let token = response.token, let refresh = response.refreshToken {
             await client.setTokens(AuthTokens(accessToken: token, refreshToken: refresh))

@@ -132,11 +132,12 @@ def request(base, path, method="GET", body=None, token=None, namespace=None, for
 
 def save(name, status, payload):
     os.makedirs(OUT, exist_ok=True)
-    path = os.path.join(OUT, name + ".json")
+    # Prefixed so they never collide with the hand-written fixtures in the flat test bundle.
+    path = os.path.join(OUT, "live_" + name + ".json")
     with open(path, "w") as fh:
         json.dump(anonymise(payload), fh, indent=2, sort_keys=True)
         fh.write("\n")
-    print(f"  {status}  {name}.json")
+    print(f"  {status}  live_{name}.json")
 
 
 def first_item(payload, key):

@@ -1,0 +1,1 @@
+{"menu":[{"key":"crm","name":"CRM","module":"crm_accounts","priority":10},{"key":"invoices","name":"Invoices","module":"invoices","priority":20}],"main_menu":[],"secondary_menu":[],"namespace":{"id":8,"uuid":"c0ffee00-1111-2222-3333-444455557777","name":"Beta Heating","slug":"beta-heating","is_owner":true},"permissions":[],"is_admin":false}

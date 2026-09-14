@@ -5,10 +5,16 @@ import SwiftUI
 struct Services: Sendable {
     let client: APIClient
     let fieldService: FieldServiceAPI
+    let crm: CRMAPI
+    let commerce: CommerceAPI
+    let invoices: InvoicesAPI
 
     init(client: APIClient, cache: ResponseCache) {
         self.client = client
         fieldService = FieldServiceAPI(client: client, cache: cache)
+        crm = CRMAPI(client: client)
+        commerce = CommerceAPI(client: client)
+        invoices = InvoicesAPI(client: client)
     }
 
     /// Used only as the environment default (previews); never talks to a real server.

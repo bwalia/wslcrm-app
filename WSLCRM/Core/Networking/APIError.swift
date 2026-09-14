@@ -184,14 +184,21 @@ enum APIError: Error, Sendable {
 }
 
 extension APIError: LocalizedError {
+    private static func isSessionMessage(_ message: String) -> Bool {
+        let lower = message.lowercased()
+        return lower.isEmpty || lower == "unauthorized" || lower.contains("token") || lower.contains("authorization")
+            || lower.contains("not signed in") || lower.contains("session expired") || lower.contains("not authenticated")
+    }
+
     var errorDescription: String? {
         switch self {
         case .offline:
             "You're offline. Check your connection and try again."
         case .transport(let e):
             e.localizedDescription
-        case .unauthorized:
-            "Your session has expired. Please sign in again."
+        case .unauthorized(let e):
+            // Login and 2FA failures are 401s too; only token problems mean the session ended.
+            Self.isSessionMessage(e.message) ? "Your session has expired. Please sign in again." : e.message
         case .forbidden(let e):
             e.requiredPermission.map { required in
                 let module = Module(rawValue: required.module)?.displayName

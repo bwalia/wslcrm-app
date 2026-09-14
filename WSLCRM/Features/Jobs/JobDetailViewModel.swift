@@ -15,6 +15,18 @@ final class JobDetailViewModel {
         let id = UUID()
         let target: Target
         let message: String
+
+        init(target: Target, message: String) {
+            self.target = target
+            self.message = Self.humanize(message)
+        }
+
+        /// "2 checklist item(s) not ticked — tick them or pass force=true" → "2 checklist item(s) not ticked."
+        static func humanize(_ serverMessage: String) -> String {
+            guard let range = serverMessage.range(of: " — "),
+                  serverMessage[range.upperBound...].lowercased().contains("force") else { return serverMessage }
+            return String(serverMessage[..<range.lowerBound]) + "."
+        }
     }
 
     /// A phase that needs a customer sign-off name before it can complete.

@@ -64,15 +64,18 @@ struct CurrentUser: Codable, Hashable, Sendable {
 struct Workspace: Codable, Hashable, Identifiable, Sendable {
     let uuid: String
     var id: String { uuid }
+    /// Numeric namespace id — needed only to scope endpoints that ignore `X-Namespace-Id`.
+    var internalId: Int?
     var name: String
     var slug: String?
     var logoUrl: String?
     var isOwner: Bool
 
-    enum CodingKeys: String, CodingKey { case uuid, name, slug, logoUrl, isOwner }
+    enum CodingKeys: String, CodingKey { case uuid, id, name, slug, logoUrl, isOwner }
 
-    init(uuid: String, name: String, slug: String? = nil, logoUrl: String? = nil, isOwner: Bool = false) {
+    init(uuid: String, internalId: Int? = nil, name: String, slug: String? = nil, logoUrl: String? = nil, isOwner: Bool = false) {
         self.uuid = uuid
+        self.internalId = internalId
         self.name = name
         self.slug = slug
         self.logoUrl = logoUrl
@@ -82,10 +85,21 @@ struct Workspace: Codable, Hashable, Identifiable, Sendable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         uuid = try c.decode(String.self, forKey: .uuid)
+        internalId = c.decodeFlexibleInt(forKey: .id)
         name = (try? c.decodeIfPresent(String.self, forKey: .name)) ?? ""
         slug = try? c.decodeIfPresent(String.self, forKey: .slug)
         logoUrl = try? c.decodeIfPresent(String.self, forKey: .logoUrl)
         isOwner = c.decodeFlexibleBool(forKey: .isOwner) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(uuid, forKey: .uuid)
+        try c.encodeIfPresent(internalId, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encodeIfPresent(slug, forKey: .slug)
+        try c.encodeIfPresent(logoUrl, forKey: .logoUrl)
+        try c.encode(isOwner, forKey: .isOwner)
     }
 }
 
@@ -105,7 +119,8 @@ struct TwoFactorChallenge: Hashable, Sendable {
 
 /// `POST /auth/login` (form-encoded) → always the 2FA branch.
 struct LoginResponse: Decodable, Sendable {
-    let requires2fa: Bool?
+    /// `requires_2fa` — `convertFromSnakeCase` capitalises the digit-led segment to `2Fa`.
+    let requires2Fa: Bool?
     let sessionToken: String?
     let email: String?
     let message: String?
