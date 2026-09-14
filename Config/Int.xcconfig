@@ -1,0 +1,8 @@
+// Integration / test environment.
+// Note: `//` starts a comment in xcconfig files, so URLs are written as https:/$()/host.
+
+API_BASE_URL = https:/$()/int-opsapi.workstation.co.uk
+API_ENVIRONMENT_NAME = Int
+
+// Optional, git-ignored overrides (e.g. DEVELOPMENT_TEAM for device builds).
+#include? "Local.xcconfig"

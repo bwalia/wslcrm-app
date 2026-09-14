@@ -1,0 +1,1 @@
+{"error":{"occurrence_uuid":"7652b611-a92b-3fc2-5a0e-b0e54427e349","category":"error","correlation_id":"bab41934-a706-fb8e-4bb5-a01af8b26c82","code":"VALIDATION_400","message":"Some of the details you entered don't look right. Please review and try again.","context":{"field":"identifier","reason":"required"},"title":"Check your details"}}

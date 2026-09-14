@@ -1,0 +1,14 @@
+// Production environment.
+//
+// The production base URL is never committed. Supply it at build time, either:
+//   xcodebuild -scheme WSLCRM-Prod WSLCRM_PROD_API_BASE_URL='https://api.example.com' ...
+// or in a git-ignored Config/Prod.local.xcconfig containing:
+//   WSLCRM_PROD_API_BASE_URL = https:/$()/api.example.com
+// The "Validate API base URL" build phase fails the build if it is missing.
+
+WSLCRM_PROD_API_BASE_URL =
+API_BASE_URL = $(WSLCRM_PROD_API_BASE_URL)
+API_ENVIRONMENT_NAME = Production
+
+#include? "Prod.local.xcconfig"
+#include? "Local.xcconfig"

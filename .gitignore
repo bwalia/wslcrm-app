@@ -1,0 +1,26 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+.build/
+*.xcresult
+
+# Local, never-committed configuration (team IDs, prod URL, test credentials)
+Config/Local.xcconfig
+Config/Prod.local.xcconfig
+.env
+.env.*
+scripts/.capture/
+
+# macOS
+.DS_Store
+
+# Tooling
+.serena/
