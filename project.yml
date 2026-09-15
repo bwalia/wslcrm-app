@@ -16,12 +16,14 @@ configs:
   Release-Int: release
   Debug-Prod: debug
   Release-Prod: release
+  Debug-Local: debug
 
 configFiles:
   Debug-Int: Config/Int.xcconfig
   Release-Int: Config/Int.xcconfig
   Debug-Prod: Config/Prod.xcconfig
   Release-Prod: Config/Prod.xcconfig
+  Debug-Local: Config/Local-API.xcconfig
 
 settings:
   base:
@@ -43,11 +45,14 @@ targets:
     platform: iOS
     sources:
       - path: WSLCRM
+        # Info plists are selected per configuration via WSLCRM_INFOPLIST_FILE.
+        excludes:
+          - "Resources/Info*.plist"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: uk.co.workstation.wslcrm
         PRODUCT_NAME: WSLCRM
-        INFOPLIST_FILE: WSLCRM/Resources/Info.plist
+        INFOPLIST_FILE: $(WSLCRM_INFOPLIST_FILE)
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: WSLCRM
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
@@ -55,6 +60,8 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_NSFaceIDUsageDescription: "Use Face ID to unlock your saved WSLCRM session."
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Your location is recorded only when you check in to or out of a site visit, as proof of attendance."
+        INFOPLIST_KEY_NSCameraUsageDescription: "Take fault and site photos for the job's quote sheet."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Attach existing photos to a job's quote sheet."
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -70,6 +77,10 @@ targets:
           fi
           case "${API_BASE_URL}" in
             https://*) ;;
+            http://127.0.0.1*|http://localhost*)
+              if [ "${API_ENVIRONMENT_NAME}" != "Local" ]; then
+                echo "error: plain-http API_BASE_URL is only allowed in the Local configuration."; exit 1
+              fi ;;
             *) echo "error: API_BASE_URL must start with https:// (got '${API_BASE_URL}')."; exit 1 ;;
           esac
 
@@ -121,6 +132,24 @@ schemes:
       config: Debug-Int
     archive:
       config: Release-Int
+  WSLCRM-Local:
+    build:
+      targets:
+        WSLCRM: all
+        WSLCRMTests: [test]
+        WSLCRMUITests: [test]
+    run:
+      config: Debug-Local
+    test:
+      config: Debug-Local
+      targets:
+        - name: WSLCRMUITests
+    profile:
+      config: Debug-Local
+    analyze:
+      config: Debug-Local
+    archive:
+      config: Debug-Local
   WSLCRM-Prod:
     build:
       targets:

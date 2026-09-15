@@ -54,10 +54,26 @@ final class AppEnvironment {
         sync.currentUserId = { [weak session] in session?.user?.uuid }
     }
 
+    /// `BGAppRefreshTask` handler: renews the signed-in engineer's offline copy of My Work.
+    func refreshMyWorkInBackground() async {
+        MyWorkRefresh.schedule()
+        guard session.phase == .signedIn, session.permissions.can(.read, .fsVisits) else { return }
+        let api = services.fieldService
+        guard let fetched = try? await api.visits(MyWorkRefresh.query(now: Date())), !fetched.isFromCache else { return }
+        await MyWorkRefresh.prefetchForOffline(fetched.value.items, api: api)
+    }
+
     static func live() -> AppEnvironment {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains(UITestSupport.launchArgument) {
             return UITestSupport.makeEnvironment()
+        }
+        if ProcessInfo.processInfo.arguments.contains("-WSLResetSession") {
+            // Test runs start signed out with no cached data or queued writes.
+            KeychainTokenStore().save(nil)
+            try? FileManager.default.removeItem(at: ResponseCache.defaultDirectory())
+            try? FileManager.default.removeItem(at: MutationQueue.defaultFileURL())
+            if let domain = Bundle.main.bundleIdentifier { UserDefaults.standard.removePersistentDomain(forName: domain) }
         }
         #endif
         return AppEnvironment(config: .fromBundle(),

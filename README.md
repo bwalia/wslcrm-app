@@ -3,8 +3,10 @@
 Native iOS client (Swift 6, SwiftUI, iOS 17+) for the OpsAPI / Workstation platform. It uses
 the same REST API as the web dashboard; the backend is not modified by this project.
 
-Modules: **field service** (jobs, phases, visits with check-in/out, service requests),
-**CRM** (accounts, contacts, deal pipeline), **customers**, **products**, **orders** and **invoices**.
+Modules: **field service** (engineer *My Work* with a guided visit, service requests with customer
+sites, assets, jobs and phases, visits, quote sheet lines, F-Gas records, photos, and invoicing
+from jobs), **CRM** (accounts, contacts, deal pipeline), **customers**, **products**, **orders**
+and **invoices**.
 
 No third-party dependencies — `URLSession`, `Codable`, Swift Concurrency, Keychain,
 CoreLocation and LocalAuthentication only.
@@ -43,6 +45,7 @@ The API base URL is a build setting (`API_BASE_URL`) written into Info.plist and
 |---|---|---|
 | `WSLCRM-Int` | `Debug-Int`, `Release-Int` | `https://int-opsapi.workstation.co.uk` (`Config/Int.xcconfig`) |
 | `WSLCRM-Prod` | `Debug-Prod`, `Release-Prod` | supplied at build time |
+| `WSLCRM-Local` | `Debug-Local` | `http://127.0.0.1:4011` (`Config/Local-API.xcconfig`) — Simulator only |
 
 The production URL is never committed. Supply it in one of two ways:
 
@@ -59,6 +62,8 @@ WSLCRM_PROD_API_BASE_URL = https:/$()/api.example.com
 ```
 
 The **Validate API base URL** build phase fails the build if the URL is missing or not `https`.
+Plain `http` is accepted only for `127.0.0.1`/`localhost` in the Local configuration, whose
+`Info-Local.plist` is the only one with `NSAllowsLocalNetworking`.
 The login screen shows an environment badge on non-production builds.
 
 ## Test credentials
@@ -67,12 +72,23 @@ The login screen shows an environment badge on non-production builds.
   exercise the offline visit flow; a service-manager or owner account exercises dispatcher actions.
 - 2FA is mandatory. The code is emailed to the account and expires **5 minutes after login**
   (resending does not extend it). If int has `TEST_OTP_CODE` configured, that code also works.
-- Never commit credentials. Put them in the git-ignored `.env` only for the fixture-capture script:
+- Credentials live in **WSL Vault** (`https://vault.workstation.co.uk`), never in git. The secret
+  is a flat KV v2 map at `kv/wslcrm/int/app` (override with `WSLCRM_VAULT_PATH`):
 
-  ```
-  WSL_IDENTIFIER=engineer@example.com
-  WSL_PASSWORD=…
-  WSL_NAMESPACE=<optional namespace uuid or slug>
+  | Key | Value |
+  |---|---|
+  | `WSL_IDENTIFIER` | int account email or username |
+  | `WSL_PASSWORD` | its password |
+  | `WSL_NAMESPACE` | optional workspace uuid or slug |
+  | `WSL_OTP` | optional, only if int has `TEST_OTP_CODE` |
+
+  Authenticate to the vault with `wslvault init` (writes `~/.wslvault/config.toml`), or set
+  `WSLVAULT_TOKEN` (or `WSLVAULT_API_KEY`) and `WSLVAULT_TENANT_ID`. Then:
+
+  ```bash
+  scripts/vault-env.py keys                                   # check access (prints key names only)
+  scripts/vault-env.py exec -- scripts/capture-fixtures.py    # secrets injected in memory
+  scripts/vault-env.py write-env                              # only if a tool needs a .env (mode 600, git-ignored)
   ```
 
 - UI tests need **no credentials**: they launch the app with `-UITestStubServer`, a Debug-only
@@ -97,15 +113,56 @@ xcodebuild … -only-testing:WSLCRMTests test
 | `TokenRefreshTests` | refresh-and-retry, single-flight refresh under concurrent 401s, rotation, offline refresh keeps session, revoked refresh ends session |
 | `MutationQueueTests` | offline replay order, persistence across relaunch, failed writes kept, same-entity blocking, per-user replay |
 | `LiveFixtureDecodingTests` | decodes every captured `live_*.json` (skipped until fixtures are captured) |
-| `PhaseCompletionUITests` | login → wrong/right 2FA code → job → phase: force prompt, checklist tick, completion |
+| `FieldServicePR610Tests` | opsapi #610 payloads: sites (`+00` timestamps), presigned photos, quote lines (labour category, days, supplier, hire), visit F-Gas fields, job site fallback, convert-to-job body (UTC), multipart upload, JPEG cap, site link follow-up `PUT` |
+| `MyWorkBucketingTests` | My Work window, shared background-refresh cache key, offline prefetch of open visits only, new-assignment detection |
+| `PhaseCompletionUITests` | login → wrong/right 2FA code → My Work → job → phase: force prompt, checklist tick, completion |
+| `FieldServiceLocalFlowUITests` | the full request → invoice happy path against a real local OPSAPI (skipped unless run by `scripts/run-local-fs-uitest.sh`) |
 
 UI test screenshots are kept in the result bundle:
 `xcrun xcresulttool export attachments --path <bundle>.xcresult --output-path screens/`.
 
+### Local OPSAPI for Simulator testing (Field Service, opsapi #610)
+
+`FieldServiceLocalFlowUITests` drives the whole flow against a real backend, using three
+non-admin users in their own workspace:
+
+1. The telecaller logs a request with a customer site.
+2. The manager converts it, assigning the engineer and a first visit, and the job becomes **Scheduled**.
+3. The engineer sees it in My Work and taps On my way, then I've arrived (GPS from the simulated
+   location). They log labour and a material, then finish.
+4. The manager ticks a phase checklist item, completes the job and creates the invoice.
+
+Run it against an isolated copy of the backend, never a shared database:
+
+```bash
+# 1. PR branch checkout, inside the git-ignored build/ (Docker Desktop can mount it)
+git clone --depth 1 -b feat/field-service-engineer-app https://github.com/bwalia/opsapi.git build/opsapi-pr610
+
+# 2. A copy of your local dev database, and a second lapis container on :4011 using the same image,
+#    network and env as the local `opsapi` container but POSTGRES_DB=opsapi-wslcrm-pr610
+docker exec opsapi-postgres-dev-db sh -c 'createdb -U "$POSTGRES_USER" opsapi-wslcrm-pr610 &&
+  pg_dump -U "$POSTGRES_USER" --no-owner <dev-db> | psql -U "$POSTGRES_USER" -q opsapi-wslcrm-pr610'
+docker run -d --name wslcrm-opsapi-pr610 --network lapis_opsapi-network -p 4011:80 --env-file <env> \
+  -v "$PWD/build/opsapi-pr610/lapis:/app" -v "$PWD/build/opsapi-pr610/projects:/app/projects" lapis-lapis lapis server
+docker exec wslcrm-opsapi-pr610 sh -c 'cd /app && lapis migrate'   # adds fs_sites, fs_job_photos, …
+
+# 3. Test tenant: owner, manager, telecaller, engineer, store + unit, customer, job type with phases.
+#    Writes build/local-fs-test.env (mode 600, git-ignored); the container must have TEST_OTP_CODE.
+scripts/local-opsapi-fs-seed.sh
+
+# 4. Run: resets that tenant's open jobs, sets the simulator location, records video
+scripts/run-local-fs-uitest.sh
+```
+
+Screenshots are in `build/local-fs-run/result.xcresult` (export them as shown above) and the video
+is saved to `build/local-fs-run/happy-path.mp4`. To run the app by hand, pick the **WSLCRM-Local**
+scheme and set `LOCAL_API_PORT` in `Config/Local.xcconfig` if the backend isn't on 4011. To clean up,
+run `docker rm -f wslcrm-opsapi-pr610`, drop the `opsapi-wslcrm-pr610` database and delete `build/opsapi-pr610`.
+
 ### Capturing fixtures from the real API
 
 ```bash
-scripts/capture-fixtures.py        # reads .env; prompts or waits for the 2FA code
+scripts/vault-env.py exec -- scripts/capture-fixtures.py   # credentials from WSL Vault; waits for the 2FA code
 ```
 
 It logs in, performs **read-only** requests, anonymises names/emails/phones/addresses and writes
@@ -126,7 +183,8 @@ WSLCRM/
     Offline/      ResponseCache, MutationQueue, SyncCenter, ConnectivityMonitor
     Location/     one-shot LocationProvider for check-in/out
   DesignSystem/   status badges, large buttons, skeletons, inline errors, paged lists
-  Features/       Auth, Workspace, Home, Jobs, Visits, ServiceRequests, CRM, Customers, Products, Orders, Invoices
+  Features/       Auth, Workspace, Home, FieldService (My Work, guided visit, sites, assets, quote sheet,
+                  photos, F-Gas), Jobs, Visits, ServiceRequests, CRM, Customers, Products, Orders, Invoices
   Support/        Debug-only UI-test stub server
 ```
 
@@ -161,12 +219,28 @@ re-fetches.
 this job" overlay. Actions a user can't perform are hidden, not left to fail. Job and
 service-request actions come from `allowed_transitions`.
 
+**Field Service (opsapi #610).**
+
+- **Navigation.** Engineers land on **My Work**; managers and telecallers land on the
+  **Field Service** hub (stats, log a request, then requests, jobs, assets, sites and invoices).
+  The area navigates by value routes only (`withAppDestinations`).
+- **My Work.** Shows one hero card for the job in front of the engineer, today at a glance, then
+  in progress / overdue / later today / coming up, over the dashboard's −3…+21-day window. It polls
+  every 30s in the foreground, announces newly assigned jobs and shows in-app notifications.
+- **Guided visit.** The flow is On my way → I've arrived (GPS) → checklist, labour / materials /
+  hire / refrigerant tiles and photos → Finish job. Pricing and approval are hidden from engineers.
+- **Assets.** OPSAPI has no assets API (see API-NOTES 45), so an asset is the store product that
+  was serviced. Asset search is product search, and history is jobs and requests filtered by `product_uuid`.
+- **Sites.** Sites are customer-scoped. The app re-sends `site_uuid` after create or convert
+  because the server drops it (API-NOTES 44).
+
 **Offline (engineers).**
 
 - `ResponseCache` stores raw responses for the user's visits, their jobs (with phases) and visit
-  details, prefetched whenever the visit list loads. Cached data goes through the same decoders
-  and is flagged "Offline copy from …".
-- En-route, check-in, check-out, no-access, checklist ticks and phase status go through
+  details. These are prefetched when My Work loads (again when the open visits change or after ten
+  minutes) and renewed by a `BGAppRefreshTask` (`MyWorkRefresh`) while the app is in the background.
+  Cached data goes through the same decoders and is flagged "Offline copy from …".
+- En-route, check-in, check-out, no-access, checklist ticks, phase status and quote-sheet lines go through
   `SyncCenter`. It sends online first and falls back to the persistent `MutationQueue` when there
   is no connection (or an earlier write to the same entity is still queued).
 - The queue replays in order on reconnect or foreground. A server-rejected write is kept as
@@ -195,3 +269,7 @@ In short:
 - The product list is not tenant-scoped; it is scoped by store, with a client-side filter as fallback.
 - Invoice PDFs are rendered on device, because the API has no PDF download.
 - Push notifications are not implemented: the backend sends via FCM only, which would add Firebase.
+  New assignments show through foreground polling and the in-app notification list.
+- Assets are store products (the backend has no assets API), and jobs can't be searched by unit serial.
+- Background refresh can't run on the Simulator. Test it on a device with Xcode's
+  `_simulateLaunchForTaskWithIdentifier`.

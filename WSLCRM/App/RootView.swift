@@ -41,11 +41,13 @@ struct RootView: View {
         .task { await session.restore() }
         .onChange(of: session.phase) { _, phase in
             if phase == .signedIn { sync.replaySoon() }
+            if phase == .signedOut { MyWorkRefresh.cancel() }
         }
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
             case .background:
                 backgroundedAt = Date()
+                if session.phase == .signedIn, session.permissions.can(.read, .fsVisits) { MyWorkRefresh.schedule() }
             case .active:
                 if let since = backgroundedAt, Date().timeIntervalSince(since) > 300 {
                     session.lockIfEnabled()

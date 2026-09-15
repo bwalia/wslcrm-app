@@ -75,7 +75,26 @@ enum ItemApprovalStatus: String, Sendable, Codable {
 }
 
 enum JobItemType: String, Sendable, CaseIterable, Codable {
-    case part, material, labour, expense, other
+    case part, material, labour, hire, expense, other
+}
+
+/// Labour categories from the engineer's paper quote sheet (Engineer/Mate × normal/overtime).
+enum LabourCategory: String, Sendable, CaseIterable, Codable, Identifiable {
+    case engineerNT = "engineer_nt"
+    case engineerOT = "engineer_ot"
+    case mateNT = "mate_nt"
+    case mateOT = "mate_ot"
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .engineerNT: "Engineer — normal time"
+        case .engineerOT: "Engineer — overtime"
+        case .mateNT: "Mate — normal time"
+        case .mateOT: "Mate — overtime"
+        }
+    }
 }
 
 // MARK: - Job
@@ -116,6 +135,12 @@ struct Job: Identifiable, Hashable, Sendable {
     var productUuid: String?
     var productName: String?
     var productSku: String?
+    var siteUuid: String?
+    var siteName: String?
+    var siteAddressLine1: String?
+    var siteCity: String?
+    var sitePostalCode: String?
+    var siteAccessNotes: String?
     var invoiceUuid: String?
     var invoiceNumber: String?
     var invoiceStatus: String?
@@ -126,11 +151,15 @@ struct Job: Identifiable, Hashable, Sendable {
     var visitCount: Int
     var nextVisitAt: Date?
 
-    /// Address + postcode on one line, for maps and display.
+    /// Address + postcode on one line, for maps and display. The job's own service address
+    /// wins; otherwise the linked customer site's address (#610).
     var fullAddress: String? {
-        let parts = [serviceAddress, servicePostcode].compactMap { $0?.trimmingCharacters(in: .whitespaces) }
+        let service = [serviceAddress, servicePostcode].compactMap { $0?.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+        if !service.isEmpty { return service.joined(separator: ", ") }
+        let site = [siteAddressLine1, siteCity, sitePostalCode].compactMap { $0?.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        return site.isEmpty ? nil : site.joined(separator: ", ")
     }
 
     var isOverdue: Bool {
@@ -147,6 +176,7 @@ extension Job: Decodable {
         case jobTypeUuid, jobTypeName, jobTypeColor, customerUuid, customerName, customerEmail, customerPhone
         case productUuid, productName, productSku, invoiceUuid, invoiceNumber, invoiceStatus, invoiceTotal
         case phaseCount, phasesDone, currentPhaseName, visitCount, nextVisitAt
+        case siteUuid, siteName, siteAddressLine1, siteCity, sitePostalCode, siteAccessNotes
     }
 
     init(from decoder: Decoder) throws {
@@ -185,6 +215,12 @@ extension Job: Decodable {
         productUuid = try? c.decodeIfPresent(String.self, forKey: .productUuid)
         productName = try? c.decodeIfPresent(String.self, forKey: .productName)
         productSku = c.decodeFlexibleString(forKey: .productSku)
+        siteUuid = try? c.decodeIfPresent(String.self, forKey: .siteUuid)
+        siteName = try? c.decodeIfPresent(String.self, forKey: .siteName)
+        siteAddressLine1 = try? c.decodeIfPresent(String.self, forKey: .siteAddressLine1)
+        siteCity = try? c.decodeIfPresent(String.self, forKey: .siteCity)
+        sitePostalCode = c.decodeFlexibleString(forKey: .sitePostalCode)
+        siteAccessNotes = try? c.decodeIfPresent(String.self, forKey: .siteAccessNotes)
         invoiceUuid = try? c.decodeIfPresent(String.self, forKey: .invoiceUuid)
         invoiceNumber = c.decodeFlexibleString(forKey: .invoiceNumber)
         invoiceStatus = try? c.decodeIfPresent(String.self, forKey: .invoiceStatus)
@@ -376,6 +412,11 @@ struct JobItem: Identifiable, Hashable, Sendable {
     var approvalStatus: ItemApprovalStatus
     var rejectionReason: String?
     var partName: String?
+    /// Quote-sheet fields (#610): labour category, days (labour / hire), supplier, free part number.
+    var labourCategory: LabourCategory?
+    var days: Decimal?
+    var supplier: String?
+    var partNumber: String?
     var visitUuid: String?
     var phaseUuid: String?
     var phaseName: String?
@@ -384,11 +425,34 @@ struct JobItem: Identifiable, Hashable, Sendable {
     var createdAt: Date?
 }
 
+extension JobItem {
+    var type: JobItemType { JobItemType(rawValue: itemType) ?? .other }
+    var isLabour: Bool { type == .labour }
+    var isMaterial: Bool { type == .part || type == .material }
+    var isHire: Bool { type == .hire }
+
+    /// One-line summary in the engineer's words — no prices.
+    var quoteSummary: String {
+        switch type {
+        case .labour:
+            let who = labourCategory?.label ?? "Labour"
+            let hours = "\(quantity.formatted())h"
+            let dayText = (days ?? 0) > 0 ? " · \(days!.formatted())d" : ""
+            return "\(who) · \(hours)\(dayText)"
+        case .hire:
+            let dayText = (days ?? 0) > 0 ? " · \(days!.formatted())d" : ""
+            return "\(description)\(dayText)\(supplier.map { " · \($0)" } ?? "")"
+        default:
+            return "\(quantity.formatted())× \(description)\(supplier.map { " · \($0)" } ?? "")"
+        }
+    }
+}
+
 extension JobItem: Decodable {
     enum CodingKeys: String, CodingKey {
         case uuid, itemType, description, quantity, unitPrice, taxRate, lineTotal, isBillable, invoiced
         case approvalStatus, rejectionReason, partName, visitUuid, phaseUuid, phaseName, createdByUuid
-        case createdByName, createdAt
+        case createdByName, createdAt, labourCategory, days, supplier, partNumber
     }
 
     init(from decoder: Decoder) throws {
@@ -405,6 +469,10 @@ extension JobItem: Decodable {
         approvalStatus = ItemApprovalStatus(api: try? c.decodeIfPresent(String.self, forKey: .approvalStatus))
         rejectionReason = try? c.decodeIfPresent(String.self, forKey: .rejectionReason)
         partName = try? c.decodeIfPresent(String.self, forKey: .partName)
+        labourCategory = (try? c.decodeIfPresent(String.self, forKey: .labourCategory)).flatMap(LabourCategory.init(rawValue:))
+        days = c.decodeFlexibleDecimal(forKey: .days)
+        supplier = try? c.decodeIfPresent(String.self, forKey: .supplier)
+        partNumber = c.decodeFlexibleString(forKey: .partNumber)
         visitUuid = try? c.decodeIfPresent(String.self, forKey: .visitUuid)
         phaseUuid = try? c.decodeIfPresent(String.self, forKey: .phaseUuid)
         phaseName = try? c.decodeIfPresent(String.self, forKey: .phaseName)
@@ -449,12 +517,29 @@ struct Visit: Identifiable, Hashable, Sendable {
     var productRef: String?
     var serviceAddress: String?
     var servicePostcode: String?
+    var siteUuid: String?
+    var siteName: String?
+    var siteAccessNotes: String?
+    // F-Gas / refrigerant log — engineer-editable on the visit.
+    var refrigerantType: String?
+    var refrigerantAddedKg: Decimal?
+    var refrigerantRecoveredKg: Decimal?
+    var leakCheckResult: String?
+    var leakCheckNotes: String?
+    var fgasCylinderRef: String?
 
     var fullAddress: String? {
         let parts = [serviceAddress, servicePostcode].compactMap { $0?.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }
+
+    var hasFGasRecord: Bool {
+        [refrigerantType, leakCheckResult, leakCheckNotes, fgasCylinderRef].contains { !($0 ?? "").isEmpty }
+            || refrigerantAddedKg != nil || refrigerantRecoveredKg != nil
+    }
+
+    var isUrgent: Bool { jobPriority == .high || jobPriority == .urgent }
 }
 
 extension Visit: Decodable {
@@ -463,7 +548,8 @@ extension Visit: Decodable {
         case instructions, workSummary, labourHours, isBillable, customerSignoffName, followUpRequired
         case followUpNotes, cancelledReason, jobUuid, jobNumber, jobTitle, jobStatus, jobPriority, phaseUuid
         case phaseName, phaseStatus, customerUuid, customerName, customerPhone, productName, productRef
-        case serviceAddress, servicePostcode
+        case serviceAddress, servicePostcode, siteUuid, siteName, siteAccessNotes
+        case refrigerantType, refrigerantAddedKg, refrigerantRecoveredKg, leakCheckResult, leakCheckNotes, fgasCylinderRef
     }
 
     init(from decoder: Decoder) throws {
@@ -499,6 +585,15 @@ extension Visit: Decodable {
         productRef = c.decodeFlexibleString(forKey: .productRef)
         serviceAddress = try? c.decodeIfPresent(String.self, forKey: .serviceAddress)
         servicePostcode = try? c.decodeIfPresent(String.self, forKey: .servicePostcode)
+        siteUuid = try? c.decodeIfPresent(String.self, forKey: .siteUuid)
+        siteName = try? c.decodeIfPresent(String.self, forKey: .siteName)
+        siteAccessNotes = try? c.decodeIfPresent(String.self, forKey: .siteAccessNotes)
+        refrigerantType = try? c.decodeIfPresent(String.self, forKey: .refrigerantType)
+        refrigerantAddedKg = c.decodeFlexibleDecimal(forKey: .refrigerantAddedKg)
+        refrigerantRecoveredKg = c.decodeFlexibleDecimal(forKey: .refrigerantRecoveredKg)
+        leakCheckResult = try? c.decodeIfPresent(String.self, forKey: .leakCheckResult)
+        leakCheckNotes = try? c.decodeIfPresent(String.self, forKey: .leakCheckNotes)
+        fgasCylinderRef = c.decodeFlexibleString(forKey: .fgasCylinderRef)
     }
 }
 
@@ -558,6 +653,8 @@ struct ServiceRequest: Identifiable, Hashable, Sendable {
     var productRef: String?
     var serviceAddress: String?
     var servicePostcode: String?
+    var siteUuid: String?
+    var siteName: String?
     var assignedManagerUuid: String?
     var assignedManagerName: String?
     var slaBreached: Bool
@@ -577,7 +674,7 @@ extension ServiceRequest: Decodable {
     enum CodingKeys: String, CodingKey {
         case uuid, requestNumber, title, description, faultCategory, reportedBy, channel, priority, status
         case customerUuid, customerName, customerEmail, customerPhone, productUuid, productName, productRef
-        case serviceAddress, servicePostcode, assignedManagerUuid, assignedManagerName, slaBreached
+        case serviceAddress, servicePostcode, siteUuid, siteName, assignedManagerUuid, assignedManagerName, slaBreached
         case slaResponseDueAt, slaResolveDueAt, resolutionNotes, createdAt
     }
 
@@ -601,6 +698,8 @@ extension ServiceRequest: Decodable {
         productRef = c.decodeFlexibleString(forKey: .productRef)
         serviceAddress = try? c.decodeIfPresent(String.self, forKey: .serviceAddress)
         servicePostcode = try? c.decodeIfPresent(String.self, forKey: .servicePostcode)
+        siteUuid = try? c.decodeIfPresent(String.self, forKey: .siteUuid)
+        siteName = try? c.decodeIfPresent(String.self, forKey: .siteName)
         assignedManagerUuid = try? c.decodeIfPresent(String.self, forKey: .assignedManagerUuid)
         assignedManagerName = try? c.decodeIfPresent(String.self, forKey: .assignedManagerName)
         slaBreached = c.decodeFlexibleBool(forKey: .slaBreached) ?? false
@@ -639,10 +738,23 @@ extension ServiceRequestDetail: Decodable {
     }
 }
 
-/// `POST /service-requests/:uuid/convert-to-job` → `{ job_uuid, job_number, request }`.
+/// `POST /service-requests/:uuid/convert-to-job` → `{ job_uuid, job_number, visit_uuid?, engineer_assigned, request }`.
+/// Since #610 an `engineer_uuid` books the first visit, moving the job draft → scheduled.
 struct ConvertToJobResult: Decodable, Sendable {
     let jobUuid: String
     let jobNumber: String?
+    let visitUuid: String?
+    let engineerAssigned: Bool
+
+    enum CodingKeys: String, CodingKey { case jobUuid, jobNumber, visitUuid, engineerAssigned }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        jobUuid = try c.decode(String.self, forKey: .jobUuid)
+        jobNumber = c.decodeFlexibleString(forKey: .jobNumber)
+        visitUuid = try? c.decodeIfPresent(String.self, forKey: .visitUuid)
+        engineerAssigned = c.decodeFlexibleBool(forKey: .engineerAssigned) ?? (visitUuid != nil)
+    }
 }
 
 // MARK: - Supporting
@@ -661,6 +773,7 @@ struct JobType: Identifiable, Hashable, Sendable, Decodable {
     var id: String { uuid }
     let name: String
     let color: String?
+    let phaseCount: Int?
 }
 
 struct FieldServiceStats: Sendable, Decodable {
@@ -685,5 +798,129 @@ struct FieldServiceStats: Sendable, Decodable {
         visitsToday = c.decodeFlexibleInt(forKey: .visitsToday) ?? 0
         engineersOnSite = c.decodeFlexibleInt(forKey: .engineersOnSite) ?? 0
         followUps = c.decodeFlexibleInt(forKey: .followUps) ?? 0
+    }
+}
+
+
+// MARK: - Sites (#610)
+
+/// A customer's saved site address (hospital ward, building…). Jobs and requests point at one.
+struct FsSite: Identifiable, Hashable, Sendable {
+    let uuid: String
+    var id: String { uuid }
+    var customerUuid: String?
+    var customerName: String?
+    var name: String
+    var addressLine1: String?
+    var addressLine2: String?
+    var city: String?
+    var county: String?
+    var postalCode: String?
+    var country: String?
+    var contactName: String?
+    var contactPhone: String?
+    var accessNotes: String?
+    /// One-line summary computed by the server for pickers.
+    var address: String?
+    var jobCount: Int
+
+    var displayAddress: String? {
+        if let address, !address.isEmpty { return address }
+        let parts = [addressLine1, city, postalCode].compactMap { $0?.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+    }
+}
+
+extension FsSite: Decodable {
+    enum CodingKeys: String, CodingKey {
+        case uuid, customerUuid, customerName, name, addressLine1, addressLine2, city, county, postalCode, country
+        case contactName, contactPhone, accessNotes, address, jobCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        uuid = try c.decode(String.self, forKey: .uuid)
+        customerUuid = try? c.decodeIfPresent(String.self, forKey: .customerUuid)
+        customerName = try? c.decodeIfPresent(String.self, forKey: .customerName)
+        name = (try? c.decodeIfPresent(String.self, forKey: .name)) ?? ""
+        addressLine1 = try? c.decodeIfPresent(String.self, forKey: .addressLine1)
+        addressLine2 = try? c.decodeIfPresent(String.self, forKey: .addressLine2)
+        city = try? c.decodeIfPresent(String.self, forKey: .city)
+        county = try? c.decodeIfPresent(String.self, forKey: .county)
+        postalCode = c.decodeFlexibleString(forKey: .postalCode)
+        country = try? c.decodeIfPresent(String.self, forKey: .country)
+        contactName = try? c.decodeIfPresent(String.self, forKey: .contactName)
+        contactPhone = c.decodeFlexibleString(forKey: .contactPhone)
+        accessNotes = try? c.decodeIfPresent(String.self, forKey: .accessNotes)
+        address = try? c.decodeIfPresent(String.self, forKey: .address)
+        jobCount = c.decodeFlexibleInt(forKey: .jobCount) ?? 0
+    }
+}
+
+// MARK: - Photos (#610)
+
+/// A job photo; `url` is a time-limited presigned MinIO URL (re-fetch the list when it expires).
+struct FsJobPhoto: Identifiable, Hashable, Sendable {
+    let uuid: String
+    var id: String { uuid }
+    var url: URL?
+    var filename: String?
+    var contentType: String?
+    var caption: String?
+    var visitUuid: String?
+    var createdAt: Date?
+}
+
+extension FsJobPhoto: Decodable {
+    enum CodingKeys: String, CodingKey { case uuid, url, filename, contentType, caption, visitUuid, createdAt }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        uuid = try c.decode(String.self, forKey: .uuid)
+        url = (try? c.decodeIfPresent(String.self, forKey: .url)).flatMap(URL.init(string:))
+        filename = try? c.decodeIfPresent(String.self, forKey: .filename)
+        contentType = try? c.decodeIfPresent(String.self, forKey: .contentType)
+        caption = try? c.decodeIfPresent(String.self, forKey: .caption)
+        visitUuid = try? c.decodeIfPresent(String.self, forKey: .visitUuid)
+        createdAt = c.decodeDate(forKey: .createdAt)
+    }
+}
+
+// MARK: - In-app notifications (#610: "New job assigned")
+
+struct AppNotification: Identifiable, Hashable, Sendable {
+    let id: String
+    var type: String?
+    var title: String
+    var message: String?
+    var isRead: Bool
+    var createdAt: Date?
+}
+
+extension AppNotification: Decodable {
+    enum CodingKeys: String, CodingKey { case uuid, id, type, title, message, body, isRead, createdAt }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.decodeFlexibleString(forKey: .uuid) ?? c.decodeFlexibleString(forKey: .id) ?? UUID().uuidString
+        type = try? c.decodeIfPresent(String.self, forKey: .type)
+        title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? "Notification"
+        message = (try? c.decodeIfPresent(String.self, forKey: .message)) ?? (try? c.decodeIfPresent(String.self, forKey: .body))
+        isRead = c.decodeFlexibleBool(forKey: .isRead) ?? false
+        createdAt = c.decodeDate(forKey: .createdAt)
+    }
+}
+
+/// `GET /api/v2/notifications` → `{ notifications: [...], unread_count }` (no envelope).
+struct NotificationsResponse: Decodable, Sendable {
+    let notifications: [AppNotification]
+    let unreadCount: Int
+
+    enum CodingKeys: String, CodingKey { case notifications, unreadCount }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        notifications = c.decodeLossyArray(AppNotification.self, forKey: .notifications)
+        unreadCount = c.decodeFlexibleInt(forKey: .unreadCount) ?? notifications.filter { !$0.isRead }.count
     }
 }

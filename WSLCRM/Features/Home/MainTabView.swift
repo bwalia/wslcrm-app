@@ -4,28 +4,23 @@ struct MainTabView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SyncCenter.self) private var sync
     @Environment(ConnectivityMonitor.self) private var connectivity
-    @State private var selection: Tab = .visits
+    @State private var selection: Tab = .myWork
     @State private var showingPendingChanges = false
 
-    enum Tab: Hashable { case visits, jobs, requests, crm, more }
+    enum Tab: Hashable { case myWork, fieldService, more }
 
     var body: some View {
         let permissions = session.permissions
         TabView(selection: $selection) {
-            if permissions.shows(.visits) {
-                NavigationStack { MyVisitsView().withAppDestinations() }
-                    .tabItem { Label("My Visits", systemImage: "calendar") }
-                    .tag(Tab.visits)
+            if showsMyWork(permissions) {
+                NavigationStack { MyWorkView().withAppDestinations() }
+                    .tabItem { Label("My Work", systemImage: "person.badge.clock") }
+                    .tag(Tab.myWork)
             }
-            if permissions.shows(.jobs) {
-                NavigationStack { JobsListView().withAppDestinations() }
-                    .tabItem { Label("Jobs", systemImage: "wrench.and.screwdriver") }
-                    .tag(Tab.jobs)
-            }
-            if permissions.shows(.serviceRequests) {
-                NavigationStack { ServiceRequestsListView().withAppDestinations() }
-                    .tabItem { Label("Requests", systemImage: "exclamationmark.bubble") }
-                    .tag(Tab.requests)
+            if showsFieldService(permissions) {
+                NavigationStack { FieldServiceHubView().withAppDestinations() }
+                    .tabItem { Label("Field Service", systemImage: "wrench.and.screwdriver") }
+                    .tag(Tab.fieldService)
             }
             NavigationStack { MoreView().withAppDestinations() }
                 .tabItem { Label("More", systemImage: "ellipsis.circle") }
@@ -44,13 +39,23 @@ struct MainTabView: View {
         .sheet(isPresented: $showingPendingChanges) {
             NavigationStack { PendingChangesView() }
         }
-        .onAppear { selection = firstAvailableTab(permissions) }
+        .onAppear { selection = initialTab(permissions) }
     }
 
-    private func firstAvailableTab(_ permissions: PermissionSet) -> Tab {
-        if permissions.shows(.visits) { return .visits }
-        if permissions.shows(.jobs) { return .jobs }
-        if permissions.shows(.serviceRequests) { return .requests }
+    private func showsMyWork(_ permissions: PermissionSet) -> Bool {
+        permissions.shows(.visits) || permissions.can(.read, .fsVisits)
+    }
+
+    private func showsFieldService(_ permissions: PermissionSet) -> Bool {
+        permissions.shows(.jobs) || permissions.shows(.serviceRequests) || permissions.can(.read, .fsServiceRequests)
+    }
+
+    /// Engineers land on My Work (as in opsapi #610); managers and telecallers on Field Service.
+    private func initialTab(_ permissions: PermissionSet) -> Tab {
+        let engineer = session.policy.isEngineerRole
+        if engineer, showsMyWork(permissions) { return .myWork }
+        if showsFieldService(permissions) { return .fieldService }
+        if showsMyWork(permissions) { return .myWork }
         return .more
     }
 }
@@ -113,6 +118,7 @@ struct MoreView: View {
             Section {
                 Button("Sign out", role: .destructive) { confirmingSignOut = true }
                     .frame(minHeight: 44)
+                    .accessibilityIdentifier("more.signOut")
             }
         }
         .navigationTitle("More")

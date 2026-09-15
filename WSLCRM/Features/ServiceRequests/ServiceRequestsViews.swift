@@ -81,10 +81,8 @@ struct ServiceRequestsListView: View {
             }
         }
         .sheet(isPresented: $creating) {
-            NewServiceRequestSheet { created in
-                creating = false
+            ServiceRequestFormSheet(request: nil) { _ in
                 Task { await model?.load() }
-                _ = created
             }
         }
         .onAppear {
@@ -99,6 +97,7 @@ struct ServiceRequestsListView: View {
                 NavigationLink(value: ServiceRequestRoute(uuid: request.uuid)) {
                     ServiceRequestRow(request: request)
                 }
+                .accessibilityIdentifier("requests.row.\(request.title)")
                 .task { await model.loadMoreIfNeeded(request) }
             }
             if model.isLoadingMore { HStack { Spacer(); ProgressView(); Spacer() } }
@@ -226,18 +225,22 @@ final class ServiceRequestDetailViewModel {
         }
     }
 
-    func convert(_ body: ConvertToJobBody) async -> Bool {
+    func convert(_ body: ConvertToJobBody) async -> ConvertToJobResult? {
         busy = true
         defer { busy = false }
         do {
-            let result = try await api.convertToJob(uuid, body: body)
+            let result = try await api.convertToJob(uuid, body: body, siteUuid: state.value?.request.siteUuid)
             convertedJobUuid = result.jobUuid
             await load()
-            return true
+            return result
         } catch {
             actionError = error.asAPIError
-            return false
+            return nil
         }
+    }
+
+    func replace(_ detail: ServiceRequestDetail) {
+        state = .loaded(detail)
     }
 }
 
@@ -269,6 +272,7 @@ private struct ServiceRequestDetailContent: View {
     @State private var resolutionNotes = ""
     @State private var showingConvert = false
     @State private var showingAssign = false
+    @State private var editing = false
     @State private var openJob: JobRoute?
 
     var body: some View {
@@ -303,7 +307,20 @@ private struct ServiceRequestDetailContent: View {
         }
         .sheet(isPresented: $showingConvert) {
             if let detail = model.state.value {
-                ConvertToJobSheet(request: detail.request) { body in await model.convert(body) }
+                AssignConvertToJobSheet(request: detail.request) { body in await model.convert(body) }
+            }
+        }
+        .sheet(isPresented: $editing) {
+            if let detail = model.state.value {
+                ServiceRequestFormSheet(request: detail.request) { updated in model.replace(updated) }
+            }
+        }
+        .toolbar {
+            if session.policy.canUpdateServiceRequests, model.state.value != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Edit") { editing = true }
+                        .accessibilityIdentifier("request.edit")
+                }
             }
         }
         .sheet(isPresented: $showingAssign) {
@@ -340,41 +357,46 @@ private struct ServiceRequestDetailContent: View {
                 .padding(.vertical, 4)
             }
 
-            if policy.canUpdateServiceRequests, !detail.allowedTransitions.isEmpty {
-                Section("Actions") {
-                    ForEach(detail.allowedTransitions, id: \.self) { status in
+            if (policy.canConvertServiceRequests && request.status.canConvertToJob)
+                || (policy.canUpdateServiceRequests && !detail.allowedTransitions.isEmpty) {
+                Section {
+                    if policy.canConvertServiceRequests, request.status.canConvertToJob {
                         Button {
-                            if status == .resolved || status == .closed {
-                                pendingStatus = status
-                            } else {
-                                Task { await model.setStatus(status, resolutionNotes: nil) }
-                            }
+                            showingConvert = true
                         } label: {
-                            Label(status.actionTitle, systemImage: status.systemImage)
+                            Label(detail.jobs.isEmpty ? "Convert to job" : "Create another job", systemImage: "arrow.right.doc.on.clipboard")
                         }
-                        .buttonStyle(.large(status.tone == .neutral ? .info : status.tone, prominent: false))
+                        .buttonStyle(.large(.progress))
                         .disabled(model.busy)
                         .listRowSeparator(.hidden)
+                        .accessibilityIdentifier("request.convert")
                     }
+                    if policy.canUpdateServiceRequests, !detail.allowedTransitions.isEmpty {
+                        Menu {
+                            ForEach(detail.allowedTransitions, id: \.self) { status in
+                                Button(status.actionTitle, systemImage: status.systemImage) {
+                                    if status == .resolved || status == .closed {
+                                        pendingStatus = status
+                                    } else {
+                                        Task { await model.setStatus(status, resolutionNotes: nil) }
+                                    }
+                                }
+                            }
+                        } label: {
+                            Label("Change status", systemImage: "arrow.triangle.swap")
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        }
+                        .disabled(model.busy)
+                        .accessibilityIdentifier("request.changeStatus")
+                    }
+                } header: {
+                    Text("Actions")
                 }
             }
 
-            if policy.canConvertServiceRequests, request.status.canConvertToJob {
-                Section {
-                    Button {
-                        showingConvert = true
-                    } label: {
-                        Label("Convert to job", systemImage: "arrow.right.doc.on.clipboard")
-                    }
-                    .buttonStyle(.large(.progress))
-                    .disabled(model.busy)
-                    .listRowSeparator(.hidden)
-                    .accessibilityIdentifier("request.convert")
-                }
-            }
-
-            Section("Customer") {
+            Section("Customer & site") {
                 DetailRow(label: "Name", value: request.customerName, systemImage: "person")
+                DetailRow(label: "Site", value: request.siteName, systemImage: "building.2")
                 if let phone = request.customerPhone {
                     PhoneLinkRow(name: request.customerName, phone: phone)
                 }
@@ -385,7 +407,8 @@ private struct ServiceRequestDetailContent: View {
                 DetailRow(label: "Reported by", value: request.reportedBy)
                 DetailRow(label: "Channel", value: Formatters.humanize(request.channel))
                 DetailRow(label: "Category", value: request.faultCategory)
-                DetailRow(label: "Product", value: [request.productName, request.productRef].compactMap { $0 }.joined(separator: " · "))
+                DetailRow(label: "Unit", value: [request.productName, request.productRef].compactMap { $0 }.joined(separator: " · "),
+                          systemImage: "wrench.adjustable")
             }
 
             Section("Handling") {
@@ -410,6 +433,7 @@ private struct ServiceRequestDetailContent: View {
                             HStack {
                                 VStack(alignment: .leading) {
                                     Text(job.jobNumber ?? "Job").font(.headline)
+                                        .accessibilityIdentifier("request.job")
                                     Text(job.title ?? "").font(.subheadline).foregroundStyle(.secondary)
                                 }
                                 Spacer()
@@ -425,74 +449,6 @@ private struct ServiceRequestDetailContent: View {
 }
 
 // MARK: - Sheets
-
-struct ConvertToJobSheet: View {
-    let request: ServiceRequest
-    let convert: (ConvertToJobBody) async -> Bool
-    @Environment(\.services) private var services
-    @Environment(\.dismiss) private var dismiss
-    @State private var title: String
-    @State private var priority: JobPriority
-    @State private var jobTypes: [JobType] = []
-    @State private var jobTypeUuid: String?
-    @State private var hasDueDate = false
-    @State private var dueDate = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
-    @State private var submitting = false
-
-    init(request: ServiceRequest, convert: @escaping (ConvertToJobBody) async -> Bool) {
-        self.request = request
-        self.convert = convert
-        _title = State(initialValue: request.title)
-        _priority = State(initialValue: request.priority == .unknown ? .normal : request.priority)
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField("Title", text: $title)
-                    Picker("Priority", selection: $priority) {
-                        ForEach([JobPriority.low, .normal, .high, .urgent], id: \.self) { Text($0.label).tag($0) }
-                    }
-                    Picker("Job type", selection: $jobTypeUuid) {
-                        Text("None").tag(String?.none)
-                        ForEach(jobTypes) { Text($0.name).tag(Optional($0.uuid)) }
-                    }
-                    Toggle("Due date", isOn: $hasDueDate)
-                    if hasDueDate {
-                        DatePicker("Due", selection: $dueDate, displayedComponents: .date)
-                    }
-                } header: {
-                    Text("Job")
-                } footer: {
-                    Text("The job type adds its standard phases. Customer, product and address are copied from the request.")
-                }
-                Section {
-                    Button {
-                        submitting = true
-                        Task {
-                            let body = ConvertToJobBody(title: title, priority: priority.rawValue, jobTypeUuid: jobTypeUuid,
-                                                        dueDate: hasDueDate ? CalendarDay(date: dueDate) : nil)
-                            let ok = await convert(body)
-                            submitting = false
-                            if ok { dismiss() }
-                        }
-                    } label: {
-                        if submitting { ProgressView().tint(.white) } else { Text("Create job") }
-                    }
-                    .buttonStyle(.large(.progress))
-                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || submitting)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
-                }
-            }
-            .navigationTitle("Convert to job")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
-            .task { jobTypes = (try? await services.fieldService.jobTypes()) ?? [] }
-        }
-    }
-}
 
 struct EngineerPickerSheet: View {
     let title: String
@@ -545,83 +501,3 @@ struct EngineerPickerSheet: View {
     }
 }
 
-struct NewServiceRequestSheet: View {
-    let onCreated: (ServiceRequestDetail) -> Void
-    @Environment(\.services) private var services
-    @Environment(\.dismiss) private var dismiss
-    @State private var title = ""
-    @State private var description = ""
-    @State private var reportedBy = ""
-    @State private var channel = "phone"
-    @State private var priority: JobPriority = .normal
-    @State private var address = ""
-    @State private var postcode = ""
-    @State private var submitting = false
-    @State private var error: APIError?
-
-    private let channels = ["phone", "email", "app", "portal", "web", "other"]
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Problem") {
-                    TextField("Title", text: $title)
-                        .accessibilityIdentifier("newRequest.title")
-                    TextField("Description", text: $description, axis: .vertical)
-                        .lineLimit(3...8)
-                    Picker("Priority", selection: $priority) {
-                        ForEach([JobPriority.low, .normal, .high, .urgent], id: \.self) { Text($0.label).tag($0) }
-                    }
-                }
-                Section("Contact") {
-                    TextField("Reported by", text: $reportedBy)
-                        .textContentType(.name)
-                    Picker("Channel", selection: $channel) {
-                        ForEach(channels, id: \.self) { Text(Formatters.humanize($0)).tag($0) }
-                    }
-                }
-                Section("Site") {
-                    TextField("Address", text: $address, axis: .vertical)
-                        .textContentType(.fullStreetAddress)
-                    TextField("Postcode", text: $postcode)
-                        .textContentType(.postalCode)
-                        .textInputAutocapitalization(.characters)
-                }
-                if let error {
-                    Section { InlineErrorRow(error: error) }
-                }
-            }
-            .navigationTitle("New request")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") { submit() }
-                        .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || submitting)
-                }
-            }
-        }
-    }
-
-    private func submit() {
-        submitting = true
-        error = nil
-        Task {
-            defer { submitting = false }
-            func clean(_ s: String) -> String? {
-                let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
-                return t.isEmpty ? nil : t
-            }
-            do {
-                let created = try await services.fieldService.createServiceRequest(CreateServiceRequestBody(
-                    title: title.trimmingCharacters(in: .whitespaces), description: clean(description), faultCategory: nil,
-                    channel: channel, reportedBy: clean(reportedBy), priority: priority.rawValue,
-                    serviceAddress: clean(address), servicePostcode: clean(postcode)))
-                onCreated(created)
-                dismiss()
-            } catch {
-                self.error = error.asAPIError
-            }
-        }
-    }
-}

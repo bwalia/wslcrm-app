@@ -6,6 +6,12 @@
 	<string>$(API_BASE_URL)</string>
 	<key>WSLAPIEnvironmentName</key>
 	<string>$(API_ENVIRONMENT_NAME)</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- Local configuration only: plain http to the OPSAPI Docker container on 127.0.0.1. -->
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>uk.co.workstation.wslcrm.mywork-refresh</string>
