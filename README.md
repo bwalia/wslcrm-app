@@ -67,12 +67,23 @@ The login screen shows an environment badge on non-production builds.
   exercise the offline visit flow; a service-manager or owner account exercises dispatcher actions.
 - 2FA is mandatory. The code is emailed to the account and expires **5 minutes after login**
   (resending does not extend it). If int has `TEST_OTP_CODE` configured, that code also works.
-- Never commit credentials. Put them in the git-ignored `.env` only for the fixture-capture script:
+- Credentials live in **WSL Vault** (`https://vault.workstation.co.uk`), never in git. The secret
+  is a flat KV v2 map at `kv/wslcrm/int/app` (override with `WSLCRM_VAULT_PATH`):
 
-  ```
-  WSL_IDENTIFIER=engineer@example.com
-  WSL_PASSWORD=…
-  WSL_NAMESPACE=<optional namespace uuid or slug>
+  | Key | Value |
+  |---|---|
+  | `WSL_IDENTIFIER` | int account email or username |
+  | `WSL_PASSWORD` | its password |
+  | `WSL_NAMESPACE` | optional workspace uuid or slug |
+  | `WSL_OTP` | optional, only if int has `TEST_OTP_CODE` |
+
+  Authenticate to the vault with `wslvault init` (writes `~/.wslvault/config.toml`), or set
+  `WSLVAULT_TOKEN` (or `WSLVAULT_API_KEY`) and `WSLVAULT_TENANT_ID`. Then:
+
+  ```bash
+  scripts/vault-env.py keys                                   # check access (prints key names only)
+  scripts/vault-env.py exec -- scripts/capture-fixtures.py    # secrets injected in memory
+  scripts/vault-env.py write-env                              # only if a tool needs a .env (mode 600, git-ignored)
   ```
 
 - UI tests need **no credentials**: they launch the app with `-UITestStubServer`, a Debug-only
@@ -105,7 +116,7 @@ UI test screenshots are kept in the result bundle:
 ### Capturing fixtures from the real API
 
 ```bash
-scripts/capture-fixtures.py        # reads .env; prompts or waits for the 2FA code
+scripts/vault-env.py exec -- scripts/capture-fixtures.py   # credentials from WSL Vault; waits for the 2FA code
 ```
 
 It logs in, performs **read-only** requests, anonymises names/emails/phones/addresses and writes

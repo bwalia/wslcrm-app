@@ -8,8 +8,9 @@ logout of its own session, only GET requests are made — nothing is created or 
 Usage:
     scripts/capture-fixtures.py [--base https://int-opsapi.workstation.co.uk]
 
-Credentials come from WSL_IDENTIFIER / WSL_PASSWORD (environment or a git-ignored
-.env file in the repo root), else interactive prompts. They are never written to disk.
+Credentials come from WSL Vault — run it as `scripts/vault-env.py exec -- scripts/capture-fixtures.py`
+so WSL_IDENTIFIER / WSL_PASSWORD are injected without touching disk. A git-ignored .env
+(e.g. from `scripts/vault-env.py write-env`) or interactive prompts also work. They are never written to disk.
 The emailed 2FA code is read from WSL_OTP, else from the file scripts/.capture/otp
 (polled for up to 5 minutes, then deleted), else an interactive prompt. Set
 WSL_NAMESPACE to a namespace uuid/slug to skip the namespace prompt. Personal data (names, emails, phones, addresses, notes) is
@@ -161,7 +162,13 @@ def load_dotenv():
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 key, value = line.split("=", 1)
-                os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+                value = value.strip()
+                if value.startswith('"'):
+                    try:
+                        value = json.loads(value)  # scripts/vault-env.py write-env quotes as JSON
+                    except ValueError:
+                        value = value.strip('"')
+                os.environ.setdefault(key.strip(), value.strip("'") if value.startswith("'") else value)
 
 
 def read_otp(email):
