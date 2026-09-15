@@ -117,6 +117,11 @@ struct FieldServicePolicy: Sendable {
     let userUuid: String
 
     var isDispatcherForJobs: Bool { permissions.can(.update, .fsJobs) }
+
+    /// Works visits but doesn't manage jobs or requests — the engineer experience.
+    var isEngineerRole: Bool {
+        permissions.can(.read, .fsVisits) && !permissions.can(.update, .fsJobs) && !permissions.can(.create, .fsServiceRequests)
+    }
     var isDispatcherForVisits: Bool { permissions.can(.update, .fsVisits) }
 
     func isEngineer(on detail: JobDetail) -> Bool {

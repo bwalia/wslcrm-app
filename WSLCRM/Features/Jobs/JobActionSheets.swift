@@ -210,6 +210,7 @@ struct JobInvoiceSheet: View {
                             Label("Draft invoice \(created.invoiceNumber ?? "") created", systemImage: "checkmark.seal.fill")
                                 .foregroundStyle(Tone.success.color)
                             NavigationLink("Open invoice") { InvoiceDetailView(invoiceUuid: created.invoiceUuid) }
+                                .accessibilityIdentifier("jobInvoice.open")
                         }
                     }
                     Section("Billable") {
@@ -246,6 +247,7 @@ struct JobInvoiceSheet: View {
                             }
                             .buttonStyle(.large(.success))
                             .disabled(!preview.canInvoice || creating)
+                            .accessibilityIdentifier("jobInvoice.create")
                             .listRowBackground(Color.clear)
                             .listRowInsets(EdgeInsets())
                         } footer: {

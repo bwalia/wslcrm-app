@@ -8,6 +8,7 @@
 
 WSLCRM_PROD_API_BASE_URL =
 API_BASE_URL = $(WSLCRM_PROD_API_BASE_URL)
+WSLCRM_INFOPLIST_FILE = WSLCRM/Resources/Info.plist
 API_ENVIRONMENT_NAME = Production
 
 #include? "Prod.local.xcconfig"

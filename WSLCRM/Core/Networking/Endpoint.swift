@@ -73,6 +73,40 @@ struct Endpoint: Sendable {
         }.joined(separator: "&")
     }
 
+    /// A file part for `multipart/form-data` uploads.
+    struct FilePart: Sendable {
+        let fieldName: String
+        let filename: String
+        let mimeType: String
+        let data: Data
+    }
+
+    /// `multipart/form-data` body (photo uploads). Text fields are sent before the file.
+    func withMultipart(fields: [(String, String)], file: FilePart, boundary: String = "WSLCRM-\(UUID().uuidString)") -> Endpoint {
+        var copy = self
+        copy.contentType = "multipart/form-data; boundary=\(boundary)"
+        copy.body = Self.multipartBody(fields: fields, file: file, boundary: boundary)
+        copy.timeout = 120
+        return copy
+    }
+
+    static func multipartBody(fields: [(String, String)], file: FilePart, boundary: String) -> Data {
+        var body = Data()
+        func append(_ string: String) { body.append(Data(string.utf8)) }
+        for (name, value) in fields {
+            append("--\(boundary)\r\n")
+            append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
+            append("\(value)\r\n")
+        }
+        let safeName = file.filename.replacingOccurrences(of: "\"", with: "")
+        append("--\(boundary)\r\n")
+        append("Content-Disposition: form-data; name=\"\(file.fieldName)\"; filename=\"\(safeName)\"\r\n")
+        append("Content-Type: \(file.mimeType)\r\n\r\n")
+        body.append(file.data)
+        append("\r\n--\(boundary)--\r\n")
+        return body
+    }
+
     func withRawBody(_ data: Data?) -> Endpoint {
         var copy = self
         copy.body = data

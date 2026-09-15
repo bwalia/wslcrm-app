@@ -39,10 +39,14 @@ final class PhaseCompletionUITests: XCTestCase {
         add(attachment)
     }
 
+    /// Jobs live in the Field Service area (engineers land on My Work).
     private func openJobsTab() {
-        let jobsTab = app.tabBars.buttons["Jobs"].firstMatch
-        XCTAssertTrue(jobsTab.waitForExistence(timeout: 10))
-        jobsTab.tap()
+        let fieldService = app.tabBars.buttons["Field Service"].firstMatch
+        XCTAssertTrue(fieldService.waitForExistence(timeout: 10))
+        fieldService.tap()
+        let jobs = app.buttons["hub.jobs"].firstMatch
+        XCTAssertTrue(jobs.waitForExistence(timeout: 10))
+        jobs.tap()
     }
 
     func testInvalidPasswordShowsCataloguedError() {
@@ -60,9 +64,9 @@ final class PhaseCompletionUITests: XCTestCase {
         snapshot("02-two-factor-error")
         enterCode("123456")
 
-        // Single workspace → straight into the app (My Visits first), then the Jobs tab.
-        XCTAssertTrue(app.buttons["visits.row.JOB-0042"].waitForExistence(timeout: 10))
-        snapshot("03-my-visits")
+        // Single workspace → an engineer lands on My Work with the current job as the hero.
+        XCTAssertTrue(app.buttons["mywork.hero"].waitForExistence(timeout: 10))
+        snapshot("03-my-work")
         openJobsTab()
         let jobRow = app.buttons["jobs.row.JOB-0042"]
         XCTAssertTrue(jobRow.waitForExistence(timeout: 10))

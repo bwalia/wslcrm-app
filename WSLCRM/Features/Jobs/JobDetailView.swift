@@ -33,7 +33,9 @@ private struct JobDetailContent: View {
     @State private var addingItem = false
     @State private var bookingVisit = false
     @State private var invoicing = false
+    @State private var photos: JobPhotosModel?
     @Environment(SessionStore.self) private var session
+    @Environment(\.services) private var services
 
     var body: some View {
         content
@@ -145,8 +147,16 @@ private struct JobDetailContent: View {
             if !detail.visits.isEmpty {
                 Section("Visits") {
                     ForEach(detail.visits.sorted { ($0.scheduledStart ?? .distantPast) < ($1.scheduledStart ?? .distantPast) }) { visit in
-                        NavigationLink(value: VisitRoute(uuid: visit.uuid)) {
-                            VisitSummaryRow(visit: visit, showsJob: false)
+                        Group {
+                            if visit.engineerUserUuid == session.user?.uuid && !policy.isDispatcherForVisits {
+                                NavigationLink(value: GuidedVisitRoute(uuid: visit.uuid)) {
+                                    VisitSummaryRow(visit: visit, showsJob: false)
+                                }
+                            } else {
+                                NavigationLink(value: VisitRoute(uuid: visit.uuid)) {
+                                    VisitSummaryRow(visit: visit, showsJob: false)
+                                }
+                            }
                         }
                     }
                 }
@@ -154,6 +164,15 @@ private struct JobDetailContent: View {
 
             if !detail.items.isEmpty {
                 itemsSection(detail, policy: policy)
+            }
+
+            invoiceSection(detail, policy: policy)
+
+            if let photos {
+                Section {
+                    PhotosSection(model: photos, canEdit: detail.job.status != .cancelled
+                                  && (policy.isDispatcherForJobs || policy.isEngineer(on: detail)))
+                }
             }
 
             if let totals = detail.totals {
@@ -184,6 +203,54 @@ private struct JobDetailContent: View {
         }
         .listStyle(.insetGrouped)
         .environment(\.editMode, $editMode)
+        .onAppear {
+            if photos == nil { photos = JobPhotosModel(jobUuid: detail.job.uuid, visitUuid: nil, api: services.fieldService) }
+        }
+    }
+
+    /// Invoice status on the job, with a link to the invoice, or the way to raise one.
+    @ViewBuilder
+    private func invoiceSection(_ detail: JobDetail, policy: FieldServicePolicy) -> some View {
+        let job = detail.job
+        if let invoiceUuid = job.invoiceUuid {
+            Section("Invoice") {
+                NavigationLink(value: InvoiceRoute(uuid: invoiceUuid)) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(job.invoiceNumber ?? "Invoice").font(.headline)
+                            if let invoicedAt = job.invoicedAt {
+                                Text("Raised \(Formatters.dateTime(invoicedAt) ?? "")").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 4) {
+                            InvoiceStatus(api: job.invoiceStatus).badge
+                            Text(Formatters.money(job.invoiceTotal, currency: job.currency) ?? "").font(.subheadline.monospacedDigit())
+                        }
+                    }
+                }
+                .accessibilityIdentifier("job.invoice")
+                if policy.canCreateInvoice(for: detail), (detail.totals?.uninvoicedValue ?? 0) > 0 {
+                    Button("Invoice new work", systemImage: "doc.badge.plus") { invoicing = true }
+                        .frame(minHeight: 44)
+                }
+            }
+        } else if policy.canCreateInvoice(for: detail) {
+            Section {
+                Button {
+                    invoicing = true
+                } label: {
+                    Label(job.status == .completed ? "Create invoice" : "Preview invoice", systemImage: "doc.text")
+                }
+                .buttonStyle(.large(.success, prominent: job.status == .completed))
+                .listRowSeparator(.hidden)
+                .accessibilityIdentifier("job.createInvoice")
+            } header: {
+                Text("Invoice")
+            } footer: {
+                Text("Bills completed labour and approved parts, materials and hire.")
+            }
+        }
     }
 
     private func header(_ detail: JobDetail) -> some View {
@@ -218,9 +285,16 @@ private struct JobDetailContent: View {
 
     @ViewBuilder
     private func customerSection(_ job: Job) -> some View {
-        if job.customerName != nil || job.fullAddress != nil || job.customerPhone != nil {
+        if job.customerName != nil || job.fullAddress != nil || job.customerPhone != nil || job.siteName != nil {
             Section("Customer & site") {
                 DetailRow(label: "Customer", value: job.customerName, systemImage: "person")
+                DetailRow(label: "Site", value: job.siteName, systemImage: "building.2")
+                if let notes = job.siteAccessNotes, !notes.isEmpty {
+                    Label(notes, systemImage: "key.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(Tone.warning.color)
+                        .accessibilityLabel("Access notes: \(notes)")
+                }
                 if let phone = job.customerPhone {
                     PhoneLinkRow(name: job.customerName, phone: phone)
                 }
@@ -273,12 +347,14 @@ private struct JobDetailContent: View {
             ForEach(detail.items) { item in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text(item.description).font(.headline)
+                        Text(item.isLabour || item.isHire ? item.quoteSummary : item.description).font(.headline)
                         Spacer()
                         Text(Formatters.money(item.lineTotal, currency: detail.job.currency) ?? "")
                             .font(.subheadline.monospacedDigit())
                     }
-                    Text("\(item.quantity.formatted()) × \(Formatters.money(item.unitPrice, currency: detail.job.currency) ?? "") · \(Formatters.humanize(item.itemType))")
+                    Text(["\(item.quantity.formatted()) × \(Formatters.money(item.unitPrice, currency: detail.job.currency) ?? "")",
+                          Formatters.humanize(item.itemType), item.supplier, item.partNumber.map { "Part \($0)" }]
+                        .compactMap { $0 }.joined(separator: " · "))
                         .font(.subheadline).foregroundStyle(.secondary)
                     HStack {
                         item.approvalStatus.badge
@@ -315,6 +391,7 @@ private struct JobDetailContent: View {
 }
 
 struct VisitRoute: Hashable { let uuid: String }
+struct InvoiceRoute: Hashable { let uuid: String }
 struct ServiceRequestRoute: Hashable { let uuid: String }
 
 extension View {
@@ -323,6 +400,19 @@ extension View {
         navigationDestination(for: JobRoute.self) { JobDetailView(jobUuid: $0.uuid) }
             .navigationDestination(for: VisitRoute.self) { VisitDetailView(visitUuid: $0.uuid) }
             .navigationDestination(for: ServiceRequestRoute.self) { ServiceRequestDetailView(requestUuid: $0.uuid) }
+            .navigationDestination(for: GuidedVisitRoute.self) { GuidedVisitView(visitUuid: $0.uuid) }
+            .navigationDestination(for: InvoiceRoute.self) { InvoiceDetailView(invoiceUuid: $0.uuid) }
+            .navigationDestination(for: AssetRoute.self) { AssetDetailView(product: $0.product) }
+            .navigationDestination(for: SiteRoute.self) { SiteDetailView(site: $0.site) }
+            .navigationDestination(for: FieldServiceArea.self) { area in
+                switch area {
+                case .requests: ServiceRequestsListView()
+                case .jobs: JobsListView()
+                case .assets: AssetSearchView()
+                case .sites: SitesListView()
+                case .invoices: InvoicesListView()
+                }
+            }
     }
 }
 

@@ -84,6 +84,64 @@ final class VisitDetailViewModel {
         return await perform(FieldServiceAPI.Mutations.noAccess(visit, reason: reason, context: context))
     }
 
+    /// Quote-sheet line logged on site; queued offline like the other on-site writes.
+    func addItem(_ body: AddJobItemBody) async -> Bool {
+        guard let visit = detail?.visit, let context = session.mutationContext else { return false }
+        var body = body
+        body.visitUuid = visit.uuid
+        body.phaseUuid = body.phaseUuid ?? visit.phaseUuid
+        busy = true
+        defer { busy = false }
+        do {
+            switch try await sync.perform(FieldServiceAPI.Mutations.addItem(visit, body: body, context: context)) {
+            case .sent:
+                await load()
+            case .queued:
+                queuedMessage = "Saved on this device. It will be added to the job when you're back online."
+            }
+            return true
+        } catch {
+            actionError = error.asAPIError
+            return false
+        }
+    }
+
+    /// Ticks a checklist item on the visit's phase (engineer booked on the job).
+    func toggleChecklist(index: Int) async {
+        guard var detail, var phase = detail.phase, phase.checklist.indices.contains(index),
+              let context = session.mutationContext else { return }
+        let done = !phase.checklist[index].done
+        phase.checklist[index].done = done
+        detail.phase = phase
+        state = .loaded(detail)
+        let mutation = FieldServiceAPI.Mutations.checklist(phase: phase, index: index, done: done,
+                                                           jobUuid: detail.visit.jobUuid, context: context)
+        do {
+            if case .sent(let data) = try await sync.perform(mutation),
+               let envelope = try? JSONDecoder.opsAPI().decode(Envelope.Standard<JobPhase>.self, from: data) {
+                detail.phase = envelope.data
+                state = .loaded(detail)
+            }
+        } catch {
+            phase.checklist[index].done = !done
+            detail.phase = phase
+            state = .loaded(detail)
+            actionError = error.asAPIError
+        }
+    }
+
+    func replace(_ updated: VisitDetail) {
+        state = .loaded(updated)
+        cachedAt = nil
+    }
+
+    /// Quote lines waiting to sync for this visit.
+    var pendingItemSummaries: [PendingMutation] {
+        sync.pending(for: visitUuid).filter { $0.kind == .jobItemAdd }
+    }
+
+    var showsPrices: Bool { session.permissions.can(.update, .fsJobs) }
+
     func cancelVisit(reason: String?) async {
         busy = true
         defer { busy = false }
@@ -147,8 +205,9 @@ struct CheckOutForm: Equatable {
         }
     }
 
+    /// The work summary is optional server-side (#610 finish sheet); hours must be within 0–24.
     var isValid: Bool {
-        !workSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && labourHours >= 0 && labourHours <= 24
+        labourHours >= 0 && labourHours <= 24
     }
 
     func body(coordinates: Coordinates?) -> CheckOutBody {

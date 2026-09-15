@@ -142,7 +142,43 @@ need confirming against the live database.
     and sums revenue across currencies (as do CRM and invoice stats).
 43. **An 11th device login silently invalidates the oldest session** (10 refresh tokens per user).
 
-## 5. Missing endpoints that would simplify the app
+## 5. Field Service engineer app (opsapi #610, `feat/field-service-engineer-app`)
+
+Found while mirroring #610 (on top of #607 / #604) and running the iOS happy path against that
+branch locally. The app works around each one. Items marked **(verified locally)** were reproduced
+on the PR branch.
+
+44. **`site_uuid` is dropped on create (verified locally).** `RequestQueries.createRequest` resolves
+    `site_uuid` to `refs.site_id` (`queries/FieldServiceRequestQueries.lua:260`) but never writes
+    `site_id` in `FsServiceRequestModel:create`. `JobQueries.createJob` has the same omission, so
+    `POST /jobs` and `POST /service-requests/:uuid/convert-to-job` also create site-less jobs.
+    Update is fine. The app sends a follow-up `PUT {site_uuid}` after create or convert
+    (`FieldServiceAPI.createServiceRequest` / `convertToJob`, covered by a unit test).
+45. **There is no assets API.** `fs_assets` (migration 862) was dropped in field-service v2 (884).
+    The serviced asset is now the customer's store product, with `product_ref` as the unit serial,
+    and the dashboard menu entry for assets is gone. iOS "Assets" is therefore a store-product
+    search, and an asset's history comes from `GET /jobs?product_uuid=` and
+    `GET /service-requests?product_uuid=`.
+46. **Job search doesn't include `product_ref`** (`FieldServiceJobQueries.lua:368`), so a unit
+    can't be found by its serial number.
+47. **Notifications are not namespace-scoped** (`routes/notifications.lua`). A user in two
+    workspaces sees both workspaces' "job assigned" notifications. Paging is `limit`/`offset`
+    with no `total`.
+48. **No mobile-friendly "my work" endpoint.** The engineer home screen is built from
+    `GET /visits?engineer_uuid=me` over a date window (−3 to +21 days, `per_page` ≤ 200), with the
+    job re-fetched per visit for checklists. A single `GET /field-service/my-work` (today's visits,
+    their job, phase checklists and site) would cut this to one cached call. There is also no
+    push for new assignments: the app polls every 30s while in the foreground and diffs visit
+    uuids locally.
+49. **Local test-tenant setup hits several unrelated bugs (verified locally):**
+    - `PUT /api/v2/users` returns 500 because it writes a missing `updated_by` column (`routes/users.lua:245`).
+    - `POST /api/v2/stores` returns 500 because it writes a missing `created_by` column (`routes/stores.lua:121`).
+    - Users created via `POST /api/v2/users` are inactive and can't log in until activated.
+    - `POST /api/v2/register` is unusable when `PROJECT_CODE=all`.
+
+    `scripts/local-opsapi-fs-seed.sh` works around these with SQL on the isolated local database only.
+
+## 6. Missing endpoints that would simplify the app
 
 - `GET /job-phases/:uuid` — phase mutations return only the phase, so the job has to be re-fetched
   for roll-ups.
@@ -155,3 +191,5 @@ need confirming against the live database.
 - APNs device-token registration (the server is FCM-only, which would force a Firebase dependency).
 - Idempotency keys on field-service mutations, so offline replays can be retried safely if a
   response is lost.
+- `GET /field-service/my-work` for the engineer home screen (see 48), and an assets or serial
+  search that covers `product_ref` (see 45–46).

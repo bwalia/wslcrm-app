@@ -77,26 +77,81 @@ struct ConvertToJobBody: Encodable, Sendable {
     var priority: String?
     var jobTypeUuid: String?
     var dueDate: CalendarDay?
+    var serviceManagerUuid: String?
+    /// #610: assigning an engineer books their first visit (job becomes `scheduled`, shows in My Work).
+    var engineerUuid: String?
+    /// First visit start, sent as ISO-8601 UTC (the API drops offsets). Defaults to now server-side.
+    var scheduledStart: Date?
 }
 
-struct CreateServiceRequestBody: Encodable, Sendable {
+/// Create/update body for service requests. `nil` keys are omitted. On update, send `""` to clear a
+/// link (`site_uuid: ""`) — the backend's `nullable` treats empty strings as NULL.
+struct ServiceRequestBody: Encodable, Sendable, Equatable {
     var title: String
     var description: String?
     var faultCategory: String?
     var channel: String
     var reportedBy: String?
     var priority: String
+    var customerUuid: String?
+    var siteUuid: String?
+    /// The serviced unit (store product) and its serial / reference.
+    var productUuid: String?
+    var productRef: String?
     var serviceAddress: String?
     var servicePostcode: String?
 }
 
-struct AddJobItemBody: Encodable, Sendable {
+typealias CreateServiceRequestBody = ServiceRequestBody
+
+struct AddJobItemBody: Encodable, Sendable, Equatable {
     var itemType: String
     var description: String
     var quantity: Decimal
     var unitPrice: Decimal?
     var visitUuid: String?
     var phaseUuid: String?
+    // Quote-sheet fields (#610)
+    var labourCategory: String?
+    var days: Decimal?
+    var supplier: String?
+    var partNumber: String?
+
+    init(itemType: String, description: String, quantity: Decimal, unitPrice: Decimal? = nil, visitUuid: String? = nil,
+         phaseUuid: String? = nil, labourCategory: String? = nil, days: Decimal? = nil, supplier: String? = nil,
+         partNumber: String? = nil) {
+        self.itemType = itemType
+        self.description = description
+        self.quantity = quantity
+        self.unitPrice = unitPrice
+        self.visitUuid = visitUuid
+        self.phaseUuid = phaseUuid
+        self.labourCategory = labourCategory
+        self.days = days
+        self.supplier = supplier
+        self.partNumber = partNumber
+    }
+}
+
+/// Engineer-editable F-Gas fields on a visit (`PUT /visits/:uuid`). Empty strings clear a value.
+struct FGasBody: Encodable, Sendable, Equatable {
+    var refrigerantType: String
+    var refrigerantAddedKg: String
+    var refrigerantRecoveredKg: String
+    var leakCheckResult: String
+    var fgasCylinderRef: String
+    var leakCheckNotes: String
+}
+
+struct SiteBody: Encodable, Sendable, Equatable {
+    var customerUuid: String?
+    var name: String
+    var addressLine1: String?
+    var city: String?
+    var postalCode: String?
+    var contactName: String?
+    var contactPhone: String?
+    var accessNotes: String?
 }
 
 // MARK: - Queries
@@ -114,6 +169,7 @@ struct JobListQuery: Sendable, Equatable {
     var search: String = ""
     var mine = false
     var overdue = false
+    var productUuid: String?
     var page = 1
     var perPage = 25
 
@@ -125,6 +181,7 @@ struct JobListQuery: Sendable, Equatable {
         q.add("search", search.trimmingCharacters(in: .whitespaces))
         if mine { q.add("mine", "true") }
         if overdue { q.add("overdue", true) }
+        q.add("product_uuid", productUuid)
         q.add("order_by", "updated_at")
         return q.items
     }
@@ -137,12 +194,14 @@ struct VisitListQuery: Sendable, Equatable {
     var to: Date?
     var page = 1
     var perPage = 100
+    var jobUuid: String?
 
     var queryItems: [URLQueryItem] {
         var q = QueryBuilder()
         q.add("page", page)
-        q.add("per_page", perPage)
+        q.add("per_page", min(perPage, 200))
         if mine { q.add("mine", "true") }
+        q.add("job_uuid", jobUuid)
         q.add("status", status)
         q.add("from", from)
         q.add("to", to)
@@ -222,10 +281,12 @@ struct FieldServiceAPI: Sendable {
 
     // MARK: Service requests
 
-    func serviceRequests(status: String?, search: String, page: Int, perPage: Int = 25) async throws -> Page<ServiceRequest> {
+    func serviceRequests(status: String?, search: String, page: Int, perPage: Int = 25,
+                         productUuid: String? = nil) async throws -> Page<ServiceRequest> {
         var q = QueryBuilder()
         q.add("page", page)
         q.add("per_page", perPage)
+        q.add("product_uuid", productUuid)
         // `status=all` returns zero rows on this endpoint — omit it instead.
         if let status, status != "all" { q.add("status", status) }
         q.add("search", search.trimmingCharacters(in: .whitespaces))
@@ -241,9 +302,27 @@ struct FieldServiceAPI: Sendable {
         return envelope.data
     }
 
-    func createServiceRequest(_ body: CreateServiceRequestBody) async throws -> ServiceRequestDetail {
+    func createServiceRequest(_ body: ServiceRequestBody) async throws -> ServiceRequestDetail {
         let envelope: Envelope.Standard<ServiceRequestDetail> =
             try await client.send(.post("\(Self.base)/service-requests", json: body))
+        // opsapi #610 gap: createRequest resolves `site_uuid` but never inserts `site_id`, so the
+        // site is dropped on create. The update path does apply it — link the site with a PUT.
+        if let site = body.siteUuid, !site.isEmpty, envelope.data.request.siteUuid == nil {
+            return try await linkSite(site, toRequest: envelope.data.request.uuid)
+        }
+        return envelope.data
+    }
+
+    private func linkSite(_ siteUuid: String, toRequest uuid: String) async throws -> ServiceRequestDetail {
+        struct SiteLink: Encodable, Sendable { let siteUuid: String }
+        let envelope: Envelope.Standard<ServiceRequestDetail> =
+            try await client.send(.put("\(Self.base)/service-requests/\(uuid)", json: SiteLink(siteUuid: siteUuid)))
+        return envelope.data
+    }
+
+    func updateServiceRequest(_ uuid: String, _ body: ServiceRequestBody) async throws -> ServiceRequestDetail {
+        let envelope: Envelope.Standard<ServiceRequestDetail> =
+            try await client.send(.put("\(Self.base)/service-requests/\(uuid)", json: body))
         return envelope.data
     }
 
@@ -260,10 +339,99 @@ struct FieldServiceAPI: Sendable {
         return envelope.data
     }
 
-    func convertToJob(_ uuid: String, body: ConvertToJobBody) async throws -> ConvertToJobResult {
+    func convertToJob(_ uuid: String, body: ConvertToJobBody, siteUuid: String? = nil) async throws -> ConvertToJobResult {
         let envelope: Envelope.Standard<ConvertToJobResult> =
             try await client.send(.post("\(Self.base)/service-requests/\(uuid)/convert-to-job", json: body))
+        // opsapi #610 gap: convert-to-job passes the request's site to createJob, which drops
+        // `site_id` on insert. Best effort: set it on the new job (needs fs_jobs.update).
+        if let siteUuid, !siteUuid.isEmpty {
+            struct SiteLink: Encodable, Sendable { let siteUuid: String }
+            _ = try? await client.sendRaw(.put("\(Self.base)/jobs/\(envelope.data.jobUuid)", json: SiteLink(siteUuid: siteUuid)))
+        }
         return envelope.data
+    }
+
+    // MARK: Sites (#610) — `{ success, data, meta }`
+
+    func sites(customerUuid: String? = nil, search: String = "", page: Int = 1, perPage: Int = 100) async throws -> Page<FsSite> {
+        var q = QueryBuilder()
+        q.add("customer_uuid", customerUuid)
+        q.add("search", search.trimmingCharacters(in: .whitespaces))
+        q.add("page", page)
+        q.add("per_page", min(perPage, 200))
+        let envelope: Envelope.Standard<LossyArray<FsSite>> = try await client.send(.get("\(Self.base)/sites", query: q.items))
+        return Page(items: envelope.data.elements, page: envelope.meta?.page ?? page,
+                    perPage: envelope.meta?.perPage ?? perPage, total: envelope.meta?.total ?? envelope.data.elements.count)
+    }
+
+    func site(_ uuid: String) async throws -> FsSite {
+        let envelope: Envelope.Standard<FsSite> = try await client.send(.get("\(Self.base)/sites/\(uuid)"))
+        return envelope.data
+    }
+
+    func createSite(_ body: SiteBody) async throws -> FsSite {
+        let envelope: Envelope.Standard<FsSite> = try await client.send(.post("\(Self.base)/sites", json: body))
+        return envelope.data
+    }
+
+    func updateSite(_ uuid: String, _ body: SiteBody) async throws -> FsSite {
+        var update = body
+        update.customerUuid = nil
+        let envelope: Envelope.Standard<FsSite> = try await client.send(.put("\(Self.base)/sites/\(uuid)", json: update))
+        return envelope.data
+    }
+
+    func deleteSite(_ uuid: String) async throws {
+        try await client.sendDiscardingBody(.delete("\(Self.base)/sites/\(uuid)"))
+    }
+
+    // MARK: Photos (#610)
+
+    func photos(jobUuid: String) async throws -> [FsJobPhoto] {
+        let envelope: Envelope.Standard<LossyArray<FsJobPhoto>> = try await client.send(.get("\(Self.base)/jobs/\(jobUuid)/photos"))
+        return envelope.data.elements
+    }
+
+    /// Multipart upload (`photo` field); the file is stored in MinIO by the server.
+    func uploadPhoto(jobUuid: String, jpeg: Data, visitUuid: String?, caption: String?) async throws -> FsJobPhoto {
+        var fields: [(String, String)] = []
+        if let visitUuid { fields.append(("visit_uuid", visitUuid)) }
+        if let caption, !caption.isEmpty { fields.append(("caption", caption)) }
+        let file = Endpoint.FilePart(fieldName: "photo", filename: "photo-\(Int(Date().timeIntervalSince1970)).jpg",
+                                     mimeType: "image/jpeg", data: jpeg)
+        let endpoint = Endpoint(.post, "\(Self.base)/jobs/\(jobUuid)/photos").withMultipart(fields: fields, file: file)
+        let envelope: Envelope.Standard<FsJobPhoto> = try await client.send(endpoint)
+        return envelope.data
+    }
+
+    func deletePhoto(_ uuid: String) async throws {
+        try await client.sendDiscardingBody(.delete("\(Self.base)/job-photos/\(uuid)"))
+    }
+
+    // MARK: Visit report fields
+
+    /// F-Gas log (engineer-editable). Returns `{ visit, conflicts, warnings }`.
+    func updateFGas(visitUuid: String, _ body: FGasBody) async throws -> VisitDetail {
+        struct Mutation: Decodable, Sendable { let visit: VisitDetail }
+        let envelope: Envelope.Standard<Mutation> = try await client.send(.put("\(Self.base)/visits/\(visitUuid)", json: body))
+        return envelope.data.visit
+    }
+
+    // MARK: Notifications (in-app bell)
+
+    func notifications(unreadOnly: Bool = false, limit: Int = 30) async throws -> NotificationsResponse {
+        var endpoint = Endpoint.get("/api/v2/notifications", query: [
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "unread_only", value: unreadOnly ? "true" : "false"),
+        ])
+        endpoint.requiresNamespace = false
+        return try await client.send(endpoint)
+    }
+
+    func markNotificationRead(_ id: String) async throws {
+        var endpoint = Endpoint(.put, "/api/v2/notifications/\(id)/read")
+        endpoint.requiresNamespace = false
+        try await client.sendDiscardingBody(endpoint)
     }
 
     // MARK: Supporting
@@ -328,6 +496,15 @@ struct FieldServiceAPI: Sendable {
                                    userId: context.userId, entityId: phase.uuid, jobId: jobUuid,
                                    summary: "\(done ? "Tick" : "Untick") “\(label)” · \(phase.name)",
                                    hints: ["index": String(index), "done": done ? "true" : "false"])
+        }
+
+        /// A quote-sheet line (labour / material / hire) logged by the engineer on site.
+        static func addItem(_ visit: Visit, body: AddJobItemBody, context: MutationContext) -> PendingMutation {
+            PendingMutation(kind: .jobItemAdd, method: .post, path: "\(base)/jobs/\(visit.jobUuid)/items",
+                            body: encode(body), namespaceId: context.namespaceId, userId: context.userId,
+                            entityId: visit.uuid, jobId: visit.jobUuid,
+                            summary: "\(Formatters.humanize(body.itemType)) · \(body.description) · \(visit.jobNumber)",
+                            hints: ["item_type": body.itemType])
         }
 
         static func phaseStatus(phase: JobPhase, body: PhaseStatusChangeBody, jobUuid: String?,

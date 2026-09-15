@@ -10,6 +10,7 @@ struct PendingMutation: Codable, Identifiable, Sendable, Equatable {
         case visitNoAccess
         case checklistToggle
         case phaseStatus
+        case jobItemAdd
     }
 
     enum State: Codable, Sendable, Equatable {

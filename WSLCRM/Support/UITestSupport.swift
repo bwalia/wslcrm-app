@@ -145,6 +145,17 @@ final class UITestStubServer: @unchecked Sendable {
         case ("GET", "/api/v2/field-service/service-requests"):
             return (200, ["success": true, "data": [], "meta": meta(0)])
 
+        case ("GET", "/api/v2/field-service/jobs/\(Self.jobUuid)/photos"):
+            return (200, ["success": true, "data": []])
+
+        case ("GET", "/api/v2/field-service/stats"):
+            return (200, ["success": true, "data": ["open_jobs": 1, "visits_today": 1, "engineers_on_site": 1, "overdue_jobs": 0]])
+
+        case ("GET", "/api/v2/notifications"):
+            return (200, ["notifications": [["uuid": "n1", "type": "fs_visit_assigned", "title": "New job assigned",
+                                             "message": "AC repair — Ward 5", "is_read": false,
+                                             "created_at": "2026-09-15 08:00:00"]], "unread_count": 1])
+
         case ("POST", let p) where p.hasPrefix("/api/v2/field-service/job-phases/\(Self.phaseUuid)/checklist/"):
             guard let index = Int(p.split(separator: "/").last ?? ""), checklist.indices.contains(index) else {
                 return (404, ["success": false, "error": "Checklist item not found"])
