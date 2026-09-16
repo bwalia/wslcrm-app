@@ -91,4 +91,21 @@ final class RoleAccessUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'emailed to customer@example.com'"))
             .firstMatch.waitForExistence(timeout: 15), "the quote was emailed")
     }
+
+    /// After the #611 review the seeded manager has `invoices: manage` (migrations 892/893
+    /// backfill existing tenants), so sending the invoice is theirs to do.
+    func testManagerCanEmailAnInvoice() {
+        launch(as: "manager")
+
+        element("hub.invoices").tap()
+        app.staticTexts["INV-0001"].firstMatch.tap()
+        let email = scrollTo("invoice.email")
+        XCTAssertTrue(email.waitForExistence(timeout: 15), "the manager sends the invoice")
+        email.tap()
+
+        XCTAssertTrue(element("invoiceEmail.send").waitForExistence(timeout: 10))
+        element("invoiceEmail.send").tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Emailed to jane@example.com'"))
+            .firstMatch.waitForExistence(timeout: 15), "the invoice was emailed to the customer on file")
+    }
 }

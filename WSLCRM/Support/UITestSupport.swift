@@ -76,6 +76,7 @@ final class UITestStubServer: @unchecked Sendable {
     static let namespaceUuid = "c0ffee00-1111-2222-3333-444455556666"
     static let jobUuid = "5b0c0e2e-6a55-4d0f-9f5e-1b2c3d4e5f60"
     static let phaseUuid = "p1000000-0000-0000-0000-000000000001"
+    static let invoiceUuid = "in000000-0000-0000-0000-000000000001"
     /// JWT whose `exp` is in 2100, so the client never tries a proactive refresh.
     static let token = "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjQxMDI0NDQ4MDB9.stub"
 
@@ -90,7 +91,8 @@ final class UITestStubServer: @unchecked Sendable {
             case .engineer: ["fs_jobs": ["read"], "fs_visits": ["read"], "fs_parts": ["read"]]
             case .manager: ["fs_service_requests": ["manage"], "fs_jobs": ["manage"], "fs_visits": ["manage"],
                             "fs_job_types": ["manage"], "fs_parts": ["manage"], "employees": ["manage"],
-                            "customers": ["manage"], "invoices": ["read", "create"], "timesheets": ["read"]]
+                            "customers": ["manage"], "products": ["manage"], "invoices": ["manage"],
+                            "payments": ["manage"], "timesheets": ["read"], "timesheet_approvals": ["manage"]]
             case .telecaller: ["fs_service_requests": ["create", "read", "update"], "customers": ["create", "read"]]
             }
         }
@@ -98,8 +100,8 @@ final class UITestStubServer: @unchecked Sendable {
         var menuKeys: [String] {
             switch self {
             case .engineer: ["field_service_jobs", "field_service_visits", "field_service_parts"]
-            case .manager: ["customers", "field_service_requests", "field_service_jobs", "field_service_visits",
-                            "invoices", "field_service_parts"]
+            case .manager: ["products", "customers", "field_service_requests", "field_service_jobs",
+                            "field_service_visits", "invoices", "field_service_parts", "timesheets"]
             case .telecaller: ["customers", "field_service_requests"]
             }
         }
@@ -111,6 +113,7 @@ final class UITestStubServer: @unchecked Sendable {
     private var checklist: [[String: Any]] = []
     private var phaseStatus = "in_progress"
     private var visitStatus = "on_site"
+    private var invoiceStatus = "draft"
     private var items: [[String: Any]] = []
     private var photos: [[String: Any]] = []
     private var fgas: [String: Any] = [:]
@@ -123,6 +126,7 @@ final class UITestStubServer: @unchecked Sendable {
             ]
             phaseStatus = "in_progress"
             visitStatus = "on_site"
+            invoiceStatus = "draft"
             // A job already has a line on its sheet, so quoting and invoicing have something
             // to price (an engineer's own additions are appended to this).
             items = [["uuid": "i0", "item_type": "labour", "description": "Engineer — normal time",
@@ -256,6 +260,24 @@ final class UITestStubServer: @unchecked Sendable {
                                                      "job_count": 1, "created_at": "2026-09-01 08:00:00+00"]],
                           "meta": meta(1)])
 
+        case ("GET", "/api/v2/invoices"):
+            return (200, ["success": true, "data": [invoice], "meta": ["total": 1, "page": 1, "perPage": 25, "totalPages": 1]])
+
+        case ("GET", "/api/v2/invoices/\(Self.invoiceUuid)"):
+            return (200, ["success": true, "data": invoice])
+
+        case ("GET", "/api/v2/invoices/dashboard/stats"):
+            return (200, ["success": true, "data": ["total_outstanding": 130, "total_paid": 0, "draft_count": 1,
+                                                    "overdue_count": 0]])
+
+        case ("POST", "/api/v2/invoices/\(Self.invoiceUuid)/email"):
+            guard let pdf = json["pdf_base64"] as? String, !pdf.isEmpty else {
+                return (400, ["success": false, "error": "pdf_base64 is required"])
+            }
+            invoiceStatus = "sent"
+            let to = (json["to"] as? String) ?? "jane@example.com"
+            return (200, ["success": true, "data": ["message": "Invoice emailed to \(to)", "to": to, "status": "sent"]])
+
         case ("GET", "/api/v2/field-service/fault-categories"):
             return (200, ["success": true, "data": ["No cooling", "Water leak", "Noisy fan"]])
 
@@ -342,6 +364,16 @@ final class UITestStubServer: @unchecked Sendable {
             result["completed_by_name"] = "Sam Engineer"
         }
         return result
+    }
+
+    private var invoice: [String: Any] {
+        ["id": Self.invoiceUuid, "invoice_number": "INV-0001", "status": invoiceStatus, "customer_name": "Jane Doe",
+         "customer_email": "jane@example.com", "currency": "GBP", "issue_date": "2026-09-15", "due_date": "2026-10-15",
+         "subtotal": 130, "tax_amount": 0, "discount_amount": 0, "total_amount": 130, "amount_paid": 0,
+         "balance_due": 130,
+         "line_items": [["id": "li1", "description": "Labour (Sam Engineer)", "quantity": 2, "unit_price": 65,
+                         "tax_rate": 0, "discount_percent": 0, "line_total": 130]],
+         "payments": []]
     }
 
     private var visitDetail: [String: Any] {

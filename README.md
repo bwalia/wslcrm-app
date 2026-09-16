@@ -229,7 +229,7 @@ re-fetches.
 | Role | Grants (from the seed) | In the app |
 |---|---|---|
 | **Telecaller** | `fs_service_requests` create/read/update, `customers` create/read | Opens on Field Service: logs and edits requests with a site, customer and faulty unit. No jobs, visits, parts or invoices, and no My Work tab. |
-| **Service manager** | `manage` on requests, jobs, visits, job types, parts, employees and customers; `invoices` create/read; `timesheets` read (plus `products` manage on workspaces seeded after #611) | The full board: convert and assign, approve items, quote, invoice. Cannot *send* an invoice — that needs `invoices.update`, which the seed doesn't grant (API-NOTES 54). |
+| **Service manager** | `manage` on requests, jobs, visits, job types, parts, employees, customers, products, invoices, payments and timesheet approvals; `timesheets` read | The full board: convert and assign, approve items, quote, invoice, email the invoice and record the payment. |
 | **Engineer** | `fs_jobs` read, `fs_visits` read, `fs_parts` read | Opens on My Work; the guided visit, the stock list for materials, checklist and phase work on jobs they're booked on. Never sees prices, approvals, quotes or invoices. |
 
 `RolePermissionTests` and `RoleAccessUITests` pin this per role, using the menu payloads the
@@ -260,7 +260,7 @@ service-request actions come from `allowed_transitions`.
 - **Fault category (#611)** is a reuse-or-create picker backed by
   `GET /field-service/fault-categories`, so categories converge instead of being retyped.
 - **Invoices (#611)** can be emailed to the customer with the PDF attached, which also marks a
-  draft as sent. Needs `invoices.update` — see the roles table.
+  draft as sent. Needs `invoices.update`, which the Service Manager role now has.
 - **Parts** show a low-stock flag at the catalogue's reorder level, since approving a part line
   now decrements stock server-side.
 

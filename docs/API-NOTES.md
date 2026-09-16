@@ -197,18 +197,15 @@ on the PR branch.
 
 ## 5b. Quotation, emailed documents and roles (opsapi #611)
 
-54. **The Service Manager role cannot send an invoice (verified locally).** The seeded role has
-    `invoices: ["create", "read"]`, but `POST /invoices/:uuid/send` and the new
-    `POST /invoices/:uuid/email` both require `invoices.update`
-    (`routes/invoices.lua`, `requirePermission("invoices", "update")`). So the person who raises
-    the invoice can't email it or mark it sent — only an owner/admin can. Either the seed needs
-    `invoices: ["manage"]` (or `update`), or sending should be guarded by `invoices.create`.
-    The app hides both actions unless the caller has `invoices.update`.
-55. **The new `products: manage` grant only reaches new workspaces.** `createFieldServiceRoles`
-    skips a role that already exists, so workspaces seeded before #611 keep a Service Manager with
-    no `products` grant (confirmed on the local tenant: the menu has no `products` key). Existing
-    tenants need the role editor or a migration. The app gates the product editor on the grant, so
-    it simply stays hidden.
+54. ~~The Service Manager role cannot send an invoice.~~ **Fixed during #611 review**
+    (`a00412c`): the seed now grants `invoices: ["manage"]`, and migration `892` backfills
+    existing tenants (only where the role is still on the old defaults, so a customised role is
+    left alone). `893` follows with `payments: ["manage"]` and `timesheet_approvals: ["manage"]`.
+    Verified on the local tenant: the manager reaches `/invoices/:uuid/email` (400 without a PDF)
+    and an engineer is refused 403.
+55. ~~The `products: manage` grant only reaches new workspaces.~~ **Fixed during #611 review**
+    (`a00412c`): migration `892` adds it to existing `service_manager` roles that have no
+    `products` grant. The local tenant's menu now includes `products`.
 56. **PDFs are the client's job.** `POST /jobs/:uuid/quote-email` and `POST /invoices/:uuid/email`
     both require `pdf_base64` from the caller — there is no server-side renderer — so every client
     has to reproduce the same document. The iOS app renders both on device (`DocumentPDF`).

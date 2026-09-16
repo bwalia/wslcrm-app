@@ -28,16 +28,17 @@ final class RolePermissionTests: XCTestCase {
                                            "customers": ["create", "read"]]))
     }
 
-    /// Runs the board: assigns, approves, invoices.
+    /// Runs the board: assigns, approves, invoices, takes payment.
     private func serviceManager() throws -> PermissionSet {
-        try permissions(menu(keys: ["namespace", "customers", "field_service_requests", "field_service_jobs",
-                                    "field_service_visits", "invoices", "employees", "field_service_parts",
-                                    "timesheets", "document_templates"],
+        try permissions(menu(keys: ["namespace", "products", "customers", "field_service_requests",
+                                    "field_service_jobs", "field_service_visits", "invoices", "employees",
+                                    "field_service_parts", "timesheets", "document_templates"],
                              permissions: ["fs_job_types": ["manage"], "timesheets": ["read"],
                                            "employees": ["manage"], "fs_service_requests": ["manage"],
-                                           "fs_jobs": ["manage"], "invoices": ["read", "create"],
+                                           "fs_jobs": ["manage"], "invoices": ["manage"],
                                            "customers": ["manage"], "fs_visits": ["manage"],
-                                           "fs_parts": ["manage"]]))
+                                           "fs_parts": ["manage"], "products": ["manage"],
+                                           "payments": ["manage"], "timesheet_approvals": ["manage"]]))
     }
 
     /// Works only their own visits; reads jobs and the parts catalogue.
@@ -78,7 +79,7 @@ final class RolePermissionTests: XCTestCase {
 
     // MARK: Service manager
 
-    func testServiceManagerRunsTheBoardButCannotEmailAnInvoice() throws {
+    func testServiceManagerRunsTheBoardEndToEnd() throws {
         let manager = try serviceManager()
         let policy = policy(manager)
         let detail = try JobDetailFixture.make(status: "completed", uninvoiced: 120)
@@ -89,13 +90,13 @@ final class RolePermissionTests: XCTestCase {
         XCTAssertTrue(policy.canCreateInvoice(for: detail))
         XCTAssertTrue(manager.can(.read, .fsParts), "manages the stock list")
 
-        // invoices: ["read","create"] — no update, so sending/emailing an invoice is not offered.
-        XCTAssertFalse(manager.can(.update, .invoices),
-                       "the seeded role can raise an invoice but not send it; see docs/API-NOTES.md")
-
-        // #611 added products: manage to the seed, but only for newly seeded workspaces — this
-        // one was seeded before, so the product editor stays hidden until the role is updated.
-        XCTAssertFalse(manager.can(.update, .products))
+        // #611 (after review) gave the role invoices/products/payments manage, and migrations
+        // 892/893 backfill existing tenants — so the manager bills the job end to end.
+        XCTAssertTrue(manager.can(.update, .invoices), "raises the invoice and sends it")
+        XCTAssertTrue(manager.can(.create, .payments), "records the customer's payment")
+        XCTAssertTrue(manager.can(.update, .products), "runs the product catalogue")
+        XCTAssertTrue(manager.shows(.products))
+        XCTAssertTrue(manager.shows(.invoices))
 
         XCTAssertEqual(navigation(manager).home, .fieldService)
         XCTAssertTrue(navigation(manager).showsMyWork, "a manager can still look at the visit board")

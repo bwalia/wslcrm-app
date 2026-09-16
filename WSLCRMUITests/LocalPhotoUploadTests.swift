@@ -46,6 +46,26 @@ final class LocalPhotoUploadTests: XCTestCase {
         XCTAssertEqual(engineerStatus, 403, "an engineer cannot send a customer quotation")
     }
 
+    /// The #611 review gave the Service Manager `invoices: manage` (migrations 892/893 backfill
+    /// existing tenants), so sending an invoice is theirs. No mail is sent: the request stops at
+    /// the missing-PDF check, which still proves the route and the guard.
+    func testInvoiceEmailIsAllowedForTheManagerAndRefusedForTheEngineer() async throws {
+        let invoices = try await json(authorized(get(path: "api/v2/invoices", query: "perPage=1")))
+        let rows = try XCTUnwrap(invoices["data"] as? [[String: Any]])
+        let invoiceUuid = try XCTUnwrap(rows.first?["id"] as? String, "the happy path leaves an invoice behind")
+
+        let managerStatus = try await status(post(path: "api/v2/invoices/\(invoiceUuid)/email",
+                                                  body: ["to": "nobody@e2e.invalid"]))
+        XCTAssertEqual(managerStatus, 400, "the manager may send an invoice; the request only lacks a PDF")
+
+        let engineerToken = try await signIn(identifier: env["WSL_ENGINEER"] ?? "")
+        var asEngineer = post(path: "api/v2/invoices/\(invoiceUuid)/email",
+                              body: ["pdf_base64": "JVBERi1mYWtl", "to": "nobody@e2e.invalid"])
+        asEngineer.setValue("Bearer \(engineerToken)", forHTTPHeaderField: "Authorization")
+        let engineerStatus = try await status(asEngineer)
+        XCTAssertEqual(engineerStatus, 403, "an engineer never bills the customer")
+    }
+
     private func post(path: String, body: [String: Any]) -> URLRequest {
         var request = authorized(URLRequest(url: api.appending(path: path)))
         request.httpMethod = "POST"
