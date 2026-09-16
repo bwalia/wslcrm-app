@@ -77,7 +77,7 @@ struct MoreView: View {
                             .accessibilityHidden(true)
                         VStack(alignment: .leading) {
                             Text(user.displayName).font(.headline)
-                            Text(user.email).font(.subheadline).foregroundStyle(.secondary)
+                            Text(user.email).font(.subheadline).foregroundStyle(.secondaryText)
                         }
                     }
                     .accessibilityElement(children: .combine)

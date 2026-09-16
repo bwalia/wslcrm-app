@@ -85,7 +85,7 @@ struct LoginView: View {
                 .font(.largeTitle.bold())
             Text("Sign in to your Workstation account")
                 .font(.title3)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryText)
             if session.environmentName != "Production" {
                 StatusBadge(text: "\(session.environmentName) environment", systemImage: "hammer", tone: .warning)
             }
@@ -135,7 +135,7 @@ struct TwoFactorView: View {
                         .font(.largeTitle.bold())
                     Text("Enter the 6-digit code we sent to \(challenge.email ?? "your email address").")
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryText)
                 }
                 .padding(.top, 32)
 
@@ -159,7 +159,7 @@ struct TwoFactorView: View {
                 }
                 if let resendMessage {
                     Label(resendMessage, systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(Tone.success.color)
+                        .foregroundStyle(Tone.success.textColor)
                 }
 
                 Button(action: submit) {

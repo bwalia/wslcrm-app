@@ -21,6 +21,11 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
     }
 
     func currentCoordinates(timeout: Duration = .seconds(8)) async -> Coordinates? {
+        #if DEBUG
+        // UI tests run against the stub server, where a system permission alert would block the
+        // flow being tested. Check-in and check-out are designed to work without a fix anyway.
+        if ProcessInfo.processInfo.arguments.contains(UITestSupport.launchArgument) { return nil }
+        #endif
         guard CLLocationManager.locationServicesEnabled() else { return nil }
 
         var status = manager.authorizationStatus

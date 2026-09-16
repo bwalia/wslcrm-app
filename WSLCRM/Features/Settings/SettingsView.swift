@@ -25,7 +25,7 @@ struct SettingsView: View {
                         }
                 } else {
                     Text("Face ID or Touch ID isn't set up on this device.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryText)
                 }
             } header: {
                 Text("Security")
@@ -49,7 +49,7 @@ struct SettingsView: View {
                     Label(session.permissions.isAdmin ? "Platform administrator" : "Workspace owner — full access",
                           systemImage: "checkmark.shield")
                 } else if session.permissions.grants.isEmpty {
-                    Text("No module permissions").foregroundStyle(.secondary)
+                    Text("No module permissions").foregroundStyle(.secondaryText)
                 } else {
                     ForEach(session.permissions.grants.keys.sorted(), id: \.self) { module in
                         LabeledContent(module, value: session.permissions.grants[module, default: []].sorted().joined(separator: ", "))
@@ -91,11 +91,11 @@ struct PendingChangesView: View {
                                 }
                             }
                             Text("Recorded \(mutation.createdAt.formatted(date: .abbreviated, time: .shortened))")
-                                .font(.subheadline).foregroundStyle(.secondary)
+                                .font(.subheadline).foregroundStyle(.secondaryText)
                             if case .failed(let message, _) = mutation.state {
-                                Text(message).font(.subheadline).foregroundStyle(Tone.danger.color)
+                                Text(message).font(.subheadline).foregroundStyle(Tone.danger.textColor)
                             } else if let lastError = mutation.lastError {
-                                Text("Last attempt: \(lastError)").font(.footnote).foregroundStyle(.secondary)
+                                Text("Last attempt: \(lastError)").font(.footnote).foregroundStyle(.secondaryText)
                             }
                             if mutation.isFailed {
                                 HStack {

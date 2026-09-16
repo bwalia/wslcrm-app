@@ -127,7 +127,7 @@ struct InvoiceRow: View {
                 }
             }
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryText)
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
@@ -227,17 +227,17 @@ struct InvoiceDetailView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     invoice.displayStatus.badge
                     Text(invoice.customerName ?? "No customer").font(.title2.bold())
-                    if let email = invoice.customerEmail { Text(email).foregroundStyle(.secondary) }
+                    if let email = invoice.customerEmail { Text(email).foregroundStyle(.secondaryText) }
                     HStack(alignment: .firstTextBaseline) {
                         Text(Formatters.money(invoice.totalAmount, currency: invoice.currency) ?? "").font(.title.monospacedDigit().bold())
                         if invoice.balanceDue > 0 && invoice.amountPaid > 0 {
                             Text("\(Formatters.money(invoice.balanceDue, currency: invoice.currency) ?? "") due")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryText)
                         }
                     }
                     Text([invoice.issueDate.map { "Issued \(Formatters.day($0.date()) ?? "")" },
                           invoice.dueDate.map { "Due \(Formatters.day($0.date()) ?? "")" }].compactMap { $0 }.joined(separator: " · "))
-                        .font(.subheadline).foregroundStyle(.secondary)
+                        .font(.subheadline).foregroundStyle(.secondaryText)
                 }
                 .padding(.vertical, 4)
             }
@@ -282,7 +282,7 @@ struct InvoiceDetailView: View {
                                 Text("\(item.quantity.formatted()) × \(Formatters.money(item.unitPrice, currency: invoice.currency) ?? "")"
                                      + (item.taxRate > 0 ? " · VAT \(item.taxRate.formatted())%" : "")
                                      + (item.discountPercent > 0 ? " · −\(item.discountPercent.formatted())%" : ""))
-                                    .font(.caption).foregroundStyle(.secondary)
+                                    .font(.caption).foregroundStyle(.secondaryText)
                             }
                             Spacer()
                             Text(Formatters.money(item.lineTotal, currency: invoice.currency) ?? "").monospacedDigit().foregroundStyle(.primary)
@@ -317,7 +317,7 @@ struct InvoiceDetailView: View {
                                 Text(Formatters.money(payment.amount, currency: invoice.currency) ?? "").font(.headline.monospacedDigit())
                                 Text([Formatters.humanize(payment.paymentMethod), payment.referenceNumber,
                                       payment.paymentDate.flatMap { Formatters.day($0.date()) }].compactMap { $0 }.joined(separator: " · "))
-                                    .font(.caption).foregroundStyle(.secondary)
+                                    .font(.caption).foregroundStyle(.secondaryText)
                             }
                             Spacer()
                         }
@@ -505,7 +505,7 @@ struct InvoiceCreateSheet: View {
     @State private var customerName = ""
     @State private var customerEmail = ""
     @State private var dueDate = Calendar.current.date(byAdding: .day, value: 30, to: Date()) ?? Date()
-    @State private var currency = "GBP"
+    @State private var currency = Formatters.fallbackCurrency
     @State private var notes = ""
     @State private var items: [LineItemBody] = [LineItemBody(description: "", quantity: 1, unitPrice: 0, taxRate: 20)]
     @State private var saving = false
@@ -521,7 +521,7 @@ struct InvoiceCreateSheet: View {
                 Section("Terms") {
                     DatePicker("Due date", selection: $dueDate, displayedComponents: .date)
                     Picker("Currency", selection: $currency) {
-                        ForEach(["GBP", "EUR", "USD"], id: \.self) { Text($0).tag($0) }
+                        ForEach(Formatters.currencyChoices(including: currency), id: \.self) { Text($0).tag($0) }
                     }
                 }
                 ForEach($items.indices, id: \.self) { index in

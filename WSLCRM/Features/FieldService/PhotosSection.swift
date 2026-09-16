@@ -83,7 +83,7 @@ struct PhotosSection: View {
                 Label("Photos", systemImage: "camera")
                     .font(.headline)
                 if !model.photos.isEmpty {
-                    Text("\(model.photos.count)").foregroundStyle(.secondary)
+                    Text("\(model.photos.count)").foregroundStyle(.secondaryText)
                 }
                 Spacer()
                 if model.uploading > 0 {
@@ -107,8 +107,8 @@ struct PhotosSection: View {
                             .font(.headline)
                             .frame(maxWidth: .infinity, minHeight: 56)
                             .background(Tone.info.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
-                            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Tone.info.color, lineWidth: 2))
-                            .foregroundStyle(Tone.info.color)
+                            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Tone.info.textColor, lineWidth: 2))
+                            .foregroundStyle(Tone.info.textColor)
                     }
                     .accessibilityIdentifier("photos.add")
                 }
@@ -122,7 +122,7 @@ struct PhotosSection: View {
             default:
                 if model.photos.isEmpty {
                     Text(canEdit ? "No photos yet. Add fault and site photos for the quote sheet." : "No photos.")
-                        .font(.subheadline).foregroundStyle(.secondary)
+                        .font(.subheadline).foregroundStyle(.secondaryText)
                 } else {
                     LazyVGrid(columns: columns, spacing: 8) {
                         ForEach(model.photos) { photo in
@@ -131,6 +131,7 @@ struct PhotosSection: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel(photo.caption ?? "Job photo")
+                            .accessibilityIdentifier("photo.\(photo.uuid)")
                             .contextMenu {
                                 if canEdit {
                                     Button("Delete photo", systemImage: "trash", role: .destructive) {
@@ -183,7 +184,7 @@ private struct PhotoThumbnail: View {
             case .success(let image):
                 image.resizable().scaledToFill()
             case .failure:
-                Image(systemName: "photo.badge.exclamationmark").foregroundStyle(.secondary)
+                Image(systemName: "photo.badge.exclamationmark").foregroundStyle(.secondaryText)
             default:
                 ProgressView()
             }

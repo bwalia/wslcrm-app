@@ -19,6 +19,11 @@ actor FakeSender: MutationSender {
     }
 }
 
+/// Movable clock so backoff can be tested without waiting.
+final class TestClock: @unchecked Sendable {
+    var now = Date()
+}
+
 final class MutationQueueTests: XCTestCase {
     private var fileURL: URL!
 
@@ -166,16 +171,62 @@ final class MutationQueueTests: XCTestCase {
         XCTAssertEqual(remaining.map(\.summary), ["theirs"])
     }
 
-    func testServerErrorInterruptsAndKeepsPending() async {
+    /// A struggling server backs that write off and holds its entity, but other entities keep
+    /// going, and the write is retried on the next pass once the backoff has elapsed.
+    func testServerErrorBacksOffWithoutBlockingOtherEntities() async {
         let sender = FakeSender()
-        await sender.script("check-in", [.server(ServerError(status: 503, message: "Unavailable", fieldErrors: [:], rawBody: ""))])
-        let queue = MutationQueue(fileURL: fileURL, sender: sender)
+        let unavailable = APIError.server(ServerError(status: 503, message: "Unavailable", fieldErrors: [:], rawBody: ""))
+        await sender.script("check-in", [unavailable])
+        let clock = TestClock()
+        let queue = MutationQueue(fileURL: fileURL, sender: sender, now: { clock.now })
         await queue.enqueue(mutation("check-in"))
+        await queue.enqueue(mutation("check-out", kind: .visitCheckOut))
+        await queue.enqueue(mutation("tick-0", entity: "phase-1", kind: .checklistToggle))
 
         let outcome = await queue.replay(forUser: "user-1")
-        XCTAssertEqual(outcome, .interrupted(sent: 0))
-        let remaining = await queue.all
-        XCTAssertEqual(remaining.first?.state, .pending)
+
+        XCTAssertEqual(outcome, .completed(sent: 1, failed: 0), "the unrelated phase write still went")
+        let sent = await sender.sent
+        XCTAssertEqual(sent, ["tick-0"])
+        let pending = await queue.all
+        XCTAssertEqual(pending.map(\.summary), ["check-in", "check-out"])
+        XCTAssertEqual(pending.first?.state, .pending)
+        XCTAssertNotNil(pending.first?.nextAttemptAt, "the failing write is backed off, not hammered")
+
+        // Too soon: still backing off.
+        let tooSoon = await queue.replay(forUser: "user-1")
+        XCTAssertEqual(tooSoon, .completed(sent: 0, failed: 0))
+
+        // After the backoff, the visit's writes go through in order.
+        clock.now = clock.now.addingTimeInterval(60)
+        let afterBackoff = await queue.replay(forUser: "user-1")
+        XCTAssertEqual(afterBackoff, .completed(sent: 2, failed: 0))
+        let all = await sender.sent
+        XCTAssertEqual(all, ["tick-0", "check-in", "check-out"])
+    }
+
+    func testWriteIsGivenUpOnAfterRepeatedServerFailures() async {
+        let sender = FakeSender()
+        let unavailable = APIError.server(ServerError(status: 503, message: "Unavailable", fieldErrors: [:], rawBody: ""))
+        await sender.script("check-in", Array(repeating: unavailable, count: 10))
+        let clock = TestClock()
+        let queue = MutationQueue(fileURL: fileURL, sender: sender,
+                                  backoff: .init(base: 1, cap: 4, maxAttempts: 3), now: { clock.now })
+        await queue.enqueue(mutation("check-in"))
+
+        for _ in 0..<3 {
+            await queue.replay(forUser: "user-1")
+            clock.now = clock.now.addingTimeInterval(10)
+        }
+
+        let item = await queue.all.first
+        XCTAssertEqual(item?.attempts, 3)
+        if case .failed(let message, let status) = item?.state {
+            XCTAssertEqual(status, 503)
+            XCTAssertFalse(message.isEmpty)
+        } else {
+            XCTFail("after the attempt cap the write is shown to the user, not retried forever")
+        }
     }
 
     func testObserverReceivesChanges() async {

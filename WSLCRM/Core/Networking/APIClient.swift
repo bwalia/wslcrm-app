@@ -19,6 +19,8 @@ actor APIClient {
     private let tokenStore: TokenStore
     private let logger: NetworkLogger
     private let userAgent: String
+    private let retryPolicy: RetryPolicy
+    private let sleep: @Sendable (TimeInterval) async throws -> Void
     private let now: @Sendable () -> Date
 
     private var tokens: AuthTokens?
@@ -33,11 +35,15 @@ actor APIClient {
          tokenStore: TokenStore,
          logger: NetworkLogger = NetworkLogger(isEnabled: false),
          appVersion: String = Bundle.main.shortVersion,
+         retryPolicy: RetryPolicy = RetryPolicy(),
+         sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) },
          now: @escaping @Sendable () -> Date = { Date() }) {
         self.baseURL = baseURL
         self.session = session
         self.tokenStore = tokenStore
         self.logger = logger
+        self.retryPolicy = retryPolicy
+        self.sleep = sleep
         self.userAgent = "WSLCRM-iOS/\(appVersion)"
         self.now = now
         self.tokens = tokenStore.load()
@@ -80,6 +86,9 @@ actor APIClient {
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.waitsForConnectivity = false
         configuration.timeoutIntervalForRequest = 30
+        #if DEBUG
+        if let window = OfflineSimulator.window() { OfflineSimulator.install(window: window, on: configuration) }
+        #endif
         return URLSession(configuration: configuration)
     }
 
@@ -120,22 +129,53 @@ actor APIClient {
             throw APIError.unauthorized(ServerError(status: 401, message: "Not signed in", fieldErrors: [:], rawBody: ""))
         }
 
-        var (data, response) = try await perform(endpoint, accessToken: tokenUsed)
-
-        if response.statusCode == 401, endpoint.requiresAuth {
-            let refreshed = try await refreshedTokens(replacing: tokenUsed)
-            (data, response) = try await perform(endpoint, accessToken: refreshed.accessToken)
-            if response.statusCode == 401 {
-                // A fresh token was still rejected — treat the session as over.
-                endSession()
-                throw APIError.from(status: 401, data: data, headers: response.allHeaderFields)
+        var attempt = 0
+        var data: Data
+        var response: HTTPURLResponse
+        while true {
+            do {
+                (data, response) = try await perform(endpoint, accessToken: tokenUsed)
+            } catch let error as APIError where retryPolicy.shouldRetry(error: error, method: endpoint.method, attempt: attempt) {
+                try await backoff(attempt: attempt, retryAfter: nil, endpoint: endpoint)
+                attempt += 1
+                continue
             }
+
+            if response.statusCode == 401, endpoint.requiresAuth {
+                let refreshed = try await refreshedTokens(replacing: tokenUsed)
+                (data, response) = try await perform(endpoint, accessToken: refreshed.accessToken)
+                if response.statusCode == 401 {
+                    // A fresh token was still rejected — treat the session as over.
+                    endSession()
+                    throw APIError.from(status: 401, data: data, headers: response.allHeaderFields)
+                }
+            }
+
+            // A read that hit a 5xx or the rate limiter is worth another go; writes are left to
+            // the mutation queue so nothing is applied twice.
+            if retryPolicy.shouldRetry(status: response.statusCode, method: endpoint.method, attempt: attempt) {
+                try await backoff(attempt: attempt, retryAfter: RetryPolicy.retryAfter(response.allHeaderFields),
+                                  endpoint: endpoint)
+                attempt += 1
+                continue
+            }
+            break
         }
 
         guard (200..<300).contains(response.statusCode) else {
             throw APIError.from(status: response.statusCode, data: data, headers: response.allHeaderFields)
         }
         return (data, response)
+    }
+
+    private func backoff(attempt: Int, retryAfter: TimeInterval?, endpoint: Endpoint) async throws {
+        let delay = retryPolicy.delay(attempt: attempt, retryAfter: retryAfter)
+        logger.retry(endpoint.summary, attempt: attempt + 1, delay: delay)
+        do {
+            try await sleep(delay)
+        } catch {
+            throw APIError.cancelled
+        }
     }
 
     // MARK: - Refresh

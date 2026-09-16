@@ -186,7 +186,7 @@ struct JobRow: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(job.jobNumber)
                     .font(.subheadline.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryText)
                 if job.priority == .urgent || job.priority == .high {
                     job.priority.badge
                 }
@@ -203,7 +203,7 @@ struct JobRow: View {
             if let address = job.fullAddress {
                 Label(address, systemImage: "mappin.and.ellipse")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryText)
                     .lineLimit(1)
             }
             HStack(spacing: 16) {
@@ -219,7 +219,7 @@ struct JobRow: View {
                 }
             }
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryText)
         }
         .padding(.vertical, 6)
         .accessibilityElement(children: .combine)

@@ -39,6 +39,7 @@ struct QuoteLineSheet: View {
     @State private var quantity: Decimal = 1
     @State private var unitPrice: Decimal?
     @State private var saving = false
+    @State private var pickingPart = false
 
     var body: some View {
         NavigationStack {
@@ -46,16 +47,16 @@ struct QuoteLineSheet: View {
                 switch kind {
                 case .labour:
                     Section {
+                        // An inline picker renders its own label as the section header; hiding
+                        // the label left an invisible copy behind for VoiceOver to read.
                         Picker("Who / rate", selection: $labourCategory) {
                             ForEach(LabourCategory.allCases) { Text($0.label).tag($0) }
                         }
                         .pickerStyle(.inline)
-                        .labelsHidden()
                         .accessibilityIdentifier("quote.labourCategory")
-                    } header: {
-                        Text("Who / rate")
                     }
-                    Section("Time") {
+                    Section {
+                        SheetSectionTitle("Time")
                         Stepper(value: $hours, in: 0...24, step: 0.5) {
                             LabeledContent("Hours", value: hours.formatted())
                                 .font(.title3.monospacedDigit())
@@ -67,7 +68,15 @@ struct QuoteLineSheet: View {
                         }
                     }
                 case .material:
-                    Section("Material") {
+                    Section {
+                        SheetSectionTitle("Material")
+                        Button {
+                            pickingPart = true
+                        } label: {
+                            Label(description.isEmpty ? "Pick from the stock list" : "Pick a different part",
+                                  systemImage: "magnifyingglass")
+                        }
+                        .accessibilityIdentifier("quote.pickPart")
                         TextField("What was fitted? e.g. Compressor", text: $description)
                             .accessibilityIdentifier("quote.description")
                         TextField("Part number", text: $partNumber)
@@ -79,12 +88,14 @@ struct QuoteLineSheet: View {
                         }
                     }
                     if showsPrices {
-                        Section("Price") {
+                        Section {
+                        SheetSectionTitle("Price")
                             TextField("Price each", value: $unitPrice, format: .number).keyboardType(.decimalPad)
                         }
                     }
                 case .hire:
-                    Section("Hire") {
+                    Section {
+                        SheetSectionTitle("Hire")
                         TextField("Equipment, e.g. Genie lift", text: $description)
                             .accessibilityIdentifier("quote.description")
                         TextField("Supplier, e.g. HSS", text: $supplier)
@@ -96,7 +107,8 @@ struct QuoteLineSheet: View {
                         }
                     }
                     if showsPrices {
-                        Section("Price") {
+                        Section {
+                        SheetSectionTitle("Price")
                             TextField("Price per day", value: $unitPrice, format: .number).keyboardType(.decimalPad)
                         }
                     }
@@ -114,6 +126,13 @@ struct QuoteLineSheet: View {
             }
             .onAppear { if kind == .hire && days == 0 { days = 1 } }
             .interactiveDismissDisabled(saving)
+            .sheet(isPresented: $pickingPart) {
+                PartPickerSheet { part in
+                    description = part.name
+                    partNumber = part.sku ?? partNumber
+                    if showsPrices, let price = part.unitPrice { unitPrice = price }
+                }
+            }
         }
     }
 
@@ -157,7 +176,7 @@ struct QuoteLineSheet: View {
 struct QuoteSheetSummary: View {
     let items: [JobItem]
     var showsPrices = false
-    var currency = "GBP"
+    var currency = Formatters.fallbackCurrency
 
     var body: some View {
         let groups: [(String, String, [JobItem])] = [
@@ -170,14 +189,14 @@ struct QuoteSheetSummary: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label(title, systemImage: icon)
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryText)
                     .textCase(.uppercase)
                 ForEach(lines) { item in
                     HStack(alignment: .firstTextBaseline) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.quoteSummary).font(.body)
                             if let part = item.partNumber {
-                                Text("Part no. \(part)").font(.caption).foregroundStyle(.secondary)
+                                Text("Part no. \(part)").font(.caption).foregroundStyle(.secondaryText)
                             }
                         }
                         Spacer()
@@ -191,5 +210,63 @@ struct QuoteSheetSummary: View {
             }
             .padding(.vertical, 4)
         }
+    }
+}
+
+
+/// Picks a material from the workspace's parts catalogue (`GET /field-service/parts`), so a
+/// line carries the real SKU and price instead of whatever was typed on site.
+struct PartPickerSheet: View {
+    let onPick: (FsPart) -> Void
+    @Environment(\.services) private var services
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ModelHost(make: { [api = services.fieldService] in
+                PagedListModel<FsPart> { search, page in try await api.parts(search: search, page: page) }
+            }) { model in
+                PagedList(model: model, searchPrompt: "Part, SKU or category", emptyTitle: "No parts",
+                          emptySystemImage: "shippingbox",
+                          emptyDescription: "The workspace has no stock list yet — type the part instead.") { part in
+                    Button {
+                        onPick(part)
+                        dismiss()
+                    } label: {
+                        PartRow(part: part)
+                    }
+                    .accessibilityIdentifier("part.row.\(part.name)")
+                }
+            }
+            .navigationTitle("Stock list")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+        }
+    }
+}
+
+private struct PartRow: View {
+    let part: FsPart
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "shippingbox.fill")
+                .frame(width: 36, height: 36)
+                .background(Tone.neutral.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                .foregroundStyle(Tone.neutral.textColor)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(part.name).font(.headline).foregroundStyle(.primary)
+                if let subtitle = part.subtitle {
+                    Text(subtitle).font(.subheadline).foregroundStyle(.secondaryText)
+                }
+            }
+            Spacer()
+            if let stock = part.stockQuantity {
+                Text("\(stock.formatted()) in stock").font(.caption).foregroundStyle(.secondaryText)
+            }
+        }
+        .frame(minHeight: 52)
+        .accessibilityElement(children: .combine)
     }
 }

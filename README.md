@@ -116,7 +116,13 @@ xcodebuild … -only-testing:WSLCRMTests test
 | `FieldServicePR610Tests` | opsapi #610 payloads: sites (`+00` timestamps), presigned photos, quote lines (labour category, days, supplier, hire), visit F-Gas fields, job site fallback, convert-to-job body (UTC), multipart upload, JPEG cap, site link follow-up `PUT` |
 | `MyWorkBucketingTests` | My Work window, shared background-refresh cache key, offline prefetch of open visits only, new-assignment detection |
 | `PhaseCompletionUITests` | login → wrong/right 2FA code → My Work → job → phase: force prompt, checklist tick, completion |
-| `FieldServiceLocalFlowUITests` | the full request → invoice happy path against a real local OPSAPI (skipped unless run by `scripts/run-local-fs-uitest.sh`) |
+| `RetryPolicyTests`, `APIClientRetryTests` | which failures are retried (reads only), bounded attempts, exponential backoff, `Retry-After` |
+| `ResponseCacheEvictionTests` | cached responses expire and the cache is trimmed to its size limit |
+| `LogRedactionTests` | passwords, tokens and OTPs never reach the log — including form-encoded bodies |
+| `EngineerFlowUITests` | the guided visit against the stub: labour from the stepper, a material from the stock list, an F-Gas record, check-out — with an **accessibility audit** of every screen |
+| `LargeTextUITests` | the same screens at an accessibility text size, with screenshots |
+| `FieldServiceLocalFlowUITests` | the full request → invoice happy path against a real local OPSAPI, including a checklist tick made **offline** that syncs on reconnect (skipped unless run by `scripts/run-local-fs-uitest.sh`) |
+| `LocalPhotoUploadTests` | photo upload, listing and delete against the real local API (multipart, presigned URL) |
 
 UI test screenshots are kept in the result bundle:
 `xcrun xcresulttool export attachments --path <bundle>.xcresult --output-path screens/`.
@@ -153,6 +159,10 @@ scripts/local-opsapi-fs-seed.sh
 # 4. Run: resets that tenant's open jobs, sets the simulator location, records video
 scripts/run-local-fs-uitest.sh
 ```
+
+`-WSLOfflineWindow <from>,<to>` (Debug builds only) fakes a loss of connectivity for a window of
+seconds after launch; the local flow uses it to prove a checklist tick made with no signal is
+queued, shown as waiting, and sent on reconnect.
 
 Screenshots are in `build/local-fs-run/result.xcresult` (export them as shown above) and the video
 is saved to `build/local-fs-run/happy-path.mp4`. To run the app by hand, pick the **WSLCRM-Local**
@@ -248,6 +258,22 @@ service-request actions come from `allowed_transitions`.
 - Screens overlay queued writes (a ticked item shows "Waiting to sync"). A banner shows pending and
   failed counts.
 
+**Reliability.**
+
+- **Retries.** Reads retry twice with exponential backoff and jitter on a 5xx, a 429 (honouring
+  `Retry-After`) or a dropped connection. Writes are never retried by the client: the mutation
+  queue owns them, so a check-in can't be applied twice.
+- **The offline queue backs off.** A write rejected by a struggling server waits (2s, doubling, up
+  to five minutes) and holds only its own entity, so unrelated writes keep syncing. After eight
+  attempts it is shown to the user as failed instead of retrying forever.
+- **The cache is bounded.** Cached responses expire after 30 days, and the oldest are evicted once
+  the cache passes 64MB.
+- **Nothing sensitive is logged.** The redacting logger covers JSON *and* form-encoded bodies
+  (`/auth/login` is form-encoded); anything it can't parse is logged as a byte count, not content.
+- **Privacy manifest.** `WSLCRM/Resources/PrivacyInfo.xcprivacy` declares the required-reason APIs
+  (UserDefaults, file timestamps) and the data the app sends to its own server. Confirm the
+  collected-data list with the product owner before each App Store submission.
+
 **Phone-first & accessibility.**
 
 - Buttons are at least 56pt tall, and checklist rows are full-width toggles.
@@ -256,6 +282,10 @@ service-request actions come from `allowed_transitions`.
 - Dynamic Type fonts are used throughout.
 - Every status has an icon and a label, never colour alone.
 - Controls have VoiceOver labels, values and hints.
+- `EngineerFlowUITests` runs Apple's accessibility audit on every screen it visits (contrast,
+  hit areas, labels, traits), and `LargeTextUITests` drives the app at an accessibility text size.
+  Status pills wrap instead of truncating, and prominent buttons use darker fills so white text
+  clears 4.5:1 — the system greens and oranges do not.
 
 **Location.** Requested only at check-in/out, with a clear purpose string, and it never blocks the
 action. There is an 8-second timeout, and denial is fine.

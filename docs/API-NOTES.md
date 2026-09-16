@@ -178,6 +178,23 @@ on the PR branch.
 
     `scripts/local-opsapi-fs-seed.sh` works around these with SQL on the isolated local database only.
 
+50. **Job photos lose their content type (verified locally).** The upload route reads
+    `file.content_type` (`routes/field-service-jobs.lua:233`), but Lapis's multipart parser doesn't
+    provide it, so `fs_job_photos.content_type` is always NULL and never comes back in the API.
+    The create response also omits `created_at` (the list has it). Photos are therefore untyped
+    and unordered for the client.
+51. **The photo size limit is really 10MB, not 15MB (verified locally).** The route rejects over
+    15MB (`routes/field-service-jobs.lua:224`), but the upload then goes through
+    `MinioClient:validateFile`, which enforces `MAX_FILE_SIZE = 10MB` (`helper/minio.lua:218`) and
+    surfaces as a **502** "Upload failed: File size …" rather than a 413. The app caps uploads at
+    10MB and maps that 502 to a "photo is too large" message.
+52. **Photo URLs are presigned for one hour** (`queries/JobPhotoQueries.lua:25-32`, re-signed on
+    every read), so a client must not persist them; the app re-fetches the list instead.
+53. **The global rate limiter answers 429 with `retry_after` in the body and a `Retry-After`
+    header** (`middleware/rate-limit.lua:67-89`), but outside a 429 only `X-RateLimit-Limit` and
+    `X-RateLimit-Remaining` are sent. The body is a bare `{error, retry_after}` — not the usual
+    envelope — so 429 needs its own decoding path.
+
 ## 6. Missing endpoints that would simplify the app
 
 - `GET /job-phases/:uuid` — phase mutations return only the phase, so the job has to be re-fetched

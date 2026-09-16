@@ -194,7 +194,7 @@ private struct JobDetailContent: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(entry.message ?? Formatters.humanize(entry.action)).font(.subheadline)
                             Text([entry.actorName, Formatters.dateTime(entry.createdAt)].compactMap { $0 }.joined(separator: " · "))
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(.caption).foregroundStyle(.secondaryText)
                         }
                         .accessibilityElement(children: .combine)
                     }
@@ -219,7 +219,7 @@ private struct JobDetailContent: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(job.invoiceNumber ?? "Invoice").font(.headline)
                             if let invoicedAt = job.invoicedAt {
-                                Text("Raised \(Formatters.dateTime(invoicedAt) ?? "")").font(.caption).foregroundStyle(.secondary)
+                                Text("Raised \(Formatters.dateTime(invoicedAt) ?? "")").font(.caption).foregroundStyle(.secondaryText)
                             }
                         }
                         Spacer()
@@ -274,7 +274,7 @@ private struct JobDetailContent: View {
                     .font(.subheadline)
             }
             if let description = detail.job.description, !description.isEmpty {
-                Text(description).font(.body).foregroundStyle(.secondary)
+                Text(description).font(.body).foregroundStyle(.secondaryText)
             }
             if let type = detail.job.jobTypeName {
                 Label(type, systemImage: "tag").font(.subheadline)
@@ -312,7 +312,7 @@ private struct JobDetailContent: View {
     private func phasesSection(_ detail: JobDetail, policy: FieldServicePolicy) -> some View {
         Section {
             if detail.phases.isEmpty {
-                Text("No phases on this job.").foregroundStyle(.secondary)
+                Text("No phases on this job.").foregroundStyle(.secondaryText)
             }
             ForEach(model.displayedPhases, id: \.phase.uuid) { display in
                 NavigationLink {
@@ -355,7 +355,7 @@ private struct JobDetailContent: View {
                     Text(["\(item.quantity.formatted()) × \(Formatters.money(item.unitPrice, currency: detail.job.currency) ?? "")",
                           Formatters.humanize(item.itemType), item.supplier, item.partNumber.map { "Part \($0)" }]
                         .compactMap { $0 }.joined(separator: " · "))
-                        .font(.subheadline).foregroundStyle(.secondary)
+                        .font(.subheadline).foregroundStyle(.secondaryText)
                     HStack {
                         item.approvalStatus.badge
                         if item.invoiced {
@@ -425,7 +425,7 @@ struct PhaseRow: View {
             HStack(alignment: .firstTextBaseline) {
                 Text("\(phase.sortOrder).")
                     .font(.headline.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryText)
                 Text(phase.name).font(.headline)
                 Spacer()
                 phase.status.badge
@@ -440,7 +440,7 @@ struct PhaseRow: View {
                 }
             }
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryText)
             if display.hasPendingWrites {
                 PendingSyncBadge(failed: display.hasFailedWrites)
             }

@@ -194,7 +194,7 @@ extension Job: Decodable {
         dueDate = c.decodeDay(forKey: .dueDate)
         estimatedHours = c.decodeFlexibleDecimal(forKey: .estimatedHours)
         hourlyRate = c.decodeFlexibleDecimal(forKey: .hourlyRate)
-        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? "GBP"
+        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? Formatters.fallbackCurrency
         startedAt = c.decodeDate(forKey: .startedAt)
         completedAt = c.decodeDate(forKey: .completedAt)
         cancelledReason = try? c.decodeIfPresent(String.self, forKey: .cancelledReason)
@@ -507,6 +507,7 @@ struct Visit: Identifiable, Hashable, Sendable {
     var jobTitle: String
     var jobStatus: JobStatus
     var jobPriority: JobPriority
+    var jobCurrency: String?
     var phaseUuid: String?
     var phaseName: String?
     var phaseStatus: PhaseStatus?
@@ -546,7 +547,7 @@ extension Visit: Decodable {
     enum CodingKeys: String, CodingKey {
         case uuid, status, engineerUserUuid, engineerName, scheduledStart, scheduledEnd, checkedInAt, checkedOutAt
         case instructions, workSummary, labourHours, isBillable, customerSignoffName, followUpRequired
-        case followUpNotes, cancelledReason, jobUuid, jobNumber, jobTitle, jobStatus, jobPriority, phaseUuid
+        case followUpNotes, cancelledReason, jobUuid, jobNumber, jobTitle, jobStatus, jobPriority, jobCurrency, phaseUuid
         case phaseName, phaseStatus, customerUuid, customerName, customerPhone, productName, productRef
         case serviceAddress, servicePostcode, siteUuid, siteName, siteAccessNotes
         case refrigerantType, refrigerantAddedKg, refrigerantRecoveredKg, leakCheckResult, leakCheckNotes, fgasCylinderRef
@@ -575,6 +576,7 @@ extension Visit: Decodable {
         jobTitle = (try? c.decodeIfPresent(String.self, forKey: .jobTitle)) ?? ""
         jobStatus = JobStatus(api: try? c.decodeIfPresent(String.self, forKey: .jobStatus))
         jobPriority = JobPriority(api: try? c.decodeIfPresent(String.self, forKey: .jobPriority))
+        jobCurrency = try? c.decodeIfPresent(String.self, forKey: .jobCurrency)
         phaseUuid = try? c.decodeIfPresent(String.self, forKey: .phaseUuid)
         phaseName = try? c.decodeIfPresent(String.self, forKey: .phaseName)
         phaseStatus = (try? c.decodeIfPresent(String.self, forKey: .phaseStatus)).map(PhaseStatus.init(api:))
@@ -764,8 +766,16 @@ struct Engineer: Identifiable, Hashable, Sendable, Decodable {
     var id: String { uuid }
     let email: String?
     let name: String?
+    /// Visits already booked on this person (scheduled, en route or on site).
+    let openVisits: Int?
 
     var displayName: String { name ?? email ?? "Unknown" }
+
+    /// "Eddie Engineer · 3 open" — workload at the point of assigning.
+    var pickerLabel: String {
+        guard let openVisits, openVisits > 0 else { return displayName }
+        return "\(displayName) · \(openVisits) open"
+    }
 }
 
 struct JobType: Identifiable, Hashable, Sendable, Decodable {
@@ -854,6 +864,45 @@ extension FsSite: Decodable {
         accessNotes = try? c.decodeIfPresent(String.self, forKey: .accessNotes)
         address = try? c.decodeIfPresent(String.self, forKey: .address)
         jobCount = c.decodeFlexibleInt(forKey: .jobCount) ?? 0
+    }
+}
+
+// MARK: - Parts catalogue
+
+/// A row from `GET /field-service/parts`: the stock list an engineer fits from, so a material
+/// line carries the real SKU and price instead of free text.
+struct FsPart: Identifiable, Hashable, Sendable {
+    let uuid: String
+    var id: String { uuid }
+    var sku: String?
+    var name: String
+    var description: String?
+    var category: String?
+    var unitPrice: Decimal?
+    var stockQuantity: Decimal?
+    var isActive: Bool
+
+    var subtitle: String? {
+        let parts = [sku, category].compactMap { $0?.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+
+extension FsPart: Decodable {
+    enum CodingKeys: String, CodingKey {
+        case uuid, sku, name, description, category, unitPrice, stockQuantity, isActive
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        uuid = try c.decode(String.self, forKey: .uuid)
+        sku = c.decodeFlexibleString(forKey: .sku)
+        name = (try? c.decodeIfPresent(String.self, forKey: .name)) ?? ""
+        description = try? c.decodeIfPresent(String.self, forKey: .description)
+        category = try? c.decodeIfPresent(String.self, forKey: .category)
+        unitPrice = c.decodeFlexibleDecimal(forKey: .unitPrice)
+        stockQuantity = c.decodeFlexibleDecimal(forKey: .stockQuantity)
+        isActive = c.decodeFlexibleBool(forKey: .isActive) ?? true
     }
 }
 

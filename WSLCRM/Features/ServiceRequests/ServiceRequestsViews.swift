@@ -147,7 +147,7 @@ struct ServiceRequestRow: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(request.requestNumber)
                     .font(.subheadline.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryText)
                 if request.priority == .urgent || request.priority == .high {
                     request.priority.badge
                 }
@@ -162,14 +162,14 @@ struct ServiceRequestRow: View {
                 Label(Formatters.humanize(request.channel), systemImage: "phone.arrow.down.left")
                 if request.slaBreached {
                     Label("SLA breached", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(Tone.danger.color)
+                        .foregroundStyle(Tone.danger.textColor)
                 }
                 if let created = request.createdAt {
                     Text(Formatters.relative(created) ?? "")
                 }
             }
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryText)
         }
         .padding(.vertical, 6)
         .accessibilityElement(children: .combine)
@@ -351,7 +351,7 @@ private struct ServiceRequestDetailContent: View {
                         }
                     }
                     if let description = request.description {
-                        Text(description).foregroundStyle(.secondary)
+                        Text(description).foregroundStyle(.secondaryText)
                     }
                 }
                 .padding(.vertical, 4)
@@ -434,7 +434,7 @@ private struct ServiceRequestDetailContent: View {
                                 VStack(alignment: .leading) {
                                     Text(job.jobNumber ?? "Job").font(.headline)
                                         .accessibilityIdentifier("request.job")
-                                    Text(job.title ?? "").font(.subheadline).foregroundStyle(.secondary)
+                                    Text(job.title ?? "").font(.subheadline).foregroundStyle(.secondaryText)
                                 }
                                 Spacer()
                                 JobStatus(api: job.status).badge
@@ -474,7 +474,7 @@ struct EngineerPickerSheet: View {
                         } label: {
                             VStack(alignment: .leading) {
                                 Text(engineer.displayName).font(.headline).foregroundStyle(.primary)
-                                if let email = engineer.email { Text(email).font(.subheadline).foregroundStyle(.secondary) }
+                                if let email = engineer.email { Text(email).font(.subheadline).foregroundStyle(.secondaryText) }
                             }
                             .frame(minHeight: 44)
                         }

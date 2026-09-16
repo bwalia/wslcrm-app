@@ -34,7 +34,7 @@ struct PhaseDetailView: View {
                         if display.hasPendingWrites { PendingSyncBadge(failed: display.hasFailedWrites) }
                     }
                     if let description = phase.description, !description.isEmpty {
-                        Text(description).foregroundStyle(.secondary)
+                        Text(description).foregroundStyle(.secondaryText)
                     }
                     if phase.requiresSignoff {
                         if let name = phase.signoffName, let at = phase.signedOffAt {
@@ -54,7 +54,7 @@ struct PhaseDetailView: View {
                         Label("This job is \(detail.job.status.label.lowercased()). Reopen it to make changes.",
                               systemImage: "lock.fill")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryText)
                     }
                 }
                 .padding(.vertical, 4)
@@ -113,7 +113,7 @@ struct PhaseDetailView: View {
                 DetailRow(label: "Started", value: Formatters.dateTime(phase.startedAt))
                 if let existing = phase.notes, !existing.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Notes").font(.caption).foregroundStyle(.secondary)
+                        Text("Notes").font(.caption).foregroundStyle(.secondaryText)
                         Text(existing)
                     }
                 }
@@ -155,7 +155,7 @@ struct ChecklistRow: View {
                     } else if item.done, let at = item.doneAt {
                         Text("Done \(Formatters.dateTime(at) ?? "")")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryText)
                     }
                 }
                 Spacer(minLength: 0)

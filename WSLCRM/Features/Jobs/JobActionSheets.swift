@@ -215,14 +215,14 @@ struct JobInvoiceSheet: View {
                     }
                     Section("Billable") {
                         if preview.lines.isEmpty {
-                            Text("Nothing to invoice — no uninvoiced labour or approved items.").foregroundStyle(.secondary)
+                            Text("Nothing to invoice — no uninvoiced labour or approved items.").foregroundStyle(.secondaryText)
                         }
                         ForEach(preview.lines, id: \.self) { line in
                             HStack(alignment: .top) {
                                 VStack(alignment: .leading) {
                                     Text(line.description)
                                     Text("\(line.quantity.formatted()) × \(Formatters.money(line.unitPrice, currency: preview.currency) ?? "")")
-                                        .font(.caption).foregroundStyle(.secondary)
+                                        .font(.caption).foregroundStyle(.secondaryText)
                                     if line.missingRate {
                                         Label("No hourly rate", systemImage: "exclamationmark.triangle.fill")
                                             .font(.caption).foregroundStyle(Tone.warning.color)

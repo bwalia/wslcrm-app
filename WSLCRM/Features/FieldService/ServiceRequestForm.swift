@@ -171,42 +171,83 @@ struct CustomerPickerRow: View {
     }
 }
 
+/// Customers, paged.
+///
+/// `GET /api/v2/customers` has no `search`, so searching means paging until the match turns up.
+/// The picker loads a page at a time as the list scrolls, and while a search is active it keeps
+/// pulling pages (up to `maxAutoPages`) until it finds matches or reaches the end — a workspace
+/// with thousands of customers stays usable instead of being cut off at the first page.
+@MainActor
+@Observable
+final class CustomerPickerModel {
+    private(set) var loaded: [Customer] = []
+    private(set) var total = 0
+    private(set) var isLoading = false
+    private(set) var reachedEnd = false
+    private(set) var error: APIError?
+    var search = ""
+
+    private let api: CommerceAPI
+    private var nextPage = 1
+    private let pageSize = 100
+    private let maxAutoPages = 20
+
+    init(api: CommerceAPI) {
+        self.api = api
+    }
+
+    var matches: [Customer] {
+        guard !search.isEmpty else { return loaded }
+        return loaded.filter {
+            $0.displayName.localizedCaseInsensitiveContains(search) || $0.email.localizedCaseInsensitiveContains(search)
+        }
+    }
+
+    /// True while a search is still paging through customers it hasn't seen yet.
+    var isSearchingRemainder: Bool { isLoading && !search.isEmpty }
+
+    func loadNextPage() async {
+        guard !isLoading, !reachedEnd else { return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let page = try await api.customers(page: nextPage, perPage: pageSize)
+            loaded.append(contentsOf: page.items)
+            total = max(total, page.total)
+            nextPage += 1
+            reachedEnd = page.items.isEmpty || loaded.count >= page.total
+            error = nil
+        } catch {
+            self.error = error.asAPIError
+            reachedEnd = true   // stop hammering a failing endpoint; the row offers a retry
+        }
+    }
+
+    func retry() async {
+        reachedEnd = false
+        error = nil
+        await loadNextPage()
+    }
+
+    /// Keeps paging while a search has nothing to show and there are pages left.
+    func continueSearch() async {
+        guard !search.isEmpty else { return }
+        while matches.isEmpty, !reachedEnd, nextPage <= maxAutoPages, error == nil {
+            await loadNextPage()
+        }
+    }
+}
+
 private struct CustomerPickerSheet: View {
     @Binding var selection: ServiceRequestFormSheet.CustomerChoice?
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
-    @State private var state: LoadState<[Customer]> = .idle
-    @State private var search = ""
 
     var body: some View {
         NavigationStack {
-            List {
-                switch state {
-                case .idle, .loading:
-                    ProgressView()
-                case .failed(let error):
-                    InlineErrorRow(error: error) { Task { await load() } }
-                case .loaded(let customers):
-                    let filtered = search.isEmpty ? customers : customers.filter {
-                        $0.displayName.localizedCaseInsensitiveContains(search) || $0.email.localizedCaseInsensitiveContains(search)
-                    }
-                    if filtered.isEmpty { Text("No matching customers").foregroundStyle(.secondary) }
-                    ForEach(filtered) { customer in
-                        Button {
-                            selection = .init(uuid: customer.uuid, name: customer.displayName)
-                            dismiss()
-                        } label: {
-                            VStack(alignment: .leading) {
-                                Text(customer.displayName).font(.headline).foregroundStyle(.primary)
-                                Text(customer.email).font(.subheadline).foregroundStyle(.secondary)
-                            }
-                            .frame(minHeight: 44)
-                        }
-                        .accessibilityIdentifier("customer.row.\(customer.displayName)")
-                    }
-                }
+            ModelHost(make: { CustomerPickerModel(api: services.commerce) }) { model in
+                CustomerPickerList(model: model, selection: $selection, dismiss: dismiss)
             }
-            .searchable(text: $search, prompt: "Name or email")
             .navigationTitle("Customer")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -215,15 +256,53 @@ private struct CustomerPickerSheet: View {
                     ToolbarItem(placement: .destructiveAction) { Button("Clear") { selection = nil; dismiss() } }
                 }
             }
-            .task { await load() }
         }
     }
+}
 
-    private func load() async {
-        do {
-            state = .loaded(try await services.commerce.customers(page: 1, perPage: 200).items)
-        } catch {
-            state = .failed(error.asAPIError)
+private struct CustomerPickerList: View {
+    @Bindable var model: CustomerPickerModel
+    @Binding var selection: ServiceRequestFormSheet.CustomerChoice?
+    let dismiss: DismissAction
+
+    var body: some View {
+        List {
+            if let error = model.error, model.loaded.isEmpty {
+                InlineErrorRow(error: error) { Task { await model.retry() } }
+            }
+            ForEach(model.matches) { customer in
+                Button {
+                    selection = .init(uuid: customer.uuid, name: customer.displayName)
+                    dismiss()
+                } label: {
+                    VStack(alignment: .leading) {
+                        Text(customer.displayName).font(.headline).foregroundStyle(.primary)
+                        Text(customer.email).font(.subheadline).foregroundStyle(.secondaryText)
+                    }
+                    .frame(minHeight: 44)
+                }
+                .accessibilityIdentifier("customer.row.\(customer.displayName)")
+                .task {
+                    // Load the next page as the end of the list comes into view.
+                    if customer.id == model.matches.last?.id { await model.loadNextPage() }
+                }
+            }
+            if model.isLoading {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text(model.isSearchingRemainder ? "Searching \(model.total) customers…" : "Loading…")
+                        .foregroundStyle(.secondaryText)
+                }
+            } else if model.matches.isEmpty {
+                Text(model.search.isEmpty ? "No customers yet" : "No matching customers")
+                    .foregroundStyle(.secondaryText)
+            }
+        }
+        .searchable(text: $model.search, prompt: "Name or email")
+        .task { await model.loadNextPage() }
+        .task(id: model.search) {
+            try? await Task.sleep(for: .milliseconds(250))   // let typing settle
+            await model.continueSearch()
         }
     }
 }
@@ -311,7 +390,7 @@ struct AssignConvertToJobSheet: View {
                 Section {
                     Picker("Engineer", selection: $engineerUuid) {
                         Text("Assign later").tag(String?.none)
-                        ForEach(members) { Text($0.displayName).tag(Optional($0.uuid)) }
+                        ForEach(members) { Text($0.pickerLabel).tag(Optional($0.uuid)) }
                     }
                     .accessibilityIdentifier("convert.engineer")
                     if engineerUuid != nil {
@@ -329,7 +408,7 @@ struct AssignConvertToJobSheet: View {
                 Section("Management") {
                     Picker("Service manager", selection: $managerUuid) {
                         Text("Unassigned").tag(String?.none)
-                        ForEach(members) { Text($0.displayName).tag(Optional($0.uuid)) }
+                        ForEach(members) { Text($0.pickerLabel).tag(Optional($0.uuid)) }
                     }
                     Toggle("Due date", isOn: $hasDueDate)
                     if hasDueDate { DatePicker("Due", selection: $dueDate, displayedComponents: .date) }

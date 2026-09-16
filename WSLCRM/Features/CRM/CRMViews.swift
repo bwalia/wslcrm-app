@@ -66,7 +66,8 @@ struct StatTile: View {
         VStack(alignment: .leading, spacing: 6) {
             Label(title, systemImage: systemImage)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                // `.secondary` is 60% of label colour: it fails the contrast audit on this card.
+                .foregroundStyle(Color(.label))
             Text(value)
                 .font(.title2.bold().monospacedDigit())
                 .minimumScaleFactor(0.6)
@@ -105,7 +106,7 @@ struct CRMAccountsListView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(account.name).font(.headline)
                         Text([account.industry, account.city].compactMap { $0 }.joined(separator: " · "))
-                            .font(.subheadline).foregroundStyle(.secondary)
+                            .font(.subheadline).foregroundStyle(.secondaryText)
                     }
                     .padding(.vertical, 4)
                 }
@@ -178,7 +179,7 @@ struct CRMAccountDetailView: View {
                 HStack(spacing: 8) {
                     StatusBadge(text: Formatters.humanize(account.status), systemImage: "circle.fill",
                                 tone: account.status == "active" ? .success : .neutral)
-                    if let industry = account.industry { Text(industry).foregroundStyle(.secondary) }
+                    if let industry = account.industry { Text(industry).foregroundStyle(.secondaryText) }
                 }
                 if let phone = account.phone { PhoneLinkRow(name: account.name, phone: phone) }
                 if let email = account.email { EmailLinkRow(email: email) }
@@ -200,7 +201,7 @@ struct CRMAccountDetailView: View {
                         NavigationLink { CRMContactDetailView(contactUuid: contact.uuid) } label: {
                             VStack(alignment: .leading) {
                                 Text(contact.fullName).font(.headline)
-                                if let title = contact.jobTitle { Text(title).font(.subheadline).foregroundStyle(.secondary) }
+                                if let title = contact.jobTitle { Text(title).font(.subheadline).foregroundStyle(.secondaryText) }
                             }
                         }
                     }
@@ -350,7 +351,7 @@ struct CRMContactsListView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(contact.fullName).font(.headline)
                         Text([contact.jobTitle, contact.accountName].compactMap { $0 }.joined(separator: " · "))
-                            .font(.subheadline).foregroundStyle(.secondary)
+                            .font(.subheadline).foregroundStyle(.secondaryText)
                     }
                     .padding(.vertical, 4)
                 }
@@ -395,7 +396,7 @@ struct CRMContactDetailView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(contact.fullName).font(.title2.bold())
                             Text([contact.jobTitle, contact.department].compactMap { $0 }.joined(separator: " · "))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryText)
                         }
                         if let account = contact.accountName {
                             Label(account, systemImage: "building.2")
@@ -544,13 +545,13 @@ struct DealRow: View {
             }
             HStack(spacing: 8) {
                 deal.statusBadge
-                Text(Formatters.humanize(deal.stage)).font(.subheadline).foregroundStyle(.secondary)
+                Text(Formatters.humanize(deal.stage)).font(.subheadline).foregroundStyle(.secondaryText)
                 if deal.probability > 0 {
-                    Text("\(deal.probability)%").font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
+                    Text("\(deal.probability)%").font(.subheadline.monospacedDigit()).foregroundStyle(.secondaryText)
                 }
             }
             if let account = deal.accountName ?? deal.contactName {
-                Label(account, systemImage: "building.2").font(.footnote).foregroundStyle(.secondary)
+                Label(account, systemImage: "building.2").font(.footnote).foregroundStyle(.secondaryText)
             }
         }
         .padding(.vertical, 4)
@@ -703,7 +704,7 @@ private struct DealPipelineContent: View {
                 let deals = model.deals(in: stage)
                 Section("\(Formatters.humanize(stage)) — \(Formatters.money(deals.reduce(0) { $0 + $1.value }, currency: deals.first?.currency) ?? "")") {
                     if deals.isEmpty {
-                        Text("No deals in this stage").foregroundStyle(.secondary)
+                        Text("No deals in this stage").foregroundStyle(.secondaryText)
                     }
                     ForEach(deals) { deal in
                         NavigationLink { CRMDealDetailView(dealUuid: deal.uuid) } label: { DealRow(deal: deal) }
@@ -931,7 +932,7 @@ struct CRMDealForm: View {
         self.save = save
         _name = State(initialValue: deal?.name ?? "")
         _value = State(initialValue: deal?.value ?? 0)
-        _currency = State(initialValue: deal?.currency ?? "GBP")
+        _currency = State(initialValue: deal?.currency ?? Formatters.fallbackCurrency)
         _probability = State(initialValue: deal?.probability ?? 10)
         _accountId = State(initialValue: deal?.accountId)
         _hasCloseDate = State(initialValue: deal?.expectedCloseDate != nil)
@@ -946,7 +947,7 @@ struct CRMDealForm: View {
                     TextField("Value", value: $value, format: .number)
                         .keyboardType(.decimalPad)
                     Picker("Currency", selection: $currency) {
-                        ForEach(["GBP", "EUR", "USD"], id: \.self) { Text($0).tag($0) }
+                        ForEach(Formatters.currencyChoices(including: currency), id: \.self) { Text($0).tag($0) }
                     }
                     Stepper("Probability \(probability)%", value: $probability, in: 0...100, step: 10)
                 }

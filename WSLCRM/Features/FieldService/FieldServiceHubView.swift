@@ -5,6 +5,7 @@ import SwiftUI
 struct FieldServiceHubView: View {
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var stats: LoadState<FieldServiceStats> = .idle
     @State private var creatingRequest = false
     @State private var createdRequest: ServiceRequestRoute?
@@ -20,7 +21,8 @@ struct FieldServiceHubView: View {
                     case .failed(let error):
                         InlineErrorRow(error: error) { Task { await loadStats() } }
                     case .loaded(let stats):
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 10)], spacing: 10) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 260 : 140),
+                                                     spacing: 10)], spacing: 10) {
                             StatTile(title: "Open jobs", value: "\(stats.openJobs)", systemImage: "wrench.and.screwdriver")
                             StatTile(title: "Visits today", value: "\(stats.visitsToday)", systemImage: "calendar")
                             StatTile(title: "On site now", value: "\(stats.engineersOnSite)", systemImage: "mappin.and.ellipse")

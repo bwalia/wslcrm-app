@@ -9,8 +9,9 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         var body: Data
         var headers: [String: String] = ["Content-Type": "application/json"]
 
-        static func json(_ status: Int, _ body: String) -> Response {
-            Response(status: status, body: Data(body.utf8))
+        static func json(_ status: Int, _ body: String, headers: [String: String] = [:]) -> Response {
+            Response(status: status, body: Data(body.utf8),
+                     headers: ["Content-Type": "application/json"].merging(headers) { _, new in new })
         }
     }
 
