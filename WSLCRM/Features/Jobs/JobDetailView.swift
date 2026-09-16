@@ -33,6 +33,7 @@ private struct JobDetailContent: View {
     @State private var addingItem = false
     @State private var bookingVisit = false
     @State private var invoicing = false
+    @State private var quoting = false
     @State private var photos: JobPhotosModel?
     @Environment(SessionStore.self) private var session
     @Environment(\.services) private var services
@@ -63,6 +64,11 @@ private struct JobDetailContent: View {
             .sheet(isPresented: $bookingVisit) {
                 if let detail = model.detail {
                     BookVisitSheet(detail: detail) { Task { await model.load() } }
+                }
+            }
+            .sheet(isPresented: $quoting) {
+                if let detail = model.detail {
+                    JobQuoteSheet(detail: detail) { Task { await model.load() } }
                 }
             }
             .sheet(isPresented: $invoicing) {
@@ -166,6 +172,7 @@ private struct JobDetailContent: View {
                 itemsSection(detail, policy: policy)
             }
 
+            quoteSection(detail, policy: policy)
             invoiceSection(detail, policy: policy)
 
             if let photos {
@@ -205,6 +212,29 @@ private struct JobDetailContent: View {
         .environment(\.editMode, $editMode)
         .onAppear {
             if photos == nil { photos = JobPhotosModel(jobUuid: detail.job.uuid, visitUuid: nil, api: services.fieldService) }
+        }
+    }
+
+    /// Customer quotation (#611): the sheet's lines priced up as an estimate, shared or emailed.
+    /// Nothing here bills — that stays with the invoice below.
+    @ViewBuilder
+    private func quoteSection(_ detail: JobDetail, policy: FieldServicePolicy) -> some View {
+        if policy.canQuote(for: detail) {
+            Section {
+                Button {
+                    quoting = true
+                } label: {
+                    Label("Customer quotation", systemImage: "doc.plaintext")
+                }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("job.quote")
+            } header: {
+                Text("Quotation")
+            } footer: {
+                Text(QuotePDFRenderer.quotableItems(detail).isEmpty
+                     ? "Add labour, materials or hire to the sheet to quote for this job."
+                     : "An estimate for the customer, built from the job's quote sheet.")
+            }
         }
     }
 

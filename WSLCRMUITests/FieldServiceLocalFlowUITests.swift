@@ -167,6 +167,7 @@ final class FieldServiceLocalFlowUITests: XCTestCase {
     func testRequestToInvoiceHappyPath() throws {
         let title = "AC not cooling \(stamp)"
         let siteName = "Ward 5 \(stamp)"
+        let faultCategory = "No cooling \(stamp)"
 
         // 1. Telecaller: log a request with a new site and the faulty unit (asset search).
         signIn(env["WSL_TELECALLER"]!)
@@ -175,6 +176,15 @@ final class FieldServiceLocalFlowUITests: XCTestCase {
         element("hub.newRequest").tap()
         type("request.title", title)
         type("request.description", "Ward 5 split unit blowing warm air")
+
+        // Fault category is a reuse-or-create picker (#611): type one and save it with the request.
+        element("request.faultCategory").tap()
+        let categorySearch = app.searchFields.firstMatch
+        XCTAssertTrue(categorySearch.waitForExistence(timeout: 20), "Fault category search")
+        categorySearch.tap()
+        categorySearch.typeText(faultCategory)
+        element("faultCategory.new", timeout: 20).tap()
+
         element("request.customer").tap()
         tapText("Priya Patel")
         element("request.site").tap()
@@ -193,6 +203,12 @@ final class FieldServiceLocalFlowUITests: XCTestCase {
         let siteRow = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", siteName)).firstMatch
         if !siteRow.waitForExistence(timeout: 5) { app.swipeUp() }
         XCTAssertTrue(siteRow.waitForExistence(timeout: 10), "Site shows on the request")
+        let categoryRow = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", faultCategory)).firstMatch
+        for _ in 0..<4 where !categoryRow.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(categoryRow.exists, "Fault category saved on the request")
         snapshot("04-request-created")
         signOut()
 

@@ -10,6 +10,9 @@ import UIKit
 @MainActor
 enum UITestSupport {
     static let launchArgument = "-UITestStubServer"
+    /// `-UITestRole engineer|manager|telecaller` picks which seeded field-service role the stub
+    /// signs in as, so RBAC can be exercised in the UI tests. Defaults to the engineer.
+    static let roleArgument = "-UITestRole"
 
     static func makeEnvironment() -> AppEnvironment {
         UIView.setAnimationsEnabled(false)
@@ -20,6 +23,11 @@ enum UITestSupport {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [UITestStubProtocol.self]
         UITestStubServer.shared.reset()
+        if let index = ProcessInfo.processInfo.arguments.firstIndex(of: roleArgument),
+           index + 1 < ProcessInfo.processInfo.arguments.count,
+           let role = UITestStubServer.Role(rawValue: ProcessInfo.processInfo.arguments[index + 1]) {
+            UITestStubServer.shared.role = role
+        }
         return AppEnvironment(config: config, session: URLSession(configuration: configuration),
                               tokenStore: InMemoryTokenStore(), cacheDirectory: temp.appendingPathComponent("cache"),
                               queueFile: temp.appendingPathComponent("queue.json"), defaults: defaults,
@@ -73,6 +81,32 @@ final class UITestStubServer: @unchecked Sendable {
 
     static let visitUuid = "v1000000-0000-0000-0000-000000000001"
 
+    /// The three roles OPSAPI seeds for field service, with the grants it returns for each.
+    enum Role: String, Sendable {
+        case engineer, manager, telecaller
+
+        var grants: [String: [String]] {
+            switch self {
+            case .engineer: ["fs_jobs": ["read"], "fs_visits": ["read"], "fs_parts": ["read"]]
+            case .manager: ["fs_service_requests": ["manage"], "fs_jobs": ["manage"], "fs_visits": ["manage"],
+                            "fs_job_types": ["manage"], "fs_parts": ["manage"], "employees": ["manage"],
+                            "customers": ["manage"], "invoices": ["read", "create"], "timesheets": ["read"]]
+            case .telecaller: ["fs_service_requests": ["create", "read", "update"], "customers": ["create", "read"]]
+            }
+        }
+
+        var menuKeys: [String] {
+            switch self {
+            case .engineer: ["field_service_jobs", "field_service_visits", "field_service_parts"]
+            case .manager: ["customers", "field_service_requests", "field_service_jobs", "field_service_visits",
+                            "invoices", "field_service_parts"]
+            case .telecaller: ["customers", "field_service_requests"]
+            }
+        }
+    }
+
+    var role: Role = .engineer
+
     private let lock = NSLock()
     private var checklist: [[String: Any]] = []
     private var phaseStatus = "in_progress"
@@ -89,7 +123,12 @@ final class UITestStubServer: @unchecked Sendable {
             ]
             phaseStatus = "in_progress"
             visitStatus = "on_site"
-            items = []
+            // A job already has a line on its sheet, so quoting and invoicing have something
+            // to price (an engineer's own additions are appended to this).
+            items = [["uuid": "i0", "item_type": "labour", "description": "Engineer — normal time",
+                      "quantity": 2, "unit_price": 65, "tax_rate": 0, "line_total": 130,
+                      "is_billable": true, "invoiced": false, "approval_status": "approved",
+                      "labour_category": "engineer_nt"]]
             photos = []
             fgas = [:]
         }
@@ -136,11 +175,14 @@ final class UITestStubServer: @unchecked Sendable {
             return (200, ["token": Self.token, "message": "Switched"])
 
         case ("GET", "/api/v2/user/menu"):
-            return (200, ["menu": [["key": "field_service_jobs", "name": "Service Jobs", "module": "fs_jobs", "priority": 38],
-                                   ["key": "field_service_visits", "name": "Visits", "module": "fs_visits", "priority": 39]],
+            // Mirrors what the server returns for the seeded role (see Role above). Phase work is
+            // still allowed for an engineer because they're booked on the job.
+            let menu = role.menuKeys.enumerated().map { index, key in
+                ["key": key, "name": key, "module": key, "priority": 30 + index] as [String: Any]
+            }
+            return (200, ["menu": menu,
                           "namespace": ["uuid": Self.namespaceUuid, "is_owner": false],
-                          // An engineer: read-only grants; phase work is allowed because they're booked on the job.
-                          "permissions": ["fs_jobs": ["read"], "fs_visits": ["read"]],
+                          "permissions": role.grants,
                           "is_admin": false])
 
         case ("GET", "/api/v2/field-service/visits"):
@@ -214,10 +256,20 @@ final class UITestStubServer: @unchecked Sendable {
                                                      "job_count": 1, "created_at": "2026-09-01 08:00:00+00"]],
                           "meta": meta(1)])
 
+        case ("GET", "/api/v2/field-service/fault-categories"):
+            return (200, ["success": true, "data": ["No cooling", "Water leak", "Noisy fan"]])
+
+        case ("POST", "/api/v2/field-service/jobs/\(Self.jobUuid)/quote-email"):
+            guard let pdf = json["pdf_base64"] as? String, !pdf.isEmpty else {
+                return (400, ["success": false, "error": "pdf_base64 is required"])
+            }
+            let to = (json["to"] as? String) ?? "jane@example.com"
+            return (200, ["success": true, "data": ["message": "Quotation emailed to \(to)", "to": to]])
+
         case ("GET", "/api/v2/field-service/parts"):
             return (200, ["success": true, "data": [["uuid": "part-1", "sku": "CAP-35", "name": "Capacitor 35uF",
-                                                     "category": "Electrical", "unit_price": 12.5, "stock_quantity": 8,
-                                                     "is_active": true]],
+                                                     "category": "Electrical", "unit_price": 12.5, "stock_quantity": 3,
+                                                     "reorder_level": 5, "is_active": true]],
                           "meta": meta(1)])
 
         case ("GET", "/api/v2/field-service/engineers"):

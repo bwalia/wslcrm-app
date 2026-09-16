@@ -61,7 +61,7 @@ struct ServiceRequestFormSheet: View {
                     TextField("Details", text: $description, axis: .vertical)
                         .lineLimit(3...8)
                         .accessibilityIdentifier("request.description")
-                    TextField("Fault category (optional)", text: $faultCategory)
+                    FaultCategoryRow(selection: $faultCategory)
                     Picker("Priority", selection: $priority) {
                         ForEach([JobPriority.low, .normal, .high, .urgent], id: \.self) { Text($0.label).tag($0) }
                     }
@@ -352,7 +352,6 @@ struct AssignConvertToJobSheet: View {
     @State private var members: [Engineer] = []
     @State private var jobTypeUuid: String?
     @State private var engineerUuid: String?
-    @State private var managerUuid: String?
     @State private var firstVisit = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0,
                                                           of: Calendar.current.date(byAdding: .day, value: 1, to: Date())!) ?? Date()
     @State private var hasDueDate = false
@@ -364,7 +363,6 @@ struct AssignConvertToJobSheet: View {
         self.convert = convert
         _title = State(initialValue: request.title)
         _priority = State(initialValue: request.priority == .unknown ? .normal : request.priority)
-        _managerUuid = State(initialValue: request.assignedManagerUuid)
     }
 
     var body: some View {
@@ -406,10 +404,6 @@ struct AssignConvertToJobSheet: View {
                 }
 
                 Section("Management") {
-                    Picker("Service manager", selection: $managerUuid) {
-                        Text("Unassigned").tag(String?.none)
-                        ForEach(members) { Text($0.pickerLabel).tag(Optional($0.uuid)) }
-                    }
                     Toggle("Due date", isOn: $hasDueDate)
                     if hasDueDate { DatePicker("Due", selection: $dueDate, displayedComponents: .date) }
                 }
@@ -438,12 +432,110 @@ struct AssignConvertToJobSheet: View {
         submitting = true
         let body = ConvertToJobBody(title: title.trimmingCharacters(in: .whitespaces), priority: priority.rawValue,
                                     jobTypeUuid: jobTypeUuid, dueDate: hasDueDate ? CalendarDay(date: dueDate) : nil,
-                                    serviceManagerUuid: managerUuid, engineerUuid: engineerUuid,
+                                    engineerUuid: engineerUuid,
                                     scheduledStart: engineerUuid != nil ? firstVisit : nil)
         Task {
             let result = await convert(body)
             submitting = false
             if result != nil { dismiss() }
+        }
+    }
+}
+
+
+/// Fault category: pick one already used in this workspace, or type a new one that is saved with
+/// the request and offered next time (opsapi #611 `GET /field-service/fault-categories`).
+struct FaultCategoryRow: View {
+    @Binding var selection: String
+    @State private var picking = false
+
+    var body: some View {
+        Button {
+            picking = true
+        } label: {
+            LabeledContent {
+                Text(selection.isEmpty ? "None" : selection)
+                    .foregroundStyle(selection.isEmpty ? .secondaryText : .primary)
+            } label: {
+                Label("Fault category", systemImage: "tag")
+            }
+        }
+        .accessibilityIdentifier("request.faultCategory")
+        .sheet(isPresented: $picking) { FaultCategorySheet(selection: $selection) }
+    }
+}
+
+private struct FaultCategorySheet: View {
+    @Binding var selection: String
+    @Environment(\.services) private var services
+    @Environment(\.dismiss) private var dismiss
+    @State private var state: LoadState<[String]> = .idle
+    @State private var search = ""
+
+    var body: some View {
+        NavigationStack {
+            List {
+                let typed = search.trimmingCharacters(in: .whitespaces)
+                if !selection.isEmpty {
+                    Button("No category", role: .destructive) {
+                        selection = ""
+                        dismiss()
+                    }
+                }
+                switch state {
+                case .idle, .loading:
+                    ProgressView()
+                case .failed(let error):
+                    InlineErrorRow(error: error) { Task { await load() } }
+                case .loaded(let categories):
+                    let matches = typed.isEmpty ? categories
+                        : categories.filter { $0.localizedCaseInsensitiveContains(typed) }
+                    if !typed.isEmpty, !categories.contains(where: { $0.caseInsensitiveCompare(typed) == .orderedSame }) {
+                        Button {
+                            choose(typed)
+                        } label: {
+                            Label("Use “\(typed)”", systemImage: "plus.circle")
+                        }
+                        .accessibilityIdentifier("faultCategory.new")
+                    }
+                    if matches.isEmpty, typed.isEmpty {
+                        Text("No categories used yet — type one to start.").foregroundStyle(.secondaryText)
+                    }
+                    ForEach(matches, id: \.self) { category in
+                        Button {
+                            choose(category)
+                        } label: {
+                            HStack {
+                                Text(category).foregroundStyle(.primary)
+                                Spacer()
+                                if category == selection {
+                                    Image(systemName: "checkmark").foregroundStyle(.tint).accessibilityLabel("Selected")
+                                }
+                            }
+                            .frame(minHeight: 44)
+                        }
+                        .accessibilityIdentifier("faultCategory.row.\(category)")
+                    }
+                }
+            }
+            .searchable(text: $search, prompt: "Search or type a new category")
+            .navigationTitle("Fault category")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+            .task { await load() }
+        }
+    }
+
+    private func choose(_ category: String) {
+        selection = category
+        dismiss()
+    }
+
+    private func load() async {
+        do {
+            state = .loaded(try await services.fieldService.faultCategories())
+        } catch {
+            state = .failed(error.asAPIError)
         }
     }
 }

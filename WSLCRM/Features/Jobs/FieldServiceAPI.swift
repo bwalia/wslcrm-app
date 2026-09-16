@@ -68,10 +68,6 @@ struct ServiceRequestStatusBody: Encodable, Sendable {
     var resolutionNotes: String?
 }
 
-struct AssignRequestBody: Encodable, Sendable {
-    var managerUuid: String
-}
-
 struct ConvertToJobBody: Encodable, Sendable {
     var title: String?
     var priority: String?
@@ -332,13 +328,6 @@ struct FieldServiceAPI: Sendable {
         return envelope.data
     }
 
-    func assignServiceRequest(_ uuid: String, managerUuid: String) async throws -> ServiceRequestDetail {
-        let envelope: Envelope.Standard<ServiceRequestDetail> =
-            try await client.send(.post("\(Self.base)/service-requests/\(uuid)/assign",
-                                        json: AssignRequestBody(managerUuid: managerUuid)))
-        return envelope.data
-    }
-
     func convertToJob(_ uuid: String, body: ConvertToJobBody, siteUuid: String? = nil) async throws -> ConvertToJobResult {
         let envelope: Envelope.Standard<ConvertToJobResult> =
             try await client.send(.post("\(Self.base)/service-requests/\(uuid)/convert-to-job", json: body))
@@ -383,6 +372,27 @@ struct FieldServiceAPI: Sendable {
 
     func deleteSite(_ uuid: String) async throws {
         try await client.sendDiscardingBody(.delete("\(Self.base)/sites/\(uuid)"))
+    }
+
+    // MARK: Quotation (#611)
+
+    /// Distinct fault categories already used in this workspace, most-used first — the
+    /// reuse-or-create picker on a service request.
+    func faultCategories() async throws -> [String] {
+        let envelope: Envelope.Standard<LossyArray<String>> = try await client.send(.get("\(Self.base)/fault-categories"))
+        return envelope.data.elements
+    }
+
+    /// Emails the job's quotation to the customer. The PDF is built on device (the server has no
+    /// renderer) and posted as base64; the server attaches it, sends it and logs the activity.
+    @discardableResult
+    func emailQuote(jobUuid: String, pdf: Data, filename: String, to: String? = nil,
+                    message: String? = nil) async throws -> EmailResult {
+        let body = EmailDocumentBody(pdfBase64: pdf.base64EncodedString(), filename: filename,
+                                     to: to?.trimmedOrNil, message: message?.trimmedOrNil)
+        let envelope: Envelope.Standard<EmailResult> =
+            try await client.send(.post("\(Self.base)/jobs/\(jobUuid)/quote-email", json: body))
+        return envelope.data
     }
 
     // MARK: Parts catalogue

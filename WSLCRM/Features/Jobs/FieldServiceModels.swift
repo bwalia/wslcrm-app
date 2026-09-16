@@ -867,6 +867,23 @@ extension FsSite: Decodable {
     }
 }
 
+// MARK: - Emailed documents (#611)
+
+/// Body for the quote/invoice email endpoints: the client renders the PDF, the server attaches it.
+struct EmailDocumentBody: Encodable, Sendable {
+    let pdfBase64: String
+    var filename: String?
+    var to: String?
+    var message: String?
+}
+
+struct EmailResult: Decodable, Sendable {
+    let message: String
+    let to: String
+    /// Invoices only: the status after sending (emailing marks a draft as sent).
+    let status: String?
+}
+
 // MARK: - Parts catalogue
 
 /// A row from `GET /field-service/parts`: the stock list an engineer fits from, so a material
@@ -880,7 +897,15 @@ struct FsPart: Identifiable, Hashable, Sendable {
     var category: String?
     var unitPrice: Decimal?
     var stockQuantity: Decimal?
+    var reorderLevel: Decimal?
     var isActive: Bool
+
+    /// The catalogue decrements stock when a part line is approved (#611), so a part at or below
+    /// its reorder level is worth flagging while it is being picked.
+    var isLowStock: Bool {
+        guard let stockQuantity, let reorderLevel else { return false }
+        return stockQuantity <= reorderLevel
+    }
 
     var subtitle: String? {
         let parts = [sku, category].compactMap { $0?.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
@@ -890,7 +915,7 @@ struct FsPart: Identifiable, Hashable, Sendable {
 
 extension FsPart: Decodable {
     enum CodingKeys: String, CodingKey {
-        case uuid, sku, name, description, category, unitPrice, stockQuantity, isActive
+        case uuid, sku, name, description, category, unitPrice, stockQuantity, reorderLevel, isActive
     }
 
     init(from decoder: Decoder) throws {
@@ -902,6 +927,7 @@ extension FsPart: Decodable {
         category = try? c.decodeIfPresent(String.self, forKey: .category)
         unitPrice = c.decodeFlexibleDecimal(forKey: .unitPrice)
         stockQuantity = c.decodeFlexibleDecimal(forKey: .stockQuantity)
+        reorderLevel = c.decodeFlexibleDecimal(forKey: .reorderLevel)
         isActive = c.decodeFlexibleBool(forKey: .isActive) ?? true
     }
 }

@@ -132,6 +132,66 @@ final class FieldServicePR610Tests: XCTestCase {
         XCTAssertEqual(calls.value("put"), 1)
     }
 
+    // MARK: #611
+
+    func testQuoteTotalsAndLinesComeFromTheSheet() throws {
+        let detail = try JobDetailFixture.withItems()
+        let items = QuotePDFRenderer.quotableItems(detail)
+        XCTAssertEqual(items.map(\.description), ["Engineer — normal time", "Capacitor 35uF"],
+                       "rejected lines are left off a customer quote")
+        let totals = QuotePDFRenderer.totals(items)
+        XCTAssertEqual(totals.net, 145)          // 2 × 65 labour + 1 × 15 part, before tax
+        XCTAssertEqual(totals.tax, 1.5)          // 10% on the part only
+        XCTAssertEqual(totals.total, 146.5)      // the server's line totals already include tax
+        XCTAssertEqual(QuotePDFRenderer.reference(for: detail.job), "QUO-JOB-0001")
+        XCTAssertEqual(QuotePDFRenderer.filename(for: detail.job), "Quote-JOB-0001.pdf")
+    }
+
+    @MainActor
+    func testQuotePDFIsBuiltFromTheJob() throws {
+        let detail = try JobDetailFixture.withItems()
+        let data = try XCTUnwrap(QuotePDFRenderer.data(for: detail, company: "Acme Cooling"))
+        XCTAssertGreaterThan(data.count, 1_000)
+        XCTAssertEqual(data.prefix(4), Data("%PDF".utf8))
+    }
+
+    func testEmailBodyCarriesTheDocumentAsBase64() throws {
+        let body = EmailDocumentBody(pdfBase64: Data("%PDF-fake".utf8).base64EncodedString(),
+                                     filename: "Quote-JOB-0001.pdf", to: "customer@example.com", message: nil)
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder.opsAPI().encode(body)) as? [String: Any]
+        XCTAssertEqual(json?["pdf_base64"] as? String, "JVBERi1mYWtl")
+        XCTAssertEqual(json?["filename"] as? String, "Quote-JOB-0001.pdf")
+        XCTAssertEqual(json?["to"] as? String, "customer@example.com")
+        XCTAssertNil(json?["message"], "an empty note is omitted rather than sent as \"\"")
+    }
+
+    func testFaultCategoriesDecodeMostUsedFirst() throws {
+        let json = #"{"success":true,"data":["No cooling","Water leak","Noise"]}"#
+        let envelope = try JSONDecoder.opsAPI().decode(Envelope.Standard<LossyArray<String>>.self, from: Data(json.utf8))
+        XCTAssertEqual(envelope.data.elements, ["No cooling", "Water leak", "Noise"])
+    }
+
+    func testLowStockUsesTheCatalogueReorderLevel() throws {
+        func part(stock: Int, reorder: Int?) throws -> FsPart {
+            let reorderJSON = reorder.map { ",\"reorder_level\":\($0)" } ?? ""
+            return try JSONDecoder.opsAPI().decode(FsPart.self, from: Data(
+                #"{"uuid":"p1","name":"Capacitor","stock_quantity":\#(stock)\#(reorderJSON)}"#.utf8))
+        }
+        XCTAssertTrue(try part(stock: 2, reorder: 5).isLowStock)
+        XCTAssertTrue(try part(stock: 5, reorder: 5).isLowStock, "at the reorder level counts as low")
+        XCTAssertFalse(try part(stock: 9, reorder: 5).isLowStock)
+        XCTAssertFalse(try part(stock: 0, reorder: nil).isLowStock, "no reorder level, nothing to say")
+    }
+
+    func testCheckOutWarningTellsTheEngineerWhatToDo() {
+        let checklist = VisitDetailViewModel.actionable("Phase not completed: 2 checklist item(s) not ticked")
+        XCTAssertTrue(checklist.contains("tick off the remaining checklist"), checklist)
+        let signoff = VisitDetailViewModel.actionable("Phase not completed: customer sign-off required")
+        XCTAssertTrue(signoff.contains("sign-off name"), signoff)
+        XCTAssertEqual(VisitDetailViewModel.actionable("Timesheet not logged"), "Timesheet not logged",
+                       "unrelated warnings are passed through unchanged")
+    }
+
     func testPhotoCompressionCapsDimensions() {
         let image = UIGraphicsImageRenderer(size: CGSize(width: 4000, height: 3000)).image { ctx in
             UIColor.red.setFill(); ctx.fill(CGRect(x: 0, y: 0, width: 4000, height: 3000))

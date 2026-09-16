@@ -43,20 +43,19 @@ struct MainTabView: View {
     }
 
     private func showsMyWork(_ permissions: PermissionSet) -> Bool {
-        permissions.shows(.visits) || permissions.can(.read, .fsVisits)
+        NavigationPolicy(permissions: permissions, isEngineerRole: session.policy.isEngineerRole).showsMyWork
     }
 
     private func showsFieldService(_ permissions: PermissionSet) -> Bool {
-        permissions.shows(.jobs) || permissions.shows(.serviceRequests) || permissions.can(.read, .fsServiceRequests)
+        NavigationPolicy(permissions: permissions, isEngineerRole: session.policy.isEngineerRole).showsFieldService
     }
 
-    /// Engineers land on My Work (as in opsapi #610); managers and telecallers on Field Service.
     private func initialTab(_ permissions: PermissionSet) -> Tab {
-        let engineer = session.policy.isEngineerRole
-        if engineer, showsMyWork(permissions) { return .myWork }
-        if showsFieldService(permissions) { return .fieldService }
-        if showsMyWork(permissions) { return .myWork }
-        return .more
+        switch NavigationPolicy(session: session).home {
+        case .myWork: .myWork
+        case .fieldService: .fieldService
+        case .more: .more
+        }
     }
 }
 

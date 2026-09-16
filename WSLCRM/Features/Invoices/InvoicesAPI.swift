@@ -47,6 +47,16 @@ struct InvoicesAPI: Sendable {
         return try await invoice(uuid)
     }
 
+    /// Emails the invoice PDF to the customer (#611). The PDF is rendered on device; emailing
+    /// also marks a draft as sent. Needs `invoices.update`.
+    @discardableResult
+    func email(_ uuid: String, pdf: Data, filename: String, to: String? = nil,
+               message: String? = nil) async throws -> EmailResult {
+        let body = EmailDocumentBody(pdfBase64: pdf.base64EncodedString(), filename: filename,
+                                     to: to?.trimmedOrNil, message: message?.trimmedOrNil)
+        return try await data(.post("/api/v2/invoices/\(uuid)/email", json: body))
+    }
+
     func void(_ uuid: String) async throws -> Invoice {
         let _: Invoice = try await data(Endpoint(.post, "\(Self.base)/\(uuid)/void"))
         return try await invoice(uuid)

@@ -21,6 +21,45 @@ final class LocalPhotoUploadTests: XCTestCase {
         token = try await signIn(identifier: env["WSL_MANAGER"] ?? "")
     }
 
+    /// #611 quotation and fault categories, and who the server lets near them. No email is sent:
+    /// the manager's request is stopped at the missing-PDF check, which still proves route + guard.
+    func testQuoteEmailIsManagerOnlyAndFaultCategoriesAreListed() async throws {
+        let jobUuid = try await latestJobUuid()
+
+        // Fault categories: readable, and a category used by the happy path comes back.
+        let categories = try await json(authorized(get(path: "api/v2/field-service/fault-categories")))
+        let values = try XCTUnwrap(categories["data"] as? [String])
+        XCTAssertFalse(values.isEmpty, "the requests logged by the flow supply a category")
+
+        // Manager: reaches the handler (400 = no PDF attached), so the route and guard are right.
+        let managerStatus = try await status(post(path: "api/v2/field-service/jobs/\(jobUuid)/quote-email",
+                                                  body: ["to": "nobody@e2e.invalid"]))
+        XCTAssertEqual(managerStatus, 400, "the manager may quote; the request only lacks a PDF")
+
+        // Engineer: blocked outright — quoting carries prices.
+        let engineerToken = try await signIn(identifier: env["WSL_ENGINEER"] ?? "")
+        var asEngineer = post(path: "api/v2/field-service/jobs/\(jobUuid)/quote-email",
+                              body: ["pdf_base64": "JVBERi1mYWtl", "to": "nobody@e2e.invalid"])
+        asEngineer.setValue("Bearer \(engineerToken)", forHTTPHeaderField: "Authorization")
+        asEngineer.setValue(namespace, forHTTPHeaderField: "X-Namespace-Id")
+        let engineerStatus = try await status(asEngineer)
+        XCTAssertEqual(engineerStatus, 403, "an engineer cannot send a customer quotation")
+    }
+
+    private func post(path: String, body: [String: Any]) -> URLRequest {
+        var request = authorized(URLRequest(url: api.appending(path: path)))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        return request
+    }
+
+    /// The status code only — for calls that are expected to be refused.
+    private func status(_ request: URLRequest) async throws -> Int {
+        let (_, response) = try await URLSession.shared.data(for: request)
+        return (response as? HTTPURLResponse)?.statusCode ?? 0
+    }
+
     func testPhotoUploadReturnsAPresignedURLAndCanBeDeleted() async throws {
         let jobUuid = try await latestJobUuid()
         let jpeg = try XCTUnwrap(Self.jpeg(width: 1_200, height: 900))

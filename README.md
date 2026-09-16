@@ -224,6 +224,17 @@ optionally re-locks the app after five minutes in the background. The workspace 
 the selection, calls `/switch`, reloads permissions, and bumps `workspaceGeneration` so every screen
 re-fetches.
 
+**Roles.** The three roles OPSAPI seeds decide what the app offers:
+
+| Role | Grants (from the seed) | In the app |
+|---|---|---|
+| **Telecaller** | `fs_service_requests` create/read/update, `customers` create/read | Opens on Field Service: logs and edits requests with a site, customer and faulty unit. No jobs, visits, parts or invoices, and no My Work tab. |
+| **Service manager** | `manage` on requests, jobs, visits, job types, parts, employees and customers; `invoices` create/read; `timesheets` read (plus `products` manage on workspaces seeded after #611) | The full board: convert and assign, approve items, quote, invoice. Cannot *send* an invoice — that needs `invoices.update`, which the seed doesn't grant (API-NOTES 54). |
+| **Engineer** | `fs_jobs` read, `fs_visits` read, `fs_parts` read | Opens on My Work; the guided visit, the stock list for materials, checklist and phase work on jobs they're booked on. Never sees prices, approvals, quotes or invoices. |
+
+`RolePermissionTests` and `RoleAccessUITests` pin this per role, using the menu payloads the
+server actually returns.
+
 **Permissions.** `GET /api/v2/user/menu` provides grants plus `is_owner`/`is_admin`, and
 `PermissionSet` mirrors the server rule. `FieldServicePolicy` adds the API's "engineer booked on
 this job" overlay. Actions a user can't perform are hidden, not left to fail. Job and
@@ -243,6 +254,15 @@ service-request actions come from `allowed_transitions`.
   was serviced. Asset search is product search, and history is jobs and requests filtered by `product_uuid`.
 - **Sites.** Sites are customer-scoped. The app re-sends `site_uuid` after create or convert
   because the server drops it (API-NOTES 44).
+- **Quotation (#611).** A manager can price the job's quote sheet up as a customer quotation,
+  share the PDF, or email it (`POST /jobs/:uuid/quote-email`). The PDF is rendered on device —
+  the server has no renderer and expects `pdf_base64`. A quote is an estimate; it bills nothing.
+- **Fault category (#611)** is a reuse-or-create picker backed by
+  `GET /field-service/fault-categories`, so categories converge instead of being retyped.
+- **Invoices (#611)** can be emailed to the customer with the PDF attached, which also marks a
+  draft as sent. Needs `invoices.update` — see the roles table.
+- **Parts** show a low-stock flag at the catalogue's reorder level, since approving a part line
+  now decrements stock server-side.
 
 **Offline (engineers).**
 

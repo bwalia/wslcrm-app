@@ -215,16 +215,6 @@ final class ServiceRequestDetailViewModel {
         }
     }
 
-    func assign(to engineer: Engineer) async {
-        busy = true
-        defer { busy = false }
-        do {
-            state = .loaded(try await api.assignServiceRequest(uuid, managerUuid: engineer.uuid))
-        } catch {
-            actionError = error.asAPIError
-        }
-    }
-
     func convert(_ body: ConvertToJobBody) async -> ConvertToJobResult? {
         busy = true
         defer { busy = false }
@@ -271,7 +261,6 @@ private struct ServiceRequestDetailContent: View {
     @State private var pendingStatus: ServiceRequestStatus?
     @State private var resolutionNotes = ""
     @State private var showingConvert = false
-    @State private var showingAssign = false
     @State private var editing = false
     @State private var openJob: JobRoute?
 
@@ -321,11 +310,6 @@ private struct ServiceRequestDetailContent: View {
                     Button("Edit") { editing = true }
                         .accessibilityIdentifier("request.edit")
                 }
-            }
-        }
-        .sheet(isPresented: $showingAssign) {
-            EngineerPickerSheet(title: "Assign manager") { engineer in
-                Task { await model.assign(to: engineer) }
             }
         }
         .onChange(of: model.convertedJobUuid) { _, uuid in
@@ -412,15 +396,9 @@ private struct ServiceRequestDetailContent: View {
             }
 
             Section("Handling") {
-                LabeledContent("Manager") {
-                    HStack {
-                        Text(request.assignedManagerName ?? "Unassigned")
-                        if policy.canUpdateServiceRequests {
-                            Button("Change") { showingAssign = true }
-                                .buttonStyle(.borderless)
-                        }
-                    }
-                }
+                // Read-only: #611 dropped the separate "assign a manager" step — the engineer is
+                // assigned when the request becomes a job.
+                DetailRow(label: "Manager", value: request.assignedManagerName ?? "Unassigned")
                 DetailRow(label: "Respond by", value: Formatters.dateTime(request.slaResponseDueAt))
                 DetailRow(label: "Resolve by", value: Formatters.dateTime(request.slaResolveDueAt))
                 DetailRow(label: "Resolution", value: request.resolutionNotes)

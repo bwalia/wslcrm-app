@@ -50,3 +50,12 @@ enum Formatters {
         return spaced.prefix(1).uppercased() + spaced.dropFirst()
     }
 }
+
+
+extension String {
+    /// Trimmed, or nil when there is nothing left — the API treats "" as "clear this field".
+    var trimmedOrNil: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}

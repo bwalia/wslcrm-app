@@ -195,6 +195,32 @@ on the PR branch.
     `X-RateLimit-Remaining` are sent. The body is a bare `{error, retry_after}` — not the usual
     envelope — so 429 needs its own decoding path.
 
+## 5b. Quotation, emailed documents and roles (opsapi #611)
+
+54. **The Service Manager role cannot send an invoice (verified locally).** The seeded role has
+    `invoices: ["create", "read"]`, but `POST /invoices/:uuid/send` and the new
+    `POST /invoices/:uuid/email` both require `invoices.update`
+    (`routes/invoices.lua`, `requirePermission("invoices", "update")`). So the person who raises
+    the invoice can't email it or mark it sent — only an owner/admin can. Either the seed needs
+    `invoices: ["manage"]` (or `update`), or sending should be guarded by `invoices.create`.
+    The app hides both actions unless the caller has `invoices.update`.
+55. **The new `products: manage` grant only reaches new workspaces.** `createFieldServiceRoles`
+    skips a role that already exists, so workspaces seeded before #611 keep a Service Manager with
+    no `products` grant (confirmed on the local tenant: the menu has no `products` key). Existing
+    tenants need the role editor or a migration. The app gates the product editor on the grant, so
+    it simply stays hidden.
+56. **PDFs are the client's job.** `POST /jobs/:uuid/quote-email` and `POST /invoices/:uuid/email`
+    both require `pdf_base64` from the caller — there is no server-side renderer — so every client
+    has to reproduce the same document. The iOS app renders both on device (`DocumentPDF`).
+    A server-rendered PDF (or an endpoint that builds it from the job) would keep the documents
+    identical across clients.
+57. **Emailing an invoice marks it sent, but sending is not idempotent.** `/email` flips a draft to
+    `sent` after the mail goes out; a second call emails again. There's no "sent at" timestamp to
+    show the customer's last copy.
+58. **Fault categories are per-tenant free text.** `GET /field-service/fault-categories` returns
+    distinct values already used, most-used first, and a new one is created simply by saving it on
+    a request. There's no rename or merge, so a typo becomes a permanent option in the list.
+
 ## 6. Missing endpoints that would simplify the app
 
 - `GET /job-phases/:uuid` — phase mutations return only the phase, so the job has to be re-fetched

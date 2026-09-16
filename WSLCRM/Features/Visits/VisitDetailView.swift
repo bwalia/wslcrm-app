@@ -9,6 +9,19 @@ final class VisitDetailViewModel {
     private(set) var busy = false
     var actionError: APIError?
     var warnings: [String] = []
+
+    /// The API reports "Phase not completed: …" when check-out couldn't close the task. Say what
+    /// to do about it rather than repeating the server's wording (#611).
+    nonisolated static func actionable(_ warning: String) -> String {
+        guard warning.localizedCaseInsensitiveContains("phase not completed") else { return warning }
+        if warning.localizedCaseInsensitiveContains("sign") {
+            return "The task stayed open — add the customer's sign-off name to close it."
+        }
+        if warning.localizedCaseInsensitiveContains("checklist") {
+            return "The task stayed open — tick off the remaining checklist items to close it."
+        }
+        return "The task stayed open, so the office may chase it. Finish the checklist to close it."
+    }
     var queuedMessage: String?
 
     private let api: FieldServiceAPI
@@ -176,7 +189,7 @@ final class VisitDetailViewModel {
         let decoder = JSONDecoder.opsAPI()
         if kind == .visitCheckOut, let result = try? decoder.decode(Envelope.Standard<CheckOutResult>.self, from: data) {
             state = .loaded(result.data.visit)
-            warnings = result.data.warnings
+            warnings = result.data.warnings.map(Self.actionable)
         } else if let envelope = try? decoder.decode(Envelope.Standard<VisitDetail>.self, from: data) {
             state = .loaded(envelope.data)
         }

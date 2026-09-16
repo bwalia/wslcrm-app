@@ -263,7 +263,12 @@ private struct PartRow: View {
             }
             Spacer()
             if let stock = part.stockQuantity {
-                Text("\(stock.formatted()) in stock").font(.caption).foregroundStyle(.secondaryText)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(stock.formatted()) in stock").font(.caption).foregroundStyle(.secondaryText)
+                    if part.isLowStock {
+                        Text("Low stock").font(.caption.weight(.semibold)).foregroundStyle(Tone.warning.textColor)
+                    }
+                }
             }
         }
         .frame(minHeight: 52)
