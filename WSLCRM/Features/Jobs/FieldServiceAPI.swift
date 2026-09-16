@@ -68,10 +68,6 @@ struct ServiceRequestStatusBody: Encodable, Sendable {
     var resolutionNotes: String?
 }
 
-struct AssignRequestBody: Encodable, Sendable {
-    var managerUuid: String
-}
-
 struct ConvertToJobBody: Encodable, Sendable {
     var title: String?
     var priority: String?
@@ -332,13 +328,6 @@ struct FieldServiceAPI: Sendable {
         return envelope.data
     }
 
-    func assignServiceRequest(_ uuid: String, managerUuid: String) async throws -> ServiceRequestDetail {
-        let envelope: Envelope.Standard<ServiceRequestDetail> =
-            try await client.send(.post("\(Self.base)/service-requests/\(uuid)/assign",
-                                        json: AssignRequestBody(managerUuid: managerUuid)))
-        return envelope.data
-    }
-
     func convertToJob(_ uuid: String, body: ConvertToJobBody, siteUuid: String? = nil) async throws -> ConvertToJobResult {
         let envelope: Envelope.Standard<ConvertToJobResult> =
             try await client.send(.post("\(Self.base)/service-requests/\(uuid)/convert-to-job", json: body))
@@ -385,6 +374,41 @@ struct FieldServiceAPI: Sendable {
         try await client.sendDiscardingBody(.delete("\(Self.base)/sites/\(uuid)"))
     }
 
+    // MARK: Quotation (#611)
+
+    /// Distinct fault categories already used in this workspace, most-used first — the
+    /// reuse-or-create picker on a service request.
+    func faultCategories() async throws -> [String] {
+        let envelope: Envelope.Standard<LossyArray<String>> = try await client.send(.get("\(Self.base)/fault-categories"))
+        return envelope.data.elements
+    }
+
+    /// Emails the job's quotation to the customer. The PDF is built on device (the server has no
+    /// renderer) and posted as base64; the server attaches it, sends it and logs the activity.
+    @discardableResult
+    func emailQuote(jobUuid: String, pdf: Data, filename: String, to: String? = nil,
+                    message: String? = nil) async throws -> EmailResult {
+        let body = EmailDocumentBody(pdfBase64: pdf.base64EncodedString(), filename: filename,
+                                     to: to?.trimmedOrNil, message: message?.trimmedOrNil)
+        let envelope: Envelope.Standard<EmailResult> =
+            try await client.send(.post("\(Self.base)/jobs/\(jobUuid)/quote-email", json: body))
+        return envelope.data
+    }
+
+    // MARK: Parts catalogue
+
+    /// `GET /field-service/parts` — the stock list. Server caps `per_page` at 200.
+    func parts(search: String = "", page: Int = 1, perPage: Int = 50) async throws -> Page<FsPart> {
+        var q = QueryBuilder()
+        q.add("page", page)
+        q.add("per_page", min(perPage, 200))
+        q.add("search", search.trimmingCharacters(in: .whitespaces))
+        let envelope: Envelope.Standard<LossyArray<FsPart>> = try await client.send(.get("\(Self.base)/parts", query: q.items))
+        return Page(items: envelope.data.elements, page: envelope.meta?.page ?? page,
+                    perPage: envelope.meta?.perPage ?? perPage,
+                    total: envelope.meta?.total ?? envelope.data.elements.count)
+    }
+
     // MARK: Photos (#610)
 
     func photos(jobUuid: String) async throws -> [FsJobPhoto] {
@@ -393,15 +417,34 @@ struct FieldServiceAPI: Sendable {
     }
 
     /// Multipart upload (`photo` field); the file is stored in MinIO by the server.
+    /// MinIO rejects anything over 10MB (the route's own check says 15MB, but the storage client
+    /// validates first), so the client stops before spending an upload on a doomed request.
+    static let maxPhotoBytes = 10 * 1024 * 1024
+
     func uploadPhoto(jobUuid: String, jpeg: Data, visitUuid: String?, caption: String?) async throws -> FsJobPhoto {
+        guard jpeg.count <= Self.maxPhotoBytes else {
+            throw APIError.validation(ServerError(status: 413,
+                                                  message: "That photo is too large to upload (over 10 MB). Take it again at a smaller size.",
+                                                  fieldErrors: [:], rawBody: ""))
+        }
         var fields: [(String, String)] = []
         if let visitUuid { fields.append(("visit_uuid", visitUuid)) }
         if let caption, !caption.isEmpty { fields.append(("caption", caption)) }
         let file = Endpoint.FilePart(fieldName: "photo", filename: "photo-\(Int(Date().timeIntervalSince1970)).jpg",
                                      mimeType: "image/jpeg", data: jpeg)
         let endpoint = Endpoint(.post, "\(Self.base)/jobs/\(jobUuid)/photos").withMultipart(fields: fields, file: file)
-        let envelope: Envelope.Standard<FsJobPhoto> = try await client.send(endpoint)
-        return envelope.data
+        do {
+            let envelope: Envelope.Standard<FsJobPhoto> = try await client.send(endpoint)
+            return envelope.data
+        } catch let error as APIError {
+            // The storage layer reports an oversized file as a 502 "Upload failed: File size …".
+            if case .server(let server) = error, server.message.localizedCaseInsensitiveContains("file size") {
+                throw APIError.validation(ServerError(status: 413,
+                                                      message: "That photo is too large to upload. Take it again at a smaller size.",
+                                                      fieldErrors: [:], rawBody: server.rawBody))
+            }
+            throw error
+        }
     }
 
     func deletePhoto(_ uuid: String) async throws {

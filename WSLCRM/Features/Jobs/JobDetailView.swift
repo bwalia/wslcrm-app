@@ -33,6 +33,7 @@ private struct JobDetailContent: View {
     @State private var addingItem = false
     @State private var bookingVisit = false
     @State private var invoicing = false
+    @State private var quoting = false
     @State private var photos: JobPhotosModel?
     @Environment(SessionStore.self) private var session
     @Environment(\.services) private var services
@@ -63,6 +64,11 @@ private struct JobDetailContent: View {
             .sheet(isPresented: $bookingVisit) {
                 if let detail = model.detail {
                     BookVisitSheet(detail: detail) { Task { await model.load() } }
+                }
+            }
+            .sheet(isPresented: $quoting) {
+                if let detail = model.detail {
+                    JobQuoteSheet(detail: detail) { Task { await model.load() } }
                 }
             }
             .sheet(isPresented: $invoicing) {
@@ -166,6 +172,7 @@ private struct JobDetailContent: View {
                 itemsSection(detail, policy: policy)
             }
 
+            quoteSection(detail, policy: policy)
             invoiceSection(detail, policy: policy)
 
             if let photos {
@@ -194,7 +201,7 @@ private struct JobDetailContent: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(entry.message ?? Formatters.humanize(entry.action)).font(.subheadline)
                             Text([entry.actorName, Formatters.dateTime(entry.createdAt)].compactMap { $0 }.joined(separator: " · "))
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(.caption).foregroundStyle(.secondaryText)
                         }
                         .accessibilityElement(children: .combine)
                     }
@@ -205,6 +212,29 @@ private struct JobDetailContent: View {
         .environment(\.editMode, $editMode)
         .onAppear {
             if photos == nil { photos = JobPhotosModel(jobUuid: detail.job.uuid, visitUuid: nil, api: services.fieldService) }
+        }
+    }
+
+    /// Customer quotation (#611): the sheet's lines priced up as an estimate, shared or emailed.
+    /// Nothing here bills — that stays with the invoice below.
+    @ViewBuilder
+    private func quoteSection(_ detail: JobDetail, policy: FieldServicePolicy) -> some View {
+        if policy.canQuote(for: detail) {
+            Section {
+                Button {
+                    quoting = true
+                } label: {
+                    Label("Customer quotation", systemImage: "doc.plaintext")
+                }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("job.quote")
+            } header: {
+                Text("Quotation")
+            } footer: {
+                Text(QuotePDFRenderer.quotableItems(detail).isEmpty
+                     ? "Add labour, materials or hire to the sheet to quote for this job."
+                     : "An estimate for the customer, built from the job's quote sheet.")
+            }
         }
     }
 
@@ -219,7 +249,7 @@ private struct JobDetailContent: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(job.invoiceNumber ?? "Invoice").font(.headline)
                             if let invoicedAt = job.invoicedAt {
-                                Text("Raised \(Formatters.dateTime(invoicedAt) ?? "")").font(.caption).foregroundStyle(.secondary)
+                                Text("Raised \(Formatters.dateTime(invoicedAt) ?? "")").font(.caption).foregroundStyle(.secondaryText)
                             }
                         }
                         Spacer()
@@ -274,7 +304,7 @@ private struct JobDetailContent: View {
                     .font(.subheadline)
             }
             if let description = detail.job.description, !description.isEmpty {
-                Text(description).font(.body).foregroundStyle(.secondary)
+                Text(description).font(.body).foregroundStyle(.secondaryText)
             }
             if let type = detail.job.jobTypeName {
                 Label(type, systemImage: "tag").font(.subheadline)
@@ -312,7 +342,7 @@ private struct JobDetailContent: View {
     private func phasesSection(_ detail: JobDetail, policy: FieldServicePolicy) -> some View {
         Section {
             if detail.phases.isEmpty {
-                Text("No phases on this job.").foregroundStyle(.secondary)
+                Text("No phases on this job.").foregroundStyle(.secondaryText)
             }
             ForEach(model.displayedPhases, id: \.phase.uuid) { display in
                 NavigationLink {
@@ -355,7 +385,7 @@ private struct JobDetailContent: View {
                     Text(["\(item.quantity.formatted()) × \(Formatters.money(item.unitPrice, currency: detail.job.currency) ?? "")",
                           Formatters.humanize(item.itemType), item.supplier, item.partNumber.map { "Part \($0)" }]
                         .compactMap { $0 }.joined(separator: " · "))
-                        .font(.subheadline).foregroundStyle(.secondary)
+                        .font(.subheadline).foregroundStyle(.secondaryText)
                     HStack {
                         item.approvalStatus.badge
                         if item.invoiced {
@@ -425,7 +455,7 @@ struct PhaseRow: View {
             HStack(alignment: .firstTextBaseline) {
                 Text("\(phase.sortOrder).")
                     .font(.headline.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryText)
                 Text(phase.name).font(.headline)
                 Spacer()
                 phase.status.badge
@@ -440,7 +470,7 @@ struct PhaseRow: View {
                 }
             }
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryText)
             if display.hasPendingWrites {
                 PendingSyncBadge(failed: display.hasFailedWrites)
             }

@@ -23,6 +23,30 @@ SQL
 
 UDID=$(xcrun simctl list devices available -j | jq -r --arg n "$DEVICE" '[.devices[][] | select(.name == $n)][0].udid')
 xcrun simctl boot "$UDID" 2>/dev/null || true
+
+# A photo for the engineer to attach (the picker needs something in the library).
+PHOTO="$ROOT/build/local-fs-run/fault-photo.jpg"
+mkdir -p "$(dirname "$PHOTO")"
+if [ ! -f "$PHOTO" ]; then
+  swift - "$PHOTO" <<'SWIFT'
+import AppKit
+let path = CommandLine.arguments[1]
+let size = NSSize(width: 1200, height: 900)
+let image = NSImage(size: size)
+image.lockFocus()
+NSColor(calibratedRed: 0.16, green: 0.20, blue: 0.28, alpha: 1).setFill()
+NSRect(origin: .zero, size: size).fill()
+let text = "WSLCRM test fault photo" as NSString
+text.draw(at: NSPoint(x: 80, y: 420), withAttributes: [
+    .font: NSFont.boldSystemFont(ofSize: 64), .foregroundColor: NSColor.white,
+])
+image.unlockFocus()
+let tiff = image.tiffRepresentation!
+let jpeg = NSBitmapImageRep(data: tiff)!.representation(using: .jpeg, properties: [.compressionFactor: 0.8])!
+try! jpeg.write(to: URL(fileURLWithPath: path))
+SWIFT
+fi
+xcrun simctl addmedia "$UDID" "$PHOTO" 2>/dev/null || true
 xcrun simctl location "$UDID" set 51.5171,-0.1749          # St Mary's, Paddington
 xcrun simctl privacy "$UDID" grant location uk.co.workstation.wslcrm 2>/dev/null || true
 
@@ -36,4 +60,4 @@ TEST_RUNNER_WSL_PASSWORD="$WSL_PASSWORD" TEST_RUNNER_WSL_OTP="$WSL_OTP" \
 TEST_RUNNER_WSL_TELECALLER="$WSL_TELECALLER" TEST_RUNNER_WSL_MANAGER="$WSL_MANAGER" TEST_RUNNER_WSL_ENGINEER="$WSL_ENGINEER" \
 xcodebuild -project "$ROOT/WSLCRM.xcodeproj" -scheme WSLCRM-Local -destination "id=$UDID" \
   -derivedDataPath "$ROOT/build/DerivedData" -resultBundlePath "$RESULT" \
-  -only-testing:WSLCRMUITests/FieldServiceLocalFlowUITests test "$@"
+  -only-testing:WSLCRMUITests/FieldServiceLocalFlowUITests -only-testing:WSLCRMUITests/LocalPhotoUploadTests test "$@"

@@ -37,10 +37,18 @@ struct CommerceAPI: Sendable {
 
     /// Stores the user owns, limited to the current workspace (the endpoint ignores the namespace header).
     func myStores(namespaceInternalId: Int?) async throws -> [Store] {
-        var endpoint = Endpoint.get("/api/v2/my/stores", query: [URLQueryItem(name: "perPage", value: "100")])
-        endpoint.requiresNamespace = false
-        let envelope: Envelope.DataTotal<Store> = try await client.send(endpoint)
-        return envelope.data.filter { store in
+        var stores: [Store] = []
+        var page = 1
+        while page <= 10 {   // 1,000 stores is far past any real workspace; don't loop forever
+            var endpoint = Endpoint.get("/api/v2/my/stores", query: [URLQueryItem(name: "perPage", value: "100"),
+                                                                     URLQueryItem(name: "page", value: String(page))])
+            endpoint.requiresNamespace = false
+            let envelope: Envelope.DataTotal<Store> = try await client.send(endpoint)
+            stores.append(contentsOf: envelope.data)
+            if envelope.data.isEmpty || stores.count >= envelope.total { break }
+            page += 1
+        }
+        return stores.filter { store in
             guard let namespaceInternalId, let storeNamespace = store.namespaceId else { return true }
             return storeNamespace == namespaceInternalId
         }

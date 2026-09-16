@@ -41,18 +41,12 @@ struct FGasCard: View {
                     Text(notes).font(.subheadline)
                 }
             } else {
-                Text("No refrigerant handled on this visit.").font(.subheadline).foregroundStyle(.secondary)
+                Text("No refrigerant handled on this visit.").font(.subheadline).foregroundStyle(.secondaryText)
             }
         }
         .sheet(isPresented: $editing) {
             FGasForm(visit: visit) { body in
-                do {
-                    let updated = try await services.fieldService.updateFGas(visitUuid: visit.uuid, body)
-                    onSaved(updated)
-                    return nil
-                } catch {
-                    return error.asAPIError
-                }
+                await FGasForm.save(visit: visit, body: body, api: services.fieldService, onSaved: onSaved)
             }
         }
     }
@@ -76,20 +70,32 @@ private struct LabeledValue: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
+            Text(label).font(.caption).foregroundStyle(.secondaryText)
             Text(value ?? "—").font(.body)
         }
         .accessibilityElement(children: .combine)
     }
 }
 
-private struct FGasForm: View {
+/// Also presented straight from the guided visit's Refrigerant tile.
+struct FGasForm: View {
     let visit: Visit
     let save: (FGasBody) async -> APIError?
     @Environment(\.dismiss) private var dismiss
     @State private var body_: FGasBody
     @State private var saving = false
     @State private var error: APIError?
+
+    /// Saves the visit's F-Gas fields (the engineer-editable allow-list on `PUT /visits/:uuid`).
+    static func save(visit: Visit, body: FGasBody, api: FieldServiceAPI,
+                     onSaved: (VisitDetail) -> Void) async -> APIError? {
+        do {
+            onSaved(try await api.updateFGas(visitUuid: visit.uuid, body))
+            return nil
+        } catch {
+            return error.asAPIError
+        }
+    }
 
     init(visit: Visit, save: @escaping (FGasBody) async -> APIError?) {
         self.visit = visit
@@ -106,7 +112,8 @@ private struct FGasForm: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Refrigerant") {
+                Section {
+                    SheetSectionTitle("Refrigerant")
                     TextField("Type, e.g. R32", text: $body_.refrigerantType)
                         .textInputAutocapitalization(.characters)
                         .accessibilityIdentifier("fgas.type")
@@ -114,15 +121,15 @@ private struct FGasForm: View {
                     TextField("Charged (kg)", text: $body_.refrigerantAddedKg).keyboardType(.decimalPad)
                     TextField("Recovered (kg)", text: $body_.refrigerantRecoveredKg).keyboardType(.decimalPad)
                 }
-                Section("Leak check") {
-                    Picker("Result", selection: $body_.leakCheckResult) {
+                Section {
+                    Picker("Leak check", selection: $body_.leakCheckResult) {
                         Text("Not recorded").tag("")
                         Text("Passed").tag("pass")
                         Text("Failed").tag("fail")
                         Text("Not applicable").tag("na")
                     }
                     .pickerStyle(.inline)
-                    .labelsHidden()
+                    .accessibilityIdentifier("fgas.leakCheck")
                     TextField("Notes", text: $body_.leakCheckNotes, axis: .vertical)
                 }
                 if let error { Section { InlineErrorRow(error: error) } }

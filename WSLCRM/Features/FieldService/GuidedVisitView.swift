@@ -93,7 +93,7 @@ private struct GuidedVisitContent: View {
                         .font(.title.bold())
                     Text([visit.customerName ?? "No customer", visit.phaseName].compactMap { $0 }.joined(separator: " · "))
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryText)
                     if !model.pendingWrites.isEmpty {
                         PendingSyncBadge(failed: model.pendingWrites.contains(where: \.isFailed))
                     }
@@ -108,10 +108,10 @@ private struct GuidedVisitContent: View {
                                 Image(systemName: "location.fill").font(.title3).foregroundStyle(Tone.info.color)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(visit.siteName != nil ? "Site · tap for directions" : "Directions")
-                                        .font(.caption).foregroundStyle(.secondary)
+                                        .font(.caption).foregroundStyle(.secondaryText)
                                     Text(visit.siteName ?? place).font(.headline).foregroundStyle(.primary).lineLimit(2)
                                     if visit.siteName != nil, let address = visit.fullAddress {
-                                        Text(address).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                        Text(address).font(.caption).foregroundStyle(.secondaryText).lineLimit(2)
                                     }
                                 }
                                 Spacer(minLength: 0)
@@ -146,18 +146,18 @@ private struct GuidedVisitContent: View {
                 // What to fix
                 card {
                     Label("What to fix", systemImage: "list.clipboard")
-                        .font(.caption.weight(.bold)).textCase(.uppercase).foregroundStyle(.secondary)
+                        .font(.caption.weight(.bold)).textCase(.uppercase).foregroundStyle(.secondaryText)
                     if let product = visit.productName {
-                        Text("Unit: ").foregroundStyle(.secondary) + Text(product).bold()
+                        Text("Unit: ").foregroundStyle(.secondaryText) + Text(product).bold()
                             + Text(visit.productRef.map { " · \($0)" } ?? "")
                     }
                     if let phase = visit.phaseName {
-                        Text("Task: ").foregroundStyle(.secondary) + Text(phase).bold()
+                        Text("Task: ").foregroundStyle(.secondaryText) + Text(phase).bold()
                     }
                     if let instructions = visit.instructions, !instructions.isEmpty {
                         Text(instructions)
                     } else if visit.productName == nil && visit.phaseName == nil {
-                        Text("See the customer for details.").foregroundStyle(.secondary)
+                        Text("See the customer for details.").foregroundStyle(.secondaryText)
                     }
                 }
 
@@ -165,7 +165,7 @@ private struct GuidedVisitContent: View {
                 if let phase = detail.phase, !phase.checklist.isEmpty {
                     card {
                         Text("Checklist · \(phase.checklist.count - phase.uncheckedCount) of \(phase.checklist.count)")
-                            .font(.caption.weight(.bold)).textCase(.uppercase).foregroundStyle(.secondary)
+                            .font(.caption.weight(.bold)).textCase(.uppercase).foregroundStyle(.secondaryText)
                         ForEach(Array(phase.checklist.enumerated()), id: \.offset) { index, item in
                             ChecklistRow(item: item, isPending: !model.pendingWrites.filter { $0.entityId == phase.uuid }.isEmpty,
                                          isEnabled: onSite) {
@@ -174,7 +174,7 @@ private struct GuidedVisitContent: View {
                             .accessibilityIdentifier("guided.checklist.\(index)")
                         }
                         if !onSite {
-                            Text("Check in to tick the checklist.").font(.footnote).foregroundStyle(.secondary)
+                            Text("Check in to tick the checklist.").font(.footnote).foregroundStyle(.secondaryText)
                         }
                     }
                 }
@@ -195,8 +195,9 @@ private struct GuidedVisitContent: View {
                 if !detail.items.isEmpty || !model.pendingItemSummaries.isEmpty {
                     card {
                         Text("On this sheet")
-                            .font(.caption.weight(.bold)).textCase(.uppercase).foregroundStyle(.secondary)
-                        QuoteSheetSummary(items: detail.items, showsPrices: model.showsPrices, currency: "GBP")
+                            .font(.caption.weight(.bold)).textCase(.uppercase).foregroundStyle(.secondaryText)
+                        QuoteSheetSummary(items: detail.items, showsPrices: model.showsPrices,
+                                          currency: visit.jobCurrency ?? Formatters.fallbackCurrency)
                         ForEach(model.pendingItemSummaries) { pending in
                             HStack {
                                 Text(pending.summary)
@@ -223,7 +224,7 @@ private struct GuidedVisitContent: View {
                             .accessibilityHidden(true)
                         Text("Job complete").font(.title3.bold())
                         if let summary = visit.workSummary { Text(summary).multilineTextAlignment(.center) }
-                        if let hours = visit.labourHours { Text("\(hours.formatted()) h on site").font(.footnote).foregroundStyle(.secondary) }
+                        if let hours = visit.labourHours { Text("\(hours.formatted()) h on site").font(.footnote).foregroundStyle(.secondaryText) }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(20)
@@ -263,14 +264,16 @@ private struct GuidedVisitContent: View {
                     showingFinish = true
                 }
             case .noAccess:
-                Text("Marked no access — the office will rebook.").font(.subheadline).foregroundStyle(.secondary)
+                Text("Marked no access — the office will rebook.").font(.subheadline).foregroundStyle(.secondaryText)
             default:
                 EmptyView()
             }
             if visit.status.isOpen {
                 Button("Can't get in? Record no access") { showingNoAccess = true }
-                    .font(.footnote)
-                    .frame(minHeight: 36)
+                    .font(.subheadline)
+                    .foregroundStyle(Tone.info.textColor)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(.rect)
                     .disabled(model.busy)
             }
         }
@@ -278,7 +281,9 @@ private struct GuidedVisitContent: View {
         .padding(.top, 10)
         .padding(.bottom, 6)
         .frame(maxWidth: .infinity)
-        .background(.bar)
+        // Opaque, not `.bar`: work notes must never be read through the action bar.
+        .background(Color(.systemGroupedBackground))
+        .overlay(alignment: .top) { Divider() }
         .opacity(visit.status.isOpen || visit.status == .noAccess ? 1 : 0)
     }
 
@@ -313,7 +318,7 @@ private struct CaptureTile: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 4) {
                 Label(title, systemImage: systemImage).font(.headline).foregroundStyle(.primary)
-                Text(hint).font(.caption).foregroundStyle(.secondary)
+                Text(hint).font(.caption).foregroundStyle(.secondaryText)
             }
             .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
             .padding(.horizontal, 14)
@@ -338,19 +343,13 @@ private struct FGasTile: View {
         }
         .accessibilityIdentifier("guided.tile.refrigerant")
         .sheet(isPresented: $editing) {
-            NavigationStack {
-                ScrollView {
-                    FGasCard(visit: visit, canEdit: true, onSaved: { updated in
-                        onSaved(updated)
-                        editing = false
-                    })
-                    .padding()
+            // Straight to the form: on site this is one tile tap, not tile then "Log F-Gas".
+            FGasForm(visit: visit) { body in
+                await FGasForm.save(visit: visit, body: body, api: services.fieldService) { updated in
+                    onSaved(updated)
+                    editing = false
                 }
-                .navigationTitle("Refrigerant")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { editing = false } } }
             }
-            .presentationDetents([.medium, .large])
         }
     }
 }

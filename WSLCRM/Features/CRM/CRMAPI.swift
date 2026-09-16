@@ -96,9 +96,18 @@ struct CRMAPI: Sendable {
     // MARK: Pipelines
 
     func pipelines() async throws -> [CRMPipeline] {
-        let envelope: Envelope.Standard<LossyArray<CRMPipeline>> =
-            try await client.send(.get("\(Self.base)/pipelines", query: [URLQueryItem(name: "per_page", value: "100")]))
-        return envelope.data.elements
+        var pipelines: [CRMPipeline] = []
+        var page = 1
+        while page <= 10 {
+            let query = [URLQueryItem(name: "per_page", value: "100"), URLQueryItem(name: "page", value: String(page))]
+            let envelope: Envelope.Standard<LossyArray<CRMPipeline>> =
+                try await client.send(.get("\(Self.base)/pipelines", query: query))
+            pipelines.append(contentsOf: envelope.data.elements)
+            let total = envelope.meta?.total ?? pipelines.count
+            if envelope.data.elements.isEmpty || pipelines.count >= total { break }
+            page += 1
+        }
+        return pipelines
     }
 
     func dealsByStage(pipelineUuid: String) async throws -> [String: [CRMDeal]] {

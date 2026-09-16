@@ -9,6 +9,19 @@ final class VisitDetailViewModel {
     private(set) var busy = false
     var actionError: APIError?
     var warnings: [String] = []
+
+    /// The API reports "Phase not completed: …" when check-out couldn't close the task. Say what
+    /// to do about it rather than repeating the server's wording (#611).
+    nonisolated static func actionable(_ warning: String) -> String {
+        guard warning.localizedCaseInsensitiveContains("phase not completed") else { return warning }
+        if warning.localizedCaseInsensitiveContains("sign") {
+            return "The task stayed open — add the customer's sign-off name to close it."
+        }
+        if warning.localizedCaseInsensitiveContains("checklist") {
+            return "The task stayed open — tick off the remaining checklist items to close it."
+        }
+        return "The task stayed open, so the office may chase it. Finish the checklist to close it."
+    }
     var queuedMessage: String?
 
     private let api: FieldServiceAPI
@@ -176,7 +189,7 @@ final class VisitDetailViewModel {
         let decoder = JSONDecoder.opsAPI()
         if kind == .visitCheckOut, let result = try? decoder.decode(Envelope.Standard<CheckOutResult>.self, from: data) {
             state = .loaded(result.data.visit)
-            warnings = result.data.warnings
+            warnings = result.data.warnings.map(Self.actionable)
         } else if let envelope = try? decoder.decode(Envelope.Standard<VisitDetail>.self, from: data) {
             state = .loaded(envelope.data)
         }
@@ -357,7 +370,7 @@ private struct VisitDetailContent: View {
                           systemImage: "shippingbox")
                 if let instructions = visit.instructions, !instructions.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
-                        Label("Instructions", systemImage: "text.bubble").font(.caption).foregroundStyle(.secondary)
+                        Label("Instructions", systemImage: "text.bubble").font(.caption).foregroundStyle(.secondaryText)
                         Text(instructions)
                     }
                 }
@@ -378,7 +391,7 @@ private struct VisitDetailContent: View {
                     if phase.needsSignoff {
                         Label("Needs customer sign-off", systemImage: "signature")
                             .font(.subheadline)
-                            .foregroundStyle(Tone.warning.color)
+                            .foregroundStyle(Tone.warning.textColor)
                     }
                     NavigationLink(value: JobRoute(uuid: visit.jobUuid)) {
                         Text("Open checklist in job")
@@ -390,7 +403,7 @@ private struct VisitDetailContent: View {
                 Section("Report") {
                     if let summary = visit.workSummary {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Work summary").font(.caption).foregroundStyle(.secondary)
+                            Text("Work summary").font(.caption).foregroundStyle(.secondaryText)
                             Text(summary)
                         }
                     }
@@ -399,7 +412,7 @@ private struct VisitDetailContent: View {
                     DetailRow(label: "Checked out", value: Formatters.dateTime(visit.checkedOutAt))
                     if visit.followUpRequired {
                         Label(visit.followUpNotes ?? "Follow-up required", systemImage: "flag.fill")
-                            .foregroundStyle(Tone.warning.color)
+                            .foregroundStyle(Tone.warning.textColor)
                     }
                 }
             }
@@ -410,7 +423,7 @@ private struct VisitDetailContent: View {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(item.description)
-                                Text("Qty \(item.quantity.formatted())").font(.caption).foregroundStyle(.secondary)
+                                Text("Qty \(item.quantity.formatted())").font(.caption).foregroundStyle(.secondaryText)
                             }
                             Spacer()
                             item.approvalStatus.badge
@@ -508,11 +521,10 @@ struct CheckOutSheet: View {
         NavigationStack {
             Form {
                 Section {
+                    SheetSectionTitle("Work report")
                     TextField("What did you do?", text: $form.workSummary, axis: .vertical)
                         .lineLimit(4...10)
                         .accessibilityIdentifier("checkout.workSummary")
-                } header: {
-                    Text("Work report")
                 } footer: {
                     Text("Tip: use the microphone on the keyboard to dictate.")
                 }
@@ -529,7 +541,8 @@ struct CheckOutSheet: View {
                     }
                 }
 
-                Section("Customer") {
+                Section {
+                    SheetSectionTitle("Customer")
                     TextField("Customer name for sign-off", text: $form.customerSignoffName)
                         .textContentType(.name)
                         .textInputAutocapitalization(.words)
@@ -538,19 +551,18 @@ struct CheckOutSheet: View {
 
                 if let phase {
                     Section {
+                        SheetSectionTitle("Phase")
                         Toggle("Complete “\(phase.name)”", isOn: $form.completePhase)
                             .disabled(phase.status.isFinished)
                         if form.completePhase {
                             if phase.needsSignoff && form.customerSignoffName.trimmingCharacters(in: .whitespaces).isEmpty {
                                 Label("This phase needs the customer's name above.", systemImage: "signature")
-                                    .foregroundStyle(Tone.warning.color)
+                                    .foregroundStyle(Tone.warning.textColor)
                             }
                             if phase.uncheckedCount > 0 {
                                 Toggle("Complete even though \(phase.uncheckedCount) checklist item(s) aren't ticked", isOn: $form.forcePhase)
                             }
                         }
-                    } header: {
-                        Text("Phase")
                     }
                 }
 

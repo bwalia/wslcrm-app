@@ -190,7 +190,7 @@ extension CRMDeal: Decodable {
         contactId = c.decodeFlexibleInt(forKey: .contactId)
         name = (try? c.decodeIfPresent(String.self, forKey: .name)) ?? ""
         value = c.decodeFlexibleDecimal(forKey: .value) ?? 0
-        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? "USD"
+        currency = ((try? c.decodeIfPresent(String.self, forKey: .currency)) ?? nil) ?? Formatters.fallbackCurrency
         stage = (try? c.decodeIfPresent(String.self, forKey: .stage)) ?? "new"
         probability = c.decodeFlexibleInt(forKey: .probability) ?? 0
         expectedCloseDate = c.decodeDay(forKey: .expectedCloseDate)

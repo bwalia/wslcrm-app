@@ -26,7 +26,7 @@ struct WorkspacePickerView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(workspace.name).font(.headline).foregroundStyle(.primary)
                                 if workspace.isOwner {
-                                    Text("Owner").font(.subheadline).foregroundStyle(.secondary)
+                                    Text("Owner").font(.subheadline).foregroundStyle(.secondaryText)
                                 }
                             }
                             Spacer()

@@ -27,6 +27,11 @@ struct NetworkLogger: Sendable {
         log.debug("← [\(id, privacy: .public)] \(response.statusCode) \(ms)ms \(body, privacy: .public)")
     }
 
+    func retry(_ endpoint: String, attempt: Int, delay: TimeInterval) {
+        guard isEnabled else { return }
+        log.debug("↻ \(endpoint, privacy: .public) retry \(attempt) in \(String(format: "%.1f", delay), privacy: .public)s")
+    }
+
     func failure(_ error: Error, id: String) {
         guard isEnabled else { return }
         log.error("✕ [\(id, privacy: .public)] \(String(describing: error), privacy: .public)")
@@ -36,7 +41,9 @@ struct NetworkLogger: Sendable {
         "password", "token", "refresh_token", "session_token", "otp", "access_token", "pin", "new_password",
     ]
 
-    /// Redacts sensitive JSON fields and truncates long bodies.
+    /// Redacts sensitive fields and truncates long bodies. Handles JSON and form-encoded
+    /// bodies; anything else is described rather than printed, because an unparsed body can't
+    /// be redacted (`/auth/login` is form-encoded, so this is the sign-in password).
     static func redactedBody(_ data: Data) -> String {
         guard !data.isEmpty else { return "" }
         if var json = try? JSONSerialization.jsonObject(with: data) {
@@ -45,7 +52,24 @@ struct NetworkLogger: Sendable {
                 return truncate(String(decoding: redacted, as: UTF8.self))
             }
         }
-        return truncate(String(decoding: data, as: UTF8.self))
+        let text = String(decoding: data, as: UTF8.self)
+        if let form = redactedForm(text) { return truncate(form) }
+        return "‹\(data.count) bytes›"
+    }
+
+    /// `a=1&password=hunter2` → `a=1&password=‹redacted›`. Returns nil if it isn't form-encoded.
+    private static func redactedForm(_ text: String) -> String? {
+        let pairs = text.split(separator: "&", omittingEmptySubsequences: false)
+        guard !text.isEmpty, pairs.allSatisfy({ $0.contains("=") }) else { return nil }
+        return pairs.map { pair -> String in
+            let parts = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            let key = String(parts[0])
+            let value = parts.count > 1 ? String(parts[1]) : ""
+            let decodedKey = key.removingPercentEncoding ?? key
+            let decodedValue = value.removingPercentEncoding ?? value
+            return "\(decodedKey)=" + (isSensitive(key: decodedKey, value: decodedValue) ? "‹redacted›" : decodedValue)
+        }
+        .joined(separator: "&")
     }
 
     private static func redact(_ value: Any) -> Any {

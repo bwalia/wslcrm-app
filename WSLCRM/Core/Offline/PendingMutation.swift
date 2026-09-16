@@ -40,6 +40,8 @@ struct PendingMutation: Codable, Identifiable, Sendable, Equatable {
     let createdAt: Date
     var attempts: Int
     var lastAttemptAt: Date?
+    /// Set after a transient failure: the queue leaves this write (and its entity) alone until then.
+    var nextAttemptAt: Date?
     var lastError: String?
     var state: State
 

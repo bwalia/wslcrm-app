@@ -29,13 +29,13 @@ struct VisitSummaryRow: View {
             if let address = visit.fullAddress {
                 Label(address, systemImage: "mappin.and.ellipse")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryText)
                     .lineLimit(2)
             }
             if let phase = visit.phaseName {
                 Label(phase, systemImage: "list.bullet.clipboard")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryText)
             }
             if pending { PendingSyncBadge(failed: failed) }
         }

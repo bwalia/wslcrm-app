@@ -10,6 +10,9 @@ import UIKit
 @MainActor
 enum UITestSupport {
     static let launchArgument = "-UITestStubServer"
+    /// `-UITestRole engineer|manager|telecaller` picks which seeded field-service role the stub
+    /// signs in as, so RBAC can be exercised in the UI tests. Defaults to the engineer.
+    static let roleArgument = "-UITestRole"
 
     static func makeEnvironment() -> AppEnvironment {
         UIView.setAnimationsEnabled(false)
@@ -20,6 +23,11 @@ enum UITestSupport {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [UITestStubProtocol.self]
         UITestStubServer.shared.reset()
+        if let index = ProcessInfo.processInfo.arguments.firstIndex(of: roleArgument),
+           index + 1 < ProcessInfo.processInfo.arguments.count,
+           let role = UITestStubServer.Role(rawValue: ProcessInfo.processInfo.arguments[index + 1]) {
+            UITestStubServer.shared.role = role
+        }
         return AppEnvironment(config: config, session: URLSession(configuration: configuration),
                               tokenStore: InMemoryTokenStore(), cacheDirectory: temp.appendingPathComponent("cache"),
                               queueFile: temp.appendingPathComponent("queue.json"), defaults: defaults,
@@ -68,12 +76,47 @@ final class UITestStubServer: @unchecked Sendable {
     static let namespaceUuid = "c0ffee00-1111-2222-3333-444455556666"
     static let jobUuid = "5b0c0e2e-6a55-4d0f-9f5e-1b2c3d4e5f60"
     static let phaseUuid = "p1000000-0000-0000-0000-000000000001"
+    static let invoiceUuid = "in000000-0000-0000-0000-000000000001"
     /// JWT whose `exp` is in 2100, so the client never tries a proactive refresh.
     static let token = "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjQxMDI0NDQ4MDB9.stub"
+
+    static let visitUuid = "v1000000-0000-0000-0000-000000000001"
+
+    /// The three roles OPSAPI seeds for field service, with the grants it returns for each.
+    enum Role: String, Sendable {
+        case engineer, manager, telecaller
+
+        var grants: [String: [String]] {
+            switch self {
+            case .engineer: ["fs_jobs": ["read"], "fs_visits": ["read"], "fs_parts": ["read"]]
+            case .manager: ["fs_service_requests": ["manage"], "fs_jobs": ["manage"], "fs_visits": ["manage"],
+                            "fs_job_types": ["manage"], "fs_parts": ["manage"], "employees": ["manage"],
+                            "customers": ["manage"], "products": ["manage"], "invoices": ["manage"],
+                            "payments": ["manage"], "timesheets": ["read"], "timesheet_approvals": ["manage"]]
+            case .telecaller: ["fs_service_requests": ["create", "read", "update"], "customers": ["create", "read"]]
+            }
+        }
+
+        var menuKeys: [String] {
+            switch self {
+            case .engineer: ["field_service_jobs", "field_service_visits", "field_service_parts"]
+            case .manager: ["products", "customers", "field_service_requests", "field_service_jobs",
+                            "field_service_visits", "invoices", "field_service_parts", "timesheets"]
+            case .telecaller: ["customers", "field_service_requests"]
+            }
+        }
+    }
+
+    var role: Role = .engineer
 
     private let lock = NSLock()
     private var checklist: [[String: Any]] = []
     private var phaseStatus = "in_progress"
+    private var visitStatus = "on_site"
+    private var invoiceStatus = "draft"
+    private var items: [[String: Any]] = []
+    private var photos: [[String: Any]] = []
+    private var fgas: [String: Any] = [:]
 
     func reset() {
         lock.withLock {
@@ -82,6 +125,16 @@ final class UITestStubServer: @unchecked Sendable {
                 ["label": "Check refrigerant pressure", "done": false],
             ]
             phaseStatus = "in_progress"
+            visitStatus = "on_site"
+            invoiceStatus = "draft"
+            // A job already has a line on its sheet, so quoting and invoicing have something
+            // to price (an engineer's own additions are appended to this).
+            items = [["uuid": "i0", "item_type": "labour", "description": "Engineer — normal time",
+                      "quantity": 2, "unit_price": 65, "tax_rate": 0, "line_total": 130,
+                      "is_billable": true, "invoiced": false, "approval_status": "approved",
+                      "labour_category": "engineer_nt"]]
+            photos = []
+            fgas = [:]
         }
     }
 
@@ -126,11 +179,14 @@ final class UITestStubServer: @unchecked Sendable {
             return (200, ["token": Self.token, "message": "Switched"])
 
         case ("GET", "/api/v2/user/menu"):
-            return (200, ["menu": [["key": "field_service_jobs", "name": "Service Jobs", "module": "fs_jobs", "priority": 38],
-                                   ["key": "field_service_visits", "name": "Visits", "module": "fs_visits", "priority": 39]],
+            // Mirrors what the server returns for the seeded role (see Role above). Phase work is
+            // still allowed for an engineer because they're booked on the job.
+            let menu = role.menuKeys.enumerated().map { index, key in
+                ["key": key, "name": key, "module": key, "priority": 30 + index] as [String: Any]
+            }
+            return (200, ["menu": menu,
                           "namespace": ["uuid": Self.namespaceUuid, "is_owner": false],
-                          // An engineer: read-only grants; phase work is allowed because they're booked on the job.
-                          "permissions": ["fs_jobs": ["read"], "fs_visits": ["read"]],
+                          "permissions": role.grants,
                           "is_admin": false])
 
         case ("GET", "/api/v2/field-service/visits"):
@@ -145,8 +201,106 @@ final class UITestStubServer: @unchecked Sendable {
         case ("GET", "/api/v2/field-service/service-requests"):
             return (200, ["success": true, "data": [], "meta": meta(0)])
 
+        case ("GET", "/api/v2/field-service/visits/\(Self.visitUuid)"):
+            return (200, ["success": true, "data": visitDetail])
+
+        case ("POST", let p) where p.hasPrefix("/api/v2/field-service/visits/\(Self.visitUuid)/"):
+            switch p.split(separator: "/").last ?? "" {
+            case "en-route": visitStatus = "en_route"
+            case "check-in": visitStatus = "on_site"
+            case "check-out": visitStatus = "completed"
+            case "no-access": visitStatus = "no_access"
+            default: return (404, ["success": false, "error": "Unknown visit action"])
+            }
+            if p.hasSuffix("check-out") {
+                return (200, ["success": true, "data": ["visit": visitDetail, "warnings": []]])
+            }
+            return (200, ["success": true, "data": visitDetail])
+
+        case ("PUT", "/api/v2/field-service/visits/\(Self.visitUuid)"):
+            for key in ["refrigerant_type", "refrigerant_added_kg", "refrigerant_recovered_kg",
+                        "leak_check_result", "leak_check_notes", "fgas_cylinder_ref"] {
+                if let value = json[key] { fgas[key] = value }
+            }
+            return (200, ["success": true, "data": ["visit": visitDetail]])
+
+        case ("POST", "/api/v2/field-service/jobs/\(Self.jobUuid)/items"):
+            var item: [String: Any] = ["uuid": "i\(items.count + 1)", "item_type": json["item_type"] as? String ?? "labour",
+                                       "description": json["description"] as? String ?? "", "quantity": json["quantity"] ?? 1,
+                                       "approval_status": "pending", "visit_uuid": Self.visitUuid]
+            for key in ["labour_category", "days", "supplier", "part_number", "unit_price"] where json[key] != nil {
+                item[key] = json[key]
+            }
+            items.append(item)
+            return (201, ["success": true, "data": item])
+
         case ("GET", "/api/v2/field-service/jobs/\(Self.jobUuid)/photos"):
-            return (200, ["success": true, "data": []])
+            return (200, ["success": true, "data": photos])
+
+        case ("POST", "/api/v2/field-service/jobs/\(Self.jobUuid)/photos"):
+            // Multipart: assert the part is there rather than parsing the whole body.
+            let raw = String(decoding: body, as: UTF8.self)
+            guard raw.contains("name=\"photo\""), raw.contains("Content-Type: image/jpeg") else {
+                return (400, ["success": false, "error": "photo file is required"])
+            }
+            let photo: [String: Any] = ["uuid": "ph\(photos.count + 1)", "filename": "photo.jpg", "content_type": "image/jpeg",
+                                        "url": "https://stub.wslcrm.test/minio/photo-\(photos.count + 1).jpg?X-Amz-Expires=3600",
+                                        "visit_uuid": Self.visitUuid, "created_at": "2026-09-15 10:30:00+00"]
+            photos.append(photo)
+            return (201, ["success": true, "data": photo])
+
+        case ("DELETE", let p) where p.hasPrefix("/api/v2/field-service/job-photos/"):
+            let uuid = String(p.split(separator: "/").last ?? "")
+            photos.removeAll { $0["uuid"] as? String == uuid }
+            return (200, ["success": true, "data": true])
+
+        case ("GET", "/api/v2/field-service/sites"):
+            return (200, ["success": true, "data": [["uuid": "site-1", "name": "Ward 5", "address_line1": "Praed Street",
+                                                     "city": "London", "postal_code": "W2 1NY", "customer_name": "Jane Doe",
+                                                     "job_count": 1, "created_at": "2026-09-01 08:00:00+00"]],
+                          "meta": meta(1)])
+
+        case ("GET", "/api/v2/invoices"):
+            return (200, ["success": true, "data": [invoice], "meta": ["total": 1, "page": 1, "perPage": 25, "totalPages": 1]])
+
+        case ("GET", "/api/v2/invoices/\(Self.invoiceUuid)"):
+            return (200, ["success": true, "data": invoice])
+
+        case ("GET", "/api/v2/invoices/dashboard/stats"):
+            return (200, ["success": true, "data": ["total_outstanding": 130, "total_paid": 0, "draft_count": 1,
+                                                    "overdue_count": 0]])
+
+        case ("POST", "/api/v2/invoices/\(Self.invoiceUuid)/email"):
+            guard let pdf = json["pdf_base64"] as? String, !pdf.isEmpty else {
+                return (400, ["success": false, "error": "pdf_base64 is required"])
+            }
+            invoiceStatus = "sent"
+            let to = (json["to"] as? String) ?? "jane@example.com"
+            return (200, ["success": true, "data": ["message": "Invoice emailed to \(to)", "to": to, "status": "sent"]])
+
+        case ("GET", "/api/v2/field-service/fault-categories"):
+            return (200, ["success": true, "data": ["No cooling", "Water leak", "Noisy fan"]])
+
+        case ("POST", "/api/v2/field-service/jobs/\(Self.jobUuid)/quote-email"):
+            guard let pdf = json["pdf_base64"] as? String, !pdf.isEmpty else {
+                return (400, ["success": false, "error": "pdf_base64 is required"])
+            }
+            let to = (json["to"] as? String) ?? "jane@example.com"
+            return (200, ["success": true, "data": ["message": "Quotation emailed to \(to)", "to": to]])
+
+        case ("GET", "/api/v2/field-service/parts"):
+            return (200, ["success": true, "data": [["uuid": "part-1", "sku": "CAP-35", "name": "Capacitor 35uF",
+                                                     "category": "Electrical", "unit_price": 12.5, "stock_quantity": 3,
+                                                     "reorder_level": 5, "is_active": true]],
+                          "meta": meta(1)])
+
+        case ("GET", "/api/v2/field-service/engineers"):
+            return (200, ["success": true, "data": [["uuid": Self.userUuid, "name": "Sam Engineer",
+                                                     "email": "engineer@example.com", "open_visits": 2]]])
+
+        case ("GET", "/api/v2/field-service/job-types"):
+            return (200, ["success": true, "data": [["uuid": "jt-1", "name": "AC repair", "is_active": true,
+                                                     "phase_count": 1, "default_hourly_rate": 65]]])
 
         case ("GET", "/api/v2/field-service/stats"):
             return (200, ["success": true, "data": ["open_jobs": 1, "visits_today": 1, "engineers_on_site": 1, "overdue_jobs": 0]])
@@ -212,8 +366,26 @@ final class UITestStubServer: @unchecked Sendable {
         return result
     }
 
+    private var invoice: [String: Any] {
+        ["id": Self.invoiceUuid, "invoice_number": "INV-0001", "status": invoiceStatus, "customer_name": "Jane Doe",
+         "customer_email": "jane@example.com", "currency": "GBP", "issue_date": "2026-09-15", "due_date": "2026-10-15",
+         "subtotal": 130, "tax_amount": 0, "discount_amount": 0, "total_amount": 130, "amount_paid": 0,
+         "balance_due": 130,
+         "line_items": [["id": "li1", "description": "Labour (Sam Engineer)", "quantity": 2, "unit_price": 65,
+                         "tax_rate": 0, "discount_percent": 0, "line_total": 130]],
+         "payments": []]
+    }
+
+    private var visitDetail: [String: Any] {
+        var result = visit
+        result["phase"] = phase
+        result["items"] = items
+        for (key, value) in fgas { result[key] = value }
+        return result
+    }
+
     private var visit: [String: Any] {
-        ["uuid": "v1000000-0000-0000-0000-000000000001", "status": "on_site", "engineer_user_uuid": Self.userUuid,
+        ["uuid": Self.visitUuid, "status": visitStatus, "engineer_user_uuid": Self.userUuid,
          "engineer_name": "Sam Engineer", "scheduled_start": todayAt(hour: 9), "scheduled_end": todayAt(hour: 12),
          "checked_in_at": todayAt(hour: 9), "is_billable": true, "follow_up_required": false, "invoiced": false,
          "job_uuid": Self.jobUuid, "job_number": "JOB-0042", "job_title": "AC repair — Ward 5", "job_status": "in_progress",
@@ -234,7 +406,7 @@ final class UITestStubServer: @unchecked Sendable {
         if detail {
             result["phases"] = [phase]
             result["visits"] = [visit]
-            result["items"] = []
+            result["items"] = items
             result["activity"] = []
             result["totals"] = ["labour_hours": 0, "billable_hours": 0, "labour_value": 0, "items_value": 0,
                                 "uninvoiced_value": 0, "open_visits": 1, "missing_rate": false]

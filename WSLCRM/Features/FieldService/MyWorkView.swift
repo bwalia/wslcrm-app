@@ -208,7 +208,7 @@ private struct MyWorkContent: View {
             LazyVStack(alignment: .leading, spacing: 18) {
                 Text(Date().formatted(.dateTime.weekday(.wide).day().month(.wide)))
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryText)
 
                 if let banner = model.newJobBanner {
                     Button {
@@ -253,7 +253,7 @@ private struct MyWorkContent: View {
                             Text("\(bucket.title) (\(bucket.visits.count))")
                                 .font(.caption.weight(.bold))
                                 .textCase(.uppercase)
-                                .foregroundStyle(bucket.isOverdue ? Tone.danger.color : .secondary)
+                                .foregroundStyle(bucket.isOverdue ? Tone.danger.textColor : .secondaryText)
                                 .accessibilityAddTraits(.isHeader)
                             ForEach(bucket.visits) { visit in
                                 NavigationLink(value: GuidedVisitRoute(uuid: visit.uuid)) {
@@ -304,19 +304,26 @@ private struct MyWorkContent: View {
 private struct HeroCard: View {
     let visit: Visit
     let pending: Bool
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         let active = visit.status == .enRoute || visit.status == .onSite
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Text(active ? "Current job" : "Next up")
-                    .font(.caption.weight(.bold))
-                    .textCase(.uppercase)
-                    .foregroundStyle(.secondary)
+            let heading = Text(active ? "Current job" : "Next up")
+                .font(.caption.weight(.bold))
+                .textCase(.uppercase)
+                .foregroundStyle(.secondaryText)
+            let badges = Group {
                 WorkStatusBadge(visit: visit)
                 if visit.isUrgent {
                     StatusBadge(text: "Urgent", systemImage: "exclamationmark.2", tone: .danger)
                 }
+            }
+            // One row normally; stacked at accessibility sizes, where three pills can't share it.
+            if typeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) { heading; badges }
+            } else {
+                HStack(spacing: 8) { heading; badges }
             }
             Text(visit.jobTitle.isEmpty ? "Service visit" : visit.jobTitle)
                 .font(.title.bold())
@@ -324,11 +331,11 @@ private struct HeroCard: View {
                 .multilineTextAlignment(.leading)
             Text(visit.customerName ?? "No customer")
                 .font(.title3)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryText)
             if let place = visit.siteName ?? visit.fullAddress {
                 Label(place, systemImage: "mappin.and.ellipse")
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondaryText)
             }
             if pending { PendingSyncBadge() }
             Label(active ? "Continue job" : visit.status == .noAccess ? "Revisit" : "Start job", systemImage: "arrow.right.circle.fill")
@@ -367,7 +374,7 @@ private struct SummaryCard: View {
             Text("Today at a glance")
                 .font(.caption.weight(.bold))
                 .textCase(.uppercase)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondaryText)
             HStack(spacing: 10) {
                 SummaryTile(value: summary.inProgress, label: "In progress", tone: .success)
                 SummaryTile(value: summary.scheduledToday, label: "Scheduled", tone: .neutral)
@@ -385,8 +392,8 @@ private struct SummaryTile: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            Text("\(value)").font(.largeTitle.bold().monospacedDigit()).foregroundStyle(tone == .neutral ? .primary : tone.color)
-            Text(label).font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            Text("\(value)").font(.largeTitle.bold().monospacedDigit()).foregroundStyle(tone == .neutral ? .primary : tone.textColor)
+            Text(label).font(.footnote).foregroundStyle(.secondaryText).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, minHeight: 86)
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
@@ -408,7 +415,7 @@ private struct WorkRow: View {
                 }
                 Text(visit.jobTitle.isEmpty ? "Service visit" : visit.jobTitle).font(.headline).foregroundStyle(.primary)
                 Text([visit.customerName ?? "No customer", visit.siteName ?? visit.fullAddress].compactMap { $0 }.joined(separator: " · "))
-                    .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                    .font(.subheadline).foregroundStyle(.secondaryText).lineLimit(2)
                 if pending { PendingSyncBadge() }
             }
             Spacer(minLength: 0)
@@ -430,7 +437,7 @@ private struct AllClearCard: View {
                 .accessibilityHidden(true)
             Text("All clear").font(.title2.bold())
             Text(doneToday > 0 ? "No jobs waiting for you right now — \(doneToday) done today." : "No jobs waiting for you right now.")
-                .foregroundStyle(.secondary).multilineTextAlignment(.center)
+                .foregroundStyle(.secondaryText).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .padding(32)
@@ -458,7 +465,7 @@ private struct NotificationsSheet: View {
                                 .accessibilityHidden(true)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(notification.title).font(notification.isRead ? .body : .headline).foregroundStyle(.primary)
-                                if let message = notification.message { Text(message).font(.subheadline).foregroundStyle(.secondary) }
+                                if let message = notification.message { Text(message).font(.subheadline).foregroundStyle(.secondaryText) }
                                 if let date = notification.createdAt {
                                     Text(Formatters.relative(date) ?? "").font(.caption).foregroundStyle(.tertiary)
                                 }

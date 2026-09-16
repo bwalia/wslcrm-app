@@ -108,6 +108,44 @@ struct PermissionSet: Sendable, Equatable {
     }
 }
 
+// MARK: - Navigation
+
+/// Which of the app's three field-service homes a signed-in user gets. Mirrors the roles OPSAPI
+/// seeds (`NamespaceRoleQueries.createFieldServiceRoles`): a telecaller logs requests, a service
+/// manager runs the board, an engineer works their own visits.
+struct NavigationPolicy: Sendable, Equatable {
+    enum Home: Sendable, Equatable { case myWork, fieldService, more }
+
+    let permissions: PermissionSet
+    let isEngineerRole: Bool
+
+    init(permissions: PermissionSet, isEngineerRole: Bool) {
+        self.permissions = permissions
+        self.isEngineerRole = isEngineerRole
+    }
+
+    @MainActor
+    init(session: SessionStore) {
+        self.init(permissions: session.permissions, isEngineerRole: session.policy.isEngineerRole)
+    }
+
+    var showsMyWork: Bool {
+        permissions.shows(.visits) || permissions.can(.read, .fsVisits)
+    }
+
+    var showsFieldService: Bool {
+        permissions.shows(.jobs) || permissions.shows(.serviceRequests) || permissions.can(.read, .fsServiceRequests)
+    }
+
+    /// Engineers land on My Work (opsapi #610); managers and telecallers on Field Service.
+    var home: Home {
+        if isEngineerRole, showsMyWork { return .myWork }
+        if showsFieldService { return .fieldService }
+        if showsMyWork { return .myWork }
+        return .more
+    }
+}
+
 // MARK: - Field-service rules
 
 /// Field-service action rules, including the "engineer on the job" overlay the API applies
@@ -160,6 +198,12 @@ struct FieldServicePolicy: Sendable {
     }
 
     func canApproveItems(in detail: JobDetail) -> Bool { isDispatcherForJobs }
+
+    /// Quoting is a dispatcher job: it prices the sheet up for the customer, so engineers
+    /// (who never see prices) don't get it.
+    func canQuote(for detail: JobDetail) -> Bool {
+        isDispatcherForJobs && detail.job.status != .cancelled
+    }
 
     func canCreateInvoice(for detail: JobDetail) -> Bool {
         isDispatcherForJobs && permissions.can(.create, .invoices)

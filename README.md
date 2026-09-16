@@ -116,7 +116,13 @@ xcodebuild … -only-testing:WSLCRMTests test
 | `FieldServicePR610Tests` | opsapi #610 payloads: sites (`+00` timestamps), presigned photos, quote lines (labour category, days, supplier, hire), visit F-Gas fields, job site fallback, convert-to-job body (UTC), multipart upload, JPEG cap, site link follow-up `PUT` |
 | `MyWorkBucketingTests` | My Work window, shared background-refresh cache key, offline prefetch of open visits only, new-assignment detection |
 | `PhaseCompletionUITests` | login → wrong/right 2FA code → My Work → job → phase: force prompt, checklist tick, completion |
-| `FieldServiceLocalFlowUITests` | the full request → invoice happy path against a real local OPSAPI (skipped unless run by `scripts/run-local-fs-uitest.sh`) |
+| `RetryPolicyTests`, `APIClientRetryTests` | which failures are retried (reads only), bounded attempts, exponential backoff, `Retry-After` |
+| `ResponseCacheEvictionTests` | cached responses expire and the cache is trimmed to its size limit |
+| `LogRedactionTests` | passwords, tokens and OTPs never reach the log — including form-encoded bodies |
+| `EngineerFlowUITests` | the guided visit against the stub: labour from the stepper, a material from the stock list, an F-Gas record, check-out — with an **accessibility audit** of every screen |
+| `LargeTextUITests` | the same screens at an accessibility text size, with screenshots |
+| `FieldServiceLocalFlowUITests` | the full request → invoice happy path against a real local OPSAPI, including a checklist tick made **offline** that syncs on reconnect (skipped unless run by `scripts/run-local-fs-uitest.sh`) |
+| `LocalPhotoUploadTests` | photo upload, listing and delete against the real local API (multipart, presigned URL) |
 
 UI test screenshots are kept in the result bundle:
 `xcrun xcresulttool export attachments --path <bundle>.xcresult --output-path screens/`.
@@ -153,6 +159,10 @@ scripts/local-opsapi-fs-seed.sh
 # 4. Run: resets that tenant's open jobs, sets the simulator location, records video
 scripts/run-local-fs-uitest.sh
 ```
+
+`-WSLOfflineWindow <from>,<to>` (Debug builds only) fakes a loss of connectivity for a window of
+seconds after launch; the local flow uses it to prove a checklist tick made with no signal is
+queued, shown as waiting, and sent on reconnect.
 
 Screenshots are in `build/local-fs-run/result.xcresult` (export them as shown above) and the video
 is saved to `build/local-fs-run/happy-path.mp4`. To run the app by hand, pick the **WSLCRM-Local**
@@ -214,6 +224,17 @@ optionally re-locks the app after five minutes in the background. The workspace 
 the selection, calls `/switch`, reloads permissions, and bumps `workspaceGeneration` so every screen
 re-fetches.
 
+**Roles.** The three roles OPSAPI seeds decide what the app offers:
+
+| Role | Grants (from the seed) | In the app |
+|---|---|---|
+| **Telecaller** | `fs_service_requests` create/read/update, `customers` create/read | Opens on Field Service: logs and edits requests with a site, customer and faulty unit. No jobs, visits, parts or invoices, and no My Work tab. |
+| **Service manager** | `manage` on requests, jobs, visits, job types, parts, employees, customers, products, invoices, payments and timesheet approvals; `timesheets` read | The full board: convert and assign, approve items, quote, invoice, email the invoice and record the payment. |
+| **Engineer** | `fs_jobs` read, `fs_visits` read, `fs_parts` read | Opens on My Work; the guided visit, the stock list for materials, checklist and phase work on jobs they're booked on. Never sees prices, approvals, quotes or invoices. |
+
+`RolePermissionTests` and `RoleAccessUITests` pin this per role, using the menu payloads the
+server actually returns.
+
 **Permissions.** `GET /api/v2/user/menu` provides grants plus `is_owner`/`is_admin`, and
 `PermissionSet` mirrors the server rule. `FieldServicePolicy` adds the API's "engineer booked on
 this job" overlay. Actions a user can't perform are hidden, not left to fail. Job and
@@ -233,6 +254,15 @@ service-request actions come from `allowed_transitions`.
   was serviced. Asset search is product search, and history is jobs and requests filtered by `product_uuid`.
 - **Sites.** Sites are customer-scoped. The app re-sends `site_uuid` after create or convert
   because the server drops it (API-NOTES 44).
+- **Quotation (#611).** A manager can price the job's quote sheet up as a customer quotation,
+  share the PDF, or email it (`POST /jobs/:uuid/quote-email`). The PDF is rendered on device —
+  the server has no renderer and expects `pdf_base64`. A quote is an estimate; it bills nothing.
+- **Fault category (#611)** is a reuse-or-create picker backed by
+  `GET /field-service/fault-categories`, so categories converge instead of being retyped.
+- **Invoices (#611)** can be emailed to the customer with the PDF attached, which also marks a
+  draft as sent. Needs `invoices.update`, which the Service Manager role now has.
+- **Parts** show a low-stock flag at the catalogue's reorder level, since approving a part line
+  now decrements stock server-side.
 
 **Offline (engineers).**
 
@@ -248,6 +278,22 @@ service-request actions come from `allowed_transitions`.
 - Screens overlay queued writes (a ticked item shows "Waiting to sync"). A banner shows pending and
   failed counts.
 
+**Reliability.**
+
+- **Retries.** Reads retry twice with exponential backoff and jitter on a 5xx, a 429 (honouring
+  `Retry-After`) or a dropped connection. Writes are never retried by the client: the mutation
+  queue owns them, so a check-in can't be applied twice.
+- **The offline queue backs off.** A write rejected by a struggling server waits (2s, doubling, up
+  to five minutes) and holds only its own entity, so unrelated writes keep syncing. After eight
+  attempts it is shown to the user as failed instead of retrying forever.
+- **The cache is bounded.** Cached responses expire after 30 days, and the oldest are evicted once
+  the cache passes 64MB.
+- **Nothing sensitive is logged.** The redacting logger covers JSON *and* form-encoded bodies
+  (`/auth/login` is form-encoded); anything it can't parse is logged as a byte count, not content.
+- **Privacy manifest.** `WSLCRM/Resources/PrivacyInfo.xcprivacy` declares the required-reason APIs
+  (UserDefaults, file timestamps) and the data the app sends to its own server. Confirm the
+  collected-data list with the product owner before each App Store submission.
+
 **Phone-first & accessibility.**
 
 - Buttons are at least 56pt tall, and checklist rows are full-width toggles.
@@ -256,6 +302,10 @@ service-request actions come from `allowed_transitions`.
 - Dynamic Type fonts are used throughout.
 - Every status has an icon and a label, never colour alone.
 - Controls have VoiceOver labels, values and hints.
+- `EngineerFlowUITests` runs Apple's accessibility audit on every screen it visits (contrast,
+  hit areas, labels, traits), and `LargeTextUITests` drives the app at an accessibility text size.
+  Status pills wrap instead of truncating, and prominent buttons use darker fills so white text
+  clears 4.5:1 — the system greens and oranges do not.
 
 **Location.** Requested only at check-in/out, with a clear purpose string, and it never blocks the
 action. There is an 8-second timeout, and denial is fine.

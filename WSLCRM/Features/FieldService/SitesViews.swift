@@ -20,11 +20,11 @@ struct SitePickerRow: View {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(selection.name).foregroundStyle(.primary)
                         if let address = selection.displayAddress {
-                            Text(address).font(.caption).foregroundStyle(.secondary)
+                            Text(address).font(.caption).foregroundStyle(.secondaryText)
                         }
                     }
                 } else {
-                    Text(customerUuid == nil ? "Choose a customer first" : "None").foregroundStyle(.secondary)
+                    Text(customerUuid == nil ? "Choose a customer first" : "None").foregroundStyle(.secondaryText)
                 }
             } label: {
                 Label("Site", systemImage: "building.2")
@@ -66,7 +66,7 @@ private struct SitePickerSheet: View {
                     InlineErrorRow(error: error) { Task { await load() } }
                 case .loaded(let sites):
                     if sites.isEmpty {
-                        Text("This customer has no saved sites yet.").foregroundStyle(.secondary)
+                        Text("This customer has no saved sites yet.").foregroundStyle(.secondaryText)
                     }
                     ForEach(sites) { site in
                         Button {
@@ -126,10 +126,10 @@ struct SiteRow: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(site.name).font(.headline).foregroundStyle(.primary)
-                if let address = site.displayAddress { Text(address).font(.subheadline).foregroundStyle(.secondary) }
+                if let address = site.displayAddress { Text(address).font(.subheadline).foregroundStyle(.secondaryText) }
                 Text([site.customerName, site.jobCount > 0 ? "\(site.jobCount) job\(site.jobCount == 1 ? "" : "s")" : nil]
                     .compactMap { $0 }.joined(separator: " · "))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(.secondaryText)
             }
             Spacer()
             if selected {

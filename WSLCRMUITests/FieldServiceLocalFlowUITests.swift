@@ -13,6 +13,8 @@ import XCTest
 final class FieldServiceLocalFlowUITests: XCTestCase {
     private var app: XCUIApplication!
     private var env: [String: String] { ProcessInfo.processInfo.environment }
+    /// Set from the job screen once the request has been converted, e.g. "JOB-0007".
+    private var jobNumber = ""
     private let stamp = String(Int(Date().timeIntervalSince1970) % 100_000)
 
     override func setUp() async throws {
@@ -45,6 +47,51 @@ final class FieldServiceLocalFlowUITests: XCTestCase {
         let match = app.descendants(matching: .any).matching(identifier: id).firstMatch
         XCTAssertTrue(match.waitForExistence(timeout: timeout), "Missing \(id)", file: file, line: line)
         return match
+    }
+
+    /// Relaunches with the network faked as down for a while (`-WSLOfflineWindow`, Debug only),
+    /// ticks the second checklist item, checks it is held as "waiting to sync", then brings the
+    /// app back once the window has passed and checks the queue drains.
+    private func tickRemainingChecklistItemWhileOffline() {
+        // Relaunch (the session is restored from the Keychain) with the connection faked as down
+        // for a window that starts after the navigation, so the screens load from the server and
+        // only the tick itself happens with no signal.
+        let offlineFrom: TimeInterval = 40
+        let offlineUntil: TimeInterval = 90
+        app.launchArguments = ["-WSLOfflineWindow", "\(Int(offlineFrom)),\(Int(offlineUntil))"]
+        let relaunchedAt = Date()
+        app.launch()
+
+        openTab("Field Service")
+        element("hub.jobs", timeout: 40).tap()
+        element("jobs.row.\(jobNumber)", timeout: 40).tap()
+        scrollTo("job.phase.1").tap()
+        let item = element("phase.checklist.1", timeout: 30)
+
+        waitUntil(relaunchedAt.addingTimeInterval(offlineFrom + 2), "the connection drops")
+        item.tap()
+
+        let waiting = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] 'Waiting to sync'")).firstMatch
+        XCTAssertTrue(waiting.waitForExistence(timeout: 20), "an offline tick is kept and shown as waiting")
+        snapshot("17-offline-waiting-to-sync")
+
+        // Wait out the outage, then foreground the app, which is when the queue replays.
+        waitUntil(relaunchedAt.addingTimeInterval(offlineUntil + 3), "the connection returns")
+        XCUIDevice.shared.press(.home)
+        app.activate()
+
+        let synced = NSPredicate(format: "exists == false")
+        wait(for: [expectation(for: synced, evaluatedWith: waiting)], timeout: 120)
+        XCTAssertEqual(element("phase.checklist.1").value as? String, "Done", "the queued tick reached the server")
+        snapshot("18-offline-synced")
+    }
+
+    /// Adds a photo through the system picker (the runner seeds one into the library) and waits
+    /// for it to upload. Skipped with a recorded note if the picker doesn't appear.
+    private func waitUntil(_ moment: Date, _ what: String) {
+        let remaining = moment.timeIntervalSinceNow
+        guard remaining > 0 else { return }
+        RunLoop.current.run(until: Date().addingTimeInterval(remaining))
     }
 
     /// Taps whatever shows `text`: a menu/picker button, a cell or a label.
@@ -120,6 +167,7 @@ final class FieldServiceLocalFlowUITests: XCTestCase {
     func testRequestToInvoiceHappyPath() throws {
         let title = "AC not cooling \(stamp)"
         let siteName = "Ward 5 \(stamp)"
+        let faultCategory = "No cooling \(stamp)"
 
         // 1. Telecaller: log a request with a new site and the faulty unit (asset search).
         signIn(env["WSL_TELECALLER"]!)
@@ -128,6 +176,15 @@ final class FieldServiceLocalFlowUITests: XCTestCase {
         element("hub.newRequest").tap()
         type("request.title", title)
         type("request.description", "Ward 5 split unit blowing warm air")
+
+        // Fault category is a reuse-or-create picker (#611): type one and save it with the request.
+        element("request.faultCategory").tap()
+        let categorySearch = app.searchFields.firstMatch
+        XCTAssertTrue(categorySearch.waitForExistence(timeout: 20), "Fault category search")
+        categorySearch.tap()
+        categorySearch.typeText(faultCategory)
+        element("faultCategory.new", timeout: 20).tap()
+
         element("request.customer").tap()
         tapText("Priya Patel")
         element("request.site").tap()
@@ -146,6 +203,12 @@ final class FieldServiceLocalFlowUITests: XCTestCase {
         let siteRow = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", siteName)).firstMatch
         if !siteRow.waitForExistence(timeout: 5) { app.swipeUp() }
         XCTAssertTrue(siteRow.waitForExistence(timeout: 10), "Site shows on the request")
+        let categoryRow = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", faultCategory)).firstMatch
+        for _ in 0..<4 where !categoryRow.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(categoryRow.exists, "Fault category saved on the request")
         snapshot("04-request-created")
         signOut()
 
@@ -186,9 +249,16 @@ final class FieldServiceLocalFlowUITests: XCTestCase {
         type("quote.description", "Capacitor 35uF")
         element("quote.add").tap()
         XCTAssertTrue(element("guided.sheet", timeout: 30).exists)
+
+        // F-Gas record (engineer-editable fields on the visit).
+        element("guided.tile.refrigerant", timeout: 20).tap()
+        type("fgas.type", "R410A")
+        element("fgas.save").tap()
+        XCTAssertTrue(app.staticTexts["R410A"].waitForExistence(timeout: 20), "the F-Gas record is on the visit")
+
         app.swipeUp()
         snapshot("10-quote-sheet")
-        element("guided.action.finish").tap()
+        element("guided.action.finish", timeout: 30).tap()
         type("checkout.workSummary", "Replaced capacitor, tested — cooling OK")
         element("checkout.submit").tap()
         _ = element("guided.complete", timeout: 40)
@@ -203,6 +273,8 @@ final class FieldServiceLocalFlowUITests: XCTestCase {
         _ = element("request.changeStatus", timeout: 30)
         scrollTo("request.job").tap()
         _ = element("job.status", timeout: 30)
+        jobNumber = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'JOB-'")).firstMatch.label
+        XCTAssertFalse(jobNumber.isEmpty, "the job number is on screen")
         let phase = scrollTo("job.phase.1")
         snapshot("12-job-phases")
         phase.tap()
@@ -213,6 +285,11 @@ final class FieldServiceLocalFlowUITests: XCTestCase {
         }
         XCTAssertEqual(item.value as? String, "Done", "Phase checklist is updatable")
         snapshot("13-phase-checklist")
+
+        // The offline promise, against the real server: a tick made with no signal is queued,
+        // shown as waiting, and sent once the connection is back.
+        tickRemainingChecklistItemWhileOffline()
+
         app.navigationBars.buttons.element(boundBy: 0).tap()
         let complete = scrollTo("job.action.completed")
         complete.tap()

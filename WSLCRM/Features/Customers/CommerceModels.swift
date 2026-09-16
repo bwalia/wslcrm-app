@@ -257,7 +257,7 @@ extension Order: Decodable {
         discountAmount = c.decodeFlexibleDecimal(forKey: .discountAmount) ?? 0
         totalAmount = c.decodeFlexibleDecimal(forKey: .totalAmount) ?? 0
         // Some rows store the default with literal quotes (`'USD'`).
-        currency = ((try? c.decodeIfPresent(String.self, forKey: .currency)) ?? "GBP")
+        currency = (((try? c.decodeIfPresent(String.self, forKey: .currency))) ?? Formatters.fallbackCurrency)
             .trimmingCharacters(in: CharacterSet(charactersIn: "'\" "))
         customerNotes = try? c.decodeIfPresent(String.self, forKey: .customerNotes)
         internalNotes = try? c.decodeIfPresent(String.self, forKey: .internalNotes)

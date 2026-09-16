@@ -21,7 +21,7 @@ struct CustomersListView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(customer.displayName).font(.headline)
                         Text([customer.email, customer.phone].compactMap { $0 }.joined(separator: " · "))
-                            .font(.subheadline).foregroundStyle(.secondary)
+                            .font(.subheadline).foregroundStyle(.secondaryText)
                     }
                     .padding(.vertical, 4)
                 }
@@ -298,11 +298,11 @@ struct ProductRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(product.name).font(.headline).lineLimit(2)
                 Text([product.sku, product.categoryName, product.storeName].compactMap { $0 }.joined(separator: " · "))
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(.secondaryText)
                 if product.trackInventory {
                     Label("\(product.inventoryQuantity) in stock", systemImage: product.isLowStock ? "exclamationmark.triangle.fill" : "cube.box")
                         .font(.footnote)
-                        .foregroundStyle(product.isLowStock ? Tone.warning.color : .secondary)
+                        .foregroundStyle(product.isLowStock ? Tone.warning.textColor : .secondaryText)
                 }
             }
             Spacer()
@@ -339,7 +339,7 @@ struct ProductDetailView: View {
                             Text(Formatters.money(product.price, currency: currency(for: product)) ?? "").font(.title3.monospacedDigit())
                             if let compare = product.comparePrice, compare > product.price {
                                 Text(Formatters.money(compare, currency: currency(for: product)) ?? "")
-                                    .strikethrough().foregroundStyle(.secondary)
+                                    .strikethrough().foregroundStyle(.secondaryText)
                             }
                         }
                         StatusBadge(text: product.isActive ? "Active" : "Inactive",
@@ -350,7 +350,7 @@ struct ProductDetailView: View {
                         DetailRow(label: "SKU", value: product.sku)
                         DetailRow(label: "In stock", value: product.trackInventory ? String(product.inventoryQuantity) : "Not tracked")
                         if product.isLowStock {
-                            Label("Low stock", systemImage: "exclamationmark.triangle.fill").foregroundStyle(Tone.warning.color)
+                            Label("Low stock", systemImage: "exclamationmark.triangle.fill").foregroundStyle(Tone.warning.textColor)
                         }
                     }
                     if let description = product.description, !description.isEmpty {
@@ -534,7 +534,7 @@ struct OrdersListView: View {
                         }
                         Text([order.storeName, order.itemCount.map { "\($0) item\($0 == 1 ? "" : "s")" }, Formatters.dateTime(order.createdAt)]
                             .compactMap { $0 }.joined(separator: " · "))
-                            .font(.footnote).foregroundStyle(.secondary)
+                            .font(.footnote).foregroundStyle(.secondaryText)
                     }
                     .padding(.vertical, 4)
                     .accessibilityElement(children: .combine)
@@ -621,11 +621,11 @@ struct OrderDetailView: View {
                 if current.items.isEmpty {
                     if detailError != nil {
                         Label("Item details couldn't be loaded from the server.", systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondaryText)
                     } else if order == nil {
                         ProgressView()
                     } else {
-                        Text("No items").foregroundStyle(.secondary)
+                        Text("No items").foregroundStyle(.secondaryText)
                     }
                 }
                 ForEach(current.items) { item in
@@ -633,7 +633,7 @@ struct OrderDetailView: View {
                         VStack(alignment: .leading) {
                             Text(item.productTitle).font(.headline)
                             Text([item.variantTitle, item.sku, "× \(item.quantity)"].compactMap { $0 }.joined(separator: " · "))
-                                .font(.subheadline).foregroundStyle(.secondary)
+                                .font(.subheadline).foregroundStyle(.secondaryText)
                         }
                         Spacer()
                         Text(Formatters.money(item.total, currency: current.currency) ?? "").monospacedDigit()
@@ -657,7 +657,7 @@ struct OrderDetailView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(Formatters.humanize(entry.oldStatus)) → \(Formatters.humanize(entry.newStatus))").font(.subheadline)
                             Text([entry.changedBy, Formatters.dateTime(entry.createdAt), entry.notes].compactMap { $0 }.joined(separator: " · "))
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(.caption).foregroundStyle(.secondaryText)
                         }
                     }
                 }

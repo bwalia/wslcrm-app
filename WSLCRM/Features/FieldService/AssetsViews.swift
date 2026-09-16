@@ -103,7 +103,7 @@ struct AssetRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(product.name).font(.headline).foregroundStyle(.primary)
                 Text([product.sku, product.categoryName, product.storeName].compactMap { $0 }.joined(separator: " · "))
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(.secondaryText)
             }
             Spacer()
         }
@@ -128,7 +128,7 @@ struct AssetDetailView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(product.name).font(.title2.bold())
                     Text([product.sku.map { "SKU \($0)" }, product.categoryName, product.storeName].compactMap { $0 }.joined(separator: " · "))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondaryText)
                     if let description = product.description, !description.isEmpty {
                         Text(description).font(.subheadline)
                     }
@@ -151,7 +151,7 @@ struct AssetDetailView: View {
                 case .idle, .loading: ProgressView()
                 case .failed(let error): InlineErrorRow(error: error) { Task { await load() } }
                 case .loaded(let items):
-                    if items.isEmpty { Text("No requests for this unit").foregroundStyle(.secondary) }
+                    if items.isEmpty { Text("No requests for this unit").foregroundStyle(.secondaryText) }
                     ForEach(items) { request in
                         NavigationLink(value: ServiceRequestRoute(uuid: request.uuid)) { ServiceRequestRow(request: request) }
                     }
@@ -163,7 +163,7 @@ struct AssetDetailView: View {
                 case .idle, .loading: ProgressView()
                 case .failed(let error): InlineErrorRow(error: error) { Task { await load() } }
                 case .loaded(let items):
-                    if items.isEmpty { Text("No jobs for this unit").foregroundStyle(.secondary) }
+                    if items.isEmpty { Text("No jobs for this unit").foregroundStyle(.secondaryText) }
                     ForEach(items) { job in
                         NavigationLink(value: JobRoute(uuid: job.uuid)) { JobRow(job: job) }
                     }

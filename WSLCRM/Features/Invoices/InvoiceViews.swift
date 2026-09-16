@@ -127,7 +127,7 @@ struct InvoiceRow: View {
                 }
             }
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.secondaryText)
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
@@ -151,6 +151,7 @@ struct InvoiceDetailView: View {
     @State private var confirmVoid = false
     @State private var confirmDelete = false
     @State private var pdfURL: URL?
+    @State private var emailing = false
 
     var body: some View {
         Group {
@@ -190,6 +191,11 @@ struct InvoiceDetailView: View {
                 await mutate { try await services.invoices.addItem(invoiceUuid, body) }
             } onDelete: { false }
         }
+        .sheet(isPresented: $emailing) {
+            if let invoice = state.value {
+                EmailInvoiceSheet(invoice: invoice) { Task { await load() } }
+            }
+        }
         .sheet(isPresented: $recordingPayment) {
             if let invoice = state.value {
                 PaymentSheet(invoice: invoice) { body in
@@ -227,17 +233,17 @@ struct InvoiceDetailView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     invoice.displayStatus.badge
                     Text(invoice.customerName ?? "No customer").font(.title2.bold())
-                    if let email = invoice.customerEmail { Text(email).foregroundStyle(.secondary) }
+                    if let email = invoice.customerEmail { Text(email).foregroundStyle(.secondaryText) }
                     HStack(alignment: .firstTextBaseline) {
                         Text(Formatters.money(invoice.totalAmount, currency: invoice.currency) ?? "").font(.title.monospacedDigit().bold())
                         if invoice.balanceDue > 0 && invoice.amountPaid > 0 {
                             Text("\(Formatters.money(invoice.balanceDue, currency: invoice.currency) ?? "") due")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.secondaryText)
                         }
                     }
                     Text([invoice.issueDate.map { "Issued \(Formatters.day($0.date()) ?? "")" },
                           invoice.dueDate.map { "Due \(Formatters.day($0.date()) ?? "")" }].compactMap { $0 }.joined(separator: " · "))
-                        .font(.subheadline).foregroundStyle(.secondary)
+                        .font(.subheadline).foregroundStyle(.secondaryText)
                 }
                 .padding(.vertical, 4)
             }
@@ -245,11 +251,17 @@ struct InvoiceDetailView: View {
             if canUpdate && (invoice.canSend || invoice.canVoid) || (permissions.can(.create, .payments) && invoice.canRecordPayment) {
                 Section("Actions") {
                     if canUpdate && invoice.canSend {
-                        Button { Task { _ = await mutate { try await services.invoices.send(invoiceUuid) } } } label: {
-                            Label("Mark as sent", systemImage: "paperplane.fill")
+                        // #611: emailing attaches the PDF this app renders and marks a draft sent.
+                        Button { emailing = true } label: {
+                            Label("Email to customer", systemImage: "envelope.fill")
                         }
                         .buttonStyle(.large(.info))
                         .listRowSeparator(.hidden)
+                        .accessibilityIdentifier("invoice.email")
+                        Button { Task { _ = await mutate { try await services.invoices.send(invoiceUuid) } } } label: {
+                            Label("Mark as sent without emailing", systemImage: "paperplane")
+                        }
+                        .frame(minHeight: 44)
                     }
                     if permissions.can(.create, .payments) && invoice.canRecordPayment {
                         Button { recordingPayment = true } label: {
@@ -282,7 +294,7 @@ struct InvoiceDetailView: View {
                                 Text("\(item.quantity.formatted()) × \(Formatters.money(item.unitPrice, currency: invoice.currency) ?? "")"
                                      + (item.taxRate > 0 ? " · VAT \(item.taxRate.formatted())%" : "")
                                      + (item.discountPercent > 0 ? " · −\(item.discountPercent.formatted())%" : ""))
-                                    .font(.caption).foregroundStyle(.secondary)
+                                    .font(.caption).foregroundStyle(.secondaryText)
                             }
                             Spacer()
                             Text(Formatters.money(item.lineTotal, currency: invoice.currency) ?? "").monospacedDigit().foregroundStyle(.primary)
@@ -317,7 +329,7 @@ struct InvoiceDetailView: View {
                                 Text(Formatters.money(payment.amount, currency: invoice.currency) ?? "").font(.headline.monospacedDigit())
                                 Text([Formatters.humanize(payment.paymentMethod), payment.referenceNumber,
                                       payment.paymentDate.flatMap { Formatters.day($0.date()) }].compactMap { $0 }.joined(separator: " · "))
-                                    .font(.caption).foregroundStyle(.secondary)
+                                    .font(.caption).foregroundStyle(.secondaryText)
                             }
                             Spacer()
                         }
@@ -505,7 +517,7 @@ struct InvoiceCreateSheet: View {
     @State private var customerName = ""
     @State private var customerEmail = ""
     @State private var dueDate = Calendar.current.date(byAdding: .day, value: 30, to: Date()) ?? Date()
-    @State private var currency = "GBP"
+    @State private var currency = Formatters.fallbackCurrency
     @State private var notes = ""
     @State private var items: [LineItemBody] = [LineItemBody(description: "", quantity: 1, unitPrice: 0, taxRate: 20)]
     @State private var saving = false
@@ -521,7 +533,7 @@ struct InvoiceCreateSheet: View {
                 Section("Terms") {
                     DatePicker("Due date", selection: $dueDate, displayedComponents: .date)
                     Picker("Currency", selection: $currency) {
-                        ForEach(["GBP", "EUR", "USD"], id: \.self) { Text($0).tag($0) }
+                        ForEach(Formatters.currencyChoices(including: currency), id: \.self) { Text($0).tag($0) }
                     }
                 }
                 ForEach($items.indices, id: \.self) { index in
@@ -644,6 +656,93 @@ enum InvoicePDFRenderer {
             return url
         } catch {
             return nil
+        }
+    }
+}
+
+
+/// Emails the invoice PDF to the customer (opsapi #611). The PDF is the same one "Share PDF"
+/// produces — the server has no renderer, so the client supplies it.
+struct EmailInvoiceSheet: View {
+    let invoice: Invoice
+    var onSent: () -> Void = {}
+
+    @Environment(\.services) private var services
+    @Environment(\.dismiss) private var dismiss
+    @State private var recipient: String
+    @State private var message = ""
+    @State private var sending = false
+    @State private var sentTo: String?
+    @State private var error: APIError?
+
+    init(invoice: Invoice, onSent: @escaping () -> Void = {}) {
+        self.invoice = invoice
+        self.onSent = onSent
+        _recipient = State(initialValue: invoice.customerEmail ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    LabeledContent("Invoice", value: invoice.invoiceNumber)
+                    LabeledContent("Customer", value: invoice.customerName ?? "—")
+                    LabeledContent("Total", value: Formatters.money(invoice.totalAmount, currency: invoice.currency) ?? "")
+                }
+                Section {
+                    TextField("Customer email", text: $recipient)
+                        .keyboardType(.emailAddress)
+                        .textContentType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .accessibilityIdentifier("invoiceEmail.recipient")
+                    TextField("Add a note (optional)", text: $message, axis: .vertical)
+                        .lineLimit(2...5)
+                } footer: {
+                    Text(invoice.status == .draft
+                         ? "Attaches the invoice PDF and marks this invoice as sent."
+                         : "Attaches the invoice PDF and emails it again.")
+                }
+                if let sentTo {
+                    Section {
+                        Label("Emailed to \(sentTo)", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(Tone.success.textColor)
+                    }
+                }
+                if let error { Section { InlineErrorRow(error: error) } }
+            }
+            .navigationTitle("Email invoice")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(sentTo == nil ? "Cancel" : "Done") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Send") { send() }
+                        .disabled(sending || recipient.trimmedOrNil == nil)
+                        .accessibilityIdentifier("invoiceEmail.send")
+                }
+            }
+            .interactiveDismissDisabled(sending)
+        }
+    }
+
+    private func send() {
+        sending = true
+        error = nil
+        Task {
+            defer { sending = false }
+            guard let url = InvoicePDFRenderer.render(invoice), let pdf = try? Data(contentsOf: url) else {
+                error = .validation(ServerError(status: 0, message: "The invoice PDF could not be built.",
+                                                fieldErrors: [:], rawBody: ""))
+                return
+            }
+            do {
+                let result = try await services.invoices.email(
+                    invoice.id, pdf: pdf, filename: url.lastPathComponent, to: recipient, message: message)
+                sentTo = result.to
+                onSent()
+            } catch {
+                self.error = error.asAPIError
+            }
         }
     }
 }

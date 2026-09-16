@@ -178,6 +178,46 @@ on the PR branch.
 
     `scripts/local-opsapi-fs-seed.sh` works around these with SQL on the isolated local database only.
 
+50. **Job photos lose their content type (verified locally).** The upload route reads
+    `file.content_type` (`routes/field-service-jobs.lua:233`), but Lapis's multipart parser doesn't
+    provide it, so `fs_job_photos.content_type` is always NULL and never comes back in the API.
+    The create response also omits `created_at` (the list has it). Photos are therefore untyped
+    and unordered for the client.
+51. **The photo size limit is really 10MB, not 15MB (verified locally).** The route rejects over
+    15MB (`routes/field-service-jobs.lua:224`), but the upload then goes through
+    `MinioClient:validateFile`, which enforces `MAX_FILE_SIZE = 10MB` (`helper/minio.lua:218`) and
+    surfaces as a **502** "Upload failed: File size …" rather than a 413. The app caps uploads at
+    10MB and maps that 502 to a "photo is too large" message.
+52. **Photo URLs are presigned for one hour** (`queries/JobPhotoQueries.lua:25-32`, re-signed on
+    every read), so a client must not persist them; the app re-fetches the list instead.
+53. **The global rate limiter answers 429 with `retry_after` in the body and a `Retry-After`
+    header** (`middleware/rate-limit.lua:67-89`), but outside a 429 only `X-RateLimit-Limit` and
+    `X-RateLimit-Remaining` are sent. The body is a bare `{error, retry_after}` — not the usual
+    envelope — so 429 needs its own decoding path.
+
+## 5b. Quotation, emailed documents and roles (opsapi #611)
+
+54. ~~The Service Manager role cannot send an invoice.~~ **Fixed during #611 review**
+    (`a00412c`): the seed now grants `invoices: ["manage"]`, and migration `892` backfills
+    existing tenants (only where the role is still on the old defaults, so a customised role is
+    left alone). `893` follows with `payments: ["manage"]` and `timesheet_approvals: ["manage"]`.
+    Verified on the local tenant: the manager reaches `/invoices/:uuid/email` (400 without a PDF)
+    and an engineer is refused 403.
+55. ~~The `products: manage` grant only reaches new workspaces.~~ **Fixed during #611 review**
+    (`a00412c`): migration `892` adds it to existing `service_manager` roles that have no
+    `products` grant. The local tenant's menu now includes `products`.
+56. **PDFs are the client's job.** `POST /jobs/:uuid/quote-email` and `POST /invoices/:uuid/email`
+    both require `pdf_base64` from the caller — there is no server-side renderer — so every client
+    has to reproduce the same document. The iOS app renders both on device (`DocumentPDF`).
+    A server-rendered PDF (or an endpoint that builds it from the job) would keep the documents
+    identical across clients.
+57. **Emailing an invoice marks it sent, but sending is not idempotent.** `/email` flips a draft to
+    `sent` after the mail goes out; a second call emails again. There's no "sent at" timestamp to
+    show the customer's last copy.
+58. **Fault categories are per-tenant free text.** `GET /field-service/fault-categories` returns
+    distinct values already used, most-used first, and a new one is created simply by saving it on
+    a request. There's no rename or merge, so a typo becomes a permanent option in the list.
+
 ## 6. Missing endpoints that would simplify the app
 
 - `GET /job-phases/:uuid` — phase mutations return only the phase, so the job has to be re-fetched
