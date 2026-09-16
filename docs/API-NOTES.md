@@ -218,6 +218,17 @@ on the PR branch.
     distinct values already used, most-used first, and a new one is created simply by saving it on
     a request. There's no rename or merge, so a typo becomes a permanent option in the list.
 
+59. **`GET /field-service/engineers` returns every workspace member.** Service managers, the
+    service desk and the owner all appear in the app's "Assign the engineer" picker alongside the
+    engineers, so a job can be booked to someone who never attends site. Found while seeding a
+    realistic tenant (`scripts/seed-dbs-limited.py`); the app can't filter it, because the payload
+    carries no role.
+60. **Notification text is stamped in UTC.** `fs_visit_assigned` messages are built server-side as
+    `"<job title> — visit <scheduled_start>"` with the naive UTC value, so an engineer booked for
+    19:08 BST reads "visit 2026-09-16 18:08" in their notification list. The timestamps the client
+    formats itself are correct; only the server's baked-in string is an hour out over British
+    Summer Time.
+
 ## 6. Missing endpoints that would simplify the app
 
 - `GET /job-phases/:uuid` — phase mutations return only the phase, so the job has to be re-fetched

@@ -53,7 +53,7 @@ final class RoleAccessUITests: XCTestCase {
         XCTAssertFalse(element("hub.invoices").exists, "engineers have no invoices")
 
         element("hub.jobs").tap()
-        app.buttons["jobs.row.JOB-0042"].tap()
+        app.buttons["jobs.row.JOB-2418"].tap()
         XCTAssertTrue(app.buttons["job.phase.1"].waitForExistence(timeout: 10))
         XCTAssertFalse(element("job.quote").exists, "a quotation carries prices")
         XCTAssertFalse(element("job.createInvoice").exists)
@@ -77,15 +77,18 @@ final class RoleAccessUITests: XCTestCase {
         XCTAssertTrue(element("hub.invoices").exists)
 
         element("hub.jobs").tap()
-        app.buttons["jobs.row.JOB-0042"].tap()
+        app.buttons["jobs.row.JOB-2418"].tap()
         let quote = scrollTo("job.quote")
         XCTAssertTrue(quote.waitForExistence(timeout: 10), "the manager prices the sheet up for the customer")
 
         // The quotation: lines, a PDF, and the email the server sends.
         quote.tap()
         XCTAssertTrue(element("quote.preview").waitForExistence(timeout: 10))
+        // The customer's address is pre-filled from the job; send it somewhere else instead.
         let recipient = element("quote.recipient")
         recipient.tap()
+        let prefilled = (recipient.value as? String) ?? ""
+        recipient.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: prefilled.count))
         recipient.typeText("customer@example.com")
         element("quote.send").tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'emailed to customer@example.com'"))
@@ -98,14 +101,14 @@ final class RoleAccessUITests: XCTestCase {
         launch(as: "manager")
 
         element("hub.invoices").tap()
-        app.staticTexts["INV-0001"].firstMatch.tap()
+        app.staticTexts["INV-4821"].firstMatch.tap()
         let email = scrollTo("invoice.email")
         XCTAssertTrue(email.waitForExistence(timeout: 15), "the manager sends the invoice")
         email.tap()
 
         XCTAssertTrue(element("invoiceEmail.send").waitForExistence(timeout: 10))
         element("invoiceEmail.send").tap()
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Emailed to jane@example.com'"))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Emailed to maintenance@freshway-stores.example'"))
             .firstMatch.waitForExistence(timeout: 15), "the invoice was emailed to the customer on file")
     }
 }

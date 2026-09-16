@@ -93,6 +93,8 @@ The login screen shows an environment badge on non-production builds.
 
 - UI tests need **no credentials**: they launch the app with `-UITestStubServer`, a Debug-only
   in-memory OpsAPI (`WSLCRM/Support/UITestSupport.swift`) that reproduces the real response shapes.
+  Its data is a slice of the DBS Limited workspace below: Tom Fletcher on site at FreshWay Streatham
+  with a tripping walk-in chiller (`JOB-2418`), invoiced as `INV-4821`.
 
 ## Tests
 
@@ -123,6 +125,7 @@ xcodebuild … -only-testing:WSLCRMTests test
 | `LargeTextUITests` | the same screens at an accessibility text size, with screenshots |
 | `FieldServiceLocalFlowUITests` | the full request → invoice happy path against a real local OPSAPI, including a checklist tick made **offline** that syncs on reconnect (skipped unless run by `scripts/run-local-fs-uitest.sh`) |
 | `LocalPhotoUploadTests` | photo upload, listing and delete against the real local API (multipart, presigned URL) |
+| `DBSLimitedTourUITests` | a screenshot tour as DBS Limited's engineer, service manager and service desk against the seeded local API; read-only (skipped unless run by `scripts/run-dbs-screenshots.sh`) |
 
 UI test screenshots are kept in the result bundle:
 `xcrun xcresulttool export attachments --path <bundle>.xcresult --output-path screens/`.
@@ -168,6 +171,39 @@ Screenshots are in `build/local-fs-run/result.xcresult` (export them as shown ab
 is saved to `build/local-fs-run/happy-path.mp4`. To run the app by hand, pick the **WSLCRM-Local**
 scheme and set `LOCAL_API_PORT` in `Config/Local.xcconfig` if the backend isn't on 4011. To clean up,
 run `docker rm -f wslcrm-opsapi-pr610`, drop the `opsapi-wslcrm-pr610` database and delete `build/opsapi-pr610`.
+
+### DBS Limited: realistic data and a screenshot tour
+
+`scripts/seed-dbs-limited.py` adds a second workspace to the same local stack, modelled on an air
+conditioning and refrigeration contractor working in London and the South East:
+
+- **People.** Service managers Claire Donnelly and Marcus Reid, service desk coordinator Aisha Rahman,
+  and six engineers (Tom Fletcher, Kwame Mensah, Jake Harrison, Ryan O'Connell, Piotr Kowalski,
+  Sanjay Mistry). Sign in with the username, e.g. `tom.fletcher`.
+- **Customers and sites.** A managing agent's offices, a restaurant group, a convenience-store chain, a
+  GP practice's vaccine fridges, a data centre, a hotel, a primary school and a domestic heat pump.
+  Each has site contacts, access notes, the plant on site and a stock list with low-stock parts.
+- **The day.** It is built around *now*. Tom is on an out-of-hours cold-room call-out (F-Gas leak found,
+  refrigerant waiting for approval) and Kwame is at a warm dairy multideck. The day's finished work has
+  sign-offs and F-Gas records, and one visit was no-access. There is a vaccine-fridge job on hold for a
+  part, a multi-day installation, tomorrow's bookings, an overdue PPM visit, a quotation, a guest
+  complaint that has missed its SLA, and invoices that are draft, sent, overdue and paid.
+
+Each step goes through the API as the person who would do it, then its timestamps are moved to when it
+happened. Staff emails end in `@e2e.invalid`, so the server doesn't email sign-in codes, and customers
+use `.example` addresses. The seed never calls the email routes.
+
+```bash
+scripts/seed-dbs-limited.py            # after scripts/local-opsapi-fs-seed.sh; writes build/dbs-limited.env
+scripts/seed-dbs-limited.py --reset    # rebuild requests, jobs, visits and invoices around the current time
+scripts/run-dbs-screenshots.sh         # opens the Simulator, runs the tour, PNGs in build/dbs-screenshots/
+```
+
+A curated set of that tour is committed in [`docs/screenshots/dbs-limited/`](docs/screenshots/dbs-limited):
+the engineer's day (My Work, the guided visit, the checklist, the quote sheet with its F-Gas record,
+the stock list, a job on hold for a part), the manager's board (hub, requests with a breached SLA,
+an installation's parts and hire, a quotation, an invoice preview, the invoice list) and the service
+desk logging a call.
 
 ### Capturing fixtures from the real API
 
