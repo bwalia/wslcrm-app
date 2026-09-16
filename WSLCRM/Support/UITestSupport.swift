@@ -77,6 +77,16 @@ final class UITestStubServer: @unchecked Sendable {
     static let jobUuid = "5b0c0e2e-6a55-4d0f-9f5e-1b2c3d4e5f60"
     static let phaseUuid = "p1000000-0000-0000-0000-000000000001"
     static let invoiceUuid = "in000000-0000-0000-0000-000000000001"
+    /// Seeded as DBS Limited (the same workspace `scripts/seed-dbs-limited.py` builds on a local
+    /// OPSAPI): Tom Fletcher on site at a FreshWay store with a tripping walk-in chiller.
+    static let jobNumber = "JOB-2418"
+    static let jobTitle = "Walk-in chiller compressor tripping"
+    static let invoiceNumber = "INV-4821"
+    static let customerName = "FreshWay Convenience Stores Ltd"
+    static let customerEmail = "maintenance@freshway-stores.example"
+    static let customerPhone = "+44 20 7946 0874"
+    static let serviceAddress = "212 Streatham High Road, London"
+    static let servicePostcode = "SW16 1BB"
     /// JWT whose `exp` is in 2100, so the client never tries a proactive refresh.
     static let token = "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjQxMDI0NDQ4MDB9.stub"
 
@@ -94,6 +104,15 @@ final class UITestStubServer: @unchecked Sendable {
                             "customers": ["manage"], "products": ["manage"], "invoices": ["manage"],
                             "payments": ["manage"], "timesheets": ["read"], "timesheet_approvals": ["manage"]]
             case .telecaller: ["fs_service_requests": ["create", "read", "update"], "customers": ["create", "read"]]
+            }
+        }
+
+        /// Who signs in for each role.
+        var person: (first: String, last: String, email: String) {
+            switch self {
+            case .engineer: ("Tom", "Fletcher", "tom.fletcher@dbs-limited.example")
+            case .manager: ("Claire", "Donnelly", "claire.donnelly@dbs-limited.example")
+            case .telecaller: ("Aisha", "Rahman", "aisha.rahman@dbs-limited.example")
             }
         }
 
@@ -121,8 +140,9 @@ final class UITestStubServer: @unchecked Sendable {
     func reset() {
         lock.withLock {
             checklist = [
-                ["label": "Isolate power", "done": true, "done_at": "2026-09-15 09:12:04", "done_by": Self.userUuid],
-                ["label": "Check refrigerant pressure", "done": false],
+                ["label": "Safe isolation and lock-off", "done": true, "done_at": "2026-09-15 07:44:12",
+                 "done_by": Self.userUuid],
+                ["label": "Record suction/discharge pressures and temperatures", "done": false],
             ]
             phaseStatus = "in_progress"
             visitStatus = "on_site"
@@ -130,7 +150,7 @@ final class UITestStubServer: @unchecked Sendable {
             // A job already has a line on its sheet, so quoting and invoicing have something
             // to price (an engineer's own additions are appended to this).
             items = [["uuid": "i0", "item_type": "labour", "description": "Engineer — normal time",
-                      "quantity": 2, "unit_price": 65, "tax_rate": 0, "line_total": 130,
+                      "quantity": 2, "unit_price": 85, "tax_rate": 20, "line_total": 204,
                       "is_billable": true, "invoiced": false, "approval_status": "approved",
                       "labour_category": "engineer_nt"]]
             photos = []
@@ -156,7 +176,7 @@ final class UITestStubServer: @unchecked Sendable {
                                         "message": "The email or password you entered is incorrect.",
                                         "correlation_id": "uitest-correlation"]])
             }
-            return (200, ["requires_2fa": true, "session_token": "stub-session", "email": "engineer@example.com",
+            return (200, ["requires_2fa": true, "session_token": "stub-session", "email": role.person.email,
                           "message": "Verification code sent to your email"])
 
         case ("POST", "/auth/2fa/verify"):
@@ -255,9 +275,13 @@ final class UITestStubServer: @unchecked Sendable {
             return (200, ["success": true, "data": true])
 
         case ("GET", "/api/v2/field-service/sites"):
-            return (200, ["success": true, "data": [["uuid": "site-1", "name": "Ward 5", "address_line1": "Praed Street",
-                                                     "city": "London", "postal_code": "W2 1NY", "customer_name": "Jane Doe",
-                                                     "job_count": 1, "created_at": "2026-09-01 08:00:00+00"]],
+            return (200, ["success": true, "data": [["uuid": "site-1", "name": "FreshWay Streatham (Store 114)",
+                                                     "address_line1": "212 Streatham High Road", "city": "London",
+                                                     "postal_code": Self.servicePostcode, "customer_name": Self.customerName,
+                                                     "contact_name": "Deborah Okafor (store manager)",
+                                                     "contact_phone": Self.customerPhone,
+                                                     "access_notes": "Store open 07:00–23:00. Condensing units in the rear yard; yard key is kept at the tills.",
+                                                     "job_count": 3, "created_at": "2024-09-01 08:00:00+00"]],
                           "meta": meta(1)])
 
         case ("GET", "/api/v2/invoices"):
@@ -267,7 +291,7 @@ final class UITestStubServer: @unchecked Sendable {
             return (200, ["success": true, "data": invoice])
 
         case ("GET", "/api/v2/invoices/dashboard/stats"):
-            return (200, ["success": true, "data": ["total_outstanding": 130, "total_paid": 0, "draft_count": 1,
+            return (200, ["success": true, "data": ["total_outstanding": 261.6, "total_paid": 0, "draft_count": 1,
                                                     "overdue_count": 0]])
 
         case ("POST", "/api/v2/invoices/\(Self.invoiceUuid)/email"):
@@ -275,40 +299,52 @@ final class UITestStubServer: @unchecked Sendable {
                 return (400, ["success": false, "error": "pdf_base64 is required"])
             }
             invoiceStatus = "sent"
-            let to = (json["to"] as? String) ?? "jane@example.com"
+            let to = (json["to"] as? String) ?? Self.customerEmail
             return (200, ["success": true, "data": ["message": "Invoice emailed to \(to)", "to": to, "status": "sent"]])
 
         case ("GET", "/api/v2/field-service/fault-categories"):
-            return (200, ["success": true, "data": ["No cooling", "Water leak", "Noisy fan"]])
+            return (200, ["success": true, "data": ["High temperature alarm", "No cooling", "Tripping / electrical",
+                                                    "Water leak", "Noisy operation"]])
 
         case ("POST", "/api/v2/field-service/jobs/\(Self.jobUuid)/quote-email"):
             guard let pdf = json["pdf_base64"] as? String, !pdf.isEmpty else {
                 return (400, ["success": false, "error": "pdf_base64 is required"])
             }
-            let to = (json["to"] as? String) ?? "jane@example.com"
+            let to = (json["to"] as? String) ?? Self.customerEmail
             return (200, ["success": true, "data": ["message": "Quotation emailed to \(to)", "to": to]])
 
         case ("GET", "/api/v2/field-service/parts"):
-            return (200, ["success": true, "data": [["uuid": "part-1", "sku": "CAP-35", "name": "Capacitor 35uF",
-                                                     "category": "Electrical", "unit_price": 12.5, "stock_quantity": 3,
-                                                     "reorder_level": 5, "is_active": true]],
-                          "meta": meta(1)])
+            return (200, ["success": true, "data": [
+                ["uuid": "part-1", "sku": "CONT-25A-230", "name": "Contactor 25A, 230V coil", "category": "Electrical",
+                 "unit_price": 48, "stock_quantity": 3, "reorder_level": 3, "is_active": true],
+                ["uuid": "part-2", "sku": "FD-DML-163", "name": "Filter drier Danfoss DML 163s, 3/8\" solder",
+                 "category": "Refrigeration", "unit_price": 24, "stock_quantity": 21, "reorder_level": 10, "is_active": true],
+                ["uuid": "part-3", "sku": "REF-R448A-KG", "name": "R448A refrigerant (per kg)", "category": "Refrigerant",
+                 "unit_price": 48, "stock_quantity": 14.8, "reorder_level": 12, "is_active": true],
+            ], "meta": meta(3)])
 
         case ("GET", "/api/v2/field-service/engineers"):
-            return (200, ["success": true, "data": [["uuid": Self.userUuid, "name": "Sam Engineer",
-                                                     "email": "engineer@example.com", "open_visits": 2]]])
+            return (200, ["success": true, "data": [
+                ["uuid": Self.userUuid, "name": "Tom Fletcher", "email": "tom.fletcher@dbs-limited.example", "open_visits": 3],
+                ["uuid": "u-kwame", "name": "Kwame Mensah", "email": "kwame.mensah@dbs-limited.example", "open_visits": 2],
+                ["uuid": "u-sanjay", "name": "Sanjay Mistry", "email": "sanjay.mistry@dbs-limited.example", "open_visits": 2],
+            ]])
 
         case ("GET", "/api/v2/field-service/job-types"):
-            return (200, ["success": true, "data": [["uuid": "jt-1", "name": "AC repair", "is_active": true,
-                                                     "phase_count": 1, "default_hourly_rate": 65]]])
+            return (200, ["success": true, "data": [
+                ["uuid": "jt-1", "name": "Reactive breakdown", "is_active": true, "phase_count": 2, "default_hourly_rate": 85],
+                ["uuid": "jt-2", "name": "Planned maintenance (PPM)", "is_active": true, "phase_count": 1,
+                 "default_hourly_rate": 68],
+                ["uuid": "jt-3", "name": "Emergency call-out", "is_active": true, "phase_count": 1, "default_hourly_rate": 128],
+            ]])
 
         case ("GET", "/api/v2/field-service/stats"):
-            return (200, ["success": true, "data": ["open_jobs": 1, "visits_today": 1, "engineers_on_site": 1, "overdue_jobs": 0]])
+            return (200, ["success": true, "data": ["open_jobs": 11, "visits_today": 9, "engineers_on_site": 2, "overdue_jobs": 1]])
 
         case ("GET", "/api/v2/notifications"):
             return (200, ["notifications": [["uuid": "n1", "type": "fs_visit_assigned", "title": "New job assigned",
-                                             "message": "AC repair — Ward 5", "is_read": false,
-                                             "created_at": "2026-09-15 08:00:00"]], "unread_count": 1])
+                                             "message": "\(Self.jobTitle) — visit 2026-09-15 07:30", "is_read": false,
+                                             "created_at": "2026-09-15 06:45:00"]], "unread_count": 1])
 
         case ("POST", let p) where p.hasPrefix("/api/v2/field-service/job-phases/\(Self.phaseUuid)/checklist/"):
             guard let index = Int(p.split(separator: "/").last ?? ""), checklist.indices.contains(index) else {
@@ -342,12 +378,12 @@ final class UITestStubServer: @unchecked Sendable {
     // MARK: Payloads (mirroring the Lua shapers)
 
     private var user: [String: Any] {
-        ["id": 42, "uuid": Self.userUuid, "email": "engineer@example.com", "first_name": "Sam", "last_name": "Engineer",
-         "active": true, "roles": []]
+        ["id": 42, "uuid": Self.userUuid, "email": role.person.email, "first_name": role.person.first,
+         "last_name": role.person.last, "active": true, "roles": []]
     }
 
     private var namespace: [String: Any] {
-        ["id": 7, "uuid": Self.namespaceUuid, "name": "Acme Cooling", "slug": "acme-cooling", "is_owner": false,
+        ["id": 7, "uuid": Self.namespaceUuid, "name": "DBS Limited", "slug": "dbs-limited", "is_owner": false,
          "status": "active", "member_status": "active"]
     }
 
@@ -358,21 +394,24 @@ final class UITestStubServer: @unchecked Sendable {
     private var phase: [String: Any] {
         var result: [String: Any] = ["uuid": Self.phaseUuid, "name": "Diagnose", "sort_order": 1, "status": phaseStatus,
                                      "requires_visit": true, "requires_signoff": false, "checklist": checklist,
-                                     "visit_count": 1, "logged_hours": 0, "started_at": "2026-09-15 09:02:51.120331"]
+                                     "visit_count": 1, "logged_hours": 0, "started_at": "2026-09-15 07:41:03.120331"]
         if phaseStatus == "completed" {
             result["completed_at"] = "2026-09-15 10:05:00.5"
-            result["completed_by_name"] = "Sam Engineer"
+            result["completed_by_name"] = "Tom Fletcher"
         }
         return result
     }
 
     private var invoice: [String: Any] {
-        ["id": Self.invoiceUuid, "invoice_number": "INV-0001", "status": invoiceStatus, "customer_name": "Jane Doe",
-         "customer_email": "jane@example.com", "currency": "GBP", "issue_date": "2026-09-15", "due_date": "2026-10-15",
-         "subtotal": 130, "tax_amount": 0, "discount_amount": 0, "total_amount": 130, "amount_paid": 0,
-         "balance_due": 130,
-         "line_items": [["id": "li1", "description": "Labour (Sam Engineer)", "quantity": 2, "unit_price": 65,
-                         "tax_rate": 0, "discount_percent": 0, "line_total": 130]],
+        ["id": Self.invoiceUuid, "invoice_number": Self.invoiceNumber, "status": invoiceStatus,
+         "customer_name": Self.customerName, "customer_email": Self.customerEmail, "currency": "GBP",
+         "issue_date": "2026-09-15", "due_date": "2026-10-15",
+         "subtotal": 218, "tax_amount": 43.6, "discount_amount": 0, "total_amount": 261.6, "amount_paid": 0,
+         "balance_due": 261.6, "notes": "PO FW-PO-20931",
+         "line_items": [["id": "li1", "description": "Engineer — normal time (Tom Fletcher, 2026-09-15)", "quantity": 2,
+                         "unit_price": 85, "tax_rate": 20, "discount_percent": 0, "line_total": 204],
+                        ["id": "li2", "description": "Contactor 25A, 230V coil", "quantity": 1, "unit_price": 48,
+                         "tax_rate": 20, "discount_percent": 0, "line_total": 57.6]],
          "payments": []]
     }
 
@@ -386,22 +425,28 @@ final class UITestStubServer: @unchecked Sendable {
 
     private var visit: [String: Any] {
         ["uuid": Self.visitUuid, "status": visitStatus, "engineer_user_uuid": Self.userUuid,
-         "engineer_name": "Sam Engineer", "scheduled_start": todayAt(hour: 9), "scheduled_end": todayAt(hour: 12),
+         "engineer_name": "Tom Fletcher", "scheduled_start": todayAt(hour: 9), "scheduled_end": todayAt(hour: 12),
          "checked_in_at": todayAt(hour: 9), "is_billable": true, "follow_up_required": false, "invoiced": false,
-         "job_uuid": Self.jobUuid, "job_number": "JOB-0042", "job_title": "AC repair — Ward 5", "job_status": "in_progress",
-         "job_priority": "high", "job_currency": "GBP", "phase_uuid": Self.phaseUuid, "phase_name": "Diagnose",
-         "phase_status": phaseStatus, "customer_name": "Jane Doe", "customer_phone": "+44 20 7946 0000",
-         "service_address": "St Mary's Hospital, Praed Street, London", "service_postcode": "W2 1NY",
-         "created_at": "2026-09-12 08:05:11", "updated_at": "2026-09-15 09:02:51"]
+         "instructions": "Store on 2-hour response. Yard key at the tills.",
+         "job_uuid": Self.jobUuid, "job_number": Self.jobNumber, "job_title": Self.jobTitle, "job_status": "in_progress",
+         "job_priority": "urgent", "job_currency": "GBP", "phase_uuid": Self.phaseUuid, "phase_name": "Diagnose",
+         "phase_status": phaseStatus, "customer_name": Self.customerName, "customer_phone": Self.customerPhone,
+         "service_address": Self.serviceAddress, "service_postcode": Self.servicePostcode,
+         "site_uuid": "site-1", "site_name": "FreshWay Streatham (Store 114)",
+         "created_at": "2026-09-15 06:45:11", "updated_at": "2026-09-15 07:41:03"]
     }
 
     private func job(detail: Bool) -> [String: Any] {
         var result: [String: Any] = [
-            "uuid": Self.jobUuid, "job_number": "JOB-0042", "title": "AC repair — Ward 5", "status": "in_progress",
-            "priority": "high", "currency": "GBP", "customer_name": "Jane Doe", "customer_phone": "+44 20 7946 0000",
-            "service_address": "St Mary's Hospital, Praed Street, London", "service_postcode": "W2 1NY",
+            "uuid": Self.jobUuid, "job_number": Self.jobNumber, "title": Self.jobTitle, "status": "in_progress",
+            "priority": "urgent", "currency": "GBP", "customer_name": Self.customerName,
+            "customer_email": Self.customerEmail, "customer_phone": Self.customerPhone,
+            "customer_reference": "FW-PO-20931", "product_ref": "CU-2 rear yard",
+            "product_name": "Tecumseh CAJ4492Z cold room condensing unit",
+            "service_address": Self.serviceAddress, "service_postcode": Self.servicePostcode,
+            "site_uuid": "site-1", "site_name": "FreshWay Streatham (Store 114)",
             "phase_count": 1, "phases_done": phaseStatus == "completed" ? 1 : 0, "visit_count": 1,
-            "created_at": "2026-09-12 08:00:00", "updated_at": "2026-09-15 09:02:51.120331",
+            "created_at": "2026-09-15 06:45:00", "updated_at": "2026-09-15 07:41:03.120331",
         ]
         if detail {
             result["phases"] = [phase]

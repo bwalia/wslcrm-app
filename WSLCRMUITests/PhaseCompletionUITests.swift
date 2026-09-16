@@ -17,7 +17,7 @@ final class PhaseCompletionUITests: XCTestCase {
         let identifier = app.textFields["login.identifier"]
         XCTAssertTrue(identifier.waitForExistence(timeout: 10))
         identifier.tap()
-        identifier.typeText("engineer@example.com")
+        identifier.typeText("tom.fletcher")
         let passwordField = app.secureTextFields["login.password"]
         passwordField.tap()
         passwordField.typeText(password)
@@ -68,7 +68,7 @@ final class PhaseCompletionUITests: XCTestCase {
         XCTAssertTrue(app.buttons["mywork.hero"].waitForExistence(timeout: 10))
         snapshot("03-my-work")
         openJobsTab()
-        let jobRow = app.buttons["jobs.row.JOB-0042"]
+        let jobRow = app.buttons["jobs.row.JOB-2418"]
         XCTAssertTrue(jobRow.waitForExistence(timeout: 10))
         jobRow.tap()
 
@@ -106,7 +106,7 @@ final class PhaseCompletionUITests: XCTestCase {
         signIn()
         enterCode("123456")
         openJobsTab()
-        let jobRow = app.buttons["jobs.row.JOB-0042"]
+        let jobRow = app.buttons["jobs.row.JOB-2418"]
         XCTAssertTrue(jobRow.waitForExistence(timeout: 10))
         jobRow.tap()
         let phaseRow = app.buttons["job.phase.1"]

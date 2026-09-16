@@ -101,6 +101,7 @@
 		D711FF19E6DA5B7680606826 /* InvoicesAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD2E6F3B9CA2DF12CC34480 /* InvoicesAPI.swift */; };
 		D77B1969ECB157BB4EB7FF75 /* EngineerFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43D3B865967161CE541B8BDC /* EngineerFlowUITests.swift */; };
 		D90721F268E9E59D06333A90 /* MyWorkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63CDF1CFC057F87C21201ABA /* MyWorkView.swift */; };
+		D942CA72977B50C576C637AD /* DBSLimitedTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E094D72D0C8B74C3994DDA2 /* DBSLimitedTourUITests.swift */; };
 		DC2E796C453858BDC6739193 /* crm_deals_by_stage.json in Resources */ = {isa = PBXBuildFile; fileRef = D4C6C8B56FD73F1E6F7998AB /* crm_deals_by_stage.json */; };
 		DE2CAE67A7861BA3A2C05238 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17E0356F831946AE13AF4665 /* KeychainStore.swift */; };
 		E0A7ACB630C82E3E4DCB8220 /* PhotosSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FF0C3F7211BAA712C7F76E9 /* PhotosSection.swift */; };
@@ -200,6 +201,7 @@
 		74F0AF4EB7E3742110B9FBE9 /* QuoteSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteSheetView.swift; sourceTree = "<group>"; };
 		76B7D8A86AE17C56B43A8488 /* PermissionSet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionSet.swift; sourceTree = "<group>"; };
 		7D7070D52AB52E16752DCD75 /* fs_checkout_response.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = fs_checkout_response.json; sourceTree = "<group>"; };
+		7E094D72D0C8B74C3994DDA2 /* DBSLimitedTourUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DBSLimitedTourUITests.swift; sourceTree = "<group>"; };
 		7F1E7EB4E5B2217CCBB8F22D /* crm_deal_detail.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = crm_deal_detail.json; sourceTree = "<group>"; };
 		84B1EE8D1F1385E6DEAA7186 /* CommerceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommerceModels.swift; sourceTree = "<group>"; };
 		87FB7B056A14718797F10881 /* FieldServiceHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldServiceHubView.swift; sourceTree = "<group>"; };
@@ -309,6 +311,7 @@
 		346843A4EA5A728A11403E1B /* WSLCRMUITests */ = {
 			isa = PBXGroup;
 			children = (
+				7E094D72D0C8B74C3994DDA2 /* DBSLimitedTourUITests.swift */,
 				43D3B865967161CE541B8BDC /* EngineerFlowUITests.swift */,
 				89F24687B5F90024152CA49F /* FieldServiceLocalFlowUITests.swift */,
 				44F9DB4684AA0F2DF07EDDEA /* LocalPhotoUploadTests.swift */,
@@ -862,6 +865,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D942CA72977B50C576C637AD /* DBSLimitedTourUITests.swift in Sources */,
 				D77B1969ECB157BB4EB7FF75 /* EngineerFlowUITests.swift in Sources */,
 				29AA43C6BC05F820F9738F9D /* FieldServiceLocalFlowUITests.swift in Sources */,
 				9596A455BAD79DD5F0D3B05C /* LocalPhotoUploadTests.swift in Sources */,

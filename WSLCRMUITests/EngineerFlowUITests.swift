@@ -19,7 +19,7 @@ final class EngineerFlowUITests: XCTestCase {
         let identifier = app.textFields["login.identifier"]
         XCTAssertTrue(identifier.waitForExistence(timeout: 10))
         identifier.tap()
-        identifier.typeText("engineer@example.com")
+        identifier.typeText("tom.fletcher")
         let password = app.secureTextFields["login.password"]
         password.tap()
         password.typeText("correct-horse")
@@ -39,6 +39,22 @@ final class EngineerFlowUITests: XCTestCase {
         let element = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
         XCTAssertTrue(element.waitForExistence(timeout: 10), "missing \(identifier)")
         return element
+    }
+
+    /// The guided visit is longer than the screen (site card, access notes, checklist, then the
+    /// tiles), so scroll a control into reach before tapping it, as an engineer would. A control
+    /// under the floating tab bar still reports as hittable, but the tap lands on the bar — so it
+    /// has to clear that too.
+    private func tap(_ identifier: String, file: StaticString = #filePath, line: UInt = #line) {
+        let match = element(identifier)
+        let tabBar = app.tabBars.firstMatch
+        let floor = tabBar.exists ? tabBar.frame.minY : app.windows.firstMatch.frame.maxY
+        for _ in 0..<6 where !(match.isHittable && match.frame.maxY < floor) {
+            app.swipeUp()
+        }
+        XCTAssertTrue(match.isHittable && match.frame.maxY < floor,
+                      "\(identifier) is not reachable above the tab bar", file: file, line: line)
+        match.tap()
     }
 
     /// Unlabelled controls, elements under the minimum hit area, missing traits and contrast
@@ -121,7 +137,7 @@ final class EngineerFlowUITests: XCTestCase {
         audit("Guided visit")
 
         // Labour: hours come from a stepper, so engineers never type on site.
-        element("guided.tile.labour").tap()
+        tap("guided.tile.labour")
         let hours = app.steppers["quote.hours"]
         XCTAssertTrue(hours.waitForExistence(timeout: 10))
         hours.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
@@ -133,27 +149,27 @@ final class EngineerFlowUITests: XCTestCase {
         XCTAssertTrue(text(containing: "Engineer — normal time").waitForExistence(timeout: 10), "labour line is on the sheet")
 
         // Materials come from the workspace's stock list, so the line carries the real SKU.
-        element("guided.tile.materials").tap()
+        tap("guided.tile.materials")
         element("quote.pickPart").tap()
-        element("part.row.Capacitor 35uF").tap()
-        XCTAssertEqual(element("quote.description").value as? String, "Capacitor 35uF")
+        element("part.row.Contactor 25A, 230V coil").tap()
+        XCTAssertEqual(element("quote.description").value as? String, "Contactor 25A, 230V coil")
         element("quote.add").tap()
-        XCTAssertTrue(text(containing: "Capacitor 35uF").waitForExistence(timeout: 10), "material line is on the sheet")
+        XCTAssertTrue(text(containing: "Contactor 25A").waitForExistence(timeout: 10), "material line is on the sheet")
 
         // F-Gas record.
-        element("guided.tile.refrigerant").tap()
+        tap("guided.tile.refrigerant")
         let gas = element("fgas.type")
         gas.tap()
-        gas.typeText("R410A\n")   // return closes the keyboard so the whole form is auditable
+        gas.typeText("R448A\n")   // return closes the keyboard so the whole form is auditable
         audit("F-Gas")
         element("fgas.save").tap()
-        XCTAssertTrue(app.staticTexts["R410A"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["R448A"].waitForExistence(timeout: 10))
 
         // Finish the job.
-        element("guided.action.finish").tap()
+        tap("guided.action.finish")
         let summary = element("checkout.workSummary")
         summary.tap()
-        summary.typeText("Replaced capacitor, tested — cooling OK")
+        summary.typeText("Contactor contacts burnt — replaced, cabinet down to 3°C")
         text(containing: "Work report").tap()   // dismiss the keyboard
         audit("Check out")
         // The keyboard covers the end of the form; scroll it into reach the way an engineer would.
@@ -174,7 +190,7 @@ final class EngineerFlowUITests: XCTestCase {
         audit("Field Service hub")
 
         element("hub.jobs").tap()
-        let jobRow = app.buttons["jobs.row.JOB-0042"]
+        let jobRow = app.buttons["jobs.row.JOB-2418"]
         XCTAssertTrue(jobRow.waitForExistence(timeout: 10))
         audit("Jobs list")
         jobRow.tap()
@@ -201,7 +217,7 @@ final class LargeTextUITests: XCTestCase {
         let identifier = app.textFields["login.identifier"]
         XCTAssertTrue(identifier.waitForExistence(timeout: 10))
         identifier.tap()
-        identifier.typeText("engineer@example.com")
+        identifier.typeText("tom.fletcher")
         let password = app.secureTextFields["login.password"]
         password.tap()
         password.typeText("correct-horse")
@@ -229,7 +245,7 @@ final class LargeTextUITests: XCTestCase {
         XCTAssertTrue(app.buttons["hub.jobs"].waitForExistence(timeout: 10))
         snapshot("large-03-hub")
         app.buttons["hub.jobs"].tap()
-        let row = app.buttons["jobs.row.JOB-0042"]
+        let row = app.buttons["jobs.row.JOB-2418"]
         XCTAssertTrue(row.waitForExistence(timeout: 10))
         row.tap()
         // Phases sit below the fold at this text size; the rows are lazy, so scroll to them.
