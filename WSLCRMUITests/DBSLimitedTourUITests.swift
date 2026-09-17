@@ -5,7 +5,11 @@ import XCTest
 /// passes the credentials as `TEST_RUNNER_*` variables; skipped otherwise.
 ///
 /// The tour only looks: sheets are opened and cancelled, nothing is converted, approved, invoiced
-/// or emailed, so it can be re-run against the same seed.
+/// or emailed, so it can be re-run against the same seed. The one exception is
+/// `test5EngineerSurveysAnAsset`, which records a condition survey the way an engineer does on
+/// site; `scripts/seed-dbs-portfolio.py` rebuilds the survey history on its next run.
+///
+/// Tests 4 and 5 need the Simpro portfolio from `scripts/seed-dbs-portfolio.py` as well.
 @MainActor
 final class DBSLimitedTourUITests: XCTestCase {
     private var app: XCUIApplication!
@@ -366,5 +370,104 @@ final class DBSLimitedTourUITests: XCTestCase {
         let discard = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Discard'")).firstMatch
         if discard.waitForExistence(timeout: 3) { discard.tap() }
         XCTAssertTrue(app.navigationBars["New request"].waitForNonExistence(timeout: 10), "The request was not created")
+    }
+
+    // MARK: Simpro — the DBS Ltd CRM in front of Simpro
+
+    /// The share sheet is a compact card with no Cancel button; a tap on the dimmed page below it
+    /// closes it, as a person would.
+    private func dismissShareSheet() {
+        let copy = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Save to Files'")).firstMatch
+        for attempt in 0..<3 {
+            let y = attempt == 0 ? 0.8 : 0.6
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: y)).tap()
+            if copy.waitForNonExistence(timeout: 3) { return }
+        }
+        XCTFail("Share sheet stayed open")
+    }
+
+    func test4ManagerSimproReportsAndAssets() {
+        signIn(env["DBS_CLAIRE"]!, loginShot: "simpro-00-dbs-ltd-sign-in")
+        hub()
+        snapshot("simpro-01-hub")
+
+        // The asset register, then the overdue filter.
+        scrollTo("hub.customerAssets").tap()
+        element("customerAsset.row.EC-DB-01", timeout: 30)
+        snapshot("simpro-02-assets")
+        element("customerAssets.filter.overdue").tap()
+        RunLoop.current.run(until: Date().addingTimeInterval(2))
+        snapshot("simpro-03-assets-service-overdue")
+        element("customerAssets.filter.overdue").tap()
+
+        // A condition-5 VRV: condition notes, F-Gas position, schedule and surveys.
+        row("customerAsset.row.NBS-VRV-02", containing: "condenser 2").tap()
+        element("customerAsset.syncState", timeout: 30)
+        snapshot("simpro-04-asset-detail")
+        app.swipeUp()
+        snapshot("simpro-05-asset-fgas-and-schedule")
+        app.swipeUp()
+        snapshot("simpro-06-asset-surveys")
+        if tapIfPresent(element("customerAsset.historyPDF")) {
+            if tapIfPresent(element("customerAsset.sharePDF", timeout: 30)) {
+                snapshot("simpro-07-asset-history-pdf-share")
+                dismissShareSheet()
+            }
+        }
+
+        // The report pack.
+        hub()
+        scrollTo("hub.reports").tap()
+        element("report.ppm_forecast", timeout: 30)
+        snapshot("simpro-08-reports")
+        element("report.ppm_forecast").tap()
+        element("report.sharePDF", timeout: 45)
+        snapshot("simpro-09-ppm-forecast")
+        app.swipeUp()
+        snapshot("simpro-10-ppm-forecast-rows")
+        element("report.sharePDF").tap()
+        snapshot("simpro-11-ppm-forecast-share-pdf")
+        dismissShareSheet()
+        back()
+        scrollTo("report.fgas_register").tap()
+        element("report.shareCSV", timeout: 45)
+        snapshot("simpro-12-fgas-register")
+        back()
+        scrollTo("report.employee_licences").tap()
+        element("report.sharePDF", timeout: 45)
+        snapshot("simpro-13-employee-licences")
+
+        // Simpro sync status (managers read it; pulls and pushes run from the web).
+        hub()
+        scrollTo("hub.simpro").tap()
+        XCTAssertTrue(text(containing: "in Simpro").waitForExistence(timeout: 30), "Sync counts shown")
+        snapshot("simpro-14-sync-status")
+    }
+
+    func test5EngineerSurveysAnAsset() {
+        signIn(env["DBS_TOM"]!)
+        openTab("More")
+        element("more.customerAssets", timeout: 30).tap()
+        // Condition 4 and worse: a short list with the St Mary Magdalene heat pump on it.
+        element("customerAssets.filter.condition", timeout: 30).tap()
+        row("customerAsset.row.SMMA-ASHP-02", containing: "ASHP 2").tap()
+        element("customerAsset.recordSurvey", timeout: 30)
+        snapshot("simpro-15-engineer-asset")
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "customerAsset.historyPDF").firstMatch.exists,
+                       "Engineers get no portfolio reports")
+
+        element("customerAsset.recordSurvey").tap()
+        let notes = element("survey.notes", timeout: 20)
+        notes.tap()
+        notes.typeText("Defrost fault on circuit 2 again; compressor running hot. Remedial quote requested.")
+        app.buttons["Advisory"].firstMatch.tap()
+        snapshot("simpro-16-engineer-survey-form")
+        element("survey.save").tap()
+        XCTAssertTrue(app.navigationBars.matching(NSPredicate(format: "identifier BEGINSWITH 'Survey'")).firstMatch
+            .waitForNonExistence(timeout: 20), "The survey saved")
+        app.swipeUp()
+        app.swipeUp()
+        XCTAssertTrue(text(containing: "Remedial quote requested").waitForExistence(timeout: 20), "New survey in the history")
+        snapshot("simpro-17-engineer-survey-saved")
     }
 }

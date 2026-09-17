@@ -434,6 +434,8 @@ extension View {
             .navigationDestination(for: InvoiceRoute.self) { InvoiceDetailView(invoiceUuid: $0.uuid) }
             .navigationDestination(for: AssetRoute.self) { AssetDetailView(product: $0.product) }
             .navigationDestination(for: SiteRoute.self) { SiteDetailView(site: $0.site) }
+            .navigationDestination(for: CustomerAssetRoute.self) { CustomerAssetDetailView(assetUuid: $0.uuid) }
+            .navigationDestination(for: ReportRoute.self) { ReportDetailView(route: $0) }
             .navigationDestination(for: FieldServiceArea.self) { area in
                 switch area {
                 case .requests: ServiceRequestsListView()
@@ -441,6 +443,9 @@ extension View {
                 case .assets: AssetSearchView()
                 case .sites: SitesListView()
                 case .invoices: InvoicesListView()
+                case .customerAssets: CustomerAssetsListView()
+                case .reports: ReportsListView()
+                case .simpro: SimproSyncStatusView()
                 }
             }
     }

@@ -5,5 +5,8 @@ API_BASE_URL = https:/$()/int-opsapi.workstation.co.uk
 WSLCRM_INFOPLIST_FILE = WSLCRM/Resources/Info.plist
 API_ENVIRONMENT_NAME = Int
 
+// White-label: the house brand. See Config/Brand-Default.xcconfig.
+#include "Brand-Default.xcconfig"
+
 // Optional, git-ignored overrides (e.g. DEVELOPMENT_TEAM for device builds).
 #include? "Local.xcconfig"

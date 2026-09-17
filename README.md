@@ -125,7 +125,8 @@ xcodebuild … -only-testing:WSLCRMTests test
 | `LargeTextUITests` | the same screens at an accessibility text size, with screenshots |
 | `FieldServiceLocalFlowUITests` | the full request → invoice happy path against a real local OPSAPI, including a checklist tick made **offline** that syncs on reconnect (skipped unless run by `scripts/run-local-fs-uitest.sh`) |
 | `LocalPhotoUploadTests` | photo upload, listing and delete against the real local API (multipart, presigned URL) |
-| `DBSLimitedTourUITests` | a screenshot tour as DBS Limited's engineer, service manager and service desk against the seeded local API; read-only (skipped unless run by `scripts/run-dbs-screenshots.sh`) |
+| `DBSLimitedTourUITests` | a screenshot tour as DBS Limited's engineer, service manager and service desk against the seeded local API, plus the DBS Ltd Simpro screens: the asset register, a PDF share, reports and sync status, and an engineer recording a survey (the only write). Skipped unless run by `scripts/run-dbs-screenshots.sh` |
+| `SimproDemoTests` | who sees assets, reports and Simpro sync per role (real grants from opsapi #612), asset and report decoding, report cell formatting, the report PDF (letterhead, legal footer, pagination), and white-label brand resolution |
 
 UI test screenshots are kept in the result bundle:
 `xcrun xcresulttool export attachments --path <bundle>.xcresult --output-path screens/`.
@@ -204,6 +205,60 @@ the engineer's day (My Work, the guided visit, the checklist, the quote sheet wi
 the stock list, a job on hold for a part), the manager's board (hub, requests with a breached SLA,
 an installation's parts and hire, a quotation, an invoice preview, the invoice list) and the service
 desk logging a call.
+
+### DBS Ltd: the CRM in front of Simpro
+
+DBS Ltd (David Blakey Services Limited, 03806201) run their business on Simpro. The demo positions
+OPSAPI as the CRM in front of it: the same data shapes and screens as Simpro, a connector that pulls
+from and pushes to a Simpro build, and the report pack DBS publish on
+[dbs.uk.com/simpro](https://dbs.uk.com/simpro). The server side is opsapi
+[#612](https://github.com/bwalia/opsapi/pull/612); run the local stack from that branch.
+
+`scripts/seed-dbs-portfolio.py` runs after `seed-dbs-limited.py` and loads DBS's real portfolio from
+`scripts/dbs-portfolio.json`:
+
+- **Customers, sites and projects** from the 22 case studies on [dbs.uk.com/projects](https://dbs.uk.com/projects)
+  (BNP Paribas, Skanska's City of London contract, Sky Studios, Fitzharry's School, St Mary Magdalene
+  Academy, Verulam Point, PureGym and others). Each project is a Simpro project job with cost
+  centres, and three live projects are added.
+- **Plant.** 129 assets built from the published plant: Sky's three Hoval UltraGas boilers, the 990 kW
+  and 2 × 500 kW heat pumps, Verulam Point's 7 VRVs with 49 ducted FCUs and 4 Lossnays, and a sample
+  of Skanska's 100+ boilers and 40 chillers. Each asset has contracts, service levels, 18 months of
+  condition surveys on DBS's 1–6 scale, F-Gas leak checks and failures.
+- **The business** at the scale Companies House shows: turnover £6.6m (FY24), 46 employees (FY25).
+  The seed also adds licences (some expiring), remedial quotes, and a mock Simpro connection with a
+  first pull and push already run.
+
+Every value is tagged in the JSON as published (from DBS's site, their Simpro report pack or Companies
+House) or assumed, e.g. project values, contract terms after handover, refrigerant charges and serial
+numbers. Assumed values are illustrative, not DBS's figures. People are not taken from the website:
+contacts are role-based with `.example` addresses, and the DBS team is the synthetic one above.
+
+The Local configuration is white-labelled as **DBS Ltd** through `Config/Brand-DBS.xcconfig`: the app
+name and icon, the sign-in mark, and the letterhead and legal footer on report PDFs. Int and Prod keep
+the house brand (`Config/Brand-Default.xcconfig`). In the app:
+
+- **Field Service → Assets.** The register with condition, F-Gas and overdue filters. An asset shows
+  its F-Gas position, service schedule and surveys, and an asset-history PDF. Engineers open it from
+  **More** and record surveys on site.
+- **Field Service → Reports.** The Simpro report pack (failure history, PPM forecast, routine
+  maintenance, F-Gas register, licences, labour, response times, admin efficiency, Power BI extract).
+  Each shares as a branded PDF (rendered on the phone) or the server's CSV. Engineers don't get
+  reports.
+- **Field Service → Simpro sync.** Read-only sync status for managers; pulls and pushes run from the
+  web dashboard.
+
+```bash
+scripts/seed-dbs-limited.py --reset && scripts/seed-dbs-portfolio.py
+OUT_DIR=build/dbs-simpro-screenshots scripts/run-dbs-screenshots.sh \
+  -only-testing:WSLCRMUITests/DBSLimitedTourUITests/test4ManagerSimproReportsAndAssets \
+  -only-testing:WSLCRMUITests/DBSLimitedTourUITests/test5EngineerSurveysAnAsset
+```
+
+For the web dashboard, run `opsapi-dashboard` with `NEXT_PUBLIC_API_URL=http://127.0.0.1:4011`,
+`NEXT_PUBLIC_BRAND_NAME="DBS Ltd"` and `NEXT_PUBLIC_BRAND_LOGO_URL=/brands/dbs-ltd.svg`.
+Screenshots of both surfaces, and a page of a generated report PDF, are in
+[`docs/screenshots/dbs-ltd-simpro/`](docs/screenshots/dbs-ltd-simpro).
 
 ### Capturing fixtures from the real API
 

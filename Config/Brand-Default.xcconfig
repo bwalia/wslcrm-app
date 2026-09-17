@@ -1,0 +1,14 @@
+// House brand (WSLCRM). Included by Int.xcconfig and Prod.xcconfig; a white-label build includes
+// its own Config/Brand-*.xcconfig instead. These live in xcconfig rather than project.yml because
+// project-level build settings would override the configuration's xcconfig values.
+
+BRAND_NAME = WSLCRM
+BRAND_MARK =
+BRAND_APP_ICON = AppIcon
+BRAND_LEGAL_NAME =
+BRAND_STRAPLINE =
+BRAND_ADDRESS =
+BRAND_PHONE =
+BRAND_EMAIL =
+BRAND_COMPANY_NUMBER =
+BRAND_VAT_NUMBER =

@@ -30,7 +30,7 @@ struct SettingsView: View {
             } header: {
                 Text("Security")
             } footer: {
-                Text("When on, WSLCRM asks for \(session.biometrics.displayName) when you open it or return after five minutes.")
+                Text("When on, \(Brand.current.name) asks for \(session.biometrics.displayName) when you open it or return after five minutes.")
             }
 
             Section("About") {

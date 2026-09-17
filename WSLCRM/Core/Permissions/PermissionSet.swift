@@ -7,6 +7,10 @@ enum Module: String, Sendable {
     case fsServiceRequests = "fs_service_requests"
     case fsJobTypes = "fs_job_types"
     case fsParts = "fs_parts"
+    case fsAssets = "fs_assets"
+    case fsContracts = "fs_contracts"
+    case fsReports = "fs_reports"
+    case simproSync = "simpro_sync"
     case crmAccounts = "crm_accounts"
     case customers
     case products
@@ -21,6 +25,10 @@ enum Module: String, Sendable {
         case .fsServiceRequests: "service requests"
         case .fsJobTypes: "job types"
         case .fsParts: "parts"
+        case .fsAssets: "customer assets"
+        case .fsContracts: "contracts"
+        case .fsReports: "reports"
+        case .simproSync: "Simpro sync"
         case .crmAccounts: "CRM"
         case .customers: "customers"
         case .products: "products"

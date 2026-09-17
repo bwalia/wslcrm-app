@@ -2,6 +2,24 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>WSLBrandName</key>
+	<string>$(BRAND_NAME)</string>
+	<key>WSLBrandMark</key>
+	<string>$(BRAND_MARK)</string>
+	<key>WSLBrandLegalName</key>
+	<string>$(BRAND_LEGAL_NAME)</string>
+	<key>WSLBrandStrapline</key>
+	<string>$(BRAND_STRAPLINE)</string>
+	<key>WSLBrandAddress</key>
+	<string>$(BRAND_ADDRESS)</string>
+	<key>WSLBrandPhone</key>
+	<string>$(BRAND_PHONE)</string>
+	<key>WSLBrandEmail</key>
+	<string>$(BRAND_EMAIL)</string>
+	<key>WSLBrandCompanyNumber</key>
+	<string>$(BRAND_COMPANY_NUMBER)</string>
+	<key>WSLBrandVATNumber</key>
+	<string>$(BRAND_VAT_NUMBER)</string>
 	<key>WSLAPIBaseURL</key>
 	<string>$(API_BASE_URL)</string>
 	<key>WSLAPIEnvironmentName</key>

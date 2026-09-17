@@ -4,7 +4,9 @@
 # exports every screenshot as a named PNG to build/dbs-screenshots/.
 #
 #   scripts/seed-dbs-limited.py --reset     # refresh the day around now first (optional)
+#   scripts/seed-dbs-portfolio.py           # the Simpro portfolio, for the simpro-* screens
 #   scripts/run-dbs-screenshots.sh
+#   scripts/run-dbs-screenshots.sh -only-testing:WSLCRMUITests/DBSLimitedTourUITests/test4ManagerSimproReportsAndAssets
 #
 # Credentials come from build/dbs-limited.env (scripts/seed-dbs-limited.py) and are passed to the
 # test runner as TEST_RUNNER_* variables — never printed.
@@ -35,7 +37,7 @@ TEST_RUNNER_WSL_PASSWORD="$WSL_PASSWORD" TEST_RUNNER_WSL_OTP="$WSL_OTP" \
 TEST_RUNNER_DBS_TOM="$DBS_TOM" TEST_RUNNER_DBS_CLAIRE="$DBS_CLAIRE" TEST_RUNNER_DBS_AISHA="$DBS_AISHA" \
 xcodebuild -project "$ROOT/WSLCRM.xcodeproj" -scheme WSLCRM-Local -destination "id=$UDID" \
   -derivedDataPath "$ROOT/build/DerivedData" -resultBundlePath "$RESULT" \
-  -only-testing:WSLCRMUITests/DBSLimitedTourUITests test "$@"
+  $(printf '%s\n' "$@" | grep -q -- '-only-testing' || echo -only-testing:WSLCRMUITests/DBSLimitedTourUITests) test "$@"
 STATUS=$?
 set -e
 
@@ -53,7 +55,7 @@ for test in json.loads((source / "manifest.json").read_text()):
         # Xcode appends "_<index>_<uuid>" to the name; keep the snapshot name itself, and skip its own
         # failure attachments (UI hierarchies, recordings).
         stem = name.rsplit(".", 1)[0].split("_")[0]
-        if not stem.startswith(("eng-", "mgr-", "desk-")):
+        if not stem.startswith(("eng-", "mgr-", "desk-", "simpro-")):
             continue
         shutil.copy(source / attachment["exportedFileName"], target / f"{stem}.png")
         count += 1

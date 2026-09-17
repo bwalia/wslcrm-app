@@ -1,0 +1,16 @@
+// DBS Ltd white-label for the demo builds (included by Local-API.xcconfig).
+//
+// Company details are public: dbs.uk.com, and Companies House for David Blakey Services Limited
+// (03806201). They print on the report PDFs' letterhead and footer, as on DBS's own Simpro reports.
+
+BRAND_NAME = DBS Ltd
+BRAND_MARK = BrandMark-DBS
+BRAND_APP_ICON = AppIcon-DBS
+BRAND_LEGAL_NAME = David Blakey Services Limited
+// `//` starts a comment in xcconfig, so the strapline's separators are written /$()/.
+BRAND_STRAPLINE = Air Conditioning /$()/ Refrigeration /$()/ Heating /$()/ Electrical /$()/ Controls
+BRAND_ADDRESS = 6-8 Colne Way Court, Colne Way, Watford, Hertfordshire WD24 7NE
+BRAND_PHONE = 01923 246381
+BRAND_EMAIL = info@dbsservices.co.uk
+BRAND_COMPANY_NUMBER = 03806201
+BRAND_VAT_NUMBER = GB 743 5371 32
