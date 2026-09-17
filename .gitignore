@@ -24,3 +24,6 @@ scripts/.capture/
 
 # Tooling
 .serena/
+
+# Python bytecode (scripts/seed-dbs-portfolio.py imports seed-dbs-limited.py)
+__pycache__/

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The Field Service area for managers and telecallers: today's numbers, then requests, jobs,
-/// assets, sites and the invoices raised from jobs.
+/// assets, sites and the invoices raised from jobs, and the Simpro report pack and sync status.
 struct FieldServiceHubView: View {
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
@@ -59,8 +59,15 @@ struct FieldServiceHubView: View {
                     }
                     .accessibilityIdentifier("hub.jobs")
                 }
+                if permissions.can(.read, .fsAssets) {
+                    NavigationLink(value: FieldServiceArea.customerAssets) {
+                        Label("Assets", systemImage: "air.conditioner.horizontal")
+                    }
+                    .accessibilityIdentifier("hub.customerAssets")
+                }
+                // The equipment models (store products) a request or job is raised against.
                 NavigationLink(value: FieldServiceArea.assets) {
-                    Label("Assets", systemImage: "wrench.adjustable")
+                    Label("Equipment models", systemImage: "wrench.adjustable")
                 }
                 .accessibilityIdentifier("hub.assets")
                 NavigationLink(value: FieldServiceArea.sites) {
@@ -72,6 +79,23 @@ struct FieldServiceHubView: View {
                         Label("Invoices", systemImage: "doc.text")
                     }
                     .accessibilityIdentifier("hub.invoices")
+                }
+            }
+
+            if permissions.can(.read, .fsReports) || permissions.can(.read, .simproSync) {
+                Section("Simpro") {
+                    if permissions.can(.read, .fsReports) {
+                        NavigationLink(value: FieldServiceArea.reports) {
+                            Label("Reports", systemImage: "chart.bar.doc.horizontal")
+                        }
+                        .accessibilityIdentifier("hub.reports")
+                    }
+                    if permissions.can(.read, .simproSync) {
+                        NavigationLink(value: FieldServiceArea.simpro) {
+                            Label("Simpro sync", systemImage: "arrow.triangle.2.circlepath.icloud")
+                        }
+                        .accessibilityIdentifier("hub.simpro")
+                    }
                 }
             }
         }
@@ -101,6 +125,7 @@ struct FieldServiceHubView: View {
 /// routes in one stack makes SwiftUI re-push screens, so the area navigates by value only.
 enum FieldServiceArea: Hashable {
     case requests, jobs, assets, sites, invoices
+    case customerAssets, reports, simpro
 }
 
 struct AssetRoute: Hashable { let product: Product }

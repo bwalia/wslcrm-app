@@ -138,7 +138,7 @@ struct MoreView: View {
     }
 
     private var signOutTitle: String {
-        hasUnsynced ? "Sign out with unsynced changes?" : "Sign out of WSLCRM?"
+        hasUnsynced ? "Sign out with unsynced changes?" : "Sign out of \(Brand.current.name)?"
     }
 
     @ViewBuilder
@@ -158,6 +158,20 @@ struct MoreView: View {
         }
         if permissions.shows(.invoices) {
             NavigationLink { InvoicesListView() } label: { Label("Invoices", systemImage: "doc.text") }
+        }
+        // Value links: these screens push further value routes (asset, report), and a destination
+        // link above them makes SwiftUI rebuild the list, dropping its filters and the row tap.
+        if permissions.can(.read, .fsAssets) {
+            NavigationLink(value: FieldServiceArea.customerAssets) {
+                Label("Assets", systemImage: "air.conditioner.horizontal")
+            }
+            .accessibilityIdentifier("more.customerAssets")
+        }
+        if permissions.can(.read, .fsReports) {
+            NavigationLink(value: FieldServiceArea.reports) {
+                Label("Reports", systemImage: "chart.bar.doc.horizontal")
+            }
+            .accessibilityIdentifier("more.reports")
         }
     }
 }

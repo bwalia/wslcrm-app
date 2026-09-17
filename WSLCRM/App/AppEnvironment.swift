@@ -8,6 +8,7 @@ struct Services: Sendable {
     let crm: CRMAPI
     let commerce: CommerceAPI
     let invoices: InvoicesAPI
+    let simpro: SimproAPI
 
     init(client: APIClient, cache: ResponseCache) {
         self.client = client
@@ -15,6 +16,7 @@ struct Services: Sendable {
         crm = CRMAPI(client: client)
         commerce = CommerceAPI(client: client)
         invoices = InvoicesAPI(client: client)
+        simpro = SimproAPI(client: client)
     }
 
     /// Used only as the environment default (previews); never talks to a real server.

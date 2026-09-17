@@ -58,6 +58,7 @@
 		850638C60508D494740A3C14 /* APIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05906A0DFA4EE2268A85FB40 /* APIError.swift */; };
 		85C099BDE261A14C4EAB2090 /* Endpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 400BD2D82C7366E2973A76DF /* Endpoint.swift */; };
 		884CAA4B6090421ED0D8A06A /* orders_list.json in Resources */ = {isa = PBXBuildFile; fileRef = 4046EF5D627EF867B75B9076 /* orders_list.json */; };
+		885BEDDCC418622FE2830E78 /* SimproAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70137ED183ABD188CA14EABD /* SimproAPI.swift */; };
 		8945C988443E7B1F818DA6F3 /* auth_verify.json in Resources */ = {isa = PBXBuildFile; fileRef = 1B9060ABA807F3B3680B2069 /* auth_verify.json */; };
 		8C27DBC19A1E3ADD1241A10A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCCC9184D96F4BD140FED6D0 /* SettingsView.swift */; };
 		8EAB66965D1FDCC5D1CB64A6 /* RoleAccessUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A63A69BBADAFD24F37A56667 /* RoleAccessUITests.swift */; };
@@ -71,11 +72,13 @@
 		97C0E4A4F6E1C878CF047F3C /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B7F0676428C6A64D8DD9681 /* Components.swift */; };
 		97E9926AD75DC07DD094ADC3 /* EnvelopeDecodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F14E252DC867CA93491BF471 /* EnvelopeDecodingTests.swift */; };
 		98807847E3B14175DFCE3397 /* FieldServiceHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87FB7B056A14718797F10881 /* FieldServiceHubView.swift */; };
+		98D3991F6875EE073AFA5F03 /* SimproDemoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D66304B8F73DA99211ECE96D /* SimproDemoTests.swift */; };
 		99121AD6A94CCFE6F4CB76B6 /* FieldServiceAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAC10D1460E660C22176FF4E /* FieldServiceAPI.swift */; };
 		9B3C31E45878C3B3A521571A /* PagedList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4584912004000EE39801832F /* PagedList.swift */; };
 		9C20FD373CE3788FA18B11AB /* crm_pipelines.json in Resources */ = {isa = PBXBuildFile; fileRef = D473A604924E41211FC52B13 /* crm_pipelines.json */; };
 		9D27D838B7C845286B672BBD /* WorkspacePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C802AA83F6C533A3BE8EA4 /* WorkspacePickerView.swift */; };
 		9EA84A3D8EFF39F7BE316378 /* PendingMutation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1590E2AAFFD277246245556A /* PendingMutation.swift */; };
+		A02E96A6D09CA9AE1CC64DA3 /* BrandMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F88A8F43540C51E16BACD95 /* BrandMark.swift */; };
 		A0560EF4928C0C890B0B21DD /* LocationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD18F1F856AE37AF2D3BE26 /* LocationProvider.swift */; };
 		A5BF0A26271A098ADFE4DA5F /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06582C99109E8286013A294C /* SessionStore.swift */; };
 		AB37E96FB36966FE73F2EF0F /* TokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70A21419F805FB340CCED976 /* TokenStore.swift */; };
@@ -86,7 +89,9 @@
 		B009A06FACC985ECB99675DF /* ReliabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FE30866D9334250F27C2B44 /* ReliabilityTests.swift */; };
 		B1D1F4F711E4C86DAEF48CB3 /* VisitDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6046749EB8F36C75D72F9D22 /* VisitDetailView.swift */; };
 		B59154EBAEF62AB40F8B079A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C99DF96FE6AE2F8982ED771E /* PrivacyInfo.xcprivacy */; };
+		B671FCEF207E9228FC026B7B /* SimproModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98EA00C366B2D02AB7CEC8B0 /* SimproModels.swift */; };
 		BF3A397604074289E69A4C56 /* fs_pr610_payloads.json in Resources */ = {isa = PBXBuildFile; fileRef = 67D1252188219C15A46F074A /* fs_pr610_payloads.json */; };
+		BFB72D5431212A5442E6B90F /* ReportsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02A6E03FDF1CB0B042DF571D /* ReportsViews.swift */; };
 		BFDA826FAF9EFEEB33800384 /* ServiceRequestsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 097CDC517A0D13A841E88800 /* ServiceRequestsViews.swift */; };
 		C02113D36A1BD5359CD2BA2B /* StatusPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3762EFCA144C5B2F18FA349B /* StatusPresentation.swift */; };
 		C1FF95AA0ACF7D99887692FA /* MyWorkRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F59BF39424DBAE2327BBEFF /* MyWorkRefresh.swift */; };
@@ -98,6 +103,7 @@
 		CEDDBB48E31964356720DC4D /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A13265EC09EE4BC8624DCC48 /* MainTabView.swift */; };
 		CFA17689C48D6B2321E06662 /* fs_visits_list.json in Resources */ = {isa = PBXBuildFile; fileRef = EC63148111E166F8388B57F9 /* fs_visits_list.json */; };
 		D10E8705FBE4FA50CE5B3C92 /* AssetsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CB35B95A5E25B0869B18B9E /* AssetsViews.swift */; };
+		D18DC34C749C9C616BC3A353 /* Brand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 483E885911A5AB21B7084AA1 /* Brand.swift */; };
 		D711FF19E6DA5B7680606826 /* InvoicesAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD2E6F3B9CA2DF12CC34480 /* InvoicesAPI.swift */; };
 		D77B1969ECB157BB4EB7FF75 /* EngineerFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43D3B865967161CE541B8BDC /* EngineerFlowUITests.swift */; };
 		D90721F268E9E59D06333A90 /* MyWorkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63CDF1CFC057F87C21201ABA /* MyWorkView.swift */; };
@@ -105,6 +111,7 @@
 		DC2E796C453858BDC6739193 /* crm_deals_by_stage.json in Resources */ = {isa = PBXBuildFile; fileRef = D4C6C8B56FD73F1E6F7998AB /* crm_deals_by_stage.json */; };
 		DE2CAE67A7861BA3A2C05238 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17E0356F831946AE13AF4665 /* KeychainStore.swift */; };
 		E0A7ACB630C82E3E4DCB8220 /* PhotosSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FF0C3F7211BAA712C7F76E9 /* PhotosSection.swift */; };
+		E0C0543BDCFB54B6C24409E5 /* CustomerAssetsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF73A81049A8AB629B20332D /* CustomerAssetsViews.swift */; };
 		E197387562DB46DE1D844138 /* AuthAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 505C8D0F09805E31EAA32EB7 /* AuthAPI.swift */; };
 		E93BC651933B26510B973899 /* customers_list.json in Resources */ = {isa = PBXBuildFile; fileRef = A95F6B363BF270799B5831F6 /* customers_list.json */; };
 		E9C68C6DA183599551621D89 /* ConnectivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF987B5B360B60622C1643F3 /* ConnectivityMonitor.swift */; };
@@ -114,6 +121,7 @@
 		F0AC2BCB0A2A64AABAEE5A04 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 549B70CE068D1B9FAC34B586 /* RootView.swift */; };
 		F9DE0C31E9D9DAB0B67B7276 /* QuotePDF.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56019BD4B8DFC185D0168E2B /* QuotePDF.swift */; };
 		FBB93CEACC88AC1E9DDE5808 /* CommerceAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = B32A38849D216BB4D0A7CE42 /* CommerceAPI.swift */; };
+		FFF77B561F9368165B8D3FFD /* ReportPDFRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 258E664B8B3FBABA27A8C275 /* ReportPDFRenderer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -137,6 +145,7 @@
 		0076134B5E492D152B6AE883 /* invoice_detail.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = invoice_detail.json; sourceTree = "<group>"; };
 		0220080C6463F48157301313 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		022EDAAF325FA736E728E9C9 /* APIDateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIDateTests.swift; sourceTree = "<group>"; };
+		02A6E03FDF1CB0B042DF571D /* ReportsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportsViews.swift; sourceTree = "<group>"; };
 		03839F50097EBD42F240A6E1 /* InvoiceViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoiceViews.swift; sourceTree = "<group>"; };
 		04DA1D31DD17B8888BFD98C7 /* StubURLProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StubURLProtocol.swift; sourceTree = "<group>"; };
 		0548E0091F09BD0FA7BA34D4 /* ResponseCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResponseCache.swift; sourceTree = "<group>"; };
@@ -157,6 +166,7 @@
 		1FF0C3F7211BAA712C7F76E9 /* PhotosSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotosSection.swift; sourceTree = "<group>"; };
 		22750ADEF7F365102908C141 /* InvoiceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoiceModels.swift; sourceTree = "<group>"; };
 		24D514275F54F4356155819A /* JobsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobsListView.swift; sourceTree = "<group>"; };
+		258E664B8B3FBABA27A8C275 /* ReportPDFRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportPDFRenderer.swift; sourceTree = "<group>"; };
 		2984B65D70C547D31D8B1DBB /* PhaseDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhaseDetailView.swift; sourceTree = "<group>"; };
 		2CB35B95A5E25B0869B18B9E /* AssetsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetsViews.swift; sourceTree = "<group>"; };
 		2CDFCF89BDED1A9BABB88273 /* CRMModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CRMModels.swift; sourceTree = "<group>"; };
@@ -176,6 +186,7 @@
 		44F9DB4684AA0F2DF07EDDEA /* LocalPhotoUploadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalPhotoUploadTests.swift; sourceTree = "<group>"; };
 		4584912004000EE39801832F /* PagedList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PagedList.swift; sourceTree = "<group>"; };
 		471527B5261F7C4E8E091BF0 /* crm_accounts_list.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = crm_accounts_list.json; sourceTree = "<group>"; };
+		483E885911A5AB21B7084AA1 /* Brand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Brand.swift; sourceTree = "<group>"; };
 		505C8D0F09805E31EAA32EB7 /* AuthAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthAPI.swift; sourceTree = "<group>"; };
 		546F85F21575AE4A8E49E474 /* JobDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobDetailView.swift; sourceTree = "<group>"; };
 		549B70CE068D1B9FAC34B586 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -183,6 +194,7 @@
 		56019BD4B8DFC185D0168E2B /* QuotePDF.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotePDF.swift; sourceTree = "<group>"; };
 		57F286B4344957499FD2B49A /* error_catalogued_validation.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = error_catalogued_validation.json; sourceTree = "<group>"; };
 		5B7F0676428C6A64D8DD9681 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		5F88A8F43540C51E16BACD95 /* BrandMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandMark.swift; sourceTree = "<group>"; };
 		6046749EB8F36C75D72F9D22 /* VisitDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitDetailView.swift; sourceTree = "<group>"; };
 		60F65992E70DB2585A631D3C /* CRMViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CRMViews.swift; sourceTree = "<group>"; };
 		61540520824213084E56AE6B /* QuoteLineSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteLineSheet.swift; sourceTree = "<group>"; };
@@ -195,6 +207,7 @@
 		6D39EB7A15326436A5BD27EC /* FieldServicePR610Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldServicePR610Tests.swift; sourceTree = "<group>"; };
 		6D770BFD9E8CAF299BE54DDC /* APIDate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIDate.swift; sourceTree = "<group>"; };
 		6FFB2994A13CDDED9F44A8AE /* WSLCRMApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WSLCRMApp.swift; sourceTree = "<group>"; };
+		70137ED183ABD188CA14EABD /* SimproAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimproAPI.swift; sourceTree = "<group>"; };
 		70A21419F805FB340CCED976 /* TokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenStore.swift; sourceTree = "<group>"; };
 		71CC3CDAD09443A2B5D7919D /* NetworkLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkLogger.swift; sourceTree = "<group>"; };
 		72EEBF838C632EC8B9AA6F56 /* WSLCRMUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = WSLCRMUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -213,6 +226,7 @@
 		97B3A14D82B9AAD7E01385C4 /* auth_login.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = auth_login.json; sourceTree = "<group>"; };
 		986784934A2A6E02EB7EC689 /* crm_deals_by_stage_empty.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = crm_deals_by_stage_empty.json; sourceTree = "<group>"; };
 		98A77F5D3D3F21C0832FAF3A /* products_list.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = products_list.json; sourceTree = "<group>"; };
+		98EA00C366B2D02AB7CEC8B0 /* SimproModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimproModels.swift; sourceTree = "<group>"; };
 		9A5DE06BD292F4CE44CC9FD0 /* SyncCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCenter.swift; sourceTree = "<group>"; };
 		9C6EA3EC0FB33C600807BF7D /* fs_job_detail.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = fs_job_detail.json; sourceTree = "<group>"; };
 		9F59BF39424DBAE2327BBEFF /* MyWorkRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyWorkRefresh.swift; sourceTree = "<group>"; };
@@ -237,7 +251,9 @@
 		D4C19CB698604D47C87F1582 /* fs_jobs_list.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = fs_jobs_list.json; sourceTree = "<group>"; };
 		D4C6C8B56FD73F1E6F7998AB /* crm_deals_by_stage.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = crm_deals_by_stage.json; sourceTree = "<group>"; };
 		D4D58A7EFA82284F56BC642D /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		D66304B8F73DA99211ECE96D /* SimproDemoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimproDemoTests.swift; sourceTree = "<group>"; };
 		DCCC9184D96F4BD140FED6D0 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		DF73A81049A8AB629B20332D /* CustomerAssetsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomerAssetsViews.swift; sourceTree = "<group>"; };
 		E11BE34221ABF9835D7D0BC8 /* Prod.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Prod.xcconfig; sourceTree = "<group>"; };
 		E144587932E426F1CCC2E6F7 /* PhaseCompletionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhaseCompletionUITests.swift; sourceTree = "<group>"; };
 		E50EE0A03F53F020141DA3B0 /* JobDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobDetailViewModel.swift; sourceTree = "<group>"; };
@@ -271,6 +287,18 @@
 				D4D58A7EFA82284F56BC642D /* LoginView.swift */,
 			);
 			path = Auth;
+			sourceTree = "<group>";
+		};
+		1CBA507FFCD08D93691CB961 /* Simpro */ = {
+			isa = PBXGroup;
+			children = (
+				DF73A81049A8AB629B20332D /* CustomerAssetsViews.swift */,
+				258E664B8B3FBABA27A8C275 /* ReportPDFRenderer.swift */,
+				02A6E03FDF1CB0B042DF571D /* ReportsViews.swift */,
+				70137ED183ABD188CA14EABD /* SimproAPI.swift */,
+				98EA00C366B2D02AB7CEC8B0 /* SimproModels.swift */,
+			);
+			path = Simpro;
 			sourceTree = "<group>";
 		};
 		24D12953DEE95FF119FC0584 /* Settings */ = {
@@ -363,6 +391,7 @@
 			children = (
 				2E3904FF9FB898B8C53A9F75 /* AppConfig.swift */,
 				0220080C6463F48157301313 /* AppEnvironment.swift */,
+				483E885911A5AB21B7084AA1 /* Brand.swift */,
 				549B70CE068D1B9FAC34B586 /* RootView.swift */,
 				6FFB2994A13CDDED9F44A8AE /* WSLCRMApp.swift */,
 			);
@@ -381,6 +410,7 @@
 				8FE30866D9334250F27C2B44 /* ReliabilityTests.swift */,
 				3C911DFD1AC8AA6FE6D739E6 /* RolePermissionTests.swift */,
 				0582F75815E1CE7C44AF8ADF /* ServerErrorTests.swift */,
+				D66304B8F73DA99211ECE96D /* SimproDemoTests.swift */,
 				67BEB155AA348823859334A1 /* TokenRefreshTests.swift */,
 			);
 			path = WSLCRMTests;
@@ -389,6 +419,7 @@
 		59C0EF72E0CB1944369F78C3 /* DesignSystem */ = {
 			isa = PBXGroup;
 			children = (
+				5F88A8F43540C51E16BACD95 /* BrandMark.swift */,
 				5B7F0676428C6A64D8DD9681 /* Components.swift */,
 				680C8B93702CCC6108327434 /* DocumentPDF.swift */,
 				3E599FD5D5C8B9F20B34ED2C /* Formatters.swift */,
@@ -539,6 +570,7 @@
 				B4A97401F1A825DEE3349105 /* Jobs */,
 				6C14B65D19A1CC9906C10153 /* ServiceRequests */,
 				24D12953DEE95FF119FC0584 /* Settings */,
+				1CBA507FFCD08D93691CB961 /* Simpro */,
 				9587FFC9A9D7D27DE68DBBD9 /* Visits */,
 				4675CC9E789F3BEE41B70B0E /* Workspace */,
 			);
@@ -783,6 +815,8 @@
 				E197387562DB46DE1D844138 /* AuthAPI.swift in Sources */,
 				8F1D23771658FC9170871206 /* AuthModels.swift in Sources */,
 				7665AFBF3CC4ED288162A576 /* BiometricGate.swift in Sources */,
+				D18DC34C749C9C616BC3A353 /* Brand.swift in Sources */,
+				A02E96A6D09CA9AE1CC64DA3 /* BrandMark.swift in Sources */,
 				220BB5F6B3DA64C7D033A99F /* CRMAPI.swift in Sources */,
 				5349133CF704E77D34855BC5 /* CRMModels.swift in Sources */,
 				45313D277E229F77CDAF2A0D /* CRMViews.swift in Sources */,
@@ -791,6 +825,7 @@
 				AB766D130B4E6C555458BC5D /* CommerceViews.swift in Sources */,
 				97C0E4A4F6E1C878CF047F3C /* Components.swift in Sources */,
 				E9C68C6DA183599551621D89 /* ConnectivityMonitor.swift in Sources */,
+				E0C0543BDCFB54B6C24409E5 /* CustomerAssetsViews.swift in Sources */,
 				35717AA0D017BFD39F3CFBEB /* DocumentPDF.swift in Sources */,
 				85C099BDE261A14C4EAB2090 /* Endpoint.swift in Sources */,
 				ECA9B94770AB55CE6DB5E1E8 /* Envelopes.swift in Sources */,
@@ -826,6 +861,8 @@
 				27B7AB49752B94BCDFA51F2B /* QuoteLineSheet.swift in Sources */,
 				F9DE0C31E9D9DAB0B67B7276 /* QuotePDF.swift in Sources */,
 				2A07CF9B6F78BDAF96BF4C10 /* QuoteSheetView.swift in Sources */,
+				FFF77B561F9368165B8D3FFD /* ReportPDFRenderer.swift in Sources */,
+				BFB72D5431212A5442E6B90F /* ReportsViews.swift in Sources */,
 				C9B011CB2828D3641F9DABAD /* ResponseCache.swift in Sources */,
 				75E3F297611E971448443EDB /* RetryPolicy.swift in Sources */,
 				F0AC2BCB0A2A64AABAEE5A04 /* RootView.swift in Sources */,
@@ -833,6 +870,8 @@
 				BFDA826FAF9EFEEB33800384 /* ServiceRequestsViews.swift in Sources */,
 				A5BF0A26271A098ADFE4DA5F /* SessionStore.swift in Sources */,
 				8C27DBC19A1E3ADD1241A10A /* SettingsView.swift in Sources */,
+				885BEDDCC418622FE2830E78 /* SimproAPI.swift in Sources */,
+				B671FCEF207E9228FC026B7B /* SimproModels.swift in Sources */,
 				ACDC6B5CFCB7D770DB41094C /* SitesViews.swift in Sources */,
 				C02113D36A1BD5359CD2BA2B /* StatusPresentation.swift in Sources */,
 				6BBD6061A90F33532113E329 /* SyncCenter.swift in Sources */,
@@ -856,6 +895,7 @@
 				B009A06FACC985ECB99675DF /* ReliabilityTests.swift in Sources */,
 				3DDDC84C66796FEFF3A0012A /* RolePermissionTests.swift in Sources */,
 				C6D67B8CC550BFA0B31B6D5E /* ServerErrorTests.swift in Sources */,
+				98D3991F6875EE073AFA5F03 /* SimproDemoTests.swift in Sources */,
 				0A894B3222E60B97E72209D1 /* StubURLProtocol.swift in Sources */,
 				1DD94564B018DC8FE615F634 /* TokenRefreshTests.swift in Sources */,
 			);
@@ -910,16 +950,16 @@
 		1C9F3133DCEE9637B8AD316E /* Debug-Int */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(BRAND_APP_ICON)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
-				INFOPLIST_KEY_CFBundleDisplayName = WSLCRM;
+				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for the job's quote sheet.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved WSLCRM session.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is recorded only when you check in to or out of a site visit, as proof of attendance.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach existing photos to a job's quote sheet.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -1028,16 +1068,16 @@
 		483B9B2765D13CFC4CD84CC4 /* Release-Int */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(BRAND_APP_ICON)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
-				INFOPLIST_KEY_CFBundleDisplayName = WSLCRM;
+				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for the job's quote sheet.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved WSLCRM session.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is recorded only when you check in to or out of a site visit, as proof of attendance.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach existing photos to a job's quote sheet.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -1272,16 +1312,16 @@
 		93F19DF2A844078104800A12 /* Debug-Local */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(BRAND_APP_ICON)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
-				INFOPLIST_KEY_CFBundleDisplayName = WSLCRM;
+				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for the job's quote sheet.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved WSLCRM session.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is recorded only when you check in to or out of a site visit, as proof of attendance.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach existing photos to a job's quote sheet.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -1479,16 +1519,16 @@
 		D30C3D4E97303B85AB6BED04 /* Release-Prod */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(BRAND_APP_ICON)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
-				INFOPLIST_KEY_CFBundleDisplayName = WSLCRM;
+				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for the job's quote sheet.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved WSLCRM session.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is recorded only when you check in to or out of a site visit, as proof of attendance.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach existing photos to a job's quote sheet.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -1508,16 +1548,16 @@
 		F3CE72E2B290A4F7F13CAF84 /* Debug-Prod */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(BRAND_APP_ICON)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
-				INFOPLIST_KEY_CFBundleDisplayName = WSLCRM;
+				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for the job's quote sheet.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved WSLCRM session.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is recorded only when you check in to or out of a site visit, as proof of attendance.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach existing photos to a job's quote sheet.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

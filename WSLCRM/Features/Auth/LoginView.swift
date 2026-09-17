@@ -77,13 +77,11 @@ struct LoginView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: "wrench.and.screwdriver.fill")
-                .font(.system(size: 40))
-                .foregroundStyle(.tint)
-                .accessibilityHidden(true)
-            Text("WSLCRM")
+            BrandMark(size: 56)
+            Text(Brand.current.name)
                 .font(.largeTitle.bold())
-            Text("Sign in to your Workstation account")
+                .accessibilityIdentifier("login.brandName")
+            Text("Sign in to your \(Brand.current.name) account")
                 .font(.title3)
                 .foregroundStyle(.secondaryText)
             if session.environmentName != "Production" {

@@ -71,7 +71,7 @@ struct LockedView: View {
                 .font(.system(size: 64))
                 .foregroundStyle(.tint)
                 .accessibilityHidden(true)
-            Text("WSLCRM is locked")
+            Text("\(Brand.current.name) is locked")
                 .font(.title.bold())
             Button("Unlock with \(session.biometrics.displayName)") {
                 Task { await session.unlock() }
