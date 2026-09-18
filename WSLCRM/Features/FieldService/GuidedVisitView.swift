@@ -23,6 +23,7 @@ private struct GuidedVisitContent: View {
     @Bindable var model: VisitDetailViewModel
     @Environment(\.services) private var services
     @State private var quoteKind: QuoteLineSheet.Kind?
+    @State private var proposingPart: PartProposalModel?
     @State private var showingFinish = false
     @State private var showingNoAccess = false
     @State private var photos: JobPhotosModel?
@@ -47,6 +48,12 @@ private struct GuidedVisitContent: View {
         .sheet(item: $quoteKind) { kind in
             QuoteLineSheet(kind: kind, showsPrices: model.showsPrices) { body in
                 await model.addItem(body)
+            }
+        }
+        .sheet(item: $proposingPart) { proposal in
+            PartProposalSheet(model: proposal,
+                              currency: model.displayedVisit?.jobCurrency ?? Formatters.fallbackCurrency) {
+                Task { await model.load() }
             }
         }
         .sheet(isPresented: $showingFinish) {
@@ -184,8 +191,13 @@ private struct GuidedVisitContent: View {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                         CaptureTile(title: "Labour", hint: "Engineer / mate time", systemImage: "person.badge.clock") { quoteKind = .labour }
                             .accessibilityIdentifier("guided.tile.labour")
-                        CaptureTile(title: "Materials", hint: "Parts fitted", systemImage: "shippingbox") { quoteKind = .material }
-                            .accessibilityIdentifier("guided.tile.materials")
+                        // Parts go through the proposal flow, not a free-text line: the manager
+                        // approves them on the photo, and the price comes off the catalogue.
+                        CaptureTile(title: "Replace part", hint: "Catalogue part + photo", systemImage: "shippingbox") {
+                            proposingPart = PartProposalModel(jobUuid: visit.jobUuid, visitUuid: visit.uuid,
+                                                              api: services.fieldService)
+                        }
+                        .accessibilityIdentifier("guided.tile.materials")
                         CaptureTile(title: "Hire", hint: "Tools / access", systemImage: "truck.box") { quoteKind = .hire }
                             .accessibilityIdentifier("guided.tile.hire")
                         FGasTile(visit: visit) { updated in model.replace(updated) }

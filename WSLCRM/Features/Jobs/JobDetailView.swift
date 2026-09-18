@@ -395,6 +395,12 @@ private struct JobDetailContent: View {
                     if let reason = item.rejectionReason {
                         Text(reason).font(.footnote).foregroundStyle(Tone.danger.color)
                     }
+                    // What the engineer photographed on site. Approving a part on the strength of
+                    // its evidence is the point of the proposal flow (opsapi #619), so the
+                    // evidence has to be here, not a tap away on another screen.
+                    if item.isMaterial, !item.invoiced {
+                        ItemEvidenceStrip(itemUuid: item.uuid)
+                    }
                 }
                 .padding(.vertical, 4)
                 .swipeActions {

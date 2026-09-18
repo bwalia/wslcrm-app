@@ -10,9 +10,36 @@ import UIKit
 @MainActor
 enum UITestSupport {
     static let launchArgument = "-UITestStubServer"
+    /// `-UITestSamplePhoto` offers a generated fault photo where a flow requires one. A simulator
+    /// has no camera, and driving the photo library from a UI test tests the library, not us.
+    static let samplePhotoArgument = "-UITestSamplePhoto"
+
     /// `-UITestRole engineer|manager|telecaller` picks which seeded field-service role the stub
     /// signs in as, so RBAC can be exercised in the UI tests. Defaults to the engineer.
     static let roleArgument = "-UITestRole"
+
+    /// Reads one text field out of a multipart body, so the stub can echo what was sent without
+    /// pulling in a parser. `nonisolated`: the stub server answers off the main actor.
+    nonisolated static func multipartValue(_ name: String, in raw: String) -> String? {
+        guard let start = raw.range(of: "name=\"\(name)\"\r\n\r\n") else { return nil }
+        let rest = raw[start.upperBound...]
+        guard let end = rest.range(of: "\r\n") else { return nil }
+        return String(rest[..<end.lowerBound])
+    }
+
+    /// A recognisable stand-in for a photo of a fault.
+    static func samplePhoto() -> UIImage {
+        let size = CGSize(width: 1200, height: 900)
+        return UIGraphicsImageRenderer(size: size).image { context in
+            UIColor(red: 0.16, green: 0.20, blue: 0.28, alpha: 1).setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            let text = "Fault photo (test)" as NSString
+            text.draw(at: CGPoint(x: 80, y: 420), withAttributes: [
+                .font: UIFont.boldSystemFont(ofSize: 64),
+                .foregroundColor: UIColor.white,
+            ])
+        }
+    }
 
     static func makeEnvironment() -> AppEnvironment {
         UIView.setAnimationsEnabled(false)
@@ -255,6 +282,34 @@ final class UITestStubServer: @unchecked Sendable {
             }
             items.append(item)
             return (201, ["success": true, "data": item])
+
+        // A proposal is one request: the pending part line and its evidence together (opsapi #619).
+        case ("POST", "/api/v2/field-service/jobs/\(Self.jobUuid)/part-proposals"):
+            let raw = String(decoding: body, as: UTF8.self)
+            guard raw.contains("name=\"photo\"") else {
+                return (400, ["success": false, "error": "A photo of the fault is required to propose a part"])
+            }
+            guard raw.contains("name=\"part_uuid\"") else {
+                return (400, ["success": false, "error": "Select a part from the catalogue"])
+            }
+            let item: [String: Any] = ["uuid": "i\(items.count + 1)", "item_type": "part",
+                                       "description": UITestSupport.multipartValue("reason", in: raw) ?? "Part replacement",
+                                       "quantity": Decimal(string: UITestSupport.multipartValue("quantity", in: raw) ?? "1") ?? 1,
+                                       "unit_price": Decimal(string: UITestSupport.multipartValue("unit_price", in: raw) ?? "0") ?? 0,
+                                       "approval_status": "pending", "visit_uuid": Self.visitUuid]
+            items.append(item)
+            let evidence: [String: Any] = ["uuid": "ph\(photos.count + 1)", "filename": "fault.jpg",
+                                           "content_type": "image/jpeg",
+                                           "url": "https://stub.wslcrm.test/minio/fault-\(photos.count + 1).jpg",
+                                           "item_uuid": item["uuid"] as? String ?? "",
+                                           "visit_uuid": Self.visitUuid, "created_at": "2026-09-18 09:30:00+00"]
+            photos.append(evidence)
+            // Both halves, the way the real route answers: the pending line and its evidence.
+            return (201, ["success": true, "data": ["item": item, "photo": evidence]])
+
+        case ("GET", let p) where p.hasPrefix("/api/v2/field-service/job-items/") && p.hasSuffix("/photos"):
+            let itemUuid = p.split(separator: "/").dropLast().last.map(String.init) ?? ""
+            return (200, ["success": true, "data": photos.filter { $0["item_uuid"] as? String == itemUuid }])
 
         case ("GET", "/api/v2/field-service/jobs/\(Self.jobUuid)/photos"):
             return (200, ["success": true, "data": photos])

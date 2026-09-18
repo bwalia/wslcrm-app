@@ -35,7 +35,7 @@ extension View {
     func brandedNavigationBar() -> some View {
         toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                BrandMark(size: 28, isDecorative: false)
+                BrandMark(size: 36, isDecorative: false)
             }
         }
     }

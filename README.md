@@ -254,6 +254,11 @@ The Local configuration is white-labelled as **DBS Ltd** through `Config/Brand-D
 name and icon, the sign-in mark, and the letterhead and legal footer on report PDFs. Int and Prod keep
 the house brand (`Config/Brand-Default.xcconfig`). In the app:
 
+- **Guided visit → Replace part.** An engineer proposes a replacement rather than logging a line:
+  the part comes from the workspace catalogue, the price and VAT come with it, and a photo of the
+  fault is required. All three go in one request (opsapi #619), which the server keeps together —
+  no evidence, no proposal. The manager sees those photos against the pending line on the job, which
+  is what they approve it on.
 - **Field Service → Assets.** The register with condition, F-Gas and overdue filters. An asset shows
   its F-Gas position, service schedule and surveys, and an asset-history PDF. Engineers open it from
   **More** and record surveys on site.

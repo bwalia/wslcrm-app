@@ -896,6 +896,9 @@ struct FsPart: Identifiable, Hashable, Sendable {
     var description: String?
     var category: String?
     var unitPrice: Decimal?
+    /// The catalogue's VAT rate for this part. A proposal copies it so the invoice is the
+    /// catalogue's arithmetic, never the engineer's (opsapi #619).
+    var taxRate: Decimal?
     var stockQuantity: Decimal?
     var reorderLevel: Decimal?
     var isActive: Bool
@@ -915,7 +918,7 @@ struct FsPart: Identifiable, Hashable, Sendable {
 
 extension FsPart: Decodable {
     enum CodingKeys: String, CodingKey {
-        case uuid, sku, name, description, category, unitPrice, stockQuantity, reorderLevel, isActive
+        case uuid, sku, name, description, category, unitPrice, taxRate, stockQuantity, reorderLevel, isActive
     }
 
     init(from decoder: Decoder) throws {
@@ -926,6 +929,7 @@ extension FsPart: Decodable {
         description = try? c.decodeIfPresent(String.self, forKey: .description)
         category = try? c.decodeIfPresent(String.self, forKey: .category)
         unitPrice = c.decodeFlexibleDecimal(forKey: .unitPrice)
+        taxRate = c.decodeFlexibleDecimal(forKey: .taxRate)
         stockQuantity = c.decodeFlexibleDecimal(forKey: .stockQuantity)
         reorderLevel = c.decodeFlexibleDecimal(forKey: .reorderLevel)
         isActive = c.decodeFlexibleBool(forKey: .isActive) ?? true

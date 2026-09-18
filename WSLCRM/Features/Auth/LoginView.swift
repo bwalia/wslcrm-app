@@ -82,7 +82,7 @@ struct LoginView: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 8) {
-                BrandMark(size: 56)
+                BrandMark(size: 88)
                 Text(Brand.current.name)
                     .font(.largeTitle.bold())
                     .accessibilityIdentifier("login.brandName")

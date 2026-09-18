@@ -451,6 +451,49 @@ struct FieldServiceAPI: Sendable {
         try await client.sendDiscardingBody(.delete("\(Self.base)/job-photos/\(uuid)"))
     }
 
+    // MARK: Part-replacement proposals (opsapi #619)
+
+    /// An engineer proposes replacing a part: the catalogue part, why, and the fault photo a
+    /// manager approves it on.
+    ///
+    /// One request, not two. The server creates the pending line and its evidence together and
+    /// rolls the line back if the photo does not land, so a proposal without evidence cannot
+    /// exist — which is the whole point of the flow. Price and VAT are copied off the picked
+    /// catalogue part rather than typed, so approving it cannot bill a number the engineer chose.
+    func proposePart(jobUuid: String, partUuid: String, quantity: Decimal, reason: String,
+                     unitPrice: Decimal?, taxRate: Decimal?, visitUuid: String?,
+                     jpeg: Data) async throws -> JobItem {
+        guard jpeg.count <= Self.maxPhotoBytes else {
+            throw APIError.validation(ServerError(status: 413,
+                                                  message: "That photo is too large to upload (over 10 MB). Take it again at a smaller size.",
+                                                  fieldErrors: [:], rawBody: ""))
+        }
+        var fields: [(String, String)] = [("part_uuid", partUuid), ("quantity", "\(quantity)")]
+        let trimmedReason = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedReason.isEmpty { fields.append(("reason", trimmedReason)) }
+        if let unitPrice { fields.append(("unit_price", "\(unitPrice)")) }
+        if let taxRate { fields.append(("tax_rate", "\(taxRate)")) }
+        if let visitUuid { fields.append(("visit_uuid", visitUuid)) }
+        let file = Endpoint.FilePart(fieldName: "photo", filename: "fault-\(Int(Date().timeIntervalSince1970)).jpg",
+                                     mimeType: "image/jpeg", data: jpeg)
+        let endpoint = Endpoint(.post, "\(Self.base)/jobs/\(jobUuid)/part-proposals")
+            .withMultipart(fields: fields, file: file)
+        // The route answers with both halves of what it created — the pending line and the photo
+        // that justifies it — because neither is meaningful without the other.
+        struct Proposal: Decodable, Sendable {
+            let item: JobItem
+            let photo: FsJobPhoto?
+        }
+        let envelope: Envelope.Standard<Proposal> = try await client.send(endpoint)
+        return envelope.data.item
+    }
+
+    /// The evidence behind a proposed item — what a manager looks at before approving.
+    func itemPhotos(itemUuid: String) async throws -> [FsJobPhoto] {
+        let envelope: Envelope.Standard<[FsJobPhoto]> = try await client.send(.get("\(Self.base)/job-items/\(itemUuid)/photos"))
+        return envelope.data
+    }
+
     // MARK: Visit report fields
 
     /// F-Gas log (engineer-editable). Returns `{ visit, conflicts, warnings }`.

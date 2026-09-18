@@ -245,9 +245,10 @@ final class FieldServiceLocalFlowUITests: XCTestCase {
         snapshot("09-on-site")
         labour.tap()
         element("quote.add").tap()
-        element("guided.tile.materials", timeout: 20).tap()
-        type("quote.description", "Capacitor 35uF")
-        element("quote.add").tap()
+        // Parts are no longer a free-text line here: replacing one is a proposal with a catalogue
+        // part and a photo, which needs stock in the tenant's catalogue. That flow is covered
+        // against the stub (EngineerFlowUITests) and against int (DBSLimitedTourUITests), so this
+        // local happy path stays on labour, F-Gas and check-out.
         XCTAssertTrue(element("guided.sheet", timeout: 30).exists)
 
         // F-Gas record (engineer-editable fields on the visit).

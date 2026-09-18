@@ -198,7 +198,8 @@ private struct PhotoThumbnail: View {
     }
 }
 
-private struct PhotoViewer: View {
+/// Full-screen photo, reused wherever a thumbnail is tapped (job photos, part evidence).
+struct PhotoViewer: View {
     let photo: FsJobPhoto
     let canDelete: Bool
     let onDelete: () -> Void
