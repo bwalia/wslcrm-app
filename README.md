@@ -44,8 +44,13 @@ The API base URL is a build setting (`API_BASE_URL`) written into Info.plist and
 | Scheme | Configurations | Base URL |
 |---|---|---|
 | `WSLCRM-Int` | `Debug-Int`, `Release-Int` | `https://int-opsapi.workstation.co.uk` (`Config/Int.xcconfig`) |
+| `WSLCRM-DBS-Int` | `Debug-DBS-Int`, `Release-DBS-Int` | the same int host, DBS white-label (`Config/DBS-Int.xcconfig`) |
 | `WSLCRM-Prod` | `Debug-Prod`, `Release-Prod` | supplied at build time |
 | `WSLCRM-Local` | `Debug-Local` | `http://127.0.0.1:4011` (`Config/Local-API.xcconfig`) — Simulator only |
+
+`WSLCRM-DBS-Int` is the demo build: int's data with DBS Ltd branding, so a demo needs no local
+stack. `WSLCRM-Int` stays house-branded for ordinary integration testing. Sign in with the
+accounts in `build/dbs-group-demo.env` (see "Seeding the demo into int" below).
 
 The production URL is never committed. Supply it in one of two ways:
 
@@ -259,6 +264,38 @@ For the web dashboard, run `opsapi-dashboard` with `NEXT_PUBLIC_API_URL=http://1
 `NEXT_PUBLIC_BRAND_NAME="DBS Ltd"` and `NEXT_PUBLIC_BRAND_LOGO_URL=/brands/dbs-ltd.svg`.
 Screenshots of both surfaces, and a page of a generated report PDF, are in
 [`docs/screenshots/dbs-ltd-simpro/`](docs/screenshots/dbs-ltd-simpro).
+
+### Seeding the demo into int
+
+Both seeds default to the local Docker stack, and take the same data to a cluster environment when
+pointed at one. `psql` and the OTP lookup then go through `kubectl exec` instead of `docker exec`;
+the API is reached over HTTPS either way. The demo lives in its own namespace, so it never touches
+anyone else's workspace on a shared server.
+
+```bash
+export KUBECONFIG=~/.kube/k3s1.yaml
+export KUBE_NAMESPACE=int PG_POD=workstation-db-0 DB=workstation_opsapi
+export API_POD=$(kubectl -n int get pods -l app=workstation-opsapi -o name | head -1 | cut -d/ -f2)
+export API=https://int-opsapi.workstation.co.uk
+export NAMESPACE_SLUG=dbs-group-demo NAMESPACE_NAME="DBS Group"
+export WSL_PASSWORD='…'          # one password for every seeded account; keep it out of the shell history
+
+scripts/seed-dbs-limited.py && scripts/seed-dbs-portfolio.py
+```
+
+Usernames land in `build/$NAMESPACE_SLUG.env` (mode 600, git-ignored). The server needs
+`TEST_OTP_CODE` set and `OPSAPI_DEPLOY_ENV` to be something other than prod, which is how int is
+configured — the seed signs each person in through the real 2FA flow using that bypass. Build the
+**WSLCRM-DBS-Int** scheme to point the branded app at it, and the screenshot tour takes the same
+two variables:
+
+```bash
+SCHEME=WSLCRM-DBS-Int ENV_FILE=build/dbs-group-demo.env scripts/run-dbs-screenshots.sh
+```
+
+Screenshots from that run against int — the engineer's day, the manager's board, the service desk
+and the Simpro screens, all reading the seeded **DBS Group** workspace — are in
+[`docs/screenshots/dbs-int/`](docs/screenshots/dbs-int).
 
 ### Capturing fixtures from the real API
 

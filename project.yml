@@ -14,6 +14,8 @@ options:
 configs:
   Debug-Int: debug
   Release-Int: release
+  Debug-DBS-Int: debug
+  Release-DBS-Int: release
   Debug-Prod: debug
   Release-Prod: release
   Debug-Local: debug
@@ -21,6 +23,8 @@ configs:
 configFiles:
   Debug-Int: Config/Int.xcconfig
   Release-Int: Config/Int.xcconfig
+  Debug-DBS-Int: Config/DBS-Int.xcconfig
+  Release-DBS-Int: Config/DBS-Int.xcconfig
   Debug-Prod: Config/Prod.xcconfig
   Release-Prod: Config/Prod.xcconfig
   Debug-Local: Config/Local-API.xcconfig
@@ -132,6 +136,27 @@ schemes:
       config: Debug-Int
     archive:
       config: Release-Int
+  # The DBS Ltd demo: the int API with the DBS white-label, so the branded build
+  # reads the seeded "DBS Group" workspace rather than a local stack.
+  WSLCRM-DBS-Int:
+    build:
+      targets:
+        WSLCRM: all
+        WSLCRMTests: [test]
+        WSLCRMUITests: [test]
+    run:
+      config: Debug-DBS-Int
+    test:
+      config: Debug-DBS-Int
+      targets:
+        - name: WSLCRMTests
+        - name: WSLCRMUITests
+    profile:
+      config: Release-DBS-Int
+    analyze:
+      config: Debug-DBS-Int
+    archive:
+      config: Release-DBS-Int
   WSLCRM-Local:
     build:
       targets:
