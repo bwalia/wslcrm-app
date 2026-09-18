@@ -19,6 +19,7 @@
 		1DF121B642C62AC0500A3152 /* InvoiceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22750ADEF7F365102908C141 /* InvoiceModels.swift */; };
 		21399313CE04C33A07A9414C /* fs_job_detail.json in Resources */ = {isa = PBXBuildFile; fileRef = 9C6EA3EC0FB33C600807BF7D /* fs_job_detail.json */; };
 		220BB5F6B3DA64C7D033A99F /* CRMAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EFE699D777992A394F2CC69 /* CRMAPI.swift */; };
+		2500CEDB259A924E838C4509 /* DBSTourNarration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FBD20F440E62B7516AC3D20 /* DBSTourNarration.swift */; };
 		27B7AB49752B94BCDFA51F2B /* QuoteLineSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61540520824213084E56AE6B /* QuoteLineSheet.swift */; };
 		29AA43C6BC05F820F9738F9D /* FieldServiceLocalFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89F24687B5F90024152CA49F /* FieldServiceLocalFlowUITests.swift */; };
 		2A07CF9B6F78BDAF96BF4C10 /* QuoteSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74F0AF4EB7E3742110B9FBE9 /* QuoteSheetView.swift */; };
@@ -198,6 +199,7 @@
 		459B5FCF2DA366F672512767 /* EnvironmentSwitchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvironmentSwitchUITests.swift; sourceTree = "<group>"; };
 		471527B5261F7C4E8E091BF0 /* crm_accounts_list.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = crm_accounts_list.json; sourceTree = "<group>"; };
 		483E885911A5AB21B7084AA1 /* Brand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Brand.swift; sourceTree = "<group>"; };
+		4FBD20F440E62B7516AC3D20 /* DBSTourNarration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DBSTourNarration.swift; sourceTree = "<group>"; };
 		505C8D0F09805E31EAA32EB7 /* AuthAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthAPI.swift; sourceTree = "<group>"; };
 		546F85F21575AE4A8E49E474 /* JobDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobDetailView.swift; sourceTree = "<group>"; };
 		549B70CE068D1B9FAC34B586 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -357,6 +359,7 @@
 			isa = PBXGroup;
 			children = (
 				7E094D72D0C8B74C3994DDA2 /* DBSLimitedTourUITests.swift */,
+				4FBD20F440E62B7516AC3D20 /* DBSTourNarration.swift */,
 				43D3B865967161CE541B8BDC /* EngineerFlowUITests.swift */,
 				459B5FCF2DA366F672512767 /* EnvironmentSwitchUITests.swift */,
 				89F24687B5F90024152CA49F /* FieldServiceLocalFlowUITests.swift */,
@@ -935,6 +938,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D942CA72977B50C576C637AD /* DBSLimitedTourUITests.swift in Sources */,
+				2500CEDB259A924E838C4509 /* DBSTourNarration.swift in Sources */,
 				D77B1969ECB157BB4EB7FF75 /* EngineerFlowUITests.swift in Sources */,
 				EBEBCDBC56C8469A1C2877BF /* EnvironmentSwitchUITests.swift in Sources */,
 				29AA43C6BC05F820F9738F9D /* FieldServiceLocalFlowUITests.swift in Sources */,

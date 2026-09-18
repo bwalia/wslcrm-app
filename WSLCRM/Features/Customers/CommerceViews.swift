@@ -25,6 +25,7 @@ struct CustomersListView: View {
                     }
                     .padding(.vertical, 4)
                 }
+                .accessibilityIdentifier("customers.row.\(customer.displayName)")
             }
             .sheet(isPresented: $creating) {
                 CustomerForm(customer: nil) { body in
@@ -271,6 +272,7 @@ private struct ProductsContent: View {
             } label: {
                 ProductRow(product: product)
             }
+            .accessibilityIdentifier("products.row.\(product.name)")
         }
         .safeAreaInset(edge: .top) {
             if model.stores.count > 1 {
