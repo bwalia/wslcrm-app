@@ -141,7 +141,7 @@ xcodebuild … -only-testing:WSLCRMTests test
 | `LargeTextUITests` | the same screens at an accessibility text size, with screenshots |
 | `FieldServiceLocalFlowUITests` | the full request → invoice happy path against a real local OPSAPI, including a checklist tick made **offline** that syncs on reconnect (skipped unless run by `scripts/run-local-fs-uitest.sh`) |
 | `LocalPhotoUploadTests` | photo upload, listing and delete against the real local API (multipart, presigned URL) |
-| `DBSLimitedTourUITests` | a screenshot tour as DBS Limited's engineer, service manager and service desk against the seeded local API, plus the DBS Ltd Simpro screens: the asset register, a PDF share, reports and sync status, and an engineer recording a survey (the only write). Skipped unless run by `scripts/run-dbs-screenshots.sh` |
+| `DBSLimitedTourUITests` | a screenshot **and video** tour as DBS Limited's engineer, service manager and service desk against a seeded API, plus the DBS Ltd Simpro screens (asset register, PDF share, reports, sync status), an engineer recording a survey, the modules and permissions behind the More tab, and a checklist tick made with no signal. Skipped unless run by `scripts/run-dbs-screenshots.sh` or `scripts/record-dbs-video.sh` |
 | `SimproDemoTests` | who sees assets, reports and Simpro sync per role (real grants from opsapi #612), asset and report decoding, report cell formatting, the report PDF (letterhead, legal footer, pagination), and white-label brand resolution |
 
 UI test screenshots are kept in the result bundle:
@@ -312,6 +312,55 @@ SCHEME=WSLCRM-DBS-Int ENV_FILE=build/dbs-group-demo.env scripts/run-dbs-screensh
 Screenshots from that run against int — the engineer's day, the manager's board, the service desk
 and the Simpro screens, all reading the seeded **DBS Group** workspace — are in
 [`docs/screenshots/dbs-int/`](docs/screenshots/dbs-int).
+
+### The video tour
+
+The same tour, filmed. `scripts/record-dbs-video.sh` records the Simulator while
+`DBSLimitedTourUITests` drives every feature, then cuts the recording into a 1920×1080 video with a
+chapter card per persona and a caption on each screen:
+
+```bash
+scripts/record-dbs-video.sh                                   # DBS Ltd build against int
+SCHEME=WSLCRM-Local ENV_FILE=build/dbs-limited.env scripts/record-dbs-video.sh   # the local stack
+scripts/record-dbs-video.sh -only-testing:WSLCRMUITests/DBSLimitedTourUITests/test4ManagerSimproReportsAndAssets
+```
+
+| Output | |
+|---|---|
+| `build/dbs-video/dbs-ltd-tour.mp4` | the tour: eight chapters, phone screen framed on a branded canvas |
+| `build/dbs-video/dbs-ltd-tour-contents.pdf` | the contents sheet to send with it: every chapter and caption, timestamped |
+| `build/dbs-video/chapters.txt` | chapter timestamps, for publishing it |
+| `build/dbs-video/index.json` | the same contents as data |
+| `build/dbs-video/screenshots/` | the same tour as stills |
+| `build/dbs-video/raw.mov` | the untouched Simulator recording |
+
+The chapters are signing in, the engineer's day, the manager's board, the service desk, the Simpro
+CRM, an engineer surveying an asset, the modules and permissions behind the More tab, and working
+with no signal. It runs about 21 minutes at roughly 850 MB, H.264 so anything will play it;
+`chapters.txt` gives the timestamps to jump by.
+
+How it fits together:
+
+- **`WSLCRMUITests/DBSTourNarration.swift`** holds the script — one line per screenshot — and
+  stamps a marker each time a screen has settled. With `TOUR_VIDEO=1` the tour also holds each
+  screen long enough for its caption to be read.
+- **`scripts/tour-video.swift`** cuts and captions the recording with AVFoundation and Core
+  Graphics. Nothing to install: no ffmpeg, no editor.
+- **`scripts/cut-dbs-video.sh <out-dir>`** runs that step on its own, so the captions or the title
+  can be changed and the video re-cut without filming the tour again.
+- **`scripts/tour-chapters-pdf.swift`** draws the contents sheet from `index.json`. That index is
+  written by the compositor, so its timestamps are the video's own arithmetic rather than a second
+  copy of it — `swift scripts/tour-video.swift <spec.json> --index-only` recomputes it in seconds
+  when only the sheet needs redoing.
+- Captions are lined up by comparing the tour's own screenshots against frames of the recording,
+  so a slow recorder start cannot put every line a second out.
+- Footage between chapters is dropped, as is anything a `TourNarration.cut` marks — the wait while
+  a faked outage runs its course, and **the two-factor code being typed**, which would otherwise be
+  readable on film.
+
+The tour writes as little as it can: a part proposal with its photo, a condition survey, and one
+checklist tick made offline. `scripts/seed-dbs-limited.py --reset && scripts/seed-dbs-portfolio.py`
+puts the workspace back.
 
 ### Capturing fixtures from the real API
 

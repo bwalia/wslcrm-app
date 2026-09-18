@@ -40,8 +40,11 @@ TEST_RUNNER_WSL_PASSWORD="$WSL_PASSWORD" TEST_RUNNER_WSL_OTP="$WSL_OTP" \
 TEST_RUNNER_DBS_TOM="$DBS_TOM" TEST_RUNNER_DBS_CLAIRE="$DBS_CLAIRE" TEST_RUNNER_DBS_AISHA="$DBS_AISHA" \
 xcodebuild -project "$ROOT/WSLCRM.xcodeproj" -scheme "$SCHEME" -destination "id=$UDID" \
   -derivedDataPath "$ROOT/build/DerivedData" -resultBundlePath "$RESULT" \
-  $(printf '%s\n' "$@" | grep -q -- '-only-testing' || echo -only-testing:WSLCRMUITests/DBSLimitedTourUITests) test "$@"
-STATUS=$?
+  $(printf '%s\n' "$@" | grep -q -- '-only-testing' || echo -only-testing:WSLCRMUITests/DBSLimitedTourUITests) test "$@" \
+  | sed -l -E 's/Type .* into ("login\.password"|"twofactor\.code")/Type <redacted> into \1/'
+# XCTest prints the text it types, so the password and the code are taken out on the way past;
+# the status wanted is xcodebuild's, not sed's.
+STATUS=${PIPESTATUS[0]}
 set -e
 
 # Export the attachments and name each PNG after its snapshot name.

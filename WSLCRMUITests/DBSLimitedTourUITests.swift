@@ -26,15 +26,25 @@ final class DBSLimitedTourUITests: XCTestCase {
         app.launch()
     }
 
+    override func tearDown() async throws {
+        // The recorder reads these back out of the result bundle to caption the footage.
+        TourNarration.attach(to: self)
+    }
+
     // MARK: Helpers
 
     private func snapshot(_ name: String) {
         // Let pushes, sheets and skeleton rows settle so the capture shows the loaded screen.
         RunLoop.current.run(until: Date().addingTimeInterval(1.2))
+        // From here the screen is what the caption describes; the video times the line from this.
+        TourNarration.beat(name)
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+        // On a recorded run, stay on the screen long enough for its caption to be read.
+        let reading = TourNarration.readingSeconds(for: name)
+        if reading > 0 { RunLoop.current.run(until: Date().addingTimeInterval(reading)) }
     }
 
     @discardableResult
@@ -129,7 +139,7 @@ final class DBSLimitedTourUITests: XCTestCase {
         tab.tap()
     }
 
-    private func signIn(_ username: String, loginShot: String? = nil) {
+    private func signIn(_ username: String, loginShot: String? = nil, twoFactorShot: String? = nil) {
         let identifier = element("login.identifier", timeout: 30)
         identifier.tap()
         identifier.typeText(username)
@@ -139,16 +149,25 @@ final class DBSLimitedTourUITests: XCTestCase {
         if let loginShot { snapshot(loginShot) }
         app.buttons["login.submit"].tap()
         let code = element("twofactor.code", timeout: 30)
+        if let twoFactorShot { snapshot(twoFactorShot) }
+        // The code itself is typed in clear and stays on screen while it is verified: keep those
+        // seconds out of the video. The seeded environments answer to one bypass code.
+        let typingTheCode = Date()
         code.tap()
         code.typeText(env["WSL_OTP"]!)
+        TourNarration.cut(from: typingTheCode, to: Date().addingTimeInterval(4))
     }
 
     // MARK: Engineer — Tom Fletcher
 
     func test1EngineerDay() {
+        TourNarration.chapter("Signing in as DBS Ltd",
+                              "White-labelled, two-factor, and pointed at the server of your choice")
         snapshot("eng-00-sign-in")
-        signIn(env["DBS_TOM"]!, loginShot: "eng-01-sign-in-filled")
+        signIn(env["DBS_TOM"]!, loginShot: "eng-01-sign-in-filled", twoFactorShot: "eng-01b-two-factor")
 
+        TourNarration.chapter("Tom Fletcher, engineer",
+                              "A day of visits, from the call-out to the paperwork")
         // My Work: the cold-room call-out he's on now, today at a glance, then what's coming up.
         let hero = element("mywork.hero", timeout: 40)
         snapshot("eng-02-my-work")
@@ -237,6 +256,8 @@ final class DBSLimitedTourUITests: XCTestCase {
 
     func test2ManagerBoard() {
         signIn(env["DBS_CLAIRE"]!)
+        TourNarration.chapter("Claire Donnelly, service manager",
+                              "Requests, jobs, approvals, quotations and invoices")
 
         element("hub.jobs", timeout: 40)
         snapshot("mgr-01-field-service-hub")
@@ -358,6 +379,8 @@ final class DBSLimitedTourUITests: XCTestCase {
 
     func test3ServiceDeskLogsACall() {
         signIn(env["DBS_AISHA"]!)
+        TourNarration.chapter("Aisha Rahman, service desk",
+                              "Logging the call that starts everything")
 
         element("hub.newRequest", timeout: 40)
         snapshot("desk-01-field-service")
@@ -415,6 +438,8 @@ final class DBSLimitedTourUITests: XCTestCase {
     }
 
     func test4ManagerSimproReportsAndAssets() {
+        TourNarration.chapter("The CRM in front of Simpro",
+                              "DBS Ltd's asset register and the report pack they publish")
         signIn(env["DBS_CLAIRE"]!, loginShot: "simpro-00-dbs-ltd-sign-in")
         hub()
         snapshot("simpro-01-hub")
@@ -474,6 +499,8 @@ final class DBSLimitedTourUITests: XCTestCase {
 
     func test5EngineerSurveysAnAsset() {
         signIn(env["DBS_TOM"]!)
+        TourNarration.chapter("An engineer surveys an asset",
+                              "The condition of the plant, recorded on site")
         openTab("More")
         element("more.customerAssets", timeout: 30).tap()
         // Condition 4 and worse: a short list with the St Mary Magdalene heat pump on it.
@@ -497,5 +524,134 @@ final class DBSLimitedTourUITests: XCTestCase {
         app.swipeUp()
         XCTAssertTrue(text(containing: "Remedial quote requested").waitForExistence(timeout: 20), "New survey in the history")
         snapshot("simpro-17-engineer-survey-saved")
+    }
+
+    // MARK: The rest of the platform — Claire Donnelly
+
+    /// The modules a manager gets beyond field service, and the screen that says what the role is
+    /// allowed to do. Nothing here is created or changed: the sign-out dialog is cancelled.
+    func test6ModulesAndPermissions() {
+        signIn(env["DBS_CLAIRE"]!)
+        TourNarration.chapter("Customers, catalogue and permissions",
+                              "The rest of the platform, and what a role is allowed to see")
+        openTab("More")
+        element("more.settings", timeout: 40)
+        snapshot("more-01-modules")
+
+        // The customer accounts the jobs hang off. A module this role is not granted simply is
+        // not in the list, so each one is only toured if it is there.
+        module("more.customers", titled: "Customers", list: "more-02-customers",
+               rows: "customers.row.", row: "more-03-customer")
+
+        // The catalogue the engineer's stock list is drawn from.
+        module("more.products", titled: "Products", list: "more-04-products",
+               rows: "products.row.", row: "more-05-product")
+
+        // Settings: the build, the server it is pointed at, and the role's grants.
+        element("more.settings", timeout: 20).tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 30), "Settings opened")
+        snapshot("more-06-settings")
+        app.swipeUp()
+        XCTAssertTrue(text(containing: "Permissions in this workspace").waitForExistence(timeout: 10),
+                      "the role's own grants are shown")
+        snapshot("more-07-permissions")
+        back()
+
+        // Workspaces, the offline queue, and what signing out warns about.
+        element("more.workspace", timeout: 20).tap()
+        XCTAssertTrue(app.navigationBars["Workspace"].waitForExistence(timeout: 30))
+        snapshot("more-08-workspace")
+        back()
+        element("more.pendingChanges", timeout: 20).tap()
+        XCTAssertTrue(app.navigationBars["Unsynced changes"].waitForExistence(timeout: 30))
+        snapshot("more-09-unsynced")
+        back()
+        element("more.signOut", timeout: 20).tap()
+        snapshot("more-10-sign-out")
+        let cancel = app.buttons["Cancel"].firstMatch
+        if cancel.waitForExistence(timeout: 5) { cancel.tap() }   // the tour stays signed in
+    }
+
+    // MARK: Working with no signal — Tom Fletcher
+
+    /// The offline promise the way it happens on site: a checklist tick made in a plant room with
+    /// no signal is kept on the device, shown as waiting, and sent when the signal comes back.
+    ///
+    /// The tick is a real write — the one this test makes — so the item stays ticked afterwards;
+    /// `scripts/seed-dbs-limited.py --reset` rebuilds the day. The outage itself is faked by
+    /// `-WSLOfflineWindow` (Debug only), not by touching the Simulator's network.
+    func test7EngineerWorksOffline() {
+        signIn(env["DBS_TOM"]!)
+        element("mywork.hero", timeout: 40)
+
+        // Relaunch with the session restored from the Keychain and the connection faked as down
+        // for a window that opens well after the guided visit has loaded from the server.
+        let offlineFrom: TimeInterval = 70, offlineUntil: TimeInterval = 105
+        app.launchArguments = ["-WSLOfflineWindow", "\(Int(offlineFrom)),\(Int(offlineUntil))"]
+        let relaunchedAt = Date()
+        app.launch()
+
+        TourNarration.chapter("Working with no signal",
+                              "A plant room is not the place to find out an app needs a connection")
+        element("mywork.hero", timeout: 40).tap()
+        element("guided.status", timeout: 30)
+        // With every item already ticked there is nothing to show; the chapter drops out.
+        guard let item = firstUntickedChecklistItem() else { return }
+        snapshot("offline-01-checklist")
+
+        // Wait out the last of the signal, off camera.
+        let quiet = Date()
+        waitUntil(relaunchedAt.addingTimeInterval(offlineFrom + 3))
+        TourNarration.cut(from: quiet)
+
+        item.tap()
+        let waiting = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] 'Waiting to sync'")).firstMatch
+        XCTAssertTrue(waiting.waitForExistence(timeout: 20), "an offline tick is kept and shown as waiting")
+        snapshot("offline-02-waiting")
+
+        // And the outage itself, likewise.
+        let outage = Date()
+        waitUntil(relaunchedAt.addingTimeInterval(offlineUntil + 3))
+        // Foregrounding is when the queue replays.
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(waiting.waitForNonExistence(timeout: 120), "the queued tick reached the server")
+        TourNarration.cut(from: outage)
+        snapshot("offline-03-synced")
+    }
+
+    /// Opens a module from the More tab, photographs the list and the first row, and comes back.
+    /// Does nothing if the role has no such module.
+    private func module(_ identifier: String, titled title: String, list: String,
+                        rows: String, row: String) {
+        let link = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+        guard tapIfPresent(link, timeout: 20) else { return }
+        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 40), "\(title) loaded")
+        snapshot(list)
+        if tapIfPresent(app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", rows)).firstMatch, timeout: 20) {
+            snapshot(row)
+            back()
+        }
+        back()
+    }
+
+    /// The first checklist item that is not already ticked, or nil if they all are. The row carries
+    /// its state as its accessibility value — the label is only the item's text, so reading that
+    /// would untick a done item instead of ticking an undone one.
+    private func firstUntickedChecklistItem() -> XCUIElement? {
+        for index in 0..<8 {
+            let row = app.descendants(matching: .any)
+                .matching(identifier: "guided.checklist.\(index)").firstMatch
+            guard row.waitForExistence(timeout: index == 0 ? 20 : 2) else { return nil }
+            if row.value as? String == "Not done" { return row }
+        }
+        return nil
+    }
+
+    private func waitUntil(_ moment: Date) {
+        let remaining = moment.timeIntervalSinceNow
+        guard remaining > 0 else { return }
+        RunLoop.current.run(until: Date().addingTimeInterval(remaining))
     }
 }

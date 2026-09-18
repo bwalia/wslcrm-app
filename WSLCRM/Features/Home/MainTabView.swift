@@ -107,11 +107,13 @@ struct MoreView: View {
                         Label("Unsynced changes", systemImage: "arrow.triangle.2.circlepath")
                     }
                 }
+                .accessibilityIdentifier("more.pendingChanges")
                 NavigationLink {
                     SettingsView()
                 } label: {
                     Label("Settings", systemImage: "gearshape")
                 }
+                .accessibilityIdentifier("more.settings")
             }
 
             Section {
@@ -146,18 +148,23 @@ struct MoreView: View {
         let permissions = session.permissions
         if permissions.shows(.crm) {
             NavigationLink { CRMHomeView() } label: { Label("CRM", systemImage: "person.2.crop.square.stack") }
+                .accessibilityIdentifier("more.crm")
         }
         if permissions.shows(.customers) {
             NavigationLink { CustomersListView() } label: { Label("Customers", systemImage: "person.crop.rectangle.stack") }
+                .accessibilityIdentifier("more.customers")
         }
         if permissions.shows(.products) {
             NavigationLink { ProductsListView() } label: { Label("Products", systemImage: "shippingbox") }
+                .accessibilityIdentifier("more.products")
         }
         if permissions.shows(.orders) {
             NavigationLink { OrdersListView() } label: { Label("Orders", systemImage: "cart") }
+                .accessibilityIdentifier("more.orders")
         }
         if permissions.shows(.invoices) {
             NavigationLink { InvoicesListView() } label: { Label("Invoices", systemImage: "doc.text") }
+                .accessibilityIdentifier("more.invoices")
         }
         // Value links: these screens push further value routes (asset, report), and a destination
         // link above them makes SwiftUI rebuild the list, dropping its filters and the row tap.
