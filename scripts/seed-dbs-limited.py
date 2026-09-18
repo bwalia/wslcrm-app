@@ -26,7 +26,10 @@ reserved .example domain.
     scripts/seed-dbs-limited.py            # first run
     scripts/seed-dbs-limited.py --reset    # rebuild requests, jobs, visits and invoices around now
 
-Writes build/dbs-limited.env (mode 600, git-ignored) with the sign-in usernames.
+Writes build/<namespace slug>.env (mode 600, git-ignored) with the sign-in usernames.
+
+Set KUBE_NAMESPACE / PG_POD / API_POD to seed a cluster environment (see the README's
+"Seeding the demo into int"); without them everything targets the local Docker stack.
 """
 from __future__ import annotations
 
@@ -51,7 +54,18 @@ API_CONTAINER = os.environ.get("API_CONTAINER", "wslcrm-opsapi-pr610")
 PG_CONTAINER = os.environ.get("PG_CONTAINER", "opsapi-postgres-dev-db")
 DB = os.environ.get("DB", "opsapi-wslcrm-pr610")
 FS_ENV = ROOT / "build" / "local-fs-test.env"
-OUT = ROOT / "build" / "dbs-limited.env"
+
+# Where the stack runs. Empty KUBE_NAMESPACE means the local Docker stack above;
+# set it (with PG_POD / API_POD) to seed a cluster environment instead, e.g.
+#
+#   KUBE_NAMESPACE=int PG_POD=workstation-db-0 API_POD=workstation-opsapi-xxxxx \
+#   DB=workstation_opsapi API=https://int-opsapi.workstation.co.uk ...
+#
+# psql and the OTP lookup then go through `kubectl exec` rather than `docker exec`.
+# The API itself is reached over HTTPS either way, so only these two differ.
+KUBE_NAMESPACE = os.environ.get("KUBE_NAMESPACE", "")
+PG_POD = os.environ.get("PG_POD", "workstation-db-0")
+API_POD = os.environ.get("API_POD", "")
 
 LONDON = ZoneInfo("Europe/London")
 NOW = datetime.now(timezone.utc).replace(microsecond=0)
@@ -61,8 +75,14 @@ VAT = 20
 # Reference data
 # ---------------------------------------------------------------------------------------------
 
-NAMESPACE = {"name": "DBS Limited", "slug": "dbs-limited",
+# NAMESPACE_SLUG / NAMESPACE_NAME let one server hold more than one seeded
+# workspace — a shared environment already has other people's namespaces in it,
+# so the slug this seed owns has to be selectable.
+NAMESPACE = {"name": os.environ.get("NAMESPACE_NAME", "DBS Limited"),
+             "slug": os.environ.get("NAMESPACE_SLUG", "dbs-limited"),
              "description": "Air conditioning, refrigeration and heat pumps — London & South East"}
+
+OUT = ROOT / "build" / f"{NAMESPACE['slug']}.env"
 
 OWNER = {"key": "owner", "first": "Owen", "last": "Sinclair", "username": "owen.sinclair"}
 
@@ -275,10 +295,52 @@ def lit(value) -> str:
     return "'" + str(value).replace("'", "''") + "'"
 
 
+def db_argv(shell_command: str) -> list[str]:
+    """Run a shell command inside the database container, wherever it lives."""
+    if KUBE_NAMESPACE:
+        return ["kubectl", "-n", KUBE_NAMESPACE, "exec", "-i", PG_POD, "--", "sh", "-c", shell_command]
+    return ["docker", "exec", "-i", PG_CONTAINER, "sh", "-c", shell_command]
+
+
+def test_otp() -> str:
+    """The server's fixed OTP bypass code, read from the API process's own environment.
+
+    It is only ever set outside production (OPSAPI_DEPLOY_ENV gates the bypass in
+    helper/otp.lua), and it never leaves this process: the value is used to sign the
+    seeded staff in and written to OUT, which is mode 600 and git-ignored.
+    """
+    if KUBE_NAMESPACE:
+        if not API_POD:
+            die("set API_POD to the opsapi pod name when seeding a cluster environment")
+        argv = ["kubectl", "-n", KUBE_NAMESPACE, "exec", API_POD, "--", "printenv", "TEST_OTP_CODE"]
+        where = f"pod {API_POD}"
+    else:
+        argv = ["docker", "exec", API_CONTAINER, "printenv", "TEST_OTP_CODE"]
+        where = API_CONTAINER
+    code = subprocess.run(argv, capture_output=True, text=True).stdout.strip()
+    if not code:
+        die(f"TEST_OTP_CODE is not set in {where}")
+    return code
+
+
+def seed_password() -> str:
+    """The password every seeded account gets. WSL_PASSWORD wins; otherwise the
+    isolated local stack's generated one from scripts/local-opsapi-fs-seed.sh."""
+    password = os.environ.get("WSL_PASSWORD")
+    if password:
+        return password
+    if not FS_ENV.exists():
+        die("set WSL_PASSWORD, or run scripts/local-opsapi-fs-seed.sh first (it writes one)")
+    env = dict(line.split("=", 1) for line in FS_ENV.read_text().splitlines()
+               if "=" in line and not line.startswith("#"))
+    if not env.get("WSL_PASSWORD"):
+        die(f"WSL_PASSWORD is missing from {FS_ENV}")
+    return env["WSL_PASSWORD"]
+
+
 def sql(query: str) -> list[list[str]]:
     result = subprocess.run(
-        ["docker", "exec", "-i", PG_CONTAINER, "sh", "-c",
-         f'psql -U "$POSTGRES_USER" -d "{DB}" -v ON_ERROR_STOP=1 -AtqX'],
+        db_argv(f'psql -U "$POSTGRES_USER" -d "{DB}" -v ON_ERROR_STOP=1 -AtqX'),
         input=query, capture_output=True, text=True)
     if result.returncode != 0:
         die(f"SQL failed: {result.stderr.strip()}\n{query[:600]}")
@@ -1319,15 +1381,8 @@ def main() -> None:
 
     if DB in ("opsapi-diytaxreturn",) or "prod" in DB:
         die(f"refusing to seed database '{DB}'")
-    if not FS_ENV.exists():
-        die("run scripts/local-opsapi-fs-seed.sh first (it creates the isolated stack's test password)")
-    env = dict(line.split("=", 1) for line in FS_ENV.read_text().splitlines() if "=" in line and not line.startswith("#"))
-    otp = subprocess.run(["docker", "exec", API_CONTAINER, "printenv", "TEST_OTP_CODE"],
-                         capture_output=True, text=True).stdout.strip()
-    if not otp:
-        die(f"TEST_OTP_CODE is not set in {API_CONTAINER}")
-
-    s = Seeder(env["WSL_PASSWORD"], otp)
+    otp = test_otp()
+    s = Seeder(seed_password(), otp)
     setup_reference_data(s)
 
     existing = int(sql_value(f"SELECT COUNT(*) FROM fs_jobs WHERE namespace_id = {s.ns_id}") or 0)
@@ -1356,10 +1411,10 @@ def main() -> None:
         (SELECT COUNT(*) FROM fs_visits WHERE namespace_id = {s.ns_id}),
         (SELECT COUNT(*) FROM fs_job_items WHERE namespace_id = {s.ns_id}),
         (SELECT COUNT(*) FROM invoices WHERE namespace_id = {s.ns_id})""")[0]
-    print(f"Done. DBS Limited ({s.ns_uuid}): {counts[0]} requests, {counts[1]} jobs, {counts[2]} visits, "
+    print(f"Done. {NAMESPACE['name']} ({s.ns_uuid}): {counts[0]} requests, {counts[1]} jobs, {counts[2]} visits, "
           f"{counts[3]} quote-sheet lines, {counts[4]} invoices.")
     print("Sign in as tom.fletcher (engineer), claire.donnelly / marcus.reid (service managers) or aisha.rahman "
-          "(service desk); password and OTP are in build/dbs-limited.env (not printed).")
+          f"(service desk); password and OTP are in {OUT.relative_to(ROOT)} (not printed).")
 
 
 if __name__ == "__main__":

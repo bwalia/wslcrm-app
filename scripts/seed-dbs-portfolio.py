@@ -28,7 +28,6 @@ import hashlib
 import importlib.util
 import json
 import random
-import subprocess
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -106,7 +105,9 @@ def brand_workspace(s) -> None:
         merged = {}
     merged["company"] = {k: company[k] for k in (
         "display_name", "legal_name", "company_number", "vat_number", "address", "phone", "email", "strapline")}
-    sql(f"""UPDATE namespaces SET name = {lit(company['display_name'])},
+    # The workspace keeps the name the seed was asked for (NAMESPACE_NAME); only
+    # the letterhead details below come from the portfolio's company block.
+    sql(f"""UPDATE namespaces SET name = {lit(dbs.NAMESPACE['name'])},
             description = {lit('HVAC, refrigeration, heating, electrical and controls — service, maintenance and projects')},
             logo_url = '/brands/dbs-ltd.svg', settings = {lit(json.dumps(merged))}, updated_at = NOW()
             WHERE id = {s.ns_id}""")
@@ -683,16 +684,7 @@ def simpro(s) -> dict:
 def main() -> None:
     if dbs.DB in ("opsapi-diytaxreturn",) or "prod" in dbs.DB:
         die(f"refusing to seed database '{dbs.DB}'")
-    if not dbs.FS_ENV.exists():
-        die("run scripts/local-opsapi-fs-seed.sh and scripts/seed-dbs-limited.py first")
-    env = dict(line.split("=", 1) for line in dbs.FS_ENV.read_text().splitlines()
-               if "=" in line and not line.startswith("#"))
-    otp = subprocess.run(["docker", "exec", dbs.API_CONTAINER, "printenv", "TEST_OTP_CODE"],
-                         capture_output=True, text=True).stdout.strip()
-    if not otp:
-        die(f"TEST_OTP_CODE is not set in {dbs.API_CONTAINER}")
-
-    s = dbs.Seeder(env["WSL_PASSWORD"], otp)
+    s = dbs.Seeder(dbs.seed_password(), dbs.test_otp())
     dbs.setup_reference_data(s)
 
     print("P1. Brand the workspace as DBS Ltd")

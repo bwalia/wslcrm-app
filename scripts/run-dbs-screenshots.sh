@@ -12,7 +12,10 @@
 # test runner as TEST_RUNNER_* variables — never printed.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ENV_FILE="$ROOT/build/dbs-limited.env"
+# Defaults are the local stack; SCHEME + ENV_FILE point the same tour at a seeded
+# cluster workspace, e.g. SCHEME=WSLCRM-DBS-Int ENV_FILE=build/dbs-group-demo.env.
+SCHEME="${SCHEME:-WSLCRM-Local}"
+ENV_FILE="${ENV_FILE:-$ROOT/build/dbs-limited.env}"
 DEVICE="${DEVICE:-iPhone 17}"
 OUT_DIR="${OUT_DIR:-$ROOT/build/dbs-screenshots}"
 RUN_DIR="$ROOT/build/dbs-run"
@@ -35,7 +38,7 @@ RESULT="$RUN_DIR/result.xcresult"; rm -rf "$RESULT"
 set +e
 TEST_RUNNER_WSL_PASSWORD="$WSL_PASSWORD" TEST_RUNNER_WSL_OTP="$WSL_OTP" \
 TEST_RUNNER_DBS_TOM="$DBS_TOM" TEST_RUNNER_DBS_CLAIRE="$DBS_CLAIRE" TEST_RUNNER_DBS_AISHA="$DBS_AISHA" \
-xcodebuild -project "$ROOT/WSLCRM.xcodeproj" -scheme WSLCRM-Local -destination "id=$UDID" \
+xcodebuild -project "$ROOT/WSLCRM.xcodeproj" -scheme "$SCHEME" -destination "id=$UDID" \
   -derivedDataPath "$ROOT/build/DerivedData" -resultBundlePath "$RESULT" \
   $(printf '%s\n' "$@" | grep -q -- '-only-testing' || echo -only-testing:WSLCRMUITests/DBSLimitedTourUITests) test "$@"
 STATUS=$?
