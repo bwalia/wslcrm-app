@@ -100,6 +100,7 @@ struct FieldServiceHubView: View {
             }
         }
         .navigationTitle("Field Service")
+        .brandedNavigationBar()
         .task { await loadStats() }
         .refreshable { await loadStats() }
         .sheet(isPresented: $creatingRequest) {

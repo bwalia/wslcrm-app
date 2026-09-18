@@ -18,7 +18,9 @@ enum UITestSupport {
         UIView.setAnimationsEnabled(false)
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("uitest-\(UUID().uuidString)")
         let defaults = UserDefaults(suiteName: "uitest-\(UUID().uuidString)")!
-        let config = AppConfig(apiBaseURL: URL(string: "https://stub.wslcrm.test")!, environmentName: "UITest",
+        let stub = URL(string: "https://stub.wslcrm.test")!
+        let config = AppConfig(apiBaseURL: stub, environmentName: "UITest",
+                               buildAPIBaseURL: stub, buildEnvironmentName: "UITest",
                                networkLoggingEnabled: true)
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [UITestStubProtocol.self]

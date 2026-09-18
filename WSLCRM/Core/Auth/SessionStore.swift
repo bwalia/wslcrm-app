@@ -29,7 +29,8 @@ final class SessionStore {
     /// Explains why the user was returned to the sign-in screen.
     var signedOutReason: String?
 
-    let environmentName: String
+    /// Changes when the app is repointed at another environment from the sign-in screen.
+    private(set) var environmentName: String
     let biometrics: BiometricGate
 
     @ObservationIgnored private let auth: AuthAPI
@@ -256,6 +257,15 @@ final class SessionStore {
         await auth.logout(refreshToken: refreshToken)
         await endLocalSession()
         signedOutReason = nil
+    }
+
+    /// The app now talks to a different server. Tokens, cached responses and the signed-in
+    /// user all belonged to the old one, so none of them survive. No logout call is made:
+    /// the client already points elsewhere, and the old server would reject it anyway.
+    func resetForEndpointChange(environmentName newName: String) async {
+        environmentName = newName
+        await endLocalSession()
+        signedOutReason = "Now pointing at \(newName). Please sign in again."
     }
 
     private func handleSessionExpired() {
