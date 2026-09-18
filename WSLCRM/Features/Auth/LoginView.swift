@@ -7,6 +7,7 @@ struct LoginView: View {
     @State private var isSubmitting = false
     @State private var error: APIError?
     @State private var showingForgotPassword = false
+    @State private var showingEndpoint = false
     @FocusState private var focused: Field?
 
     private enum Field { case identifier, password }
@@ -72,21 +73,37 @@ struct LoginView: View {
         .sheet(isPresented: $showingForgotPassword) {
             ForgotPasswordView(prefill: identifier.contains("@") ? identifier : "")
         }
+        .sheet(isPresented: $showingEndpoint) {
+            APIEndpointSheet()
+        }
         .onAppear { focused = identifier.isEmpty ? .identifier : .password }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            BrandMark(size: 56)
-            Text(Brand.current.name)
-                .font(.largeTitle.bold())
-                .accessibilityIdentifier("login.brandName")
-            Text("Sign in to your \(Brand.current.name) account")
-                .font(.title3)
-                .foregroundStyle(.secondaryText)
-            if session.environmentName != "Production" {
-                StatusBadge(text: "\(session.environmentName) environment", systemImage: "hammer", tone: .warning)
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 8) {
+                BrandMark(size: 88)
+                Text(Brand.current.name)
+                    .font(.largeTitle.bold())
+                    .accessibilityIdentifier("login.brandName")
+                Text("Sign in to your \(Brand.current.name) account")
+                    .font(.title3)
+                    .foregroundStyle(.secondaryText)
+                if session.environmentName != "Production" {
+                    StatusBadge(text: "\(session.environmentName) environment", systemImage: "hammer", tone: .warning)
+                }
             }
+            Spacer(minLength: 12)
+            Button {
+                showingEndpoint = true
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.title3)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Environment settings")
+            .accessibilityIdentifier("login.environmentSettings")
         }
         .padding(.top, 32)
     }

@@ -11,6 +11,7 @@ struct WSLCRMApp: App {
                 .environment(environment.session)
                 .environment(environment.sync)
                 .environment(environment.connectivity)
+                .environment(environment.endpoint)
                 .environment(\.services, environment.services)
         }
         .backgroundTask(.appRefresh(MyWorkRefresh.taskIdentifier)) {

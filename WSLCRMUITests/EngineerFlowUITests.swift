@@ -10,7 +10,7 @@ final class EngineerFlowUITests: XCTestCase {
     override func setUp() async throws {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["-UITestStubServer"]
+        app.launchArguments = ["-UITestStubServer", "-UITestSamplePhoto"]
         app.launch()
         signIn()
     }
@@ -148,13 +148,29 @@ final class EngineerFlowUITests: XCTestCase {
         _ = element("guided.sheet")
         XCTAssertTrue(text(containing: "Engineer — normal time").waitForExistence(timeout: 10), "labour line is on the sheet")
 
-        // Materials come from the workspace's stock list, so the line carries the real SKU.
+        // A part is proposed, not just logged: picked from the workspace's catalogue, with a
+        // reason and a photo of the fault, so the manager approves it on evidence (opsapi #619).
         tap("guided.tile.materials")
-        element("quote.pickPart").tap()
+        element("partProposal.pickPart").tap()
         element("part.row.Contactor 25A, 230V coil").tap()
-        XCTAssertEqual(element("quote.description").value as? String, "Contactor 25A, 230V coil")
-        element("quote.add").tap()
-        XCTAssertTrue(text(containing: "Contactor 25A").waitForExistence(timeout: 10), "material line is on the sheet")
+        XCTAssertTrue(element("partProposal.selectedPart").waitForExistence(timeout: 5))
+
+        let reason = element("partProposal.reason")
+        reason.tap()
+        reason.typeText("Contactor pitted, compressor not pulling in")
+
+        // Query the button itself: the generic descendant match finds the toolbar item wrapping
+        // it, which stays enabled while the button inside is not.
+        let propose = app.buttons["partProposal.submit"]
+        XCTAssertTrue(propose.waitForExistence(timeout: 10))
+        XCTAssertFalse(propose.isEnabled, "no proposal without evidence")
+
+        element("partProposal.samplePhoto").tap()
+        XCTAssertTrue(element("partProposal.photo").waitForExistence(timeout: 5))
+        propose.tap()
+
+        XCTAssertTrue(text(containing: "Contactor pitted").waitForExistence(timeout: 10),
+                      "the proposed part is on the sheet")
 
         // F-Gas record.
         tap("guided.tile.refrigerant")

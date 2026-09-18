@@ -193,6 +193,7 @@ struct MyWorkView: View {
             MyWorkContent(model: model)
         }
         .navigationTitle("My Work")
+        .brandedNavigationBar()
     }
 }
 

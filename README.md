@@ -52,6 +52,17 @@ The API base URL is a build setting (`API_BASE_URL`) written into Info.plist and
 stack. `WSLCRM-Int` stays house-branded for ordinary integration testing. Sign in with the
 accounts in `build/dbs-group-demo.env` (see "Seeding the demo into int" below).
 
+### Switching environment without a rebuild
+
+The **gear on the sign-in screen** repoints a build at any API. The address is validated (https
+anywhere, plain http only for `127.0.0.1` / `localhost`), kept across relaunches, and shown on the
+sign-in badge, which names the host once it differs from the build's own. "Use this build's default"
+puts it back. Switching signs you out and clears cached responses: tokens minted by one server mean
+nothing to another. `APIEndpoint` owns the rules, `APIEndpointController` applies them.
+
+The badge is how to tell at a glance which server a build is talking to — a build showing
+**Local environment** is on `127.0.0.1`, and accounts that exist only on int will not sign in there.
+
 The production URL is never committed. Supply it in one of two ways:
 
 ```bash
@@ -243,6 +254,11 @@ The Local configuration is white-labelled as **DBS Ltd** through `Config/Brand-D
 name and icon, the sign-in mark, and the letterhead and legal footer on report PDFs. Int and Prod keep
 the house brand (`Config/Brand-Default.xcconfig`). In the app:
 
+- **Guided visit → Replace part.** An engineer proposes a replacement rather than logging a line:
+  the part comes from the workspace catalogue, the price and VAT come with it, and a photo of the
+  fault is required. All three go in one request (opsapi #619), which the server keeps together —
+  no evidence, no proposal. The manager sees those photos against the pending line on the job, which
+  is what they approve it on.
 - **Field Service → Assets.** The register with condition, F-Gas and overdue filters. An asset shows
   its F-Gas position, service schedule and surveys, and an asset-history PDF. Engineers open it from
   **More** and record surveys on site.

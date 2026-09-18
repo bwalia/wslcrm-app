@@ -14,7 +14,9 @@ enum SessionEvent: Sendable, Equatable {
 /// injection, one-shot token refresh on 401 (single-flight: concurrent 401s share a
 /// single `/auth/refresh` call), typed errors, and redacted debug logging.
 actor APIClient {
-    private let baseURL: URL
+    /// Not a `let`: the sign-in screen can repoint the app at another environment, and
+    /// everything below is otherwise identical against whichever server that is.
+    private var baseURL: URL
     private let session: URLSession
     private let tokenStore: TokenStore
     private let logger: NetworkLogger
@@ -54,6 +56,15 @@ actor APIClient {
 
     var hasTokens: Bool { tokens != nil }
     var currentNamespaceId: String? { namespaceId }
+    var currentBaseURL: URL { baseURL }
+
+    /// Repoint at another server. The caller (`APIEndpointController`) clears the tokens
+    /// and cached responses that belonged to the previous one.
+    func setBaseURL(_ url: URL) {
+        baseURL = url
+        refreshTask?.cancel()
+        refreshTask = nil
+    }
 
     func setTokens(_ newTokens: AuthTokens?) {
         tokens = newTokens

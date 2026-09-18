@@ -21,7 +21,8 @@ final class DBSLimitedTourUITests: XCTestCase {
         try XCTSkipIf(env["WSL_PASSWORD"] == nil || env["DBS_TOM"] == nil,
                       "DBS Limited credentials not supplied (run scripts/run-dbs-screenshots.sh)")
         app = XCUIApplication()
-        app.launchArguments = ["-WSLResetSession"]
+        // The simulator has no camera, and a part proposal needs a photo to be a proposal.
+        app.launchArguments = ["-WSLResetSession", "-UITestSamplePhoto"]
         app.launch()
     }
 
@@ -169,14 +170,41 @@ final class DBSLimitedTourUITests: XCTestCase {
         app.swipeUp()
         snapshot("eng-07-guided-visit-sheet-and-fgas")
 
-        // Materials come from the stock list (low stock is flagged).
+        // Replacing a part is a proposal: a catalogue part, why, and a photo of the fault, which
+        // is what the manager approves it on (opsapi #619). Sent for real against int, so the
+        // pending line and its evidence are there for the manager's tour to find.
         if tapIfPresent(scrollTo("guided.tile.materials")) {
-            if tapIfPresent(element("quote.pickPart")) {
+            if tapIfPresent(element("partProposal.pickPart")) {
                 snapshot("eng-08-stock-list")
-                dismissSheet("Stock list")
+                let part = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "part.row.")).firstMatch
+                if part.waitForExistence(timeout: 10) {
+                    part.tap()
+                } else {
+                    dismissSheet("Stock list")
+                }
             }
-            snapshot("eng-09-add-material")
-            dismissSheet("Add material")
+            let reason = element("partProposal.reason")
+            if reason.waitForExistence(timeout: 5) {
+                reason.tap()
+                reason.typeText("Fan motor bearings collapsed, unit tripping on high head")
+                tapIfPresent(element("partProposal.samplePhoto"))
+                snapshot("eng-09-part-proposal")
+                // The button itself, not the toolbar item around it: the wrapper reports as
+                // existing and enabled, and tapping it does nothing.
+                let propose = app.buttons["partProposal.submit"]
+                XCTAssertTrue(propose.waitForExistence(timeout: 5) && propose.isEnabled,
+                              "a part, a reason and a photo make a proposal sendable")
+                propose.tap()
+                // Wait for the sheet to GO: waitForExistence returns the moment it sees it, which
+                // is still true while the dismissal animates.
+                XCTAssertTrue(app.navigationBars["Replace part"].waitForNonExistence(timeout: 20),
+                              "the proposal was accepted and the sheet closed")
+            }
+            // Submitting closes the sheet; if anything above did not take, close it here so the
+            // rest of the tour is not tapping through a sheet.
+            if app.navigationBars["Replace part"].firstMatch.exists {
+                dismissSheet("Replace part")
+            }
         }
         back()
 

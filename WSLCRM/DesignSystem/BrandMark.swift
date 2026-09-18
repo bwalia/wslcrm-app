@@ -5,6 +5,9 @@ import SwiftUI
 struct BrandMark: View {
     var size: CGFloat = 44
     var brand: Brand = .current
+    /// Decorative where the brand name is already spelled out beside it (sign-in).
+    /// In a navigation bar there is no such label, so the mark names itself instead.
+    var isDecorative: Bool = true
 
     var body: some View {
         Group {
@@ -19,6 +22,21 @@ struct BrandMark: View {
             }
         }
         .frame(width: size, height: size)
-        .accessibilityHidden(true)
+        .accessibilityHidden(isDecorative)
+        .accessibilityLabel(isDecorative ? Text(verbatim: "") : Text(brand.name))
+        .accessibilityIdentifier(isDecorative ? "" : "brand.mark")
+    }
+}
+
+extension View {
+    /// Carries the brand into the navigation bar of a screen someone lands on after
+    /// signing in — otherwise a white-label build only looks white-labelled until
+    /// the moment it is used.
+    func brandedNavigationBar() -> some View {
+        toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                BrandMark(size: 36, isDecorative: false)
+            }
+        }
     }
 }

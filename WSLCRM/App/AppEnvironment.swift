@@ -40,6 +40,7 @@ final class AppEnvironment {
     let connectivity: ConnectivityMonitor
     let sync: SyncCenter
     let session: SessionStore
+    let endpoint: APIEndpointController
 
     init(config: AppConfig, session urlSession: URLSession, tokenStore: TokenStore, cacheDirectory: URL,
          queueFile: URL, defaults: UserDefaults, monitorConnectivity: Bool) {
@@ -54,6 +55,11 @@ final class AppEnvironment {
         session = SessionStore(auth: AuthAPI(client: client), client: client, cache: cache,
                                environmentName: config.environmentName, defaults: defaults)
         sync.currentUserId = { [weak session] in session?.user?.uuid }
+        endpoint = APIEndpointController(current: config.apiBaseURL,
+                                         buildDefault: config.buildAPIBaseURL,
+                                         buildName: config.buildEnvironmentName,
+                                         client: client, defaults: defaults,
+                                         session: { [weak session] in session })
     }
 
     /// `BGAppRefreshTask` handler: renews the signed-in engineer's offline copy of My Work.

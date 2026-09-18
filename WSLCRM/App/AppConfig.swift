@@ -4,6 +4,10 @@ import Foundation
 struct AppConfig: Sendable, Equatable {
     let apiBaseURL: URL
     let environmentName: String
+    /// What the build itself ships with, kept so the sign-in screen can offer a way back
+    /// after someone repoints the app at another environment.
+    let buildAPIBaseURL: URL
+    let buildEnvironmentName: String
     /// Request/response logging. On in Debug builds, or when launched with `-WSLNetworkLogging YES`.
     let networkLoggingEnabled: Bool
 
@@ -24,11 +28,18 @@ struct AppConfig: Sendable, Equatable {
         #else
         let logging = defaults.bool(forKey: "WSLNetworkLogging")
         #endif
-        return AppConfig(apiBaseURL: url, environmentName: name, networkLoggingEnabled: logging)
+        // A tester can repoint the app from the sign-in screen; that choice outranks the
+        // build's own default until it is cleared.
+        let effective = APIEndpoint.stored(in: defaults) ?? url
+        return AppConfig(apiBaseURL: effective,
+                         environmentName: APIEndpoint.displayName(for: effective, buildURL: url, buildName: name),
+                         buildAPIBaseURL: url,
+                         buildEnvironmentName: name,
+                         networkLoggingEnabled: logging)
     }
 
     /// Plain http is accepted only for the Local (Docker) configuration.
     private static func isLocalHost(_ url: URL) -> Bool {
-        ["127.0.0.1", "localhost"].contains(url.host ?? "")
+        APIEndpoint.isLocalHost(url)
     }
 }
