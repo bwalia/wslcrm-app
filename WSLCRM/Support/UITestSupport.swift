@@ -127,11 +127,13 @@ final class UITestStubServer: @unchecked Sendable {
 
         var grants: [String: [String]] {
             switch self {
-            case .engineer: ["fs_jobs": ["read"], "fs_visits": ["read"], "fs_parts": ["read"]]
+            case .engineer: ["fs_jobs": ["read"], "fs_visits": ["read"], "fs_parts": ["read"],
+                             "projects": ["read", "update"]]
             case .manager: ["fs_service_requests": ["manage"], "fs_jobs": ["manage"], "fs_visits": ["manage"],
                             "fs_job_types": ["manage"], "fs_parts": ["manage"], "employees": ["manage"],
                             "customers": ["manage"], "products": ["manage"], "invoices": ["manage"],
-                            "payments": ["manage"], "timesheets": ["read"], "timesheet_approvals": ["manage"]]
+                            "payments": ["manage"], "timesheets": ["read"], "timesheet_approvals": ["manage"],
+                            "projects": ["manage"]]
             case .telecaller: ["fs_service_requests": ["create", "read", "update"], "customers": ["create", "read"]]
             }
         }
@@ -147,9 +149,11 @@ final class UITestStubServer: @unchecked Sendable {
 
         var menuKeys: [String] {
             switch self {
-            case .engineer: ["field_service_jobs", "field_service_visits", "field_service_parts"]
+            case .engineer: ["field_service_jobs", "field_service_visits", "field_service_parts",
+                             "projects", "timesheets"]
             case .manager: ["products", "customers", "field_service_requests", "field_service_jobs",
-                            "field_service_visits", "invoices", "field_service_parts", "timesheets"]
+                            "field_service_visits", "invoices", "field_service_parts", "timesheets",
+                            "projects"]
             case .telecaller: ["customers", "field_service_requests"]
             }
         }
@@ -165,6 +169,10 @@ final class UITestStubServer: @unchecked Sendable {
     private var items: [[String: Any]] = []
     private var photos: [[String: Any]] = []
     private var fgas: [String: Any] = [:]
+    /// Work management: two cards an agent is involved in, and one nobody has touched.
+    private var tasks: [String: [String: Any]] = [:]
+    private var taskComments: [String: [[String: Any]]] = [:]
+    private var timesheets: [String: [String: Any]] = [:]
 
     func reset() {
         lock.withLock {
@@ -184,6 +192,9 @@ final class UITestStubServer: @unchecked Sendable {
                       "labour_category": "engineer_nt"]]
             photos = []
             fgas = [:]
+            tasks = Self.seededTasks()
+            taskComments = [Self.reviewTaskUuid: [], Self.runningTaskUuid: [], Self.plainTaskUuid: []]
+            timesheets = Self.seededTimesheets()
         }
     }
 
@@ -427,9 +438,305 @@ final class UITestStubServer: @unchecked Sendable {
             phaseStatus = target
             return (200, ["success": true, "data": phase])
 
+        // MARK: Work management — projects, boards, tasks
+
+        case ("GET", "/api/v2/kanban/projects"):
+            return (200, ["success": true, "data": [Self.project], "meta": meta(1),
+                          "permissions": Self.objectPermissions])
+
+        case ("GET", "/api/v2/kanban/projects/\(Self.projectUuid)"):
+            return (200, ["success": true, "data": Self.project, "permissions": Self.objectPermissions])
+
+        case ("GET", "/api/v2/kanban/projects/\(Self.projectUuid)/boards"):
+            return (200, ["success": true, "data": [Self.board(withColumns: false)]])
+
+        case ("GET", "/api/v2/kanban/projects/\(Self.projectUuid)/members"):
+            return (200, ["success": true, "data": [Self.member]])
+
+        case ("GET", "/api/v2/kanban/projects/\(Self.projectUuid)/sprints"):
+            return (200, ["success": true, "data": [Self.sprint]])
+
+        case ("GET", "/api/v2/kanban/boards/\(Self.boardUuid)/full"):
+            return (200, ["success": true, "data": boardWithTasks()])
+
+        case ("GET", "/api/v2/kanban/boards/\(Self.boardUuid)/tasks"):
+            return (200, ["success": true, "data": orderedTasks(), "meta": meta(orderedTasks().count)])
+
+        case ("GET", "/api/v2/kanban/my-tasks"):
+            return (200, ["success": true, "data": orderedTasks(), "meta": meta(orderedTasks().count)])
+
+        case ("GET", let p) where p.hasPrefix("/api/v2/kanban/tasks/") && p.hasSuffix("/comments"):
+            return (200, ["success": true, "data": taskComments[Self.taskUuid(in: p)] ?? []])
+
+        case ("POST", let p) where p.hasPrefix("/api/v2/kanban/tasks/") && p.hasSuffix("/comments"):
+            let uuid = Self.taskUuid(in: p)
+            var list = taskComments[uuid] ?? []
+            list.append(["uuid": "c\(list.count + 1)", "content": json["content"] as? String ?? "",
+                         "user_uuid": Self.userUuid, "created_at": "2026-09-19 09:00:00",
+                         "user": ["uuid": Self.userUuid, "first_name": role.person.first,
+                                  "last_name": role.person.last]])
+            taskComments[uuid] = list
+            return (201, ["success": true, "data": list.last!])
+
+        case ("GET", let p) where p.hasPrefix("/api/v2/kanban/tasks/") && p.hasSuffix("/checklists"):
+            return (200, ["success": true, "data": []])
+
+        case ("GET", let p) where p.hasPrefix("/api/v2/kanban/tasks/") && p.hasSuffix("/activities"):
+            return (200, ["success": true, "data": [Self.activity]])
+
+        case ("GET", let p) where p.hasPrefix("/api/v2/kanban/tasks/") && p.hasSuffix("/time-entries"):
+            return (200, ["success": true, "data": [Self.agentTimeEntry]])
+
+        case ("GET", "/api/v2/kanban/timer/current"):
+            return (200, ["success": true, "data": NSNull()])
+
+        case ("POST", "/api/v2/kanban/timer/start"), ("POST", "/api/v2/kanban/timer/stop"):
+            return (200, ["success": true, "data": NSNull()])
+
+        case ("GET", let p) where p.hasPrefix("/api/v2/kanban/tasks/"):
+            guard let task = tasks[Self.taskUuid(in: p)] else {
+                return (404, ["success": false, "error": "Task not found"])
+            }
+            return (200, ["success": true, "data": task])
+
+        case ("PUT", let p) where p.hasPrefix("/api/v2/kanban/tasks/") && p.hasSuffix("/move"):
+            let uuid = Self.taskUuid(in: p)
+            guard var task = tasks[uuid], let column = json["column_id"] as? Int else {
+                return (400, ["success": false, "error": "column_id is required"])
+            }
+            task["column_id"] = column
+            task["updated_at"] = "2026-09-19 10:00:00"
+            tasks[uuid] = task
+            return (200, ["success": true, "data": task])
+
+        case ("PUT", let p) where p.hasPrefix("/api/v2/kanban/tasks/"):
+            let uuid = Self.taskUuid(in: p)
+            guard var task = tasks[uuid] else { return (404, ["success": false, "error": "Task not found"]) }
+            if let metadata = json["metadata"] { task["metadata"] = metadata }
+            for key in ["title", "description", "status", "priority"] where json[key] != nil {
+                task[key] = json[key]
+            }
+            task["updated_at"] = "2026-09-19 10:00:00"
+            tasks[uuid] = task
+            return (200, ["success": true, "data": task])
+
+        // MARK: Work management — timesheets
+
+        case ("GET", "/api/v2/timesheets"):
+            let mine = timesheets.values.filter { $0["user_uuid"] as? String == Self.userUuid }
+            return (200, ["success": true, "data": mine, "meta": meta(mine.count)])
+
+        case ("GET", "/api/v2/timesheets/approval-queue"):
+            let waiting = timesheets.values.filter { $0["status"] as? String == "submitted" }
+            return (200, ["success": true, "data": waiting, "meta": meta(waiting.count)])
+
+        case ("GET", "/api/v2/timesheets/summary"):
+            return (200, ["success": true, "data": ["total_hours": 7.5, "billable_hours": 6,
+                                                    "pending_count": 1, "approved_count": 2]])
+
+        case ("GET", "/api/v2/timesheets/lookups/customers"):
+            return (200, ["success": true, "data": [["uuid": "cust-1", "first_name": Self.customerName]]])
+
+        case ("GET", "/api/v2/timesheets/lookups/tasks"):
+            return (200, ["success": true, "data": [["task_uuid": Self.plainTaskUuid,
+                                                     "title": "Quote the R22 replacement",
+                                                     "project_name": "DBS service desk"]]])
+
+        case ("POST", "/api/v2/timesheets"):
+            let uuid = "ts-\(timesheets.count + 1)"
+            timesheets[uuid] = ["uuid": uuid, "user_uuid": Self.userUuid, "status": "draft",
+                                "work_date": "2026-09-19", "total_hours": json["hours"] as? Double ?? 1,
+                                "billable_hours": json["hours"] as? Double ?? 1,
+                                "is_billable": json["is_billable"] as? Bool ?? true,
+                                "client_name": json["client_name"] as? String ?? "",
+                                "task": json["task"] as? String ?? "",
+                                "notes": json["notes"] as? String ?? ""]
+            return (201, ["success": true, "data": timesheets[uuid]!])
+
+        case ("POST", let p) where p.hasPrefix("/api/v2/timesheets/") && p.hasSuffix("/submit"):
+            return timesheetTransition(p, dropping: "/submit", to: "submitted")
+
+        case ("POST", let p) where p.hasPrefix("/api/v2/timesheets/") && p.hasSuffix("/approve"):
+            return timesheetTransition(p, dropping: "/approve", to: "approved")
+
+        case ("POST", let p) where p.hasPrefix("/api/v2/timesheets/") && p.hasSuffix("/reject"):
+            return timesheetTransition(p, dropping: "/reject", to: "rejected",
+                                       reason: json["reason"] as? String)
+
+        case ("POST", let p) where p.hasPrefix("/api/v2/timesheets/") && p.hasSuffix("/reopen"):
+            return timesheetTransition(p, dropping: "/reopen", to: "draft")
+
+        case ("GET", let p) where p.hasPrefix("/api/v2/timesheets/"):
+            let uuid = String(p.dropFirst("/api/v2/timesheets/".count))
+            guard let sheet = timesheets[uuid] else {
+                return (404, ["success": false, "error": "Not found"])
+            }
+            return (200, ["success": true, "data": sheet])
+
         default:
             return (404, ["error": ["code": "NOT_FOUND_404", "category": "error", "message": "The requested resource was not found."]])
         }
+    }
+
+    private func timesheetTransition(_ path: String, dropping suffix: String, to status: String,
+                                     reason: String? = nil) -> (Int, Any) {
+        let uuid = String(path.dropFirst("/api/v2/timesheets/".count).dropLast(suffix.count))
+        guard var sheet = timesheets[uuid] else { return (404, ["success": false, "error": "Not found"]) }
+        sheet["status"] = status
+        if let reason { sheet["rejection_reason"] = reason }
+        timesheets[uuid] = sheet
+        return (200, ["success": true, "data": sheet])
+    }
+
+    private func orderedTasks() -> [[String: Any]] {
+        [Self.reviewTaskUuid, Self.runningTaskUuid, Self.plainTaskUuid].compactMap { tasks[$0] }
+    }
+
+    private func boardWithTasks() -> [String: Any] {
+        var board = Self.board(withColumns: true)
+        var columns = board["columns"] as? [[String: Any]] ?? []
+        for index in columns.indices {
+            let id = columns[index]["id"] as? Int ?? 0
+            let inColumn = orderedTasks().filter { $0["column_id"] as? Int == id }
+            columns[index]["tasks"] = inColumn
+            columns[index]["task_count"] = inColumn.count
+        }
+        board["columns"] = columns
+        return board
+    }
+
+    // MARK: Work-management payloads
+
+    static let projectUuid = "pr000000-0000-0000-0000-000000000001"
+    static let boardUuid = "bo000000-0000-0000-0000-000000000001"
+    static let reviewTaskUuid = "ta000000-0000-0000-0000-00000000000a"
+    static let runningTaskUuid = "ta000000-0000-0000-0000-00000000000b"
+    static let plainTaskUuid = "ta000000-0000-0000-0000-00000000000c"
+    /// The agent's principal uuid, which is the API key's uuid — it matches no users row, which
+    /// is exactly how OPSAPI reports one.
+    static let agentUuid = "ak000000-0000-0000-0000-000000000001"
+    static let agentKeyName = "fgas-report-bot"
+
+    static var objectPermissions: [String: Any] {
+        ["can_create": true, "can_update": true, "can_delete": false, "can_manage": true]
+    }
+
+    static var project: [String: Any] {
+        ["uuid": projectUuid, "id": 1, "name": "DBS service desk", "slug": "DBS",
+         "description": "Reactive service work that is not a job yet.",
+         "status": "active", "task_count": 3, "completed_task_count": 1,
+         "member_count": 2, "board_count": 1, "is_starred": true,
+         "updated_at": "2026-09-19 08:00:00"]
+    }
+
+    static var member: [String: Any] {
+        ["uuid": "me000000-0000-0000-0000-000000000001", "user_uuid": userUuid, "role": "member",
+         "user": ["uuid": userUuid, "first_name": "Tom", "last_name": "Fletcher"]]
+    }
+
+    static var sprint: [String: Any] {
+        ["uuid": "sp000000-0000-0000-0000-000000000001", "name": "Week 38", "status": "active",
+         "total_points": 13, "completed_points": 5, "task_count": 3, "completed_task_count": 1]
+    }
+
+    static func board(withColumns: Bool) -> [String: Any] {
+        var board: [String: Any] = ["uuid": boardUuid, "id": 1, "name": "Service desk board",
+                                    "position": 0, "is_default": true, "column_count": 3, "task_count": 3]
+        if withColumns {
+            board["columns"] = [
+                ["uuid": "co000000-0000-0000-0000-000000000001", "id": 11, "name": "Ready for agent",
+                 "position": 0, "is_done_column": false],
+                ["uuid": "co000000-0000-0000-0000-000000000002", "id": 12, "name": "Needs review",
+                 "position": 1, "is_done_column": false],
+                ["uuid": "co000000-0000-0000-0000-000000000003", "id": 13, "name": "Done",
+                 "position": 2, "is_done_column": true],
+            ]
+        }
+        return board
+    }
+
+    static var activity: [String: Any] {
+        ["uuid": "ac000000-0000-0000-0000-000000000001", "action": "moved", "entity_type": "column_id",
+         "user_uuid": agentUuid, "created_at": "2026-09-19 08:40:00",
+         "user": ["uuid": agentUuid, "username": "api-key:\(agentKeyName)"]]
+    }
+
+    /// Machine time, logged by the agent against its own run.
+    static var agentTimeEntry: [String: Any] {
+        ["uuid": "te000000-0000-0000-0000-000000000001", "description": "Agent run", "duration_minutes": 12,
+         "is_billable": false, "user_uuid": agentUuid,
+         "user": ["uuid": agentUuid, "username": "api-key:\(agentKeyName)"]]
+    }
+
+    /// One card waiting on a person, one an agent is mid-run on, and one nobody has touched.
+    static func seededTasks() -> [String: [String: Any]] {
+        func contract(_ agent: [String: Any]) -> [String: Any] { ["agent": agent] }
+        let review: [String: Any] = [
+            "uuid": reviewTaskUuid, "id": 1, "board_id": 1, "column_id": 12, "task_number": 14,
+            "title": "F-Gas register for Q3", "status": "review", "priority": "high",
+            "position": 0, "comment_count": 0, "updated_at": "2026-09-19 09:10:00",
+            "project": project,
+            "metadata": contract([
+                "version": 1,
+                "goal": "Produce the Q3 F-Gas register for Brightwell and attach it.",
+                "acceptance": ["Every asset with a failed leak check appears",
+                               "The PDF carries the DBS letterhead"],
+                "definition_of_done": "A reviewer can send the PDF to the customer unchanged.",
+                "budget": ["minutes": 30, "attempts": 2],
+                "review": ["required": true],
+                "claim": ["by": agentUuid, "kind": "agent", "name": agentKeyName,
+                          "at": "2026-09-19 08:30:00", "expires_at": "2126-09-19 09:30:00"],
+                "run": ["id": "run-1", "attempt": 1, "started_at": "2026-09-19 08:30:00",
+                        "heartbeat_at": "2026-09-19 09:05:00", "cost": ["minutes": 12]],
+                "result": ["status": "needs_review", "summary": "Register built from 41 assets; 3 failed checks.",
+                           "artifacts": [["name": "fgas-register-q3.pdf", "kind": "pdf"]],
+                           "finished_at": "2026-09-19 09:05:00"],
+            ]),
+        ]
+        let running: [String: Any] = [
+            "uuid": runningTaskUuid, "id": 2, "board_id": 1, "column_id": 11, "task_number": 15,
+            "title": "Chase the overdue PPM visits", "status": "in_progress", "priority": "medium",
+            "position": 0, "comment_count": 0, "updated_at": "2026-09-19 09:00:00",
+            "project": project,
+            "metadata": contract([
+                "version": 1,
+                "goal": "List every PPM visit more than 14 days overdue and comment with the list.",
+                "acceptance": ["The list names the site and how many days late"],
+                "definition_of_done": "A manager can ring the sites straight off the comment.",
+                "budget": ["minutes": 15, "attempts": 1],
+                "claim": ["by": agentUuid, "kind": "agent", "name": agentKeyName,
+                          "at": "2026-09-19 08:55:00", "expires_at": "2026-09-19 09:05:00"],
+                "run": ["id": "run-2", "attempt": 1, "started_at": "2026-09-19 08:55:00",
+                        "heartbeat_at": "2026-09-19 08:56:00"],
+            ]),
+        ]
+        let plain: [String: Any] = [
+            "uuid": plainTaskUuid, "id": 3, "board_id": 1, "column_id": 11, "task_number": 16,
+            "title": "Quote the R22 replacement", "status": "open", "priority": "low",
+            "position": 1, "comment_count": 0, "updated_at": "2026-09-19 07:00:00",
+            "project": project, "metadata": [:],
+        ]
+        return [reviewTaskUuid: review, runningTaskUuid: running, plainTaskUuid: plain]
+    }
+
+    static func seededTimesheets() -> [String: [String: Any]] {
+        [
+            "ts-draft": ["uuid": "ts-draft", "user_uuid": userUuid, "status": "draft",
+                         "work_date": "2026-09-19", "total_hours": 3.5, "billable_hours": 3.5,
+                         "is_billable": true, "client_name": customerName,
+                         "task": "Walk-in chiller call-out"],
+            "ts-submitted": ["uuid": "ts-submitted", "user_uuid": "other-engineer", "status": "submitted",
+                             "work_date": "2026-09-18", "total_hours": 8, "billable_hours": 7.5,
+                             "is_billable": true, "client_name": "Brightwell Data Centres Ltd",
+                             "task": "CRAC 3 high head pressure",
+                             "user": ["uuid": "other-engineer", "first_name": "Kwame", "last_name": "Mensah"]],
+        ]
+    }
+
+    static func taskUuid(in path: String) -> String {
+        let parts = path.split(separator: "/")
+        guard let index = parts.firstIndex(of: "tasks"), index + 1 < parts.count else { return "" }
+        return String(parts[index + 1])
     }
 
     // MARK: Payloads (mirroring the Lua shapers)

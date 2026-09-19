@@ -9,6 +9,8 @@ struct Services: Sendable {
     let commerce: CommerceAPI
     let invoices: InvoicesAPI
     let simpro: SimproAPI
+    let kanban: KanbanAPI
+    let timesheets: TimesheetsAPI
 
     init(client: APIClient, cache: ResponseCache) {
         self.client = client
@@ -17,6 +19,8 @@ struct Services: Sendable {
         commerce = CommerceAPI(client: client)
         invoices = InvoicesAPI(client: client)
         simpro = SimproAPI(client: client)
+        kanban = KanbanAPI(client: client)
+        timesheets = TimesheetsAPI(client: client)
     }
 
     /// Used only as the environment default (previews); never talks to a real server.

@@ -442,6 +442,11 @@ extension View {
             .navigationDestination(for: SiteRoute.self) { SiteDetailView(site: $0.site) }
             .navigationDestination(for: CustomerAssetRoute.self) { CustomerAssetDetailView(assetUuid: $0.uuid) }
             .navigationDestination(for: ReportRoute.self) { ReportDetailView(route: $0) }
+            .navigationDestination(for: ProjectRoute.self) { ProjectDetailView(uuid: $0.uuid) }
+            .navigationDestination(for: BoardRoute.self) { BoardView(uuid: $0.uuid, name: $0.name) }
+            .navigationDestination(for: SprintRoute.self) { SprintDetailView(uuid: $0.uuid, name: $0.name) }
+            .navigationDestination(for: TaskRoute.self) { TaskDetailView(uuid: $0.uuid) }
+            .navigationDestination(for: TimesheetRoute.self) { TimesheetDetailView(uuid: $0.uuid) }
             .navigationDestination(for: FieldServiceArea.self) { area in
                 switch area {
                 case .requests: ServiceRequestsListView()
@@ -452,6 +457,10 @@ extension View {
                 case .customerAssets: CustomerAssetsListView()
                 case .reports: ReportsListView()
                 case .simpro: SimproSyncStatusView()
+                case .projects: ProjectsListView()
+                case .timesheets: TimesheetsView()
+                case .myTasks: MyTasksView()
+                case .reviewQueue: ReviewQueueView()
                 }
             }
     }

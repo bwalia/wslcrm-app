@@ -141,6 +141,8 @@ xcodebuild … -only-testing:WSLCRMTests test
 | `LargeTextUITests` | the same screens at an accessibility text size, with screenshots |
 | `FieldServiceLocalFlowUITests` | the full request → invoice happy path against a real local OPSAPI, including a checklist tick made **offline** that syncs on reconnect (skipped unless run by `scripts/run-local-fs-uitest.sh`) |
 | `LocalPhotoUploadTests` | photo upload, listing and delete against the real local API (multipart, presigned URL) |
+| `WorkManagementTests` | the kanban envelope and its `permissions` block, the agent contract's round trip (including keys this build never reads), claim leases and staleness, run health, budgets, review decisions, idempotency markers, conflict detection, actor resolution, and the rule that an agent approves nothing |
+| `WorkManagementUITests` | against the stub: logging and submitting time with no grant, a manager approving somebody else's, the board as a column pager with move-by-sheet, reviewing an agent's result and sending it back with a reason, taking over a stalled agent, and a card being refused agent-ready status without a definition of done |
 | `DBSLimitedTourUITests` | a screenshot **and video** tour as DBS Limited's engineer, service manager and service desk against a seeded API, plus the DBS Ltd Simpro screens (asset register, PDF share, reports, sync status), an engineer recording a survey, the modules and permissions behind the More tab, and a checklist tick made with no signal. Skipped unless run by `scripts/run-dbs-screenshots.sh` or `scripts/record-dbs-video.sh` |
 | `SimproDemoTests` | who sees assets, reports and Simpro sync per role (real grants from opsapi #612), asset and report decoding, report cell formatting, the report PDF (letterhead, legal footer, pagination), and white-label brand resolution |
 
@@ -373,6 +375,49 @@ It logs in, performs **read-only** requests, anonymises names/emails/phones/addr
 `scripts/.capture/otp`. Review the files before committing.
 
 ---
+
+## Work management: projects, tasks, timesheets — and agents
+
+One board carries work done by people and work done by agents, under the same rules. The modules
+are `Features/Projects` (kanban projects, boards, tasks, sprints, time tracking) and
+`Features/Timesheets`, reached from the More tab.
+
+- **Timesheets** — your own time needs no module grant (those routes are namespace-gated only), so
+  everyone gets "My time"; the approval queue appears only for someone holding
+  `timesheet_approvals`. Statuses follow the server: draft → submitted → approved or sent back,
+  and a rejection carries its reason.
+- **Projects and boards** — you see only projects you are a member of. A board is shown as a
+  **column pager** rather than a scrolling wall: one column at a time, named with its count, and
+  cards move through a "Move to…" sheet, which is faster one-handed and works with VoiceOver.
+- **My tasks** and **Waiting for me** are the two home screens. The second is the review queue —
+  everything an agent has finished that needs a person's decision.
+
+### The agent side
+
+A card an agent may pick up carries a contract under `metadata.agent`: goal, acceptance criteria,
+definition of done, budget, review requirement, claim, run state and result. The app reads and
+writes it losslessly — an agent may add keys this build has never heard of and they survive the
+round trip. `docs/AGENTS.md` is the contract as an agent builder needs it, and
+`scripts/agent-example.py` runs the whole loop against a real server in about a hundred lines.
+
+Four things the app does because the API cannot yet:
+
+| | |
+|---|---|
+| **Claims are leases** | with an expiry and a heartbeat. A lease that runs out is offered to whoever is looking at the card, so an agent that dies mid-run cannot hold work for ever. |
+| **Conflicts surface** | `updated_at` is compared either side of a write; if the row moved, the app says so and reloads rather than overwriting somebody's edit. |
+| **Writes are idempotent by convention** | comments carry an `<!-- idem:… -->` marker so a retry can recognise its own write. |
+| **Nothing is queued that shouldn't be** | these modules do not use the offline queue yet: a write needs a connection and says so. When queueing is added it covers a checklist tick or a comment only — never a task move, a claim or a timer, because positions, leases and clocks are contended and replaying them later invents history. |
+
+And two rules that do not bend: an agent approves nothing — not its own work, not another agent's,
+not a timesheet — and every actor is named and marked as person or agent wherever it appears, by
+glyph as well as colour. An agent is identified by the credential it holds (`api-key:<name>`),
+because revoking that key is how a person stops it.
+
+**Known gap:** an `opsk_…` API key authenticates as a principal whose uuid matches no `users` row,
+while every kanban task route checks project membership by user uuid — so a key is refused today
+and an agent must run as a bot user account. That, and the six other server changes this design
+wants, are listed at the end of `PROMPT-work-management.md`.
 
 ## Architecture
 
