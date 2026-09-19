@@ -17,6 +17,11 @@ enum Module: String, Sendable {
     case orders
     case invoices
     case payments
+    /// Kanban projects, boards and tasks. Note an API key also needs the `kanban` scope to be
+    /// admitted by URI, which is a different name for the same module.
+    case projects
+    case timesheets
+    case timesheetApprovals = "timesheet_approvals"
 
     var displayName: String {
         switch self {
@@ -35,12 +40,18 @@ enum Module: String, Sendable {
         case .orders: "orders"
         case .invoices: "invoices"
         case .payments: "payments"
+        case .projects: "projects"
+        case .timesheets: "timesheets"
+        case .timesheetApprovals: "timesheet approvals"
         }
     }
 }
 
 enum Action: String, Sendable {
     case create, read, update, delete, manage
+    /// Timesheet decisions are their own actions server-side (`timesheet_approvals.approve` /
+    /// `.reject`); a `manage` grant covers both.
+    case approve, reject
 }
 
 /// The caller's permissions in the selected workspace, from `GET /api/v2/user/menu`.
@@ -87,6 +98,7 @@ struct PermissionSet: Sendable, Equatable {
 
     enum Feature: Sendable, CaseIterable {
         case jobs, visits, serviceRequests, crm, customers, products, orders, invoices
+        case projects, timesheets
 
         var menuKeys: Set<String> {
             switch self {
@@ -98,6 +110,9 @@ struct PermissionSet: Sendable, Equatable {
             case .products: ["products"]
             case .orders: ["orders"]
             case .invoices: ["invoices"]
+            case .projects: ["projects", "kanban"]
+            // Logging your own time needs no grant, so the menu key alone opens this one.
+            case .timesheets: ["timesheets"]
             }
         }
 
@@ -111,6 +126,8 @@ struct PermissionSet: Sendable, Equatable {
             case .products: [.products]
             case .orders: [.orders]
             case .invoices: [.invoices]
+            case .projects: [.projects]
+            case .timesheets: [.timesheets]
             }
         }
     }
@@ -232,5 +249,32 @@ struct FieldServicePolicy: Sendable {
     var canUpdateServiceRequests: Bool { permissions.can(.update, .fsServiceRequests) }
     var canConvertServiceRequests: Bool {
         permissions.can(.update, .fsServiceRequests) && permissions.can(.create, .fsJobs)
+    }
+
+    // MARK: Work management
+
+    /// Anyone signed in may log and read their own time: those routes are namespace-gated only.
+    var canLogOwnTime: Bool { true }
+
+    /// Seeing other people's time is an approver's right, not an ordinary one.
+    var canSeeOthersTimesheets: Bool {
+        permissions.can(.read, .timesheetApprovals) || permissions.can(.manage, .timesheets)
+    }
+
+    var canApproveTimesheets: Bool { permissions.can(.approve, .timesheetApprovals) }
+    var canRejectTimesheets: Bool { permissions.can(.reject, .timesheetApprovals) }
+
+    /// An agent never approves anything — not its own work, not anyone else's. The app refuses
+    /// even if a future server change would allow it.
+    func canDecideTimesheets(as actor: WorkActor) -> Bool {
+        actor.kind != .agent && (canApproveTimesheets || canRejectTimesheets)
+    }
+
+    var showsProjects: Bool { permissions.can(.read, .projects) }
+    var canCreateProjects: Bool { permissions.can(.create, .projects) }
+
+    /// Reviewing an agent's result is a person's job, and needs write access to the card.
+    func canReviewAgentWork(as actor: WorkActor, permissions object: ObjectPermissions?) -> Bool {
+        actor.kind != .agent && (object?.canEdit ?? permissions.can(.update, .projects))
     }
 }

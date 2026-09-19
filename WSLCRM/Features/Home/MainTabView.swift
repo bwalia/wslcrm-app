@@ -180,5 +180,25 @@ struct MoreView: View {
             }
             .accessibilityIdentifier("more.reports")
         }
+        // Work management. Projects are membership- and grant-gated; logging your own time is
+        // not, so timesheets are offered to everyone signed in.
+        if permissions.shows(.projects) || permissions.can(.read, .projects) {
+            NavigationLink(value: FieldServiceArea.projects) {
+                Label("Projects", systemImage: "square.stack.3d.up")
+            }
+            .accessibilityIdentifier("more.projects")
+            NavigationLink(value: FieldServiceArea.myTasks) {
+                Label("My tasks", systemImage: "checklist")
+            }
+            .accessibilityIdentifier("more.myTasks")
+            NavigationLink(value: FieldServiceArea.reviewQueue) {
+                Label("Waiting for me", systemImage: "person.crop.circle.badge.questionmark")
+            }
+            .accessibilityIdentifier("more.reviewQueue")
+        }
+        NavigationLink(value: FieldServiceArea.timesheets) {
+            Label("Timesheets", systemImage: "clock.badge.checkmark")
+        }
+        .accessibilityIdentifier("more.timesheets")
     }
 }

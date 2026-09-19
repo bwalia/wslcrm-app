@@ -62,6 +62,16 @@ enum Envelope {
         enum CodingKeys: String, CodingKey { case data, total, page, perPage, totalPages }
     }
 
+    /// Kanban (`/api/v2/kanban/...`): `Standard` plus a top-level `permissions` block saying what
+    /// the caller may do — actions are rendered from that rather than guessed from the role.
+    /// Note this module pages with camelCase `perPage`, in both the query and the meta.
+    struct Kanban<T: Decodable & Sendable>: Decodable, Sendable {
+        let success: Bool?
+        let data: T
+        let meta: Standard<T>.Meta?
+        let permissions: ObjectPermissions?
+    }
+
     /// Customers and products: `{ "data": [...], "total": N }` (no `success`, no page metadata).
     struct DataTotal<T: Decodable & Sendable>: Decodable, Sendable {
         let data: [T]

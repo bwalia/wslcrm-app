@@ -127,6 +127,7 @@ struct FieldServiceHubView: View {
 enum FieldServiceArea: Hashable {
     case requests, jobs, assets, sites, invoices
     case customerAssets, reports, simpro
+    case projects, timesheets, myTasks, reviewQueue
 }
 
 struct AssetRoute: Hashable { let product: Product }
