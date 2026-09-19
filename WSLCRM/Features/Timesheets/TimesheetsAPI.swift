@@ -13,12 +13,12 @@ struct TimesheetsAPI: Sendable {
         var query = [URLQueryItem(name: "page", value: String(page)),
                      URLQueryItem(name: "per_page", value: String(perPage))]
         if let status { query.append(URLQueryItem(name: "status", value: status.rawValue)) }
-        let envelope: Envelope.Standard<LossyArray<Timesheet>> =
+        let envelope: Envelope.Nested<LossyArray<Timesheet>> =
             try await client.send(.get(Self.base, query: query))
-        return Page(items: envelope.data.elements,
-                    page: envelope.meta?.page ?? page,
-                    perPage: envelope.meta?.perPage ?? perPage,
-                    total: envelope.meta?.total ?? envelope.data.elements.count)
+        return Page(items: envelope.data.data.elements,
+                    page: envelope.data.meta?.page ?? page,
+                    perPage: envelope.data.meta?.perPage ?? perPage,
+                    total: envelope.data.meta?.total ?? envelope.data.data.elements.count)
     }
 
     func timesheet(_ uuid: String) async throws -> Timesheet {
@@ -30,9 +30,9 @@ struct TimesheetsAPI: Sendable {
         var query = QueryBuilder()
         query.add("date_from", from)
         query.add("date_to", to)
-        let envelope: Envelope.Standard<TimesheetSummary> =
+        let envelope: Envelope.Standard<TimesheetSummaryPayload> =
             try await client.send(.get("\(Self.base)/summary", query: query.items))
-        return envelope.data
+        return envelope.data.summary
     }
 
     @discardableResult
@@ -58,12 +58,12 @@ struct TimesheetsAPI: Sendable {
     func approvalQueue(page: Int, perPage: Int = 25) async throws -> Page<Timesheet> {
         let query = [URLQueryItem(name: "page", value: String(page)),
                      URLQueryItem(name: "per_page", value: String(perPage))]
-        let envelope: Envelope.Standard<LossyArray<Timesheet>> =
+        let envelope: Envelope.Nested<LossyArray<Timesheet>> =
             try await client.send(.get("\(Self.base)/approval-queue", query: query))
-        return Page(items: envelope.data.elements,
-                    page: envelope.meta?.page ?? page,
-                    perPage: envelope.meta?.perPage ?? perPage,
-                    total: envelope.meta?.total ?? envelope.data.elements.count)
+        return Page(items: envelope.data.data.elements,
+                    page: envelope.data.meta?.page ?? page,
+                    perPage: envelope.data.meta?.perPage ?? perPage,
+                    total: envelope.data.meta?.total ?? envelope.data.data.elements.count)
     }
 
     func approve(_ uuid: String, comments: String?) async throws {

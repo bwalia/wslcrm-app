@@ -522,17 +522,22 @@ final class UITestStubServer: @unchecked Sendable {
 
         // MARK: Work management — timesheets
 
+        // The list endpoints wrap the page one level further in than the rest of the module —
+        // { success, data: { data: [...], meta } } — which is what the real server sends.
         case ("GET", "/api/v2/timesheets"):
             let mine = timesheets.values.filter { $0["user_uuid"] as? String == Self.userUuid }
-            return (200, ["success": true, "data": mine, "meta": meta(mine.count)])
+            return (200, ["success": true, "data": ["data": mine, "meta": meta(mine.count)]])
 
         case ("GET", "/api/v2/timesheets/approval-queue"):
             let waiting = timesheets.values.filter { $0["status"] as? String == "submitted" }
-            return (200, ["success": true, "data": waiting, "meta": meta(waiting.count)])
+            return (200, ["success": true, "data": ["data": waiting, "meta": meta(waiting.count)]])
 
         case ("GET", "/api/v2/timesheets/summary"):
-            return (200, ["success": true, "data": ["total_hours": 7.5, "billable_hours": 6,
-                                                    "pending_count": 1, "approved_count": 2]])
+            return (200, ["success": true, "data": ["summary": [
+                "total_hours": 7.5, "billable_hours": 6, "draft_count": 1,
+                "submitted_count": 1, "approved_count": 2, "rejected_count": 0,
+                "total_timesheets": 4,
+            ], "by_project": [], "by_category": []]])
 
         case ("GET", "/api/v2/timesheets/lookups/customers"):
             return (200, ["success": true, "data": [["uuid": "cust-1", "first_name": Self.customerName]]])
@@ -544,9 +549,13 @@ final class UITestStubServer: @unchecked Sendable {
 
         case ("POST", "/api/v2/timesheets"):
             let uuid = "ts-\(timesheets.count + 1)"
+            // Hours come from the clock pair, as the server derives them — a sheet posted without
+            // start and end times records zero, which is worth reproducing rather than papering over.
+            let worked = Self.hours(from: json["start_time"] as? String, to: json["end_time"] as? String)
             timesheets[uuid] = ["uuid": uuid, "user_uuid": Self.userUuid, "status": "draft",
-                                "work_date": "2026-09-19", "total_hours": json["hours"] as? Double ?? 1,
-                                "billable_hours": json["hours"] as? Double ?? 1,
+                                "work_date": "2026-09-19",
+                                "total_hours": worked,
+                                "billable_hours": (json["is_billable"] as? Bool ?? true) ? worked : 0,
                                 "is_billable": json["is_billable"] as? Bool ?? true,
                                 "client_name": json["client_name"] as? String ?? "",
                                 "task": json["task"] as? String ?? "",
@@ -729,8 +738,20 @@ final class UITestStubServer: @unchecked Sendable {
                              "work_date": "2026-09-18", "total_hours": 8, "billable_hours": 7.5,
                              "is_billable": true, "client_name": "Brightwell Data Centres Ltd",
                              "task": "CRAC 3 high head pressure",
-                             "user": ["uuid": "other-engineer", "first_name": "Kwame", "last_name": "Mensah"]],
+                             "user_name": "kwame.mensah", "user_email": "kwame.mensah.dbs@e2e.invalid"],
         ]
+    }
+
+    /// The server's own arithmetic: minutes between two "HH:MM" clocks, wrapping past midnight.
+    static func hours(from start: String?, to end: String?) -> Double {
+        func minutes(_ clock: String?) -> Int? {
+            let parts = (clock ?? "").split(separator: ":").compactMap { Int($0) }
+            guard parts.count >= 2 else { return nil }
+            return parts[0] * 60 + parts[1]
+        }
+        guard let from = minutes(start), let to = minutes(end) else { return 0 }
+        let span = to >= from ? to - from : to - from + 24 * 60
+        return Double(span) / 60
     }
 
     static func taskUuid(in path: String) -> String {

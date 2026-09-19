@@ -72,6 +72,19 @@ enum Envelope {
         let permissions: ObjectPermissions?
     }
 
+    /// Timesheet lists: the page sits one level further in —
+    /// `{ "success": true, "data": { "data": [...], "meta": { total, page, per_page, total_pages } } }`.
+    /// Single reads and writes in the same module are `{ success, data }`, so only the lists use this.
+    struct Nested<T: Decodable & Sendable>: Decodable, Sendable {
+        let success: Bool?
+        let data: Inner
+
+        struct Inner: Decodable, Sendable {
+            let data: T
+            let meta: Standard<T>.Meta?
+        }
+    }
+
     /// Customers and products: `{ "data": [...], "total": N }` (no `success`, no page metadata).
     struct DataTotal<T: Decodable & Sendable>: Decodable, Sendable {
         let data: [T]

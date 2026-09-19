@@ -401,7 +401,8 @@ struct LogTimeSheet: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
     @State private var workDate = Date()
-    @State private var hours = 1.0
+    @State private var startTime = Calendar.current.date(bySettingHour: 8, minute: 0, second: 0, of: Date()) ?? Date()
+    @State private var endTime = Calendar.current.date(bySettingHour: 16, minute: 30, second: 0, of: Date()) ?? Date()
     @State private var isBillable = true
     @State private var notes = ""
     @State private var customer: TimesheetCustomerOption?
@@ -414,15 +415,21 @@ struct LogTimeSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("When") {
+                Section {
                     DatePicker("Work date", selection: $workDate, displayedComponents: .date)
                         .accessibilityIdentifier("timesheet.workDate")
-                    Stepper(value: $hours, in: 0.25...24, step: 0.25) {
-                        LabeledContent("Hours", value: Formatters.hours(Decimal(hours)) ?? "1")
-                    }
-                    .accessibilityIdentifier("timesheet.hours")
+                    DatePicker("Start", selection: $startTime, displayedComponents: .hourAndMinute)
+                        .accessibilityIdentifier("timesheet.startTime")
+                    DatePicker("End", selection: $endTime, displayedComponents: .hourAndMinute)
+                        .accessibilityIdentifier("timesheet.endTime")
+                    LabeledContent("Hours", value: Formatters.hours(Decimal(hours)) ?? "0")
+                        .accessibilityIdentifier("timesheet.hours")
                     Toggle("Billable", isOn: $isBillable)
                         .accessibilityIdentifier("timesheet.billable")
+                } header: {
+                    Text("When")
+                } footer: {
+                    Text("The hours come from the times you worked, which is what the server records. A shift ending before it starts is treated as crossing midnight.")
                 }
 
                 Section("What") {
@@ -466,10 +473,30 @@ struct LogTimeSheet: View {
         }
     }
 
+    /// The same arithmetic the server does, so the sheet shows what will be recorded — including
+    /// a shift that runs past midnight.
+    private var hours: Double {
+        let calendar = Calendar.current
+        let start = calendar.component(.hour, from: startTime) * 60 + calendar.component(.minute, from: startTime)
+        let end = calendar.component(.hour, from: endTime) * 60 + calendar.component(.minute, from: endTime)
+        let minutes = end >= start ? end - start : end - start + 24 * 60
+        return Double(minutes) / 60
+    }
+
+    private static let clock: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_GB")
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
     private func save() async {
         busy = true
         defer { busy = false }
-        let body = CreateTimesheetBody(workDate: workDate, hours: hours,
+        // Hours are not a field the create route accepts: it derives them from the clock pair.
+        let body = CreateTimesheetBody(workDate: workDate,
+                                       startTime: Self.clock.string(from: startTime),
+                                       endTime: Self.clock.string(from: endTime),
                                        customerUuid: customer?.uuid, clientName: customer?.name,
                                        taskUuid: task?.taskUuid, task: task?.title,
                                        isBillable: isBillable,

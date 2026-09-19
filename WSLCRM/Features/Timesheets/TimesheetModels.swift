@@ -58,6 +58,10 @@ struct Timesheet: Decodable, Sendable, Identifiable, Hashable {
     var uuid: String
     var userUuid: String?
     var user: UserStub?
+    /// The API returns the author flat on the row (`user_name`, `user_email`) rather than as a
+    /// nested user object, so both are read and whichever arrives is used.
+    var userName: String?
+    var userEmail: String?
     var status: TimesheetStatus = .draft
     var periodStart: Date?
     var periodEnd: Date?
@@ -84,7 +88,17 @@ struct Timesheet: Decodable, Sendable, Identifiable, Hashable {
     var createdAt: Date?
 
     var id: String { uuid }
-    var actor: WorkActor { WorkActor(user: user, uuid: userUuid) }
+
+    var actor: WorkActor {
+        if let user { return WorkActor(user: user, uuid: userUuid) }
+        guard let userName, !userName.isEmpty else { return WorkActor(user: nil, uuid: userUuid) }
+        if userName.hasPrefix(WorkActor.apiKeyUsernamePrefix) {
+            let key = String(userName.dropFirst(WorkActor.apiKeyUsernamePrefix.count))
+            return WorkActor(uuid: userUuid ?? "", name: key, kind: .agent, keyName: key)
+        }
+        return WorkActor(uuid: userUuid ?? "", name: userName, kind: .person)
+    }
+
     /// Time an agent logged for itself is counted the same way, and marked.
     var isMachineTime: Bool { actor.kind == .agent }
 
@@ -99,7 +113,8 @@ struct Timesheet: Decodable, Sendable, Identifiable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case uuid, userUuid, user, status, periodStart, periodEnd, workDate, startTime, endTime
+        case uuid, userUuid, user, userName, userEmail, status
+        case periodStart, periodEnd, workDate, startTime, endTime
         case totalHours, billableHours, hourlyRate, isBillable, clientName, customerUuid
         case task, taskUuid, projectName, projectUuid, notes
         case submittedAt, approvedAt, rejectedAt, rejectionReason, approvalComments, entries, createdAt
@@ -110,6 +125,8 @@ struct Timesheet: Decodable, Sendable, Identifiable, Hashable {
         uuid = try c.decode(String.self, forKey: .uuid)
         userUuid = try? c.decodeIfPresent(String.self, forKey: .userUuid)
         user = try? c.decodeIfPresent(UserStub.self, forKey: .user)
+        userName = try? c.decodeIfPresent(String.self, forKey: .userName)
+        userEmail = try? c.decodeIfPresent(String.self, forKey: .userEmail)
         status = (try? c.decodeIfPresent(TimesheetStatus.self, forKey: .status)) ?? .draft
         periodStart = try? c.decodeIfPresent(Date.self, forKey: .periodStart)
         periodEnd = try? c.decodeIfPresent(Date.self, forKey: .periodEnd)
@@ -164,20 +181,36 @@ struct TimesheetEntry: Decodable, Sendable, Identifiable, Hashable {
     }
 }
 
+/// `GET /api/v2/timesheets/summary` wraps the totals a level in, beside per-project and
+/// per-category breakdowns: `{ data: { summary: {...}, by_project: [], by_category: [] } }`.
+struct TimesheetSummaryPayload: Decodable, Sendable, Hashable {
+    var summary: TimesheetSummary = TimesheetSummary()
+}
+
 struct TimesheetSummary: Decodable, Sendable, Hashable {
     var totalHours: Double = 0
     var billableHours: Double = 0
+    var draftCount: Int = 0
+    /// Submitted and waiting on somebody.
     var pendingCount: Int = 0
     var approvedCount: Int = 0
+    var rejectedCount: Int = 0
+    var totalTimesheets: Int = 0
 
-    enum CodingKeys: String, CodingKey { case totalHours, billableHours, pendingCount, approvedCount }
+    enum CodingKeys: String, CodingKey {
+        case totalHours, billableHours, draftCount, submittedCount, approvedCount
+        case rejectedCount, totalTimesheets
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         totalHours = c.decodeFlexibleDouble(forKey: .totalHours) ?? 0
         billableHours = c.decodeFlexibleDouble(forKey: .billableHours) ?? 0
-        pendingCount = c.decodeFlexibleInt(forKey: .pendingCount) ?? 0
+        draftCount = c.decodeFlexibleInt(forKey: .draftCount) ?? 0
+        pendingCount = c.decodeFlexibleInt(forKey: .submittedCount) ?? 0
         approvedCount = c.decodeFlexibleInt(forKey: .approvedCount) ?? 0
+        rejectedCount = c.decodeFlexibleInt(forKey: .rejectedCount) ?? 0
+        totalTimesheets = c.decodeFlexibleInt(forKey: .totalTimesheets) ?? 0
     }
 
     init() {}
@@ -212,11 +245,13 @@ struct TimesheetTaskOption: Decodable, Sendable, Identifiable, Hashable {
 
 // MARK: - Request bodies
 
+/// The server computes the hours from `start_time`/`end_time` when both are sent, and otherwise
+/// takes `total_hours`. It ignores a field called `hours`, which is easy to send and get zero for.
 struct CreateTimesheetBody: Encodable, Sendable {
     var workDate: Date?
     var startTime: String?
     var endTime: String?
-    var hours: Double?
+    var totalHours: Double?
     var customerUuid: String?
     var clientName: String?
     var taskUuid: String?
