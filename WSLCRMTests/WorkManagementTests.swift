@@ -52,6 +52,57 @@ final class WorkManagementTests: XCTestCase {
         XCTAssertEqual(stringly.totalHours, 7.5, "the same route returns both shapes")
     }
 
+    /// Captured from int on 19 September 2026. The list endpoints in this module wrap the page one
+    /// level further in than the single reads beside them, which is not a thing you find by
+    /// reading the routes — the first client I wrote decoded an empty list for ever.
+    func testTimesheetListsAreWrappedOneLevelFurtherInThanEverythingElse() throws {
+        let json = """
+        {"success": true,
+         "data": {"data": [{"uuid": "ts-1", "status": "draft", "work_date": "2026-09-19",
+                            "total_hours": 1.5, "billable_hours": 1.5, "is_billable": true,
+                            "user_name": "claire.donnelly",
+                            "user_email": "claire.donnelly.dbs@e2e.invalid"}],
+                  "meta": {"total_pages": 1, "total": 1, "page": 1, "per_page": 25}}}
+        """
+        let envelope = try JSONDecoder.opsAPI()
+            .decode(Envelope.Nested<[Timesheet]>.self, from: Data(json.utf8))
+        XCTAssertEqual(envelope.data.data.count, 1)
+        XCTAssertEqual(envelope.data.meta?.total, 1)
+        XCTAssertEqual(envelope.data.data.first?.totalHours, 1.5)
+    }
+
+    func testTheAuthorArrivesFlatOnATimesheetRatherThanAsANestedUser() throws {
+        let json = """
+        {"uuid": "ts-1", "status": "submitted", "user_uuid": "u-1",
+         "user_name": "kwame.mensah", "user_email": "kwame.mensah.dbs@e2e.invalid"}
+        """
+        let sheet = try JSONDecoder.opsAPI().decode(Timesheet.self, from: Data(json.utf8))
+        XCTAssertEqual(sheet.actor.name, "kwame.mensah")
+        XCTAssertEqual(sheet.actor.kind, .person)
+
+        let machine = try JSONDecoder.opsAPI().decode(Timesheet.self, from: Data("""
+        {"uuid": "ts-2", "status": "draft", "user_uuid": "ak-1", "user_name": "api-key:fgas-report-bot"}
+        """.utf8))
+        XCTAssertEqual(machine.actor.kind, .agent, "machine time is marked wherever it is shown")
+        XCTAssertTrue(machine.isMachineTime)
+    }
+
+    func testTheSummarySitsUnderItsOwnKeyWithTheServersNames() throws {
+        let json = """
+        {"success": true,
+         "data": {"summary": {"rejected_count": 0, "total_hours": 7.5, "billable_hours": 6,
+                              "total_timesheets": 4, "draft_count": 1, "submitted_count": 2,
+                              "approved_count": 1},
+                  "by_project": [], "by_category": []}}
+        """
+        let envelope = try JSONDecoder.opsAPI()
+            .decode(Envelope.Standard<TimesheetSummaryPayload>.self, from: Data(json.utf8))
+        let summary = envelope.data.summary
+        XCTAssertEqual(summary.totalHours, 7.5)
+        XCTAssertEqual(summary.pendingCount, 2, "\"pending\" is the server's submitted_count")
+        XCTAssertEqual(summary.approvedCount, 1)
+    }
+
     // MARK: The contract
 
     func testContractRoundTripsKeysThisBuildKnowsNothingAbout() throws {
