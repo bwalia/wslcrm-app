@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DBS Ltd white-label. Navy and teal are sampled from AppIcon-DBS / BrandMark-DBS. -->
+<resources>
+    <color name="brand_primary">#FF0A2644</color>
+    <color name="brand_on_primary">#FFFFFFFF</color>
+    <color name="brand_secondary">#FF12A89D</color>
+    <color name="brand_launch_background">#FFFFFFFF</color>
+</resources>
