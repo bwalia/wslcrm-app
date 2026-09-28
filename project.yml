@@ -62,6 +62,9 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        # HTTPS only, no custom cryptography: answers App Store Connect's export question so
+        # TestFlight builds are not held waiting for it.
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_NSFaceIDUsageDescription: "Use Face ID to unlock your saved $(BRAND_NAME) session."
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Your location is recorded only when you check in to or out of a site visit, as proof of attendance."
         INFOPLIST_KEY_NSCameraUsageDescription: "Take fault and site photos for the job's quote sheet."

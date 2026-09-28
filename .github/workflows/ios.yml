@@ -1,0 +1,84 @@
+name: iOS
+
+# Build and unit-test the app on every change to it. Runs on GitHub's macOS runners, never
+# the self-hosted Mac Studio: this repo is public, and a pull request from anyone must not
+# run code on that machine. Release and TestFlight live in ios_release.yml.
+
+on:
+  push:
+    paths:
+      - "WSLCRM/**"
+      - "WSLCRMTests/**"
+      - "WSLCRM.xcodeproj/**"
+      - "Config/**"
+      - "project.yml"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "WSLCRM/**"
+      - "WSLCRMTests/**"
+      - "WSLCRM.xcodeproj/**"
+      - "Config/**"
+      - "project.yml"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: wslcrm-ios-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # Swift 6 strict concurrency needs a current Xcode, not whatever the image defaults to.
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
+
+      # Build what project.yml describes, as the release lane does.
+      - name: Generate the project
+        run: xcodegen generate
+
+      - name: Pick a Simulator
+        id: sim
+        run: |
+          id="$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          phones = [d for runtime, ds in devices.items() if "iOS" in runtime for d in ds if d["name"].startswith("iPhone")]
+          print(phones[-1]["udid"] if phones else "")')"
+          [ -n "$id" ] || { echo "::error::No iPhone Simulator available"; exit 1; }
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+      - name: Unit tests
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project WSLCRM.xcodeproj \
+            -scheme WSLCRM-Int \
+            -destination "id=${{ steps.sim.outputs.id }}" \
+            -only-testing:WSLCRMTests \
+            CODE_SIGNING_ALLOWED=NO \
+            | tail -n 60
+
+      # The release build, unsigned: catches a Release-only failure before main does.
+      - name: Build the tester configuration (Release-DBS-Int)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project WSLCRM.xcodeproj \
+            -scheme WSLCRM-DBS-Int \
+            -configuration Release-DBS-Int \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            -quiet

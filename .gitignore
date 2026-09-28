@@ -27,3 +27,11 @@ scripts/.capture/
 
 # Python bytecode (scripts/seed-dbs-portfolio.py imports seed-dbs-limited.py)
 __pycache__/
+
+# fastlane / Bundler (the release pipeline)
+vendor/bundle/
+.bundle/
+fastlane/report.xml
+fastlane/README.md
+fastlane/test_output/
+.ios-secrets/
