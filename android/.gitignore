@@ -14,3 +14,8 @@ captures/
 # Outputs
 *.apk
 *.aab
+
+# Release signing (written by CI, never committed)
+key.properties
+*.jks
+*.keystore

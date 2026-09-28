@@ -1,0 +1,218 @@
+name: Android Release (Google Play)
+
+# Build, sign and upload the Kotlin app to Google Play for testers. Same shape as the Fishers
+# Android release and as ios_release.yml here, so whoever ships one can ship the other.
+#
+#   AUTO (merge to main) : push to main touching android/** → internal track
+#   MANUAL               : workflow_dispatch — internal by default
+#   TAG                  : push a v*.*.* tag → internal, version name from the tag
+#   PRODUCTION           : workflow_dispatch with track = production (after QA)
+#
+# Testers get the dbsInt flavour (package uk.co.workstation.wslcrm.dbs: DBS Ltd branding on the
+# int server), matching the iOS TestFlight build. Skip an automatic release with
+# [skip release] or [skip android].
+#
+# Secrets — see docs/ANDROID_RELEASE.md:
+#   ANDROID_KEYSTORE_B64        base64 of the upload keystore (.jks)
+#   ANDROID_KEYSTORE_PASSWORD   its store password
+#   ANDROID_KEY_ALIAS           the key alias inside it
+#   ANDROID_KEY_PASSWORD        that key's password
+#   PLAY_SERVICE_ACCOUNT_JSON   Play Console service account, JSON body
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+      - ".github/workflows/android_release.yml"
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      track:
+        description: "Play track to upload to"
+        required: true
+        type: choice
+        default: internal
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
+      flavour:
+        description: "Which build"
+        required: true
+        type: choice
+        default: dbsInt
+        options:
+          - dbsInt
+          - int
+      status:
+        description: "Release status on that track"
+        required: false
+        type: choice
+        default: completed
+        options:
+          - completed
+          - draft
+          - inProgress
+      version:
+        description: "Version name override (blank = 1.0.0 or the tag)"
+        required: false
+        default: ""
+
+concurrency:
+  group: wslcrm-android-release
+  # versionCode is the run number, so an older run losing to a newer one is correct.
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Is there a keystore to sign with? A job of its own because the `secrets` context isn't
+  # available in a job-level `if:`. It says nothing secret: just yes or no.
+  gate:
+    name: Check signing is configured
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "${KEYSTORE_B64:-}" ]; then
+            echo "configured=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=no" >> "$GITHUB_OUTPUT"
+            echo "No ANDROID_KEYSTORE_B64: automatic releases stay paused. See docs/ANDROID_RELEASE.md."
+          fi
+
+  release:
+    name: Build & upload (${{ github.event_name == 'workflow_dispatch' && inputs.track || 'internal' }})
+    needs: [gate]
+    # Merges stay quiet until the keystore exists: Play needs one manual upload before any of
+    # this can work, and a job that goes red on every merge until then gets ignored. A manual
+    # run always runs, and fails loudly if it can't release.
+    if: >-
+      (
+        github.event_name != 'push'
+        || github.ref_type == 'tag'
+        || (
+          !contains(github.event.head_commit.message, '[skip release]')
+          && !contains(github.event.head_commit.message, '[skip android]')
+        )
+      )
+      && (github.event_name == 'workflow_dispatch' || needs.gate.outputs.configured == 'yes')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FLAVOUR: ${{ github.event_name == 'workflow_dispatch' && inputs.flavour || 'dbsInt' }}
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Everything that can fail without a keystore fails here, before signing.
+      - name: Unit tests
+        run: ./gradlew :app:testIntDebugUnitTest --console=plain
+
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_TYPE:-}" = tag ]; then
+            name="${GITHUB_REF_NAME#v}"
+          elif [ -n "${INPUT_VERSION:-}" ]; then
+            name="$INPUT_VERSION"
+          else
+            name="1.0.0"
+          fi
+          case "$FLAVOUR" in
+            dbsInt) package="uk.co.workstation.wslcrm.dbs" ;;
+            int)    package="uk.co.workstation.wslcrm.integration" ;;
+            *) echo "::error::Unknown flavour $FLAVOUR"; exit 1 ;;
+          esac
+          task="bundle${FLAVOUR^}Release"
+          {
+            echo "name=$name"
+            echo "code=$GITHUB_RUN_NUMBER"
+            echo "package=$package"
+            echo "task=$task"
+            echo "aab=android/app/build/outputs/bundle/${FLAVOUR}Release/app-${FLAVOUR}-release.aab"
+          } >> "$GITHUB_OUTPUT"
+          echo "Releasing $package $name (versionCode $GITHUB_RUN_NUMBER)"
+
+      # The keystore and its passwords, from secrets to the two files Gradle reads. Both are
+      # git-ignored, and neither survives the job.
+      - name: Write signing config
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_B64:-}" ]; then
+            echo "::error::ANDROID_KEYSTORE_B64 is not set. Without it the bundle is unsigned and Play refuses it."
+            echo "::error::See docs/ANDROID_RELEASE.md to create and upload the keystore."
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 --decode > upload-keystore.jks
+          {
+            echo "storeFile=upload-keystore.jks"
+            echo "storePassword=$STORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > key.properties
+
+      - name: Build signed AAB
+        run: |
+          ./gradlew ":app:${{ steps.version.outputs.task }}" --console=plain \
+            -Pwslcrm.versionCode='${{ steps.version.outputs.code }}' \
+            -Pwslcrm.versionName='${{ steps.version.outputs.name }}'
+
+      - name: Write Play service account
+        env:
+          PLAY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PLAY_JSON:-}" ]; then
+            echo "::error::PLAY_SERVICE_ACCOUNT_JSON is not set. See docs/ANDROID_RELEASE.md."
+            exit 1
+          fi
+          printf '%s' "$PLAY_JSON" > "$RUNNER_TEMP/play-service-account.json"
+
+      - name: Upload to Google Play
+        uses: r0adkll/upload-google-play@v1.1.3
+        with:
+          serviceAccountJson: ${{ runner.temp }}/play-service-account.json
+          packageName: ${{ steps.version.outputs.package }}
+          releaseFiles: ${{ steps.version.outputs.aab }}
+          track: ${{ github.event_name == 'workflow_dispatch' && inputs.track || 'internal' }}
+          status: ${{ github.event_name == 'workflow_dispatch' && inputs.status || 'completed' }}
+
+      - name: Shred signing material
+        if: always()
+        run: rm -f upload-keystore.jks key.properties "$RUNNER_TEMP/play-service-account.json"
+
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo "### WSLCRM Android"
+            echo "- package: \`${{ steps.version.outputs.package }}\`"
+            echo "- version: \`${{ steps.version.outputs.name }}\` (code \`${{ steps.version.outputs.code }}\`)"
+            echo "- track: \`${{ github.event_name == 'workflow_dispatch' && inputs.track || 'internal' }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

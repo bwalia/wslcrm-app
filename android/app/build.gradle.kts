@@ -32,6 +32,17 @@ fun setting(property: String, env: String): String? =
         ?: localProperties.getProperty(property)?.takeIf { it.isNotBlank() }
 
 val prodApiBaseUrl: String = setting("wslcrm.prodApiBaseUrl", "WSLCRM_PROD_API_BASE_URL")?.trim().orEmpty()
+
+// Release numbering and signing, supplied by .github/workflows/android_release.yml. Play refuses
+// a versionCode it has seen, so CI passes the run number rather than anyone keeping a counter.
+val releaseVersionCode: Int = setting("wslcrm.versionCode", "WSLCRM_VERSION_CODE")?.toIntOrNull() ?: 1
+val releaseVersionName: String = setting("wslcrm.versionName", "WSLCRM_VERSION_NAME") ?: "1.0.0"
+
+/** The upload keystore, from android/key.properties (CI writes it; never committed). */
+val keyProperties = Properties().apply {
+    val file = rootProject.file("key.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
 val localApiPort: String = setting("wslcrm.localApiPort", "WSLCRM_LOCAL_API_PORT") ?: "4011"
 
 fun quoted(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
@@ -86,8 +97,19 @@ android {
         applicationId = "uk.co.workstation.wslcrm"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = releaseVersionCode
+        versionName = releaseVersionName
+    }
+
+    signingConfigs {
+        if (keyProperties.getProperty("storeFile") != null) {
+            create("upload") {
+                storeFile = rootProject.file(keyProperties.getProperty("storeFile"))
+                storePassword = keyProperties.getProperty("storePassword")
+                keyAlias = keyProperties.getProperty("keyAlias")
+                keyPassword = keyProperties.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -97,6 +119,9 @@ android {
         }
         release {
             buildConfigField("boolean", "NETWORK_LOGGING", "false")
+            // Without key.properties a release build is unsigned, and Play refuses it: the
+            // release workflow fails before building rather than uploading that.
+            signingConfigs.findByName("upload")?.let { signingConfig = it }
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
