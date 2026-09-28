@@ -55,6 +55,25 @@ final class RolePermissionTests: XCTestCase {
         NavigationPolicy(permissions: permissions, isEngineerRole: policy(permissions).isEngineerRole)
     }
 
+    // MARK: Project member
+
+    /// Works projects and nothing in field service: their day is their cards.
+    private func projectMember() throws -> PermissionSet {
+        try permissions(menu(keys: ["namespace", "projects"], permissions: ["projects": ["read", "update"]]))
+    }
+
+    func testSomeoneWhoOnlyWorksProjectsLandsOnTheirTasks() throws {
+        let navigation = navigation(try projectMember())
+        XCTAssertTrue(navigation.showsTasks)
+        XCTAssertFalse(navigation.showsMyWork, "no visits, so no My Work")
+        XCTAssertEqual(navigation.home, .tasks, "not dropped on More with a list of menus")
+    }
+
+    func testFieldServiceRolesWithoutProjectsGetNoTasksTab() throws {
+        XCTAssertFalse(navigation(try engineer()).showsTasks)
+        XCTAssertFalse(navigation(try telecaller()).showsTasks)
+    }
+
     // MARK: Telecaller
 
     func testTelecallerLogsRequestsAndSeesNothingElse() throws {

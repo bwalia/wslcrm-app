@@ -258,10 +258,31 @@ struct KanbanAPI: Sendable {
 
     // MARK: Sprints
 
-    func sprints(projectUuid: String) async throws -> [KanbanSprint] {
+    func sprints(projectUuid: String, status: KanbanSprintStatus? = nil) async throws -> [KanbanSprint] {
+        let query = status.map { [URLQueryItem(name: "status", value: $0.rawValue)] } ?? []
         let envelope: Envelope.Kanban<LossyArray<KanbanSprint>> =
-            try await client.send(.get("\(Self.base)/projects/\(projectUuid)/sprints"))
+            try await client.send(.get("\(Self.base)/projects/\(projectUuid)/sprints", query: query))
         return envelope.data.elements
+    }
+
+    /// The running sprints behind these cards, keyed by the numeric id tasks carry as `sprint_id`.
+    /// `/my-tasks` says which sprint a card is in but not whether that sprint is running, so this
+    /// asks each project once. A project that refuses (not a member any more) just contributes
+    /// nothing: the cards still show, only without a sprint.
+    func activeSprints(for tasks: [KanbanTask]) async -> [Int: KanbanSprint] {
+        let projects = Set(tasks.filter { $0.sprintId != nil }.compactMap(\.projectUuid))
+        return await withTaskGroup(of: [KanbanSprint].self) { group in
+            for project in projects {
+                group.addTask { (try? await sprints(projectUuid: project, status: .active)) ?? [] }
+            }
+            var byId: [Int: KanbanSprint] = [:]
+            for await sprints in group {
+                for sprint in sprints where sprint.status == .active {
+                    if let id = sprint.numericId { byId[id] = sprint }
+                }
+            }
+            return byId
+        }
     }
 
     func backlog(projectUuid: String, page: Int = 1, perPage: Int = 50) async throws -> Page<KanbanTask> {

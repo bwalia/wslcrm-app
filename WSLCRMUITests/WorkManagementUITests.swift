@@ -67,6 +67,16 @@ final class WorkManagementUITests: XCTestCase {
         link.tap()
     }
 
+    /// My tasks has its own tab. "By due date" lists every card, whatever today's date is.
+    private func openTasks(file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(app.tabBars.buttons["Tasks"].firstMatch.waitForExistence(timeout: 20),
+                      "project users get a Tasks tab", file: file, line: line)
+        app.tabBars.buttons["Tasks"].firstMatch.tap()
+        let byDue = app.segmentedControls.buttons["By due date"].firstMatch
+        XCTAssertTrue(byDue.waitForExistence(timeout: 20), file: file, line: line)
+        byDue.tap()
+    }
+
     // MARK: Timesheets
 
     func testEngineerLogsTimeAndSubmitsItWithoutAnyGrant() {
@@ -151,9 +161,45 @@ final class WorkManagementUITests: XCTestCase {
                       "with the reason, so the next attempt can read it")
     }
 
+    // MARK: Today
+
+    func testMyWorkShowsTodaysTasksBesideTheVisits() {
+        launch(role: "engineer")
+        // Late first, then due today, then already started.
+        let late = scrollTo("mywork.task.DBS-14")
+        XCTAssertTrue(late.exists, "the overdue card is on the home screen")
+        XCTAssertTrue(scrollTo("mywork.task.DBS-16").exists, "and the one due today")
+        XCTAssertTrue(scrollTo("mywork.task.DBS-15").exists, "and the one already in progress")
+        attachScreenshot("My Work with today's tasks")
+    }
+
+    func testTheTasksTabNarrowsToTheRunningSprint() {
+        launch(role: "manager")
+        XCTAssertTrue(app.tabBars.buttons["Tasks"].firstMatch.waitForExistence(timeout: 20))
+        app.tabBars.buttons["Tasks"].firstMatch.tap()
+
+        app.segmentedControls.buttons["Today"].firstMatch.tap()
+        XCTAssertTrue(element("mytask.row.DBS-16", timeout: 20).exists, "due today")
+        attachScreenshot("My tasks — Today")
+
+        app.segmentedControls.buttons["Sprint"].firstMatch.tap()
+        XCTAssertTrue(element("mytasks.sprint.Week 38", timeout: 20).exists, "grouped under the running sprint")
+        XCTAssertTrue(element("mytask.row.DBS-15").exists)
+        XCTAssertFalse(app.descendants(matching: .any)["mytask.row.DBS-16"].exists,
+                       "a card outside the sprint stays out of it")
+        attachScreenshot("My tasks — Sprint")
+    }
+
+    private func attachScreenshot(_ name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     func testAStalledAgentCanBeTakenOverByAPerson() {
         launch(role: "manager")
-        openMore("more.myTasks")
+        openTasks()
 
         element("mytask.row.DBS-15", timeout: 20).tap()
         // Its lease ran out and its heartbeat went quiet: the card says so in words, and offers

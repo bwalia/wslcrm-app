@@ -61,6 +61,7 @@
 		6BBD6061A90F33532113E329 /* SyncCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A5DE06BD292F4CE44CC9FD0 /* SyncCenter.swift */; };
 		70D8A5FB3B3400DB3F4A6449 /* auth_login.json in Resources */ = {isa = PBXBuildFile; fileRef = 97B3A14D82B9AAD7E01385C4 /* auth_login.json */; };
 		735180826F6FEE8FC9CEA479 /* WSLCRMApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FFB2994A13CDDED9F44A8AE /* WSLCRMApp.swift */; };
+		75BB3785FC797D9084AE4933 /* TaskAgendaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F24B350E0571DC46AF2AFC8 /* TaskAgendaTests.swift */; };
 		75E3F297611E971448443EDB /* RetryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0297B7F739CA0ECB799E0DE /* RetryPolicy.swift */; };
 		7665AFBF3CC4ED288162A576 /* BiometricGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6430DC80300B085DD17D6677 /* BiometricGate.swift */; };
 		7A42CF1BF2615A02C02B0519 /* AgentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 465090F1C7F6C1367E90674B /* AgentViews.swift */; };
@@ -100,6 +101,7 @@
 		ACDC6B5CFCB7D770DB41094C /* SitesViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6D10A792A90751951AC30B0 /* SitesViews.swift */; };
 		AEAE0DE2E21843B79AB5257F /* VisitSummaryRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDE0974521C9CA816351005C /* VisitSummaryRow.swift */; };
 		B009A06FACC985ECB99675DF /* ReliabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FE30866D9334250F27C2B44 /* ReliabilityTests.swift */; };
+		B00C469B1AE616B4740D6D4A /* TaskAgenda.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53E23AD0A5E508C226B2B7D4 /* TaskAgenda.swift */; };
 		B1D1F4F711E4C86DAEF48CB3 /* VisitDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6046749EB8F36C75D72F9D22 /* VisitDetailView.swift */; };
 		B59154EBAEF62AB40F8B079A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C99DF96FE6AE2F8982ED771E /* PrivacyInfo.xcprivacy */; };
 		B671FCEF207E9228FC026B7B /* SimproModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98EA00C366B2D02AB7CEC8B0 /* SimproModels.swift */; };
@@ -178,6 +180,7 @@
 		097CDC517A0D13A841E88800 /* ServiceRequestsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceRequestsViews.swift; sourceTree = "<group>"; };
 		098A8C03260A50D5DF019BEB /* ItemEvidenceStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemEvidenceStrip.swift; sourceTree = "<group>"; };
 		0B17E373E80B3EA9F6F93907 /* KanbanAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KanbanAPI.swift; sourceTree = "<group>"; };
+		0F24B350E0571DC46AF2AFC8 /* TaskAgendaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskAgendaTests.swift; sourceTree = "<group>"; };
 		0F5885FDCA35FA6BCBA44090 /* JobActionSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobActionSheets.swift; sourceTree = "<group>"; };
 		1590E2AAFFD277246245556A /* PendingMutation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingMutation.swift; sourceTree = "<group>"; };
 		15C75B0AD3C33227C840B315 /* UITestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestSupport.swift; sourceTree = "<group>"; };
@@ -218,6 +221,7 @@
 		483E885911A5AB21B7084AA1 /* Brand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Brand.swift; sourceTree = "<group>"; };
 		4FBD20F440E62B7516AC3D20 /* DBSTourNarration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DBSTourNarration.swift; sourceTree = "<group>"; };
 		505C8D0F09805E31EAA32EB7 /* AuthAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthAPI.swift; sourceTree = "<group>"; };
+		53E23AD0A5E508C226B2B7D4 /* TaskAgenda.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskAgenda.swift; sourceTree = "<group>"; };
 		546F85F21575AE4A8E49E474 /* JobDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobDetailView.swift; sourceTree = "<group>"; };
 		549B70CE068D1B9FAC34B586 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		55422755DC3C1397D367E0AB /* user_menu_owner_empty_permissions.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = user_menu_owner_empty_permissions.json; sourceTree = "<group>"; };
@@ -460,6 +464,7 @@
 				3C911DFD1AC8AA6FE6D739E6 /* RolePermissionTests.swift */,
 				0582F75815E1CE7C44AF8ADF /* ServerErrorTests.swift */,
 				D66304B8F73DA99211ECE96D /* SimproDemoTests.swift */,
+				0F24B350E0571DC46AF2AFC8 /* TaskAgendaTests.swift */,
 				67BEB155AA348823859334A1 /* TokenRefreshTests.swift */,
 				79E8CCBFD3C16167C05552EC /* WorkManagementTests.swift */,
 			);
@@ -475,6 +480,7 @@
 				0B17E373E80B3EA9F6F93907 /* KanbanAPI.swift */,
 				294EF2AB393C9534B35756DB /* KanbanModels.swift */,
 				8AD14E29062DEF3699C7F4A7 /* ProjectsViews.swift */,
+				53E23AD0A5E508C226B2B7D4 /* TaskAgenda.swift */,
 				D9278ED24A14C59926FB18B2 /* TaskDetailView.swift */,
 			);
 			path = Projects;
@@ -963,6 +969,7 @@
 				ACDC6B5CFCB7D770DB41094C /* SitesViews.swift in Sources */,
 				C02113D36A1BD5359CD2BA2B /* StatusPresentation.swift in Sources */,
 				6BBD6061A90F33532113E329 /* SyncCenter.swift in Sources */,
+				B00C469B1AE616B4740D6D4A /* TaskAgenda.swift in Sources */,
 				D3A9E935E80FE10569B671FC /* TaskDetailView.swift in Sources */,
 				A1747D1B7293D71C2DED1670 /* TimesheetModels.swift in Sources */,
 				D5ADB655F44FD1B0507392BF /* TimesheetsAPI.swift in Sources */,
@@ -991,6 +998,7 @@
 				C6D67B8CC550BFA0B31B6D5E /* ServerErrorTests.swift in Sources */,
 				98D3991F6875EE073AFA5F03 /* SimproDemoTests.swift in Sources */,
 				0A894B3222E60B97E72209D1 /* StubURLProtocol.swift in Sources */,
+				75BB3785FC797D9084AE4933 /* TaskAgendaTests.swift in Sources */,
 				1DD94564B018DC8FE615F634 /* TokenRefreshTests.swift in Sources */,
 				E973B73A229FAAF94FC69A78 /* WorkManagementTests.swift in Sources */,
 			);

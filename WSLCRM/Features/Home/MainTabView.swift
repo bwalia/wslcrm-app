@@ -7,7 +7,7 @@ struct MainTabView: View {
     @State private var selection: Tab = .myWork
     @State private var showingPendingChanges = false
 
-    enum Tab: Hashable { case myWork, fieldService, more }
+    enum Tab: Hashable { case myWork, fieldService, tasks, more }
 
     var body: some View {
         let permissions = session.permissions
@@ -21,6 +21,11 @@ struct MainTabView: View {
                 NavigationStack { FieldServiceHubView().withAppDestinations() }
                     .tabItem { Label("Field Service", systemImage: "wrench.and.screwdriver") }
                     .tag(Tab.fieldService)
+            }
+            if NavigationPolicy(session: session).showsTasks {
+                NavigationStack { MyTasksView().withAppDestinations() }
+                    .tabItem { Label("Tasks", systemImage: "checklist") }
+                    .tag(Tab.tasks)
             }
             NavigationStack { MoreView().withAppDestinations() }
                 .tabItem { Label("More", systemImage: "ellipsis.circle") }
@@ -54,6 +59,7 @@ struct MainTabView: View {
         switch NavigationPolicy(session: session).home {
         case .myWork: .myWork
         case .fieldService: .fieldService
+        case .tasks: .tasks
         case .more: .more
         }
     }
@@ -181,16 +187,12 @@ struct MoreView: View {
             .accessibilityIdentifier("more.reports")
         }
         // Work management. Projects are membership- and grant-gated; logging your own time is
-        // not, so timesheets are offered to everyone signed in.
+        // not, so timesheets are offered to everyone signed in. My tasks has its own tab.
         if permissions.shows(.projects) || permissions.can(.read, .projects) {
             NavigationLink(value: FieldServiceArea.projects) {
                 Label("Projects", systemImage: "square.stack.3d.up")
             }
             .accessibilityIdentifier("more.projects")
-            NavigationLink(value: FieldServiceArea.myTasks) {
-                Label("My tasks", systemImage: "checklist")
-            }
-            .accessibilityIdentifier("more.myTasks")
             NavigationLink(value: FieldServiceArea.reviewQueue) {
                 Label("Waiting for me", systemImage: "person.crop.circle.badge.questionmark")
             }

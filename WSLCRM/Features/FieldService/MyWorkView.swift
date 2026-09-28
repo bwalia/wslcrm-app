@@ -26,16 +26,24 @@ final class MyWorkViewModel {
     private(set) var notifications: [AppNotification] = []
     /// Set when a background refresh finds a visit that wasn't there before.
     var newJobBanner: String?
+    /// Project cards assigned to this person; empty when they have no project access.
+    private(set) var tasks: [KanbanTask] = []
+    private(set) var tasksError: APIError?
 
     private let api: FieldServiceAPI
+    private let kanban: KanbanAPI?
     private let sync: SyncCenter
     private let tracker: AssignmentTracker
     private let now: () -> Date
     @ObservationIgnored private var prefetchTask: Task<Void, Never>?
     @ObservationIgnored private var lastPrefetch: (ids: Set<String>, at: Date) = ([], .distantPast)
 
-    init(api: FieldServiceAPI, sync: SyncCenter, userUuid: String, now: @escaping () -> Date = Date.init) {
+    /// `kanban` is nil for someone without project access, so My Work never asks for cards
+    /// the server would refuse.
+    init(api: FieldServiceAPI, sync: SyncCenter, userUuid: String, kanban: KanbanAPI? = nil,
+         now: @escaping () -> Date = Date.init) {
         self.api = api
+        self.kanban = kanban
         self.sync = sync
         self.tracker = AssignmentTracker(userUuid: userUuid)
         self.now = now
@@ -70,8 +78,26 @@ final class MyWorkViewModel {
             if case .cancelled = apiError { return }
             if visits.isEmpty && !silent { state = .failed(apiError) } else { refreshError = apiError }
         }
+        await loadTasks()
         await loadNotifications()
     }
+
+    /// A failed task load never hides the visits: it only marks the tasks block.
+    func loadTasks() async {
+        guard let kanban else { return }
+        do {
+            tasks = try await kanban.myTasks(perPage: 100).items
+            tasksError = nil
+        } catch {
+            let apiError = error.asAPIError
+            if case .cancelled = apiError { return }
+            tasksError = apiError
+        }
+    }
+
+    /// Today's share of the person's project cards, for the block under the visits.
+    var todayTasks: [KanbanTask] { TaskAgenda.today(tasks, now: now()) }
+    var hasTaskAccess: Bool { kanban != nil }
 
     private func fetchVisits() async throws -> Fetched<Page<Visit>> {
         do {
@@ -189,7 +215,10 @@ struct MyWorkView: View {
     @Environment(SessionStore.self) private var session
 
     var body: some View {
-        ModelHost(make: { MyWorkViewModel(api: services.fieldService, sync: sync, userUuid: session.user?.uuid ?? "") }) { model in
+        ModelHost(make: {
+            MyWorkViewModel(api: services.fieldService, sync: sync, userUuid: session.user?.uuid ?? "",
+                            kanban: NavigationPolicy(session: session).showsTasks ? services.kanban : nil)
+        }) { model in
             MyWorkContent(model: model)
         }
         .navigationTitle("My Work")
@@ -240,6 +269,7 @@ private struct MyWorkContent: View {
                     InlineErrorRow(error: error) { Task { await model.load() } }
                 case .loaded where layout.total == 0:
                     AllClearCard(doneToday: layout.summary.doneToday)
+                    TodayTasksBlock(model: model)
                 case .loaded:
                     if let hero = layout.hero {
                         NavigationLink(value: GuidedVisitRoute(uuid: hero.uuid)) {
@@ -265,6 +295,7 @@ private struct MyWorkContent: View {
                             }
                         }
                     }
+                    TodayTasksBlock(model: model)
                 }
             }
             .padding(16)
@@ -426,6 +457,66 @@ private struct WorkRow: View {
         .frame(minHeight: 80)
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Project cards for today, under the visits, so one screen answers "what am I doing today".
+private struct TodayTasksBlock: View {
+    let model: MyWorkViewModel
+    /// Enough to plan the day from; the rest is one tap away.
+    private let limit = 5
+
+    var body: some View {
+        if model.hasTaskAccess {
+            let today = model.todayTasks
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Tasks for today (\(today.count))")
+                    .font(.caption.weight(.bold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(.secondaryText)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("mywork.tasks")
+                if let error = model.tasksError {
+                    InlineErrorRow(error: error) { Task { await model.loadTasks() } }
+                } else if today.isEmpty {
+                    Text(model.tasks.isEmpty ? "No project tasks assigned to you."
+                                             : "Nothing overdue, due today or in progress.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+                }
+                ForEach(today.prefix(limit)) { task in
+                    NavigationLink(value: TaskRoute(uuid: task.uuid)) {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                TaskCard(task: task)
+                                if let project = task.projectName {
+                                    Text(project).font(.caption).foregroundStyle(.secondaryText)
+                                }
+                            }
+                            .foregroundStyle(.primary)
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right").foregroundStyle(.tertiary).accessibilityHidden(true)
+                        }
+                        .padding(14)
+                        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("mywork.task.\(task.reference)")
+                }
+                if !model.tasks.isEmpty {
+                    NavigationLink(value: FieldServiceArea.myTasks) {
+                        Label(today.count > limit ? "All \(today.count) for today, and the rest" : "All my tasks",
+                              systemImage: "checklist")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    }
+                    .accessibilityIdentifier("mywork.allTasks")
+                }
+            }
+        }
     }
 }
 
