@@ -1,0 +1,16 @@
+# Gradle and Kotlin caches
+.gradle/
+.kotlin/
+build/
+
+# Machine-specific: the SDK path, and the prod API URL when set here
+local.properties
+
+# IDE
+.idea/
+*.iml
+captures/
+
+# Outputs
+*.apk
+*.aab

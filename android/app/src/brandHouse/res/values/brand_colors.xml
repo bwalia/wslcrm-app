@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- House brand. brand_primary is the iOS AccentColor (Assets.xcassets/AccentColor, light). -->
+<resources>
+    <color name="brand_primary">#FF005499</color>
+    <color name="brand_on_primary">#FFFFFFFF</color>
+    <color name="brand_secondary">#FF0072CB</color>
+    <color name="brand_launch_background">#FFFFFFFF</color>
+</resources>
