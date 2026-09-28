@@ -463,7 +463,16 @@ final class UITestStubServer: @unchecked Sendable {
             return (200, ["success": true, "data": orderedTasks(), "meta": meta(orderedTasks().count)])
 
         case ("GET", "/api/v2/kanban/my-tasks"):
-            return (200, ["success": true, "data": orderedTasks(), "meta": meta(orderedTasks().count)])
+            // The real query joins the project, board and column in flat rather than nesting them.
+            let mine = orderedTasks().map { task -> [String: Any] in
+                var row = task
+                row["project_uuid"] = Self.projectUuid
+                row["project_name"] = Self.project["name"]
+                row["board_name"] = "Service desk board"
+                row["column_name"] = (task["column_id"] as? Int) == 12 ? "Needs review" : "Ready for agent"
+                return row
+            }
+            return (200, ["success": true, "data": mine, "meta": meta(mine.count)])
 
         case ("GET", let p) where p.hasPrefix("/api/v2/kanban/tasks/") && p.hasSuffix("/comments"):
             return (200, ["success": true, "data": taskComments[Self.taskUuid(in: p)] ?? []])
@@ -644,8 +653,8 @@ final class UITestStubServer: @unchecked Sendable {
     }
 
     static var sprint: [String: Any] {
-        ["uuid": "sp000000-0000-0000-0000-000000000001", "name": "Week 38", "status": "active",
-         "total_points": 13, "completed_points": 5, "task_count": 3, "completed_task_count": 1]
+        ["uuid": "sp000000-0000-0000-0000-000000000001", "id": 1, "name": "Week 38", "status": "active",
+         "end_date": day(offset: 4), "total_points": 13, "completed_points": 5, "task_count": 3, "completed_task_count": 1]
     }
 
     static func board(withColumns: Bool) -> [String: Any] {
@@ -677,13 +686,24 @@ final class UITestStubServer: @unchecked Sendable {
          "user": ["uuid": agentUuid, "username": "api-key:\(agentKeyName)"]]
     }
 
-    /// One card waiting on a person, one an agent is mid-run on, and one nobody has touched.
+    /// A date this many days from today, so "overdue" and "due today" stay true whenever it runs.
+    static func day(offset: Int) -> String {
+        let date = Calendar.current.date(byAdding: .day, value: offset, to: Date()) ?? Date()
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    /// One card waiting on a person (late), one an agent is mid-run on, both in the running sprint,
+    /// and one nobody has touched that is due today.
     static func seededTasks() -> [String: [String: Any]] {
         func contract(_ agent: [String: Any]) -> [String: Any] { ["agent": agent] }
         let review: [String: Any] = [
             "uuid": reviewTaskUuid, "id": 1, "board_id": 1, "column_id": 12, "task_number": 14,
             "title": "F-Gas register for Q3", "status": "review", "priority": "high",
-            "position": 0, "comment_count": 0, "updated_at": "2026-09-19 09:10:00",
+            "due_date": day(offset: -1), "sprint_id": 1, "position": 0, "comment_count": 0, "updated_at": "2026-09-19 09:10:00",
             "project": project,
             "metadata": contract([
                 "version": 1,
@@ -705,7 +725,7 @@ final class UITestStubServer: @unchecked Sendable {
         let running: [String: Any] = [
             "uuid": runningTaskUuid, "id": 2, "board_id": 1, "column_id": 11, "task_number": 15,
             "title": "Chase the overdue PPM visits", "status": "in_progress", "priority": "medium",
-            "position": 0, "comment_count": 0, "updated_at": "2026-09-19 09:00:00",
+            "sprint_id": 1, "position": 0, "comment_count": 0, "updated_at": "2026-09-19 09:00:00",
             "project": project,
             "metadata": contract([
                 "version": 1,
@@ -722,7 +742,7 @@ final class UITestStubServer: @unchecked Sendable {
         let plain: [String: Any] = [
             "uuid": plainTaskUuid, "id": 3, "board_id": 1, "column_id": 11, "task_number": 16,
             "title": "Quote the R22 replacement", "status": "open", "priority": "low",
-            "position": 1, "comment_count": 0, "updated_at": "2026-09-19 07:00:00",
+            "due_date": day(offset: 0), "position": 1, "comment_count": 0, "updated_at": "2026-09-19 07:00:00",
             "project": project, "metadata": [:],
         ]
         return [reviewTaskUuid: review, runningTaskUuid: running, plainTaskUuid: plain]

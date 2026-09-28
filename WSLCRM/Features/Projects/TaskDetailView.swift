@@ -364,11 +364,25 @@ struct TaskDetailView: View {
 
 // MARK: - My tasks
 
-/// Where a phone user starts: their own cards, nearest deadline first, with anything an agent is
-/// holding marked as such.
+/// Where a phone user starts: their own cards across every project, seen three ways — what to do
+/// today, everything by deadline, or the running sprint's share of it.
 struct MyTasksView: View {
+    enum Scope: String, CaseIterable, Identifiable {
+        case today, dueDate, sprint
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .today: "Today"
+            case .dueDate: "By due date"
+            case .sprint: "Sprint"
+            }
+        }
+    }
+
     @Environment(\.services) private var services
     @State private var state: LoadState<[KanbanTask]> = .idle
+    @State private var activeSprints: [Int: KanbanSprint] = [:]
+    @AppStorage("myTasks.scope") private var scope: Scope = .today
 
     var body: some View {
         Group {
@@ -380,15 +394,19 @@ struct MyTasksView: View {
                                        description: Text("Cards assigned to you across every project show up here."))
             case .loaded(let tasks):
                 List {
-                    ForEach(DueGroup.all(from: tasks), id: \.title) { group in
-                        Section(group.title) {
-                            ForEach(group.tasks) { task in
-                                NavigationLink(value: TaskRoute(uuid: task.uuid)) {
-                                    TaskCard(task: task)
-                                }
-                                .accessibilityIdentifier("mytask.row.\(task.reference)")
-                            }
+                    Section {
+                        Picker("Show", selection: $scope) {
+                            ForEach(Scope.allCases) { Text($0.title).tag($0) }
                         }
+                        .pickerStyle(.segmented)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                        .accessibilityIdentifier("mytasks.scope")
+                    }
+                    switch scope {
+                    case .today: todaySections(tasks)
+                    case .dueDate: dueDateSections(tasks)
+                    case .sprint: sprintSections(tasks)
                     }
                 }
                 .refreshable { await load() }
@@ -398,37 +416,100 @@ struct MyTasksView: View {
         .task { await load() }
     }
 
+    @ViewBuilder
+    private func todaySections(_ tasks: [KanbanTask]) -> some View {
+        let today = TaskAgenda.today(tasks)
+        if today.isEmpty {
+            ContentUnavailableView("Nothing due today", systemImage: "sun.max",
+                                   description: Text("Nothing is overdue, due today or in progress. Switch to By due date to pick up what's next."))
+                .listRowBackground(Color.clear)
+        } else {
+            Section {
+                ForEach(today) { row($0) }
+            } footer: {
+                Text("Overdue first, then due today, then work you've already started.")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func dueDateSections(_ tasks: [KanbanTask]) -> some View {
+        ForEach(TaskAgenda.byDueDate(tasks)) { bucket in
+            Section(bucket.title) {
+                ForEach(bucket.tasks) { row($0) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func sprintSections(_ tasks: [KanbanTask]) -> some View {
+        let sprints = TaskAgenda.bySprint(tasks, activeSprints: activeSprints)
+        let inSprint = sprints.reduce(0) { $0 + $1.tasks.count }
+        if sprints.isEmpty {
+            ContentUnavailableView("No running sprint", systemImage: "flag.checkered",
+                                   description: Text("None of your cards are in a sprint that has started."))
+                .listRowBackground(Color.clear)
+        }
+        ForEach(sprints) { bucket in
+            Section {
+                ForEach(bucket.tasks) { row($0) }
+            } header: {
+                SprintHeader(sprint: bucket.sprint)
+            }
+        }
+        let outside = TaskAgenda.open(tasks).count - inSprint
+        if !sprints.isEmpty, outside > 0 {
+            Section {
+            } footer: {
+                Text(outside == 1 ? "1 more of your cards isn't in a running sprint. It's under By due date."
+                                  : "\(outside) more of your cards aren't in a running sprint. They're under By due date.")
+            }
+        }
+    }
+
+    private func row(_ task: KanbanTask) -> some View {
+        NavigationLink(value: TaskRoute(uuid: task.uuid)) {
+            VStack(alignment: .leading, spacing: 2) {
+                TaskCard(task: task)
+                if let place = task.projectName {
+                    Text([place, task.columnName].compactMap { $0 }.joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(.secondaryText)
+                }
+            }
+        }
+        .accessibilityIdentifier("mytask.row.\(task.reference)")
+    }
+
     private func load() async {
         if state.value == nil { state = .loading }
         do {
             let page = try await services.kanban.myTasks(perPage: 100)
+            activeSprints = await services.kanban.activeSprints(for: page.items)
             state = .loaded(page.items)
         } catch {
             state = .failed(error.asAPIError)
         }
     }
+}
 
-    /// Named DueGroup, not Group: SwiftUI already has one.
-    struct DueGroup {
-        let title: String
-        let tasks: [KanbanTask]
+private struct SprintHeader: View {
+    let sprint: KanbanSprint
 
-        static func all(from tasks: [KanbanTask]) -> [DueGroup] {
-            let calendar = Calendar.current
-            let today = calendar.startOfDay(for: Date())
-            let weekEnd = calendar.date(byAdding: .day, value: 7, to: today) ?? today
-            func bucket(_ task: KanbanTask) -> Int {
-                guard let due = task.dueDate else { return 3 }
-                if due < today { return 0 }
-                if calendar.isDate(due, inSameDayAs: today) { return 1 }
-                return due <= weekEnd ? 2 : 3
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(sprint.name)
+            HStack(spacing: 8) {
+                ProgressView(value: sprint.progress)
+                    .frame(maxWidth: 120)
+                if let end = sprint.endDate {
+                    Text("Ends \(Formatters.day(end) ?? "")")
+                }
             }
-            let titles = ["Overdue", "Today", "This week", "Later"]
-            return (0..<4).compactMap { index in
-                let group = tasks.filter { bucket($0) == index }
-                    .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
-                return group.isEmpty ? nil : DueGroup(title: titles[index], tasks: group)
-            }
+            .font(.caption)
+            .textCase(nil)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("mytasks.sprint.\(sprint.name)")
     }
 }

@@ -316,6 +316,12 @@ struct KanbanTask: Decodable, Sendable, Identifiable, Hashable {
     var assignees: [KanbanTaskAssignee]?
     var labels: [KanbanLabel]?
     var project: KanbanProject?
+    /// `/my-tasks` joins these in flat rather than nesting a project, so a card from any project
+    /// can say where it lives and which sprint list to look it up in.
+    var projectUuid: String?
+    var projectName: String?
+    var boardName: String?
+    var columnName: String?
 
     var id: String { uuid }
 
@@ -327,8 +333,21 @@ struct KanbanTask: Decodable, Sendable, Identifiable, Hashable {
     }
 
     var isOverdue: Bool {
-        guard let dueDate, status != .completed, status != .cancelled else { return false }
-        return dueDate < Date()
+        guard let due = dueDay(), status != .completed, status != .cancelled else { return false }
+        return due < Calendar.current.startOfDay(for: Date())
+    }
+
+    /// The day the card is due, as the person reading it counts days. `due_date` is a calendar
+    /// date that decodes as midnight UTC, which is already the previous evening west of Greenwich
+    /// and would make a card due today "overdue" from 1am in a British summer. A date-only value
+    /// is read back as that same date locally; a real timestamp is left alone.
+    func dueDay(calendar: Calendar = .current) -> Date? {
+        guard let dueDate else { return nil }
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        let parts = utc.dateComponents([.year, .month, .day, .hour, .minute, .second], from: dueDate)
+        guard parts.hour == 0, parts.minute == 0, parts.second == 0 else { return calendar.startOfDay(for: dueDate) }
+        return calendar.date(from: DateComponents(year: parts.year, month: parts.month, day: parts.day))
     }
 
     /// The agent contract, if this card carries one.
@@ -340,6 +359,7 @@ struct KanbanTask: Decodable, Sendable, Identifiable, Hashable {
         case startDate, dueDate, completedAt, reporterUserUuid, chatChannelUuid
         case commentCount, subtaskCount, completedSubtaskCount, assigneeCount
         case createdAt, updatedAt, metadata, assignees, labels, project
+        case projectUuid, projectName, boardName, columnName
     }
 
     init(from decoder: Decoder) throws {
@@ -373,6 +393,10 @@ struct KanbanTask: Decodable, Sendable, Identifiable, Hashable {
         assignees = try? c.decodeIfPresent(LossyArray<KanbanTaskAssignee>.self, forKey: .assignees)?.elements
         labels = try? c.decodeIfPresent(LossyArray<KanbanLabel>.self, forKey: .labels)?.elements
         project = try? c.decodeIfPresent(KanbanProject.self, forKey: .project)
+        projectUuid = (try? c.decodeIfPresent(String.self, forKey: .projectUuid)) ?? project?.uuid
+        projectName = (try? c.decodeIfPresent(String.self, forKey: .projectName)) ?? project?.name
+        boardName = try? c.decodeIfPresent(String.self, forKey: .boardName)
+        columnName = try? c.decodeIfPresent(String.self, forKey: .columnName)
     }
 }
 
@@ -485,6 +509,8 @@ enum KanbanSprintStatus: String, Sendable, Codable, Hashable {
 
 struct KanbanSprint: Decodable, Sendable, Identifiable, Hashable {
     var uuid: String
+    /// Tasks point at their sprint by this number (`sprint_id`), never by uuid.
+    var numericId: Int?
     var name: String
     var goal: String?
     var status: KanbanSprintStatus = .planned
@@ -500,6 +526,28 @@ struct KanbanSprint: Decodable, Sendable, Identifiable, Hashable {
     var progress: Double {
         totalPoints > 0 ? Double(completedPoints) / Double(totalPoints)
             : (taskCount > 0 ? Double(completedTaskCount) / Double(taskCount) : 0)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case uuid, id, name, goal, status, startDate, endDate
+        case totalPoints, completedPoints, taskCount, completedTaskCount, completedCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        uuid = try c.decode(String.self, forKey: .uuid)
+        numericId = c.decodeFlexibleInt(forKey: .id)
+        name = (try? c.decode(String.self, forKey: .name)) ?? "Sprint"
+        goal = try? c.decodeIfPresent(String.self, forKey: .goal)
+        status = (try? c.decodeIfPresent(KanbanSprintStatus.self, forKey: .status)) ?? .planned
+        startDate = try? c.decodeIfPresent(Date.self, forKey: .startDate)
+        endDate = try? c.decodeIfPresent(Date.self, forKey: .endDate)
+        totalPoints = c.decodeFlexibleInt(forKey: .totalPoints) ?? 0
+        completedPoints = c.decodeFlexibleInt(forKey: .completedPoints) ?? 0
+        taskCount = c.decodeFlexibleInt(forKey: .taskCount) ?? 0
+        // The list query counts live into `completed_count`; the stored column lags behind it.
+        completedTaskCount = c.decodeFlexibleInt(forKey: .completedCount)
+            ?? c.decodeFlexibleInt(forKey: .completedTaskCount) ?? 0
     }
 }
 

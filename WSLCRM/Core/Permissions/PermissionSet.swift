@@ -139,7 +139,7 @@ struct PermissionSet: Sendable, Equatable {
 /// seeds (`NamespaceRoleQueries.createFieldServiceRoles`): a telecaller logs requests, a service
 /// manager runs the board, an engineer works their own visits.
 struct NavigationPolicy: Sendable, Equatable {
-    enum Home: Sendable, Equatable { case myWork, fieldService, more }
+    enum Home: Sendable, Equatable { case myWork, fieldService, tasks, more }
 
     let permissions: PermissionSet
     let isEngineerRole: Bool
@@ -162,11 +162,18 @@ struct NavigationPolicy: Sendable, Equatable {
         permissions.shows(.jobs) || permissions.shows(.serviceRequests) || permissions.can(.read, .fsServiceRequests)
     }
 
-    /// Engineers land on My Work (opsapi #610); managers and telecallers on Field Service.
+    /// Project cards: a tab of their own, and a "for today" block on My Work.
+    var showsTasks: Bool {
+        permissions.shows(.projects) || permissions.can(.read, .projects)
+    }
+
+    /// Engineers land on My Work (opsapi #610); managers and telecallers on Field Service; people
+    /// who only work projects on their tasks.
     var home: Home {
         if isEngineerRole, showsMyWork { return .myWork }
         if showsFieldService { return .fieldService }
         if showsMyWork { return .myWork }
+        if showsTasks { return .tasks }
         return .more
     }
 }
