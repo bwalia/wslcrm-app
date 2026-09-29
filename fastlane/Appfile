@@ -1,0 +1,3 @@
+app_identifier("uk.co.workstation.wslcrm")
+
+# The team id is supplied at build time as APPLE_TEAM_ID (GitHub secrets or WSLVault).

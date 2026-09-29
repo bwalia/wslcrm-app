@@ -1064,6 +1064,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for the job's quote sheet.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is recorded only when you check in to or out of a site visit, as proof of attendance.";
@@ -1271,6 +1272,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for the job's quote sheet.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is recorded only when you check in to or out of a site visit, as proof of attendance.";
@@ -1382,6 +1384,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for the job's quote sheet.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is recorded only when you check in to or out of a site visit, as proof of attendance.";
@@ -1578,6 +1581,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for the job's quote sheet.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is recorded only when you check in to or out of a site visit, as proof of attendance.";
@@ -1713,6 +1717,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for the job's quote sheet.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is recorded only when you check in to or out of a site visit, as proof of attendance.";
@@ -1831,6 +1836,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for the job's quote sheet.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is recorded only when you check in to or out of a site visit, as proof of attendance.";
@@ -1925,6 +1931,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for the job's quote sheet.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is recorded only when you check in to or out of a site visit, as proof of attendance.";

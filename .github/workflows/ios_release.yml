@@ -1,0 +1,234 @@
+name: iOS Release (TestFlight & App Store)
+
+# Build, sign and upload the WSLCRM iOS app with fastlane — the same shape as Fishers.
+#
+#   AUTO (merge to main) : push to main touching the app → fastlane ios beta → TestFlight
+#   MANUAL               : workflow_dispatch — TestFlight by default
+#   TAG                  : push a v*.*.* tag → TestFlight, version taken from the tag
+#   APP STORE            : workflow_dispatch with target = app_store (after QA)
+#
+# Pipeline: ci_build_number → prepare_signing → build_ipa → beta
+# Testers get the DBS Ltd build against int (WSLCRM-DBS-Int) unless a dispatch picks another.
+# Runner: the self-hosted Mac Studio. This repo is public, so nothing here runs for pull
+# requests — only for pushes to main, tags and manual runs, which need write access.
+# Secrets: GitHub Actions or WSLVault kv/wslcrm/ios. See docs/IOS_RELEASE.md.
+# Skip an automatic release with [skip release] or [skip ios] in the commit message.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "WSLCRM/**"
+      - "WSLCRM.xcodeproj/**"
+      - "Config/**"
+      - "project.yml"
+      - "fastlane/**"
+      - "Gemfile"
+      - "Gemfile.lock"
+      - "scripts/ci/**"
+      - ".github/workflows/ios_release.yml"
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "What to do"
+        required: true
+        type: choice
+        default: testflight
+        options:
+          - testflight
+          - invite_testers
+          - app_store
+      build:
+        description: "Which build"
+        required: true
+        type: choice
+        default: DBS-Int
+        options:
+          - DBS-Int
+          - Int
+      version:
+        description: "Marketing version override (blank = project.yml)"
+        required: false
+        default: ""
+
+concurrency:
+  group: wslcrm-ios-release
+  # Keep only the tip-of-main release when several merges land close together.
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'testflight' }} (${{ github.event_name == 'workflow_dispatch' && inputs.build || 'DBS-Int' }})
+    if: >-
+      github.event_name != 'push'
+      || github.ref_type == 'tag'
+      || (
+        !contains(github.event.head_commit.message, '[skip release]')
+        && !contains(github.event.head_commit.message, '[skip ios]')
+      )
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 90
+    env:
+      # WSLVault only — never vault.diytaxreturn.co.uk.
+      VAULT_ADDR: https://vault.workstation.co.uk
+      VAULT_TOKEN_FILE: /Users/balinderwalia/.secrets/wslvault/token.json
+      WSLCRM_IOS_VAULT_PATH: kv/wslcrm/ios
+      RELEASE_SCHEME: WSLCRM-${{ github.event_name == 'workflow_dispatch' && inputs.build || 'DBS-Int' }}
+      RELEASE_CONFIGURATION: Release-${{ github.event_name == 'workflow_dispatch' && inputs.build || 'DBS-Int' }}
+      BUILDS_APP: ${{ github.event_name != 'workflow_dispatch' || inputs.target != 'invite_testers' }}
+      TESTFLIGHT_TESTERS: ${{ vars.TESTFLIGHT_TESTERS }}
+      TESTFLIGHT_DEMO_USER: ${{ secrets.TESTFLIGHT_DEMO_USER }}
+      TESTFLIGHT_DEMO_PASSWORD: ${{ secrets.TESTFLIGHT_DEMO_PASSWORD }}
+      TESTFLIGHT_CONTACT_PHONE: ${{ vars.TESTFLIGHT_CONTACT_PHONE }}
+      FASTLANE_SKIP_UPDATE_CHECK: "1"
+      FASTLANE_HIDE_CHANGELOG: "1"
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure build keychain
+        run: |
+          set -euo pipefail
+          # A persistent keychain, so fastlane `cert` reuses one Apple Distribution
+          # certificate instead of minting one per build — Apple caps them per team. Fishers
+          # releases from this Mac on the same team, so its keychain is shared when present
+          # rather than spending a second certificate; otherwise WSLCRM gets its own.
+          if [ -f "$HOME/Library/Keychains/fishers-signing.keychain-db" ] && [ -s "$HOME/.secrets/fishers/keychain-password" ]; then
+            kc_path="$HOME/Library/Keychains/fishers-signing.keychain-db"
+            pass_file="$HOME/.secrets/fishers/keychain-password"
+          else
+            kc_path="$HOME/Library/Keychains/wslcrm-signing.keychain-db"
+            pass_file="$HOME/.secrets/wslcrm/keychain-password"
+            mkdir -p "$(dirname "$pass_file")"
+            if [ ! -s "$pass_file" ]; then
+              ( umask 077; openssl rand -base64 24 > "$pass_file" )
+            fi
+          fi
+          kc_pass="$(cat "$pass_file")"
+          echo "::add-mask::$kc_pass"
+          echo "Signing keychain: $kc_path"
+          {
+            echo "BUILD_KEYCHAIN_PATH=$kc_path"
+            echo "BUILD_KEYCHAIN_PASSWORD=$kc_pass"
+            echo "EXPORT_OPTIONS_PLIST=$RUNNER_TEMP/ExportOptions.plist"
+          } >> "$GITHUB_ENV"
+
+      - name: Load signing secrets (GitHub secrets or WSLVault)
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY_B64: ${{ secrets.ASC_PRIVATE_KEY_B64 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_STORE_APP_ID: ${{ secrets.APP_STORE_APP_ID }}
+          CERT_PRIVATE_KEY_B64: ${{ secrets.CERT_PRIVATE_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          # Prefer the AuthKey already on the Mac Studio when it is a real PEM; a placeholder
+          # must not override ASC_PRIVATE_KEY_B64.
+          if [ -z "${ASC_P8_PATH:-}" ] && [ -n "${ASC_KEY_ID:-}" ]; then
+            candidate="$HOME/AuthKey_${ASC_KEY_ID}.p8"
+            if [ -f "$candidate" ] && grep -q "BEGIN PRIVATE KEY" "$candidate"; then
+              export ASC_P8_PATH="$candidate"
+              echo "Using local ASC key file: $candidate"
+            fi
+          fi
+          scripts/ci/load-ios-secrets.sh
+
+      - name: Install Ruby dependencies
+        run: |
+          set -euo pipefail
+          # Prefer Ruby 3.3 when present — fastlane is happier than on Homebrew Ruby 4.x.
+          for ruby_dir in /opt/homebrew/opt/ruby@3.3/bin /opt/homebrew/opt/ruby@3.2/bin; do
+            if [ -x "$ruby_dir/ruby" ]; then export PATH="$ruby_dir:$PATH"; break; fi
+          done
+          echo "Using $(command -v ruby) ($(ruby -v))"
+          gem install bundler -v '~> 2.5' --no-document
+          bundle config set --local path 'vendor/bundle'
+          bundle install --jobs 4
+          echo "PATH=$PATH" >> "$GITHUB_ENV"
+
+      - name: Verify App Store Connect API key
+        run: bundle exec ruby scripts/ci/verify-asc-api-key.rb
+
+      - name: Install XcodeGen
+        if: env.BUILDS_APP == 'true'
+        run: command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
+
+      - name: Resolve marketing version
+        if: env.BUILDS_APP == 'true'
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            v="${GITHUB_REF_NAME#v}"
+          elif [ -n "${INPUT_VERSION:-}" ]; then
+            v="$INPUT_VERSION"
+          else
+            v="$(awk -F'"' '/MARKETING_VERSION:/{print $2; exit}' project.yml)"
+          fi
+          [ -n "$v" ] || { echo "::error::Could not resolve a marketing version"; exit 1; }
+          echo "Resolved version: $v"
+          echo "VERSION_NAME=$v" >> "$GITHUB_ENV"
+
+      - name: Compute next build number
+        if: env.BUILDS_APP == 'true'
+        id: build
+        run: bundle exec fastlane ios ci_build_number
+
+      - name: Prepare code signing
+        if: env.BUILDS_APP == 'true'
+        run: bundle exec fastlane ios prepare_signing
+
+      - name: Build signed IPA
+        if: env.BUILDS_APP == 'true'
+        env:
+          BUILD_NUMBER: ${{ steps.build.outputs.build_number }}
+        run: bundle exec fastlane ios build_ipa
+
+      - name: Upload to TestFlight and hand to testers
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target == 'testflight')
+        run: bundle exec fastlane ios beta
+
+      - name: Re-invite testers to the latest build
+        if: github.event_name == 'workflow_dispatch' && inputs.target == 'invite_testers'
+        run: bundle exec fastlane ios invite_testers
+
+      - name: Submit for App Store review
+        if: github.event_name == 'workflow_dispatch' && inputs.target == 'app_store'
+        run: bundle exec fastlane ios release
+
+      - name: Archive IPA artifact
+        if: always() && env.BUILDS_APP == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wslcrm-ios-ipa
+          path: build/release/WSLCRM.ipa
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo "### WSLCRM iOS"
+            echo "- build: \`$RELEASE_SCHEME\` ($RELEASE_CONFIGURATION)"
+            echo "- version: \`${VERSION_NAME:-n/a}\` (build \`${{ steps.build.outputs.build_number || 'n/a' }}\`)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Clean up signing material
+        if: always()
+        run: |
+          # The keychain is persistent on purpose (see Configure build keychain): lock it,
+          # don't delete it, so the certificate survives.
+          security lock-keychain "$BUILD_KEYCHAIN_PATH" 2>/dev/null || true
+          rm -f "$EXPORT_OPTIONS_PLIST" "${ASC_KEY_FILEPATH:-}" "${DIST_CERT_KEY_FILEPATH:-}" "${INSTALLED_PROFILE_PATH:-}" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP"/*.cer "$RUNNER_TEMP"/*.p12 2>/dev/null || true
+          rm -rf "$RUNNER_TEMP/.ios-secrets" 2>/dev/null || true
