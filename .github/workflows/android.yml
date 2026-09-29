@@ -1,0 +1,60 @@
+name: Android
+
+# Unit tests, lint and a debug build of the Kotlin app on every change to it. GitHub's Ubuntu
+# runners carry the Android SDK; nothing here runs on the self-hosted Mac. Release and the
+# Play upload live in android_release.yml.
+
+on:
+  push:
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  pull_request:
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: wslcrm-android-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: android
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The tests read the iOS fixtures from ../WSLCRMTests/Fixtures, so the whole repo is
+      # checked out, not just android/.
+      - name: Unit tests
+        run: ./gradlew :app:testIntDebugUnitTest --console=plain
+
+      - name: Lint
+        run: ./gradlew :app:lintIntDebug --console=plain
+
+      - name: Build (debug)
+        run: ./gradlew :app:assembleIntDebug --console=plain
+
+      - name: Test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-report
+          path: android/app/build/reports
+          retention-days: 7
