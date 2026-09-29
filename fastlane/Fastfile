@@ -462,14 +462,18 @@ platform :ios do
 
   desc "Archive and export a signed App Store IPA"
   lane :build_ipa do
+    # Passed as build settings, not via increment_version_number: agvtool can't resolve the
+    # per-configuration $(WSLCRM_INFOPLIST_FILE) and leaves the version where a file path
+    # belongs. The Info.plist is generated from these settings anyway.
     version = ENV["VERSION_NAME"].to_s
-    increment_version_number(version_number: version, xcodeproj: PROJECT) unless version.empty?
-    increment_build_number(build_number: ENV.fetch("BUILD_NUMBER"), xcodeproj: PROJECT)
+    settings = ["CURRENT_PROJECT_VERSION=#{ENV.fetch('BUILD_NUMBER')}"]
+    settings << "MARKETING_VERSION=#{version}" unless version.empty?
 
     build_app(
       project: PROJECT,
       scheme: release_scheme,
       configuration: release_configuration,
+      xcargs: settings.join(" "),
       export_method: "app-store",
       export_options: ENV.fetch("EXPORT_OPTIONS_PLIST"),
       output_directory: ipa_output_dir,
