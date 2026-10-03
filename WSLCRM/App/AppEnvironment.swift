@@ -11,6 +11,7 @@ struct Services: Sendable {
     let simpro: SimproAPI
     let kanban: KanbanAPI
     let timesheets: TimesheetsAPI
+    let shop: ShopAPI
 
     init(client: APIClient, cache: ResponseCache) {
         self.client = client
@@ -21,6 +22,7 @@ struct Services: Sendable {
         simpro = SimproAPI(client: client)
         kanban = KanbanAPI(client: client)
         timesheets = TimesheetsAPI(client: client)
+        shop = ShopAPI(client: client)
     }
 
     /// Used only as the environment default (previews); never talks to a real server.
