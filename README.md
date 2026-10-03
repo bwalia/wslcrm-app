@@ -5,8 +5,11 @@ the same REST API as the web dashboard; the backend is not modified by this proj
 
 Modules: **field service** (engineer *My Work* with a guided visit, service requests with customer
 sites, assets, jobs and phases, visits, quote sheet lines, F-Gas records, photos, and invoicing
-from jobs), **CRM** (accounts, contacts, deal pipeline), **customers**, **products**, **orders**
-and **invoices**.
+from jobs), **CRM** (accounts, contacts, deal pipeline), **customers**, **products**, **orders**,
+**invoices**, and the **shop back office** (`/api/v2/shop/admin`: KPI dashboard, shop orders and
+quotes, catalogue and categories, stock, market prices, assistant chats and knowledge). The Shop tab
+appears only in workspaces whose menu includes `shop`; option groups and compatibility rules are
+still edited in the web dashboard.
 
 No third-party dependencies — `URLSession`, `Codable`, Swift Concurrency, Keychain,
 CoreLocation and LocalAuthentication only.

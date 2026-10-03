@@ -1,0 +1,25 @@
+{
+  "success": true,
+  "data": {
+    "uuid": "q-1", "quote_number": "Q-2026-0007", "status": "sent", "source": "chat",
+    "customer": {"name": "Ben Ode", "email": "ben@example.com", "company": "Ode Labs",
+                 "address": {"line1": "1 High St", "city": "Leeds", "postal_code": "LS1 1AA", "country": "GB"}},
+    "lines": [
+      {"uuid": "ql-1", "product_uuid": "p-1", "product_slug": "studio-w7", "product_name": "Studio W7", "sku": "WS-W7",
+       "qty": 1, "selections": {"gpuCard": [{"option": "rtx5090", "qty": 1}], "cpu_cooler": [{"option": "ddr5_128", "qty": 1}]},
+       "unit_price_minor": 450000, "list_unit_price_minor": 489900, "price_override_minor": 450000,
+       "line_subtotal_minor": 450000, "line_vat_minor": 90000, "line_total_minor": 540000,
+       "label": "Studio W7 · RTX 5090 · 128 GB", "valid": true,
+       "breakdown": [{"group": "gpuCard", "option": "rtx5090", "name": "RTX 5090", "qty": 1, "price_delta_minor": 180000},
+                     {"group": "memory", "option": "ddr5_128", "name": "128 GB DDR5", "qty": 2, "price_delta_minor": 40000}],
+       "violations": []},
+      {"uuid": "ql-2", "product_slug": "warranty-3y", "product_name": "3-year warranty", "qty": "2",
+       "selections": {}, "unit_price_minor": 19900, "line_subtotal_minor": 39800, "line_vat_minor": 7960,
+       "line_total_minor": 47760, "valid": false, "breakdown": {}}
+    ],
+    "subtotal_minor": 489800, "vat_minor": 97960, "shipping_minor": 2500, "total_minor": 590260, "currency": "GBP",
+    "valid_until": "2026-10-31 23:59:59", "created_at": "2026-10-01 12:00:00", "notes": null,
+    "internal_notes": "Chased by phone", "viewed_at": "2026-10-02 08:00:00",
+    "crm_lead_id": "88", "order_uuid": null, "public_url": "https://shop.workstation.co.uk/quotes/q-1?t=abc"
+  }
+}

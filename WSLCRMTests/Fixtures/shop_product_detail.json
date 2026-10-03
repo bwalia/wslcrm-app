@@ -1,0 +1,28 @@
+{
+  "success": true,
+  "data": {
+    "uuid": "p-1", "sku": "WS-W7", "slug": "studio-w7", "name": "Studio W7", "brand": "Workstation",
+    "product_type": "workstation", "price_mode": "configurable", "short_description": "Quiet 4K editing tower",
+    "description": null, "specs": {"chassis": "Fractal North", "psu_watts": 1000}, "attributes": {"psu_watts": 1000},
+    "images": ["https://cdn.example.com/w7.jpg"], "tags": ["video", "ai"],
+    "base_price_minor": 249900, "currency": "GBP", "vat_rate": "0.2",
+    "stock_qty": 5, "held": 2, "available": 3, "low_stock_threshold": 3, "lead_time_days": 7,
+    "allow_backorder": false, "price_verified": false, "status": "active", "is_featured": true, "sort_order": 0,
+    "category": {"uuid": "c-1", "slug": "workstations", "name": "Workstations"},
+    "from_price_minor": 269900, "updated_at": "2026-10-02 21:57:26",
+    "option_groups": [
+      {"uuid": "g-1", "code": "gpu", "name": "Graphics", "selection": "single", "required": true, "min_qty": 1, "max_qty": 1,
+       "sort_order": 0, "is_active": true,
+       "options": [
+         {"uuid": "opt-1", "code": "rtx5090", "name": "RTX 5090", "price_delta_minor": 180000, "stock_qty": 1, "available": 0,
+          "component_product": null, "max_qty": 1, "is_default": false, "is_active": true, "sort_order": 0, "attributes": {}},
+         {"uuid": "opt-2", "code": "rtx5080", "name": "RTX 5080", "price_delta_minor": 90000, "stock_qty": null,
+          "component_product": {"uuid": "p-9", "sku": "GPU-5080", "name": "RTX 5080 card"}, "available": 6,
+          "max_qty": 1, "is_default": true, "is_active": true, "sort_order": 1, "attributes": {}},
+         {"uuid": "opt-3", "code": "igpu", "name": "Integrated", "price_delta_minor": 0, "stock_qty": null,
+          "component_product": null, "max_qty": 1, "is_default": false, "is_active": true, "sort_order": 2, "attributes": {}}
+       ]}
+    ],
+    "rules": [{"uuid": "r-1", "kind": "power", "params": {}, "message": "PSU too small", "is_active": true, "sort_order": 0}]
+  }
+}

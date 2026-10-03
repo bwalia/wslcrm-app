@@ -7,7 +7,7 @@ struct MainTabView: View {
     @State private var selection: Tab = .myWork
     @State private var showingPendingChanges = false
 
-    enum Tab: Hashable { case myWork, fieldService, tasks, more }
+    enum Tab: Hashable { case myWork, fieldService, tasks, shop, more }
 
     var body: some View {
         let permissions = session.permissions
@@ -26,6 +26,11 @@ struct MainTabView: View {
                 NavigationStack { MyTasksView().withAppDestinations() }
                     .tabItem { Label("Tasks", systemImage: "checklist") }
                     .tag(Tab.tasks)
+            }
+            if NavigationPolicy(session: session).showsShop {
+                NavigationStack { ShopHomeView().withAppDestinations() }
+                    .tabItem { Label("Shop", systemImage: "storefront") }
+                    .tag(Tab.shop)
             }
             NavigationStack { MoreView().withAppDestinations() }
                 .tabItem { Label("More", systemImage: "ellipsis.circle") }
@@ -60,6 +65,7 @@ struct MainTabView: View {
         case .myWork: .myWork
         case .fieldService: .fieldService
         case .tasks: .tasks
+        case .shop: .shop
         case .more: .more
         }
     }

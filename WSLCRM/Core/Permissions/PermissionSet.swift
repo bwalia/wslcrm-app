@@ -22,6 +22,8 @@ enum Module: String, Sendable {
     case projects
     case timesheets
     case timesheetApprovals = "timesheet_approvals"
+    /// The online shop's back office: catalogue, stock, carts' quotes and orders, chats, market prices.
+    case shop
 
     var displayName: String {
         switch self {
@@ -43,6 +45,7 @@ enum Module: String, Sendable {
         case .projects: "projects"
         case .timesheets: "timesheets"
         case .timesheetApprovals: "timesheet approvals"
+        case .shop: "shop"
         }
     }
 }
@@ -98,7 +101,7 @@ struct PermissionSet: Sendable, Equatable {
 
     enum Feature: Sendable, CaseIterable {
         case jobs, visits, serviceRequests, crm, customers, products, orders, invoices
-        case projects, timesheets
+        case projects, timesheets, shop
 
         var menuKeys: Set<String> {
             switch self {
@@ -113,6 +116,7 @@ struct PermissionSet: Sendable, Equatable {
             case .projects: ["projects", "kanban"]
             // Logging your own time needs no grant, so the menu key alone opens this one.
             case .timesheets: ["timesheets"]
+            case .shop: ["shop"]
             }
         }
 
@@ -128,6 +132,7 @@ struct PermissionSet: Sendable, Equatable {
             case .invoices: [.invoices]
             case .projects: [.projects]
             case .timesheets: [.timesheets]
+            case .shop: [.shop]
             }
         }
     }
@@ -139,7 +144,7 @@ struct PermissionSet: Sendable, Equatable {
 /// seeds (`NamespaceRoleQueries.createFieldServiceRoles`): a telecaller logs requests, a service
 /// manager runs the board, an engineer works their own visits.
 struct NavigationPolicy: Sendable, Equatable {
-    enum Home: Sendable, Equatable { case myWork, fieldService, tasks, more }
+    enum Home: Sendable, Equatable { case myWork, fieldService, tasks, shop, more }
 
     let permissions: PermissionSet
     let isEngineerRole: Bool
@@ -167,6 +172,14 @@ struct NavigationPolicy: Sendable, Equatable {
         permissions.shows(.projects) || permissions.can(.read, .projects)
     }
 
+    /// The shop back office gets a tab only where the workspace has the shop feature (its menu
+    /// carries `shop`). Admins pass every grant check, so a grant alone would put an empty tab in
+    /// front of them on workspaces that don't sell online.
+    var showsShop: Bool {
+        permissions.menuKeys.contains("shop")
+            || (!permissions.isAdmin && !permissions.isOwner && permissions.can(.read, .shop))
+    }
+
     /// Engineers land on My Work (opsapi #610); managers and telecallers on Field Service; people
     /// who only work projects on their tasks.
     var home: Home {
@@ -174,6 +187,7 @@ struct NavigationPolicy: Sendable, Equatable {
         if showsFieldService { return .fieldService }
         if showsMyWork { return .myWork }
         if showsTasks { return .tasks }
+        if showsShop { return .shop }
         return .more
     }
 }
