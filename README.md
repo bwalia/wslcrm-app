@@ -304,6 +304,13 @@ export WSL_PASSWORD='…'          # one password for every seeded account; keep
 scripts/seed-dbs-limited.py && scripts/seed-dbs-portfolio.py
 ```
 
+`scripts/seed-dbs-shop.py` then gives the workspace an online shop for the app's Shop tab: it grants
+the service-manager role the `shop` module and, through the shop admin API, imports a small
+AI-hardware catalogue (a configurable workstation, GPUs, a monitor, support, a quote-only server)
+and four quotes (sent, draft with a price override, accepted, expired). It reads
+`build/dbs-group-demo.env` (`ENV_FILE` to change) and is safe to re-run: the catalogue is
+re-applied and quotes are only added to a workspace that has none.
+
 Usernames land in `build/$NAMESPACE_SLUG.env` (mode 600, git-ignored). The server needs
 `TEST_OTP_CODE` set and `OPSAPI_DEPLOY_ENV` to be something other than prod, which is how int is
 configured — the seed signs each person in through the real 2FA flow using that bypass. Build the
