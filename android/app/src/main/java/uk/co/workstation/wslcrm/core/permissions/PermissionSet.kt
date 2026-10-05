@@ -27,6 +27,9 @@ enum class Module(val raw: String, val displayName: String) {
     PROJECTS("projects", "projects"),
     TIMESHEETS("timesheets", "timesheets"),
     TIMESHEET_APPROVALS("timesheet_approvals", "timesheet approvals"),
+
+    /** The online shop's back office: catalogue, stock, quotes and orders, chats, market prices. */
+    SHOP("shop", "shop"),
     ;
 
     companion object {
@@ -91,6 +94,7 @@ data class PermissionSet(
 
         /** Logging your own time needs no grant, so the menu key alone opens this one. */
         TIMESHEETS(setOf("timesheets"), listOf(Module.TIMESHEETS)),
+        SHOP(setOf("shop"), listOf(Module.SHOP)),
     }
 
     companion object {
@@ -104,7 +108,7 @@ data class PermissionSet(
  * works their own visits.
  */
 data class NavigationPolicy(val permissions: PermissionSet, val isEngineerRole: Boolean) {
-    enum class Home { MY_WORK, FIELD_SERVICE, TASKS, MORE }
+    enum class Home { MY_WORK, FIELD_SERVICE, TASKS, SHOP, MORE }
 
     constructor(permissions: PermissionSet) : this(permissions, FieldServicePolicy(permissions, "").isEngineerRole)
 
@@ -120,6 +124,15 @@ data class NavigationPolicy(val permissions: PermissionSet, val isEngineerRole: 
         get() = permissions.shows(PermissionSet.Feature.PROJECTS) || permissions.can(Action.READ, Module.PROJECTS)
 
     /**
+     * The shop back office gets a tab only where the workspace has the shop feature (its menu
+     * carries `shop`). Admins pass every grant check, so a grant alone would put an empty tab in
+     * front of them on workspaces that don't sell online.
+     */
+    val showsShop: Boolean
+        get() = "shop" in permissions.menuKeys ||
+            (!permissions.isAdmin && !permissions.isOwner && permissions.can(Action.READ, Module.SHOP))
+
+    /**
      * Engineers land on My Work (opsapi #610); managers and telecallers on Field Service; people who
      * only work projects on their tasks.
      */
@@ -129,6 +142,7 @@ data class NavigationPolicy(val permissions: PermissionSet, val isEngineerRole: 
             showsFieldService -> Home.FIELD_SERVICE
             showsMyWork -> Home.MY_WORK
             showsTasks -> Home.TASKS
+            showsShop -> Home.SHOP
             else -> Home.MORE
         }
 }

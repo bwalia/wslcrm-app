@@ -1,8 +1,11 @@
 # WSLCRM for Android
 
-A native Kotlin/Compose mirror of the SwiftUI app in `../WSLCRM`. So far it has the core
-(networking, auth, offline queue, permissions, theme) and the work-management rules; screens
-come next.
+A native Kotlin/Compose mirror of the SwiftUI app in `../WSLCRM`. It has the core (networking,
+auth, offline queue, permissions, theme), the work-management rules, an app shell (sign-in with
+2FA, biometric unlock, workspace choice, Shop and More tabs) and the **shop back office**
+(`features/shop`): dashboard, orders, quotes, products, categories, stock, market prices, and the
+shop assistant's chats and knowledge, over `/api/v2/shop/admin`. The Shop tab appears only where
+the workspace's menu includes `shop`. Field service, CRM and project screens come next.
 
 ## Flavours
 
