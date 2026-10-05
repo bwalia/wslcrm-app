@@ -691,7 +691,9 @@ struct ShopStockRowView: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(row.available)").font(.headline.monospacedDigit())
                     .foregroundStyle(row.isLow ? Tone.danger.textColor : Color(.label))
-                Text("alert at \(row.lowStockThreshold)").font(.caption).foregroundStyle(.secondaryText)
+                // A negative threshold means "never alert" (services, built-to-order).
+                Text(row.lowStockThreshold < 0 ? "no stock alert" : "alert at \(row.lowStockThreshold)")
+                    .font(.caption).foregroundStyle(.secondaryText)
             }
         }
         .accessibilityElement(children: .combine)
