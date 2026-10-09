@@ -71,7 +71,7 @@ targets:
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Attach existing photos to a job's quote sheet."
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: $(BRAND_APP_ICON)
-        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: $(BRAND_ACCENT_COLOR)
         CODE_SIGN_STYLE: Automatic
         ENABLE_PREVIEWS: YES
     preBuildScripts:

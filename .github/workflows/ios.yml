@@ -72,13 +72,13 @@ jobs:
             | tail -n 60
 
       # The release build, unsigned: catches a Release-only failure before main does.
-      - name: Build the tester configuration (Release-DBS-Int)
+      - name: Build the tester configuration (Release-Int)
         run: |
           set -o pipefail
           xcodebuild build \
             -project WSLCRM.xcodeproj \
-            -scheme WSLCRM-DBS-Int \
-            -configuration Release-DBS-Int \
+            -scheme WSLCRM-Int \
+            -configuration Release-Int \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
             -quiet

@@ -144,11 +144,13 @@ final class SimproDemoTests: XCTestCase {
 
     func testBrandReadsWhiteLabelValues() {
         let info: [String: String] = ["WSLBrandName": "DBS Ltd", "WSLBrandMark": "BrandMark-DBS",
+                                      "WSLBrandAccentColor": "AccentColor-DBS",
                                       "WSLBrandCompanyNumber": "03806201", "WSLBrandVATNumber": "GB 743 5371 32",
                                       "WSLBrandLegalName": "David Blakey Services Limited"]
         let brand = Brand.from(info: { info[$0] })
         XCTAssertEqual(brand.name, "DBS Ltd")
         XCTAssertEqual(brand.markImageName, "BrandMark-DBS")
+        XCTAssertEqual(brand.accentColorName, "AccentColor-DBS")
         XCTAssertEqual(brand.company.legalFooter,
                        "David Blakey Services Limited  ·  Company Registration No 03806201  ·  VAT No GB 743 5371 32")
     }
@@ -156,8 +158,9 @@ final class SimproDemoTests: XCTestCase {
     func testBrandFallsBackToHouseBrandForEmptyOrUnexpandedValues() {
         let info: [String: String] = ["WSLBrandName": "$(BRAND_NAME)", "WSLBrandMark": "  "]
         let brand = Brand.from(info: { info[$0] })
-        XCTAssertEqual(brand.name, "WSLCRM")
+        XCTAssertEqual(brand.name, "Workstation CRM")
         XCTAssertNil(brand.markImageName)
+        XCTAssertEqual(brand.accentColorName, "AccentColor")
         XCTAssertEqual(brand.company.legalFooter, "")
     }
 }

@@ -8,7 +8,7 @@ name: iOS Release (TestFlight & App Store)
 #   APP STORE            : workflow_dispatch with target = app_store (after QA)
 #
 # Pipeline: ci_build_number → prepare_signing → build_ipa → beta
-# Testers get the DBS Ltd build against int (WSLCRM-DBS-Int) unless a dispatch picks another.
+# Testers get the Workstation CRM build against int (WSLCRM-Int) unless a dispatch picks another.
 # Runner: the self-hosted Mac Studio. This repo is public, so nothing here runs for pull
 # requests — only for pushes to main, tags and manual runs, which need write access.
 # Secrets: GitHub Actions or WSLVault kv/wslcrm/ios. See docs/IOS_RELEASE.md.
@@ -44,10 +44,10 @@ on:
         description: "Which build"
         required: true
         type: choice
-        default: DBS-Int
+        default: Int
         options:
-          - DBS-Int
           - Int
+          - DBS-Int
       version:
         description: "Marketing version override (blank = project.yml)"
         required: false
@@ -63,7 +63,7 @@ permissions:
 
 jobs:
   release:
-    name: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'testflight' }} (${{ github.event_name == 'workflow_dispatch' && inputs.build || 'DBS-Int' }})
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'testflight' }} (${{ github.event_name == 'workflow_dispatch' && inputs.build || 'Int' }})
     if: >-
       github.event_name != 'push'
       || github.ref_type == 'tag'
@@ -78,8 +78,8 @@ jobs:
       VAULT_ADDR: https://vault.workstation.co.uk
       VAULT_TOKEN_FILE: /Users/balinderwalia/.secrets/wslvault/token.json
       WSLCRM_IOS_VAULT_PATH: kv/wslcrm/ios
-      RELEASE_SCHEME: WSLCRM-${{ github.event_name == 'workflow_dispatch' && inputs.build || 'DBS-Int' }}
-      RELEASE_CONFIGURATION: Release-${{ github.event_name == 'workflow_dispatch' && inputs.build || 'DBS-Int' }}
+      RELEASE_SCHEME: WSLCRM-${{ github.event_name == 'workflow_dispatch' && inputs.build || 'Int' }}
+      RELEASE_CONFIGURATION: Release-${{ github.event_name == 'workflow_dispatch' && inputs.build || 'Int' }}
       BUILDS_APP: ${{ github.event_name != 'workflow_dispatch' || inputs.target != 'invite_testers' }}
       TESTFLIGHT_TESTERS: ${{ vars.TESTFLIGHT_TESTERS }}
       TESTFLIGHT_DEMO_USER: ${{ secrets.TESTFLIGHT_DEMO_USER }}

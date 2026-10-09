@@ -4,7 +4,7 @@ import Foundation
 struct AuthAPI: Sendable {
     let client: APIClient
     /// Brands the OTP email (the server default is another product's name).
-    static let appName = "WSLCRM"
+    static let appName = "Workstation CRM"
 
     /// Step 1. Form-encoded — the server does not parse JSON on this route.
     func login(identifier: String, password: String) async throws -> LoginResponse {

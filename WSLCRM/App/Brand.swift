@@ -2,14 +2,16 @@ import Foundation
 
 /// White-label identity for this build, from `BRAND_*` build settings through Info.plist.
 ///
-/// The defaults in project.yml give the house brand ("WSLCRM", SF Symbol mark). A brand
+/// Config/Brand-Default.xcconfig gives the house brand ("Workstation CRM" and its mark). A brand
 /// xcconfig such as Config/Brand-DBS.xcconfig swaps in a customer's name, mark, app icon and the
 /// company details printed on report PDFs, without touching code.
 struct Brand: Sendable, Equatable {
     var name: String
-    /// Asset catalog image for the brand mark; nil means use the house SF Symbol.
+    /// Asset catalog image for the brand mark; nil falls back to an SF Symbol.
     var markImageName: String?
     var company: ReportCompany
+    /// The accent colour set; `<name>-Fill` and `<name>-Text` sit beside it (Tone.brand).
+    var accentColorName: String = "AccentColor"
 
     static let current = Brand.fromBundle()
 
@@ -25,7 +27,7 @@ struct Brand: Sendable, Equatable {
             // An unexpanded "$(BRAND_X)" means the setting was never defined for this build.
             return trimmed.isEmpty || trimmed.hasPrefix("$(") ? nil : trimmed
         }
-        let name = value("WSLBrandName") ?? "WSLCRM"
+        let name = value("WSLBrandName") ?? "Workstation CRM"
         return Brand(
             name: name,
             markImageName: value("WSLBrandMark"),
@@ -37,7 +39,8 @@ struct Brand: Sendable, Equatable {
                 phone: value("WSLBrandPhone"),
                 email: value("WSLBrandEmail"),
                 companyNumber: value("WSLBrandCompanyNumber"),
-                vatNumber: value("WSLBrandVATNumber")))
+                vatNumber: value("WSLBrandVATNumber")),
+            accentColorName: value("WSLBrandAccentColor") ?? "AccentColor")
     }
 }
 

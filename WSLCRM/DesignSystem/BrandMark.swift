@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The white-label brand mark: the brand's own artwork when the build sets one
-/// (BRAND_MARK), otherwise the house SF Symbol.
+/// (BRAND_MARK), otherwise an SF Symbol.
 struct BrandMark: View {
     var size: CGFloat = 44
     var brand: Brand = .current

@@ -4,13 +4,15 @@ import UIKit
 // MARK: - Tones
 
 /// Semantic colours. Every use is paired with an icon and text, never colour alone.
+/// `brand` is the build's own accent (Workstation CRM pink, DBS blue) for primary actions.
 enum Tone: Sendable {
-    case neutral, info, progress, success, warning, danger
+    case brand, neutral, info, progress, success, warning, danger
 
     /// Fills, borders and glyphs. Use `textColor` for anything a person has to read:
     /// the system greens and oranges are well under 4.5:1 against a light background.
     var color: Color {
         switch self {
+        case .brand: .accentColor
         case .neutral: .secondary
         case .info: .blue
         case .progress: .indigo
@@ -23,9 +25,11 @@ enum Tone: Sendable {
     /// Fill for a solid button or chip with white text on top: dark enough for 4.5:1 in both
     /// appearances, unlike the system greens/oranges (white on `.green` is about 1.9:1).
     var solidColor: Color {
-        Color(uiColor: UIColor { traits in
+        if self == .brand { return Color("\(Brand.current.accentColorName)-Fill") }
+        return Color(uiColor: UIColor { traits in
             let dark = traits.userInterfaceStyle == .dark
             switch self {
+            case .brand: return .tintColor
             case .neutral: return dark ? UIColor(white: 0.32, alpha: 1) : UIColor(white: 0.26, alpha: 1)
             case .info: return dark ? UIColor(red: 0.04, green: 0.36, blue: 0.80, alpha: 1)
                                     : UIColor(red: 0.00, green: 0.31, blue: 0.72, alpha: 1)
@@ -44,9 +48,11 @@ enum Tone: Sendable {
     /// The readable version of `color`: at least 4.5:1 against this tone's tinted card in
     /// both light and dark appearance (checked by the accessibility audit in the UI tests).
     var textColor: Color {
-        Color(uiColor: UIColor { traits in
+        if self == .brand { return Color("\(Brand.current.accentColorName)-Text") }
+        return Color(uiColor: UIColor { traits in
             let dark = traits.userInterfaceStyle == .dark
             switch self {
+            case .brand: return .tintColor
             case .neutral: return dark ? UIColor(white: 0.84, alpha: 1) : UIColor(white: 0.28, alpha: 1)
             case .info: return dark ? UIColor(red: 0.45, green: 0.72, blue: 1.00, alpha: 1)
                                     : UIColor(red: 0.00, green: 0.31, blue: 0.72, alpha: 1)
@@ -128,7 +134,7 @@ struct StatusBadge: View {
 
 /// Large, high-contrast button for one-handed/gloved use. Minimum 56pt tall.
 struct LargeButtonStyle: ButtonStyle {
-    var tone: Tone = .info
+    var tone: Tone = .brand
     var prominent = true
 
     func makeBody(configuration: Configuration) -> some View {
@@ -164,7 +170,7 @@ struct LargeButtonStyle: ButtonStyle {
 }
 
 extension ButtonStyle where Self == LargeButtonStyle {
-    static func large(_ tone: Tone = .info, prominent: Bool = true) -> LargeButtonStyle {
+    static func large(_ tone: Tone = .brand, prominent: Bool = true) -> LargeButtonStyle {
         LargeButtonStyle(tone: tone, prominent: prominent)
     }
 }

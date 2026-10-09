@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="172 198 720 570" width="720" height="570">
+  <title>Workstation CRM mark, on dark</title>
+  <defs><linearGradient id="momentum" x1="190" y1="0" x2="860" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FF6088"/><stop offset="0.5" stop-color="#FF004E"/><stop offset="1" stop-color="#C20035"/></linearGradient></defs>
+  <path d="M236 330 L374 704 L512 446 L650 704 L828 262" fill="none" stroke="url(#momentum)" stroke-width="108" stroke-linecap="round" stroke-linejoin="round"/><circle cx="236" cy="330" r="30" fill="#FFFFFF"/>
+</svg>

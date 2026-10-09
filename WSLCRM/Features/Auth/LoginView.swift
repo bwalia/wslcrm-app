@@ -20,7 +20,7 @@ struct LoginView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Email or username").font(.subheadline.weight(.semibold))
-                        TextField("name@company.co.uk", text: $identifier)
+                        TextField(text: $identifier, prompt: Text(verbatim: "name@company.co.uk")) { Text("Email or username") }
                             .textContentType(.username)
                             .keyboardType(.emailAddress)
                             .textInputAutocapitalization(.never)
