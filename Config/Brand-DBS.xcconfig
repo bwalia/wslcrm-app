@@ -6,6 +6,7 @@
 BRAND_NAME = DBS Ltd
 BRAND_MARK = BrandMark-DBS
 BRAND_APP_ICON = AppIcon-DBS
+BRAND_ACCENT_COLOR = AccentColor-DBS
 BRAND_LEGAL_NAME = David Blakey Services Limited
 // `//` starts a comment in xcconfig, so the strapline's separators are written /$()/.
 BRAND_STRAPLINE = Air Conditioning /$()/ Refrigeration /$()/ Heating /$()/ Electrical /$()/ Controls

@@ -12,10 +12,10 @@ APP_ID = "uk.co.workstation.wslcrm".freeze
 PROJECT = "WSLCRM.xcodeproj".freeze
 TARGET = "WSLCRM".freeze
 
-# Testers get the DBS Ltd build against int by default: the DBS Group demo workspace is
-# seeded there. RELEASE_SCHEME / RELEASE_CONFIGURATION pick another (e.g. WSLCRM-Int).
-DEFAULT_SCHEME = "WSLCRM-DBS-Int".freeze
-DEFAULT_CONFIGURATION = "Release-DBS-Int".freeze
+# Testers get the house-branded Workstation CRM build against int by default.
+# RELEASE_SCHEME / RELEASE_CONFIGURATION pick another (e.g. WSLCRM-DBS-Int for the DBS Ltd demo).
+DEFAULT_SCHEME = "WSLCRM-Int".freeze
+DEFAULT_CONFIGURATION = "Release-Int".freeze
 
 # Every main merge makes these emails internal testers on "WSLCRM Team" — App Store
 # Connect team members, so builds install with no Beta App Review. Override with the

@@ -6,6 +6,8 @@
 	<string>$(BRAND_NAME)</string>
 	<key>WSLBrandMark</key>
 	<string>$(BRAND_MARK)</string>
+	<key>WSLBrandAccentColor</key>
+	<string>$(BRAND_ACCENT_COLOR)</string>
 	<key>WSLBrandLegalName</key>
 	<string>$(BRAND_LEGAL_NAME)</string>
 	<key>WSLBrandStrapline</key>

@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workstation CRM Brand</title>
+<link rel="icon" href="logo-glyph.svg">
+<style>
+  @font-face { font-family: "Plus Jakarta Sans"; src: url("fonts/PlusJakartaSans.ttf") format("truetype"); font-weight: 200 800; }
+  :root {
+    --primary: #FF004E; --p400: #FF6088; --p600: #E6003F; --p700: #C20035;
+    --ink: #0F172A; --night: #0B1120; --surface: #131A2B; --slate: #64748B;
+    --emerald: #10B981; --amber: #F59E0B; --red: #EF4444;
+    --route: linear-gradient(90deg, #FF6088 0%, #FF004E 50%, #C20035 100%);
+    --bg: #F8FAFC; --fg: var(--ink); --muted: #475569; --card: #FFFFFF; --line: #E2E8F0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0B1120; --fg: #E8EDF5; --muted: #93A2B8; --card: #131A2B; --line: #243044; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 "Plus Jakarta Sans", system-ui, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 0 24px 96px; }
+  .hero { position: relative; overflow: hidden; background: var(--night); color: #fff; padding: 96px 24px 80px; }
+  .hero::before { content: ""; position: absolute; inset: -50% auto auto -15%; width: 70%; height: 150%;
+    background: radial-gradient(closest-side, rgba(255,0,78,.32), transparent); pointer-events: none; }
+  .hero::after { content: ""; position: absolute; inset: auto -10% -60% auto; width: 50%; height: 120%;
+    background: radial-gradient(closest-side, rgba(255,96,136,.16), transparent); pointer-events: none; }
+  .hero .inner { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1fr auto; gap: 56px; align-items: center; }
+  .hero .lockup { width: min(560px, 100%); display: block; margin-bottom: 28px; }
+  .hero h1 { font-size: clamp(48px, 7vw, 88px); line-height: 1; letter-spacing: -0.035em; margin: 0 0 18px; font-weight: 800; }
+  .hero h1 span { background: var(--route); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero p { font-size: 20px; color: #C3CCDD; margin: 0; max-width: 38ch; }
+  .hero .icon { width: min(300px, 40vw); border-radius: 22.5%; box-shadow: 0 40px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.08); }
+  h2 { font-size: 32px; letter-spacing: -0.025em; margin: 80px 0 8px; font-weight: 800; }
+  h2 + p.lead { color: var(--muted); margin: 0 0 28px; max-width: 66ch; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px; }
+  .tile { border-radius: 18px; display: grid; place-items: center; padding: 32px; min-height: 210px; border: 1px solid var(--line); }
+  .tile.light { background: #fff; } .tile.dark { background: var(--night); } .tile.pink { background: var(--primary); }
+  .tile img { max-width: 100%; max-height: 120px; }
+  .tile .mono { color: #fff; width: 120px; }
+  .caption { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .swatch { border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: var(--card); }
+  .swatch .chip { height: 110px; }
+  .swatch .meta { padding: 12px 14px; font-size: 14px; }
+  .swatch .meta b { display: block; font-size: 15px; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; }
+  .route-bar { height: 120px; border-radius: 18px; background: var(--route); display: flex; align-items: flex-end; justify-content: space-between; padding: 16px 20px; color: #fff; font-weight: 700; }
+  .type-sample .big { font-size: 60px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.05; }
+  .type-sample .big em { font-style: normal; color: var(--primary); }
+  .type-sample .mid { font-size: 24px; font-weight: 600; margin-top: 10px; }
+  .type-sample .body { color: var(--muted); margin-top: 8px; }
+  .sizes { display: flex; gap: 32px; align-items: flex-end; flex-wrap: wrap; }
+  .sizes figure { margin: 0; text-align: center; }
+  .sizes img { border-radius: 22.5%; display: block; }
+  .sizes figcaption { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .phones { display: grid; gap: 24px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .phones img { width: 100%; border-radius: 28px; border: 1px solid var(--line); box-shadow: 0 20px 50px rgba(15,23,42,.18); }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 18px; overflow: hidden; border: 1px solid var(--line); }
+  td, th { text-align: left; padding: 14px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 13px; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .do { color: #047857; } .dont { color: #B91C1C; }
+  @media (prefers-color-scheme: dark) { .do { color: #34D399; } .dont { color: #FF8A8A; } }
+  .status { display: inline-flex; gap: 8px; align-items: center; padding: 5px 12px; border-radius: 999px; font-weight: 600; font-size: 14px; margin: 4px 6px 4px 0; }
+  .status.ok { color: #047857; background: rgba(16,185,129,.14); }
+  .status.risk { color: #92400E; background: rgba(245,158,11,.18); }
+  .status.late { color: #B91C1C; background: rgba(239,68,68,.14); }
+  @media (prefers-color-scheme: dark) { .status.ok { color: #6EE7B7; } .status.risk { color: #FCD34D; } .status.late { color: #FCA5A5; } }
+  footer { color: var(--muted); font-size: 13px; margin-top: 80px; }
+  @media (max-width: 760px) { .hero .inner { grid-template-columns: 1fr; } .hero .icon { width: 160px; } }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="inner">
+    <div>
+      <img class="lockup" src="lockup-on-dark.svg" alt="Workstation CRM">
+      <h1>Work, <span>done.</span></h1>
+      <p>Jobs, visits, boards, timesheets and property deals, from the office to the van. The phone side of OpsAPI.</p>
+    </div>
+    <img class="icon" src="png/icon-1024.png" alt="Workstation CRM app icon">
+  </div>
+</header>
+<main>
+
+<h2>The mark</h2>
+<p class="lead">A “W” drawn as one continuous route. It starts at a dot (the job, the place someone is heading) and its last stroke climbs past the first, so the W ends as a tick. Booked to done, in one line.</p>
+<div class="grid">
+  <div><div class="tile light"><img src="logo-glyph.svg" alt="Mark on light"></div><div class="caption"><code>logo-glyph.svg</code>: ink start dot on light</div></div>
+  <div><div class="tile dark"><img src="logo-glyph-on-dark.svg" alt="Mark on dark"></div><div class="caption"><code>logo-glyph-on-dark.svg</code>: white start dot on dark</div></div>
+  <div><div class="tile pink"><img class="mono" src="logo-mono.svg" alt="One-colour mark" style="filter: brightness(0) invert(1)"></div><div class="caption"><code>logo-mono.svg</code>: one colour, <code>currentColor</code></div></div>
+</div>
+
+<h2>Logo</h2>
+<p class="lead">The lockup is the default. “Workstation” is ink (white on dark), “CRM” is the primary pink. Plus Jakarta Sans ExtraBold, outlined.</p>
+<div class="grid" style="grid-template-columns: 1fr 1fr">
+  <div><div class="tile light"><img src="lockup.svg" alt="Lockup on light"></div><div class="caption"><code>lockup.svg</code></div></div>
+  <div><div class="tile dark"><img src="lockup-on-dark.svg" alt="Lockup on dark"></div><div class="caption"><code>lockup-on-dark.svg</code></div></div>
+  <div><div class="tile light"><img src="wordmark.svg" alt="Wordmark on light"></div><div class="caption"><code>wordmark.svg</code></div></div>
+  <div><div class="tile dark"><img src="wordmark-on-dark.svg" alt="Wordmark on dark"></div><div class="caption"><code>wordmark-on-dark.svg</code></div></div>
+</div>
+
+<h2>App icon</h2>
+<p class="lead">Full bleed for iOS, which rounds the corners. The night background, a soft pink glow and a lifted route with a light sheen. iOS 18 dark and tinted versions ship with it.</p>
+<div class="sizes">
+  <figure><img src="png/icon-1024.png" width="180" height="180" alt=""><figcaption>Home screen</figcaption></figure>
+  <figure><img src="png/icon-dark-1024.png" width="180" height="180" alt="" style="background:#1C1C1E"><figcaption>Dark</figcaption></figure>
+  <figure><img src="png/icon-tinted-1024.png" width="180" height="180" alt="" style="background:#1C1C1E"><figcaption>Tinted</figcaption></figure>
+  <figure><img src="png/icon-1024.png" width="60" height="60" alt=""><figcaption>60 pt</figcaption></figure>
+  <figure><img src="png/icon-1024.png" width="40" height="40" alt=""><figcaption>Spotlight</figcaption></figure>
+  <figure><img src="png/icon-1024.png" width="29" height="29" alt=""><figcaption>Settings</figcaption></figure>
+</div>
+
+<h2>Colour</h2>
+<p class="lead">The OpsAPI dashboard palette, so the phone and the web look like one product.</p>
+<div class="route-bar"><span>Route gradient</span><span>#FF6088 → #FF004E → #C20035</span></div>
+<div class="grid" style="margin-top:16px">
+  <div class="swatch"><div class="chip" style="background:#FF004E"></div><div class="meta"><b>Primary</b><code>#FF004E</code> · the brand</div></div>
+  <div class="swatch"><div class="chip" style="background:#C20035"></div><div class="meta"><b>Primary 700</b><code>#C20035</code> · button fill, light</div></div>
+  <div class="swatch"><div class="chip" style="background:#E6003F"></div><div class="meta"><b>Primary 600</b><code>#E6003F</code> · app tint, light</div></div>
+  <div class="swatch"><div class="chip" style="background:#FF6088"></div><div class="meta"><b>Primary 400</b><code>#FF6088</code> · app tint, dark</div></div>
+  <div class="swatch"><div class="chip" style="background:#0F172A"></div><div class="meta"><b>Ink</b><code>#0F172A</code> · text on light</div></div>
+  <div class="swatch"><div class="chip" style="background:linear-gradient(90deg,#0B1120 50%,#131A2B 50%)"></div><div class="meta"><b>Night</b><code>#0B1120</code> / <code>#131A2B</code></div></div>
+  <div class="swatch"><div class="chip" style="background:#64748B"></div><div class="meta"><b>Slate</b><code>#64748B</code> · secondary text</div></div>
+</div>
+<p class="lead" style="margin-top:28px">Status colours mean status and nothing else, and always come with an icon and words.</p>
+<span class="status ok">● On track</span><span class="status risk">▲ At risk</span><span class="status late">■ Late · £7,000 at risk</span>
+
+<h2>Type</h2>
+<p class="lead">Plus Jakarta Sans for the brand and the web dashboard. Inside the iOS app, SF Pro, so Dynamic Type and Bold Text work.</p>
+<div class="card type-sample">
+  <div class="big">Workstation <em>CRM</em></div>
+  <div class="mid">Every job, from booked to done.</div>
+  <div class="body">ExtraBold 800 for headlines · SemiBold 600 for subheads · Regular 400 for body.</div>
+</div>
+
+<h2>In the app</h2>
+<p class="lead">The tint, primary buttons and the sign-in mark come from the brand. White-label builds swap in their own name, icon, mark and colours from one xcconfig.</p>
+<div class="phones">
+  <img src="../screenshots/brand/01-sign-in.png" alt="Sign-in, light">
+  <img src="../screenshots/brand/02-sign-in-dark.png" alt="Sign-in, dark">
+  <img src="../screenshots/brand/03-home-screen.png" alt="Home screen">
+</div>
+
+<h2>Voice</h2>
+<p class="lead">Plain, confident, practical. Say what happened and what's next.</p>
+<table>
+  <tr><th>Do</th><th>Don't</th></tr>
+  <tr><td class="do">Visit checked in at 09:12. Photos upload when you're back online.</td><td class="dont">Success! Your check-in has been processed!</td></tr>
+  <tr><td class="do">7 Mill Lane is £7,000 at risk. The buyer's AML check is missing.</td><td class="dont">Warning: deal health degraded.</td></tr>
+  <tr><td class="do">Couldn't reach the server. Your changes are saved on this phone.</td><td class="dont">Error -1009.</td></tr>
+</table>
+
+<h2>Don't</h2>
+<p class="lead">Recolour the route · flip or rotate it · move the start dot · outline it or add effects · stretch the lockup · set the full-colour logo on busy photos (use the mono mark).</p>
+
+<footer>Workstation CRM brand · every file is built by <code>tools/build-brand.py</code> · Plus Jakarta Sans under the SIL Open Font License · see <code>BRAND.md</code></footer>
+</main>
+</body>
+</html>

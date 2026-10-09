@@ -8,13 +8,13 @@ Fishers (`bwalia/fishers`, `ios/fastlane`), adapted to this repo.
 | **CI** | `.github/workflows/ios.yml` | Every push and pull request touching the app: unit tests, plus an unsigned build of the tester configuration. Runs on GitHub's macOS runners. |
 | **TestFlight (auto)** | `.github/workflows/ios_release.yml` | Every merge to `main` that touches the app |
 | **TestFlight (tag)** | same | Push a `v1.2.3` tag: ships as version 1.2.3 |
-| **TestFlight (manual)** | same, Run workflow → **testflight** | Any time; pick **DBS-Int** or **Int** |
+| **TestFlight (manual)** | same, Run workflow → **testflight** | Any time; pick **Int** or **DBS-Int** |
 | **Re-invite testers** | same, Run workflow → **invite_testers** | Re-send invites for the latest build, no rebuild |
 | **App Store review** | same, Run workflow → **app_store** | After TestFlight sign-off |
 
-Testers get **WSLCRM-DBS-Int**: DBS Ltd branding, pointed at the int server where the DBS Group
-demo workspace is seeded. Every configuration shares the bundle id `uk.co.workstation.wslcrm`,
-so TestFlight holds one app, and a manual run can ship the house-branded **Int** build instead.
+Testers get **Workstation CRM** (scheme `WSLCRM-Int`): the house brand (`docs/brand/`),
+pointed at the int server. Every configuration shares the bundle id `uk.co.workstation.wslcrm`,
+so TestFlight holds one app; a manual run with **DBS-Int** ships the DBS Ltd demo build instead.
 
 Skip an automatic release with `[skip release]` or `[skip ios]` in the merge commit message.
 
@@ -31,7 +31,7 @@ merge to main (app changed)   or   push v1.2.3   or   Run workflow
           build number: latest TestFlight build for that version + 1
                                      ▼
           fastlane prepare_signing   persistent keychain, App Store profile
-          fastlane build_ipa         archive Release-DBS-Int → WSLCRM.ipa
+          fastlane build_ipa         archive Release-Int → WSLCRM.ipa
                                      ▼
           fastlane beta              upload, wait for processing, then:
             • internal group "WSLCRM Team": installs straight away, no review

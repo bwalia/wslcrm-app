@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>Workstation CRM app icon, tinted</title>
+  <defs><linearGradient id="grey" x1="190" y1="0" x2="860" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9A9A9A"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient></defs>
+  <path d="M236 330 L374 704 L512 446 L650 704 L828 262" fill="none" stroke="url(#grey)" stroke-width="108" stroke-linecap="round" stroke-linejoin="round"/><circle cx="236" cy="330" r="30" fill="#FFFFFF"/>
+</svg>

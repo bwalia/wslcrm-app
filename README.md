@@ -1,6 +1,8 @@
-# WSLCRM — iOS
+# Workstation CRM — iOS
 
-Native iOS client (Swift 6, SwiftUI, iOS 17+) for the OpsAPI / Workstation platform. It uses
+<img src="docs/brand/png/lockup@2x.png" alt="Workstation CRM" width="360">
+
+**Workstation CRM** (code name WSLCRM) is the native iOS client (Swift 6, SwiftUI, iOS 17+) for the OpsAPI / Workstation platform. It uses
 the same REST API as the web dashboard; the backend is not modified by this project.
 
 Modules: **field service** (engineer *My Work* with a guided visit, service requests with customer
@@ -13,6 +15,9 @@ still edited in the web dashboard.
 
 No third-party dependencies — `URLSession`, `Codable`, Swift Concurrency, Keychain,
 CoreLocation and LocalAuthentication only.
+
+Brand: the mark, colours (the OpsAPI palette), type and voice are in [`docs/brand/`](docs/brand/BRAND.md);
+open `docs/brand/index.html` for the visual guide.
 
 ---
 
@@ -52,7 +57,7 @@ The API base URL is a build setting (`API_BASE_URL`) written into Info.plist and
 | `WSLCRM-Local` | `Debug-Local` | `http://127.0.0.1:4011` (`Config/Local-API.xcconfig`) — Simulator only |
 
 `WSLCRM-DBS-Int` is the demo build: int's data with DBS Ltd branding, so a demo needs no local
-stack. `WSLCRM-Int` stays house-branded for ordinary integration testing. Sign in with the
+stack. `WSLCRM-Int` is the house-branded Workstation CRM build, and the one TestFlight testers get. Sign in with the
 accounts in `build/dbs-group-demo.env` (see "Seeding the demo into int" below).
 
 ### Switching environment without a rebuild
