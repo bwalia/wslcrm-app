@@ -22,6 +22,19 @@
 	<string>$(BRAND_COMPANY_NUMBER)</string>
 	<key>WSLBrandVATNumber</key>
 	<string>$(BRAND_VAT_NUMBER)</string>
+	<key>WSLAPNSEnvironment</key>
+	<string>$(APS_ENVIRONMENT)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>uk.co.workstation.wslcrm</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>wslcrm</string>
+			</array>
+		</dict>
+	</array>
 	<key>WSLAPIBaseURL</key>
 	<string>$(API_BASE_URL)</string>
 	<key>WSLAPIEnvironmentName</key>

@@ -3,6 +3,8 @@ import SwiftUI
 struct RootView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SyncCenter.self) private var sync
+    @Environment(DeepLinkRouter.self) private var router
+    @Environment(PushCenter.self) private var push
     @Environment(\.scenePhase) private var scenePhase
     @State private var backgroundedAt: Date?
 
@@ -39,8 +41,12 @@ struct RootView: View {
         }
         .animation(.default, value: session.phase)
         .task { await session.restore() }
+        .onOpenURL { router.open($0) }
         .onChange(of: session.phase) { _, phase in
-            if phase == .signedIn { sync.replaySoon() }
+            if phase == .signedIn {
+                sync.replaySoon()
+                Task { await push.registerIfAllowed() }
+            }
             if phase == .signedOut { MyWorkRefresh.cancel() }
         }
         .onChange(of: scenePhase) { _, newPhase in

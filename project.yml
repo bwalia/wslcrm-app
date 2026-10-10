@@ -53,6 +53,14 @@ targets:
         excludes:
           - "Resources/Info*.plist"
     settings:
+      configs:
+        Debug-Int: { APS_ENVIRONMENT: development }
+        Debug-DBS-Int: { APS_ENVIRONMENT: development }
+        Debug-Prod: { APS_ENVIRONMENT: development }
+        Debug-Local: { APS_ENVIRONMENT: development }
+        Release-Int: { APS_ENVIRONMENT: production }
+        Release-DBS-Int: { APS_ENVIRONMENT: production }
+        Release-Prod: { APS_ENVIRONMENT: production }
       base:
         PRODUCT_BUNDLE_IDENTIFIER: uk.co.workstation.wslcrm
         PRODUCT_NAME: WSLCRM
@@ -66,10 +74,14 @@ targets:
         # TestFlight builds are not held waiting for it.
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_NSFaceIDUsageDescription: "Use Face ID to unlock your saved $(BRAND_NAME) session."
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Your location is recorded only when you check in to or out of a site visit, as proof of attendance."
-        INFOPLIST_KEY_NSCameraUsageDescription: "Take fault and site photos for the job's quote sheet."
-        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Attach existing photos to a job's quote sheet."
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address."
+        INFOPLIST_KEY_NSCameraUsageDescription: "Take fault and site photos for a job, or photos of a property you're capturing."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Attach existing photos to a job or a property."
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Dictate a note about a lead or property. The recording stays on this phone."
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Turn your voice note into text on this phone. The audio isn't uploaded."
         TARGETED_DEVICE_FAMILY: "1"
+        # Push (Property Deals alerts). Needs Push Notifications enabled on the App ID.
+        CODE_SIGN_ENTITLEMENTS: WSLCRM/Resources/WSLCRM.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: $(BRAND_APP_ICON)
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: $(BRAND_ACCENT_COLOR)
         CODE_SIGN_STYLE: Automatic

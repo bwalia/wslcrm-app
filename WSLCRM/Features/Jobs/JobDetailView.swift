@@ -447,6 +447,16 @@ extension View {
             .navigationDestination(for: SprintRoute.self) { SprintDetailView(uuid: $0.uuid, name: $0.name) }
             .navigationDestination(for: TaskRoute.self) { TaskDetailView(uuid: $0.uuid) }
             .navigationDestination(for: TimesheetRoute.self) { TimesheetDetailView(uuid: $0.uuid) }
+            .navigationDestination(for: PDTaskRoute.self) { PDTaskDetailView(taskUuid: $0.uuid) }
+            .navigationDestination(for: PDDealRoute.self) { PDDealView(dealUuid: $0.uuid) }
+            .navigationDestination(for: PDDealsRoute.self) { PDDealsListView(initialFilter: $0.filter) }
+            .navigationDestination(for: PDApprovalsRoute.self) { _ in PDApprovalsListView() }
+            .navigationDestination(for: PDApprovalRoute.self) { PDApprovalDetailView(approvalUuid: $0.uuid) }
+            .navigationDestination(for: PDLeadRoute.self) { PDLeadView(leadUuid: $0.uuid) }
+            .navigationDestination(for: PDDueRoute.self) { _ in PDDueView() }
+            .navigationDestination(for: PDRenovationsRoute.self) { _ in PDRenovationsListView() }
+            .navigationDestination(for: PurchaseOrdersRoute.self) { PurchaseOrdersListView(route: $0) }
+            .navigationDestination(for: PurchaseOrderRoute.self) { PurchaseOrderDetailView(uuid: $0.uuid) }
             .navigationDestination(for: FieldServiceArea.self) { area in
                 switch area {
                 case .requests: ServiceRequestsListView()

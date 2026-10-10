@@ -305,6 +305,9 @@ actor APIClient {
         if endpoint.requiresNamespace, let namespace = endpoint.namespaceOverride ?? namespaceId {
             request.setValue(namespace, forHTTPHeaderField: "X-Namespace-Id")
         }
+        for (name, value) in endpoint.headers {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
         return request
     }
 

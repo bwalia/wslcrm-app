@@ -81,6 +81,13 @@ final class SyncCenter {
         }
     }
 
+    /// A chained write (quick capture) always goes through the queue, online or not: each step is
+    /// saved as it completes, so losing signal halfway through loses nothing.
+    func enqueue(_ mutation: PendingMutation) async {
+        await queue.enqueue(mutation)
+        replaySoon()
+    }
+
     func retry(_ mutation: PendingMutation) {
         Task {
             await queue.retry(id: mutation.id)

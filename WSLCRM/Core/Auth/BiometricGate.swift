@@ -37,7 +37,11 @@ struct BiometricGate: Sendable {
     }
 
     /// Prompts for biometrics, falling back to the device passcode.
-    func authenticate(reason: String = "Unlock WSLCRM") async -> Bool {
+    func authenticate(reason: String = "Unlock your session") async -> Bool {
+        #if DEBUG
+        // UI tests can't present Face ID; `-UITestBiometric pass|fail` stands in for the person.
+        if let result = Self.uiTestResult { return result }
+        #endif
         let context = LAContext()
         context.localizedFallbackTitle = "Use Passcode"
         do {
@@ -46,4 +50,14 @@ struct BiometricGate: Sendable {
             return false
         }
     }
+
+    #if DEBUG
+    static let uiTestArgument = "-UITestBiometric"
+
+    private static var uiTestResult: Bool? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: uiTestArgument), index + 1 < arguments.count else { return nil }
+        return arguments[index + 1] == "pass"
+    }
+    #endif
 }

@@ -17,6 +17,8 @@ enum Module: String, Sendable {
     case orders
     case invoices
     case payments
+    /// Supplier purchase orders (opsapi #710).
+    case purchaseOrders = "purchase_orders"
     /// Kanban projects, boards and tasks. Note an API key also needs the `kanban` scope to be
     /// admitted by URI, which is a different name for the same module.
     case projects
@@ -42,6 +44,7 @@ enum Module: String, Sendable {
         case .orders: "orders"
         case .invoices: "invoices"
         case .payments: "payments"
+        case .purchaseOrders: "purchase orders"
         case .projects: "projects"
         case .timesheets: "timesheets"
         case .timesheetApprovals: "timesheet approvals"
@@ -100,7 +103,7 @@ struct PermissionSet: Sendable, Equatable {
     }
 
     enum Feature: Sendable, CaseIterable {
-        case jobs, visits, serviceRequests, crm, customers, products, orders, invoices
+        case jobs, visits, serviceRequests, crm, customers, products, orders, invoices, purchaseOrders
         case projects, timesheets, shop
 
         var menuKeys: Set<String> {
@@ -113,6 +116,7 @@ struct PermissionSet: Sendable, Equatable {
             case .products: ["products"]
             case .orders: ["orders"]
             case .invoices: ["invoices"]
+            case .purchaseOrders: ["purchase_orders"]
             case .projects: ["projects", "kanban"]
             // Logging your own time needs no grant, so the menu key alone opens this one.
             case .timesheets: ["timesheets"]
@@ -130,6 +134,7 @@ struct PermissionSet: Sendable, Equatable {
             case .products: [.products]
             case .orders: [.orders]
             case .invoices: [.invoices]
+            case .purchaseOrders: [.purchaseOrders]
             case .projects: [.projects]
             case .timesheets: [.timesheets]
             case .shop: [.shop]
@@ -144,19 +149,23 @@ struct PermissionSet: Sendable, Equatable {
 /// seeds (`NamespaceRoleQueries.createFieldServiceRoles`): a telecaller logs requests, a service
 /// manager runs the board, an engineer works their own visits.
 struct NavigationPolicy: Sendable, Equatable {
-    enum Home: Sendable, Equatable { case myWork, fieldService, tasks, shop, more }
+    enum Home: Sendable, Equatable { case myWork, fieldService, propertyDeals, tasks, shop, more }
 
     let permissions: PermissionSet
     let isEngineerRole: Bool
+    /// Property Deals is on for the workspace and the role can read it (`GET /property-deals/me`).
+    let hasPropertyDeals: Bool
 
-    init(permissions: PermissionSet, isEngineerRole: Bool) {
+    init(permissions: PermissionSet, isEngineerRole: Bool, hasPropertyDeals: Bool = false) {
         self.permissions = permissions
         self.isEngineerRole = isEngineerRole
+        self.hasPropertyDeals = hasPropertyDeals
     }
 
     @MainActor
     init(session: SessionStore) {
-        self.init(permissions: session.permissions, isEngineerRole: session.policy.isEngineerRole)
+        self.init(permissions: session.permissions, isEngineerRole: session.policy.isEngineerRole,
+                  hasPropertyDeals: session.propertyDeals != nil)
     }
 
     var showsMyWork: Bool {
@@ -180,11 +189,16 @@ struct NavigationPolicy: Sendable, Equatable {
             || (!permissions.isAdmin && !permissions.isOwner && permissions.can(.read, .shop))
     }
 
-    /// Engineers land on My Work (opsapi #610); managers and telecallers on Field Service; people
-    /// who only work projects on their tasks.
+    /// The deals tab (Today, deals) appears only where the plugin is on: an admin's grants alone
+    /// would otherwise put an empty tab in front of them, as with the shop.
+    var showsPropertyDeals: Bool { hasPropertyDeals }
+
+    /// Engineers land on My Work (opsapi #610); managers and telecallers on Field Service; property
+    /// operators on Today; people who only work projects on their tasks.
     var home: Home {
         if isEngineerRole, showsMyWork { return .myWork }
         if showsFieldService { return .fieldService }
+        if showsPropertyDeals { return .propertyDeals }
         if showsMyWork { return .myWork }
         if showsTasks { return .tasks }
         if showsShop { return .shop }
