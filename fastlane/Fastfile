@@ -1,3 +1,4 @@
+require "shellwords"
 # Fastfile — WSLCRM iOS release (GitHub Actions + Vault + fastlane).
 #
 # The same pipeline as Fishers: CI signs with an App Store Connect API key whose
@@ -71,6 +72,26 @@ def spaceship_token_from!(api_key)
     token_args[:filepath] = api_key[:key_filepath] || api_key[:filepath] || ENV["ASC_KEY_FILEPATH"]
   end
   Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(**token_args)
+end
+
+# The app registers for APNs (Property Deals alerts), so the App ID needs Push Notifications and
+# the distribution profile must carry `aps-environment`. Adds the capability through the ASC API
+# when it's missing; returns true when it changed (older profiles then lack the entitlement).
+def ensure_push_capability!(api_key)
+  spaceship_token_from!(api_key)
+  bundle = Spaceship::ConnectAPI::BundleId.find(APP_ID)
+  UI.user_error!("App ID #{APP_ID} not found in the developer portal") unless bundle
+  push = Spaceship::ConnectAPI::BundleIdCapability::Type::PUSH_NOTIFICATIONS
+  return false if bundle.get_capabilities.any? { |c| c.capability_type == push }
+  bundle.create_capability(push)
+  UI.important("Turned on Push Notifications for #{APP_ID}")
+  true
+end
+
+def profile_has_push?(profile_path)
+  return false unless profile_path && File.exist?(profile_path)
+  plist = `security cms -D -i #{profile_path.shellescape} 2>/dev/null`
+  plist.include?("aps-environment")
 end
 
 def generate_xcode_project!
@@ -439,7 +460,12 @@ platform :ios do
     # Reuses the Apple Distribution certificate already in the keychain when there is one;
     # Apple caps how many a team may have.
     cert(api_key: api_key, keychain_path: kc_path, keychain_password: kc_pass, output_path: tmp_dir)
-    get_provisioning_profile(api_key: api_key, app_identifier: APP_ID)
+    push_added = ensure_push_capability!(api_key)
+    get_provisioning_profile(api_key: api_key, app_identifier: APP_ID, force: push_added)
+    unless profile_has_push?(lane_context[SharedValues::SIGH_PROFILE_PATH])
+      UI.important("Profile has no aps-environment entitlement; making a new one")
+      get_provisioning_profile(api_key: api_key, app_identifier: APP_ID, force: true)
+    end
     profile_name = lane_context[SharedValues::SIGH_NAME]
     profile_path = lane_context[SharedValues::SIGH_PROFILE_PATH]
     emit_github("GITHUB_ENV", "INSTALLED_PROFILE_PATH=#{profile_path}") if profile_path
