@@ -17,6 +17,28 @@ actor FakeSender: MutationSender {
         if let result { throw result }
         sent.append(mutation.summary)
     }
+
+    // Chained writes: steps are keyed "METHOD path"; each answers the next scripted result
+    // (a JSON body, or an error), or `{"success":true,"data":{}}` when nothing is scripted.
+    private(set) var stepsSent: [Endpoint] = []
+    private var stepScript: [String: [Result<String, APIError>]] = [:]
+
+    func scriptStep(_ key: String, _ results: [Result<String, APIError>]) {
+        stepScript[key] = results
+    }
+
+    func sendStep(_ endpoint: Endpoint) async throws -> Data {
+        let key = "\(endpoint.method.rawValue) \(endpoint.path)"
+        var queue = stepScript[key] ?? []
+        let result = queue.isEmpty ? .success(#"{"success":true,"data":{}}"#) : queue.removeFirst()
+        stepScript[key] = queue
+        switch result {
+        case .failure(let error): throw error
+        case .success(let body):
+            stepsSent.append(endpoint)
+            return Data(body.utf8)
+        }
+    }
 }
 
 /// Movable clock so backoff can be tested without waiting.

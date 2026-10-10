@@ -8,10 +8,12 @@ struct Services: Sendable {
     let crm: CRMAPI
     let commerce: CommerceAPI
     let invoices: InvoicesAPI
+    let purchaseOrders: PurchaseOrdersAPI
     let simpro: SimproAPI
     let kanban: KanbanAPI
     let timesheets: TimesheetsAPI
     let shop: ShopAPI
+    let propertyDeals: PropertyDealsAPI
 
     init(client: APIClient, cache: ResponseCache) {
         self.client = client
@@ -19,10 +21,12 @@ struct Services: Sendable {
         crm = CRMAPI(client: client)
         commerce = CommerceAPI(client: client)
         invoices = InvoicesAPI(client: client)
+        purchaseOrders = PurchaseOrdersAPI(client: client)
         simpro = SimproAPI(client: client)
         kanban = KanbanAPI(client: client)
         timesheets = TimesheetsAPI(client: client)
         shop = ShopAPI(client: client)
+        propertyDeals = PropertyDealsAPI(client: client, cache: cache)
     }
 
     /// Used only as the environment default (previews); never talks to a real server.
@@ -47,6 +51,7 @@ final class AppEnvironment {
     let sync: SyncCenter
     let session: SessionStore
     let endpoint: APIEndpointController
+    let push: PushCenter
 
     init(config: AppConfig, session urlSession: URLSession, tokenStore: TokenStore, cacheDirectory: URL,
          queueFile: URL, defaults: UserDefaults, monitorConnectivity: Bool) {
@@ -61,6 +66,10 @@ final class AppEnvironment {
         session = SessionStore(auth: AuthAPI(client: client), client: client, cache: cache,
                                environmentName: config.environmentName, defaults: defaults)
         sync.currentUserId = { [weak session] in session?.user?.uuid }
+        push = PushCenter(api: DeviceTokensAPI(client: client), defaults: defaults,
+                          environment: PushCenter.environment())
+        push.isSignedIn = { [weak session] in session?.phase == .signedIn }
+        session.willSignOut = { [weak push] in await push?.unregister() }
         endpoint = APIEndpointController(current: config.apiBaseURL,
                                          buildDefault: config.buildAPIBaseURL,
                                          buildName: config.buildEnvironmentName,

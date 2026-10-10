@@ -67,6 +67,8 @@ struct ServerError: Sendable, Equatable {
         if case .string = top["error"], let detail = top["message"]?.stringValue, detail != result.message {
             result.reason = detail
         }
+        // Plugin routes put the code beside a plain-string error (`"code": "PLUGIN_DISABLED"`).
+        if result.code == nil, let code = top["code"]?.stringValue { result.code = code }
         if let reason = top["reason"]?.stringValue { result.reason = reason }
         if result.reason == nil, let details = top["details"]?.stringValue { result.reason = details }
         if let retry = top["retry_after"]?.stringValue.flatMap(TimeInterval.init) { result.retryAfter = retry }

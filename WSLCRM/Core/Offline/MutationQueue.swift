@@ -4,11 +4,17 @@ import os
 /// Sends a queued mutation. Abstracted so the queue can be tested without networking.
 protocol MutationSender: Sendable {
     func send(_ mutation: PendingMutation) async throws
+    /// One step of a chained write; the body is read for ids later steps need.
+    func sendStep(_ endpoint: Endpoint) async throws -> Data
 }
 
 extension APIClient: MutationSender {
     func send(_ mutation: PendingMutation) async throws {
         try await sendDiscardingBody(mutation.endpoint)
+    }
+
+    func sendStep(_ endpoint: Endpoint) async throws -> Data {
+        try await sendRaw(endpoint).0
     }
 }
 
@@ -39,6 +45,7 @@ actor MutationQueue {
     }
 
     private let fileURL: URL
+    private let uploadsDirectory: URL
     private let sender: MutationSender
     private let backoff: Backoff
     private let now: @Sendable () -> Date
@@ -55,8 +62,10 @@ actor MutationQueue {
     }
 
     init(fileURL: URL, sender: MutationSender, backoff: Backoff = Backoff(),
+         uploadsDirectory: URL = PendingUploads.defaultDirectory(),
          now: @escaping @Sendable () -> Date = { Date() }) {
         self.fileURL = fileURL
+        self.uploadsDirectory = uploadsDirectory
         self.sender = sender
         self.backoff = backoff
         self.now = now
@@ -96,12 +105,14 @@ actor MutationQueue {
     }
 
     func discard(id: UUID) {
+        if let mutation = items.first(where: { $0.id == id }) { PendingUploads.remove(for: mutation, in: uploadsDirectory) }
         items.removeAll { $0.id == id }
         persist()
     }
 
     /// Discards everything belonging to a user (only called after the user confirms at sign-out).
     func discardAll(forUser userId: String) {
+        for mutation in items where mutation.userId == userId { PendingUploads.remove(for: mutation, in: uploadsDirectory) }
         items.removeAll { $0.userId == userId }
         persist()
     }
@@ -140,7 +151,12 @@ actor MutationQueue {
             items[index].nextAttemptAt = nil
 
             do {
-                try await sender.send(mutation)
+                if mutation.isChain {
+                    try await sendChain(id)
+                    PendingUploads.remove(for: mutation, in: uploadsDirectory)
+                } else {
+                    try await sender.send(mutation)
+                }
                 items.removeAll { $0.id == id }
                 persist()
                 sent += 1
@@ -190,6 +206,53 @@ actor MutationQueue {
         return .completed(sent: sent, failed: failed)
     }
 
+    /// Sends a chain's remaining steps in order. Each finished step (and any id it returned) is
+    /// saved straight away, so after an interruption the next replay starts at the first unfinished
+    /// step, with the same idempotency key.
+    private func sendChain(_ id: UUID) async throws {
+        while let index = items.firstIndex(where: { $0.id == id }),
+              let stepIndex = items[index].steps?.firstIndex(where: { !$0.done }) {
+            let mutation = items[index]
+            let step = mutation.steps![stepIndex]
+            guard let endpoint = try mutation.endpoint(for: step, uploadsDirectory: uploadsDirectory) else {
+                throw APIError.validation(ServerError(status: 0, message: "\(step.label): an earlier step didn't return the id it needs",
+                                                      fieldErrors: [:], rawBody: ""))
+            }
+            let data: Data
+            do {
+                data = try await sender.sendStep(endpoint)
+            } catch let error as APIError {
+                throw error.naming(step.label)
+            }
+            var captured: String?
+            if step.captures != nil {
+                guard let uuid = Self.uuid(in: data) else {
+                    throw APIError.validation(ServerError(status: 0, message: "\(step.label): the server didn't return an id",
+                                                          fieldErrors: [:], rawBody: String(decoding: data.prefix(300), as: UTF8.self)))
+                }
+                captured = uuid
+            }
+            guard let current = items.firstIndex(where: { $0.id == id }) else { return }
+            items[current].steps?[stepIndex].done = true
+            if let key = step.captures, let captured {
+                var results = items[current].results ?? [:]
+                results[key] = captured
+                items[current].results = results
+            }
+            persist()
+        }
+    }
+
+    /// `uuid` from `{ data: { uuid } }`, `{ data: { lead: { uuid } } }` or `{ uuid }`.
+    static func uuid(in data: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        let inner = json["data"] as? [String: Any] ?? json
+        for candidate in [inner, inner["lead"] as? [String: Any], inner["property"] as? [String: Any], json] {
+            if let uuid = candidate?["uuid"] as? String, !uuid.isEmpty { return uuid }
+        }
+        return nil
+    }
+
     private func persist() {
         do {
             let data = try JSONEncoder().encode(items)
@@ -200,5 +263,22 @@ actor MutationQueue {
             log.error("Failed to persist offline queue: \(String(describing: error), privacy: .public)")
         }
         observer?(items)
+    }
+}
+
+private extension APIError {
+    /// A server rejection inside a chain says which step it was ("Property: postcode is invalid").
+    func naming(_ step: String) -> APIError {
+        func prefixed(_ error: ServerError) -> ServerError {
+            var copy = error
+            copy.message = "\(step): \(error.message)"
+            return copy
+        }
+        switch self {
+        case .validation(let e): return .validation(prefixed(e))
+        case .forbidden(let e): return .forbidden(prefixed(e))
+        case .notFound(let e): return .notFound(prefixed(e))
+        default: return self
+        }
     }
 }

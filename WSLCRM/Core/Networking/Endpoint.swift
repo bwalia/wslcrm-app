@@ -19,6 +19,8 @@ struct Endpoint: Sendable {
     var namespaceOverride: String?
     var contentType = "application/json"
     var timeout: TimeInterval = 30
+    /// Extra request headers, e.g. `Idempotency-Key`.
+    var headers: [String: String] = [:]
 
     init(_ method: HTTPMethod, _ path: String, query: [URLQueryItem] = [],
          requiresAuth: Bool = true, requiresNamespace: Bool = true) {
@@ -105,6 +107,13 @@ struct Endpoint: Sendable {
         body.append(file.data)
         append("\r\n--\(boundary)--\r\n")
         return body
+    }
+
+    /// A retry with the same key gets the first answer back and creates nothing (OpsAPI keeps keys 24 h).
+    func withIdempotencyKey(_ key: String?) -> Endpoint {
+        var copy = self
+        if let key { copy.headers["Idempotency-Key"] = key }
+        return copy
     }
 
     func withRawBody(_ data: Data?) -> Endpoint {

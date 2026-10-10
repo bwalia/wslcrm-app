@@ -4,52 +4,90 @@ struct MainTabView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SyncCenter.self) private var sync
     @Environment(ConnectivityMonitor.self) private var connectivity
+    @Environment(DeepLinkRouter.self) private var router
     @State private var selection: Tab = .myWork
     @State private var showingPendingChanges = false
+    @State private var propertyDealsPath = NavigationPath()
 
-    enum Tab: Hashable { case myWork, fieldService, tasks, shop, more }
+    enum Tab: Hashable { case myWork, fieldService, propertyDeals, tasks, shop, more }
 
     var body: some View {
         let permissions = session.permissions
         TabView(selection: $selection) {
             if showsMyWork(permissions) {
-                NavigationStack { MyWorkView().withAppDestinations() }
+                NavigationStack { MyWorkView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
                     .tabItem { Label("My Work", systemImage: "person.badge.clock") }
                     .tag(Tab.myWork)
             }
             if showsFieldService(permissions) {
-                NavigationStack { FieldServiceHubView().withAppDestinations() }
+                NavigationStack { FieldServiceHubView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
                     .tabItem { Label("Field Service", systemImage: "wrench.and.screwdriver") }
                     .tag(Tab.fieldService)
             }
+            if NavigationPolicy(session: session).showsPropertyDeals {
+                NavigationStack(path: $propertyDealsPath) { PDTodayView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
+                    .tabItem { Label("Deals", systemImage: "house.and.flag") }
+                    .tag(Tab.propertyDeals)
+            }
             if NavigationPolicy(session: session).showsTasks {
-                NavigationStack { MyTasksView().withAppDestinations() }
+                NavigationStack { MyTasksView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
                     .tabItem { Label("Tasks", systemImage: "checklist") }
                     .tag(Tab.tasks)
             }
             if NavigationPolicy(session: session).showsShop {
-                NavigationStack { ShopHomeView().withAppDestinations() }
+                NavigationStack { ShopHomeView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
                     .tabItem { Label("Shop", systemImage: "storefront") }
                     .tag(Tab.shop)
             }
-            NavigationStack { MoreView().withAppDestinations() }
+            NavigationStack { MoreView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
                 .tabItem { Label("More", systemImage: "ellipsis.circle") }
                 .tag(Tab.more)
-        }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            Button {
-                showingPendingChanges = true
-            } label: {
-                SyncStatusBanner(isOnline: connectivity.isOnline, pendingCount: sync.pendingCount,
-                                 failedCount: sync.failedCount)
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("sync.banner")
         }
         .sheet(isPresented: $showingPendingChanges) {
             NavigationStack { PendingChangesView() }
         }
-        .onAppear { selection = initialTab(permissions) }
+        .onAppear {
+            selection = initialTab(permissions)
+            openPendingLink()
+        }
+        .onChange(of: router.pending) { openPendingLink() }
+    }
+
+    /// Opens a push tap or `wslcrm://` link, switching workspace first when it belongs to another
+    /// one. A switch rebuilds this view (`workspaceGeneration`), and the new one opens the link.
+    private func openPendingLink() {
+        guard let link = router.pending else { return }
+        switch DeepLinkResolver.resolve(link, currentWorkspaceId: session.workspace?.uuid, workspaces: session.workspaces) {
+        case .switchWorkspace(let workspace):
+            Task { await session.select(workspace) }
+        case .ignore:
+            router.clear()
+        case .open:
+            router.clear()
+            guard NavigationPolicy(session: session).showsPropertyDeals else { return }
+            selection = .propertyDeals
+            var path = NavigationPath()
+            switch link.target {
+            case .task(let uuid): path.append(PDTaskRoute(uuid: uuid))
+            case .approval(let uuid): path.append(PDApprovalRoute(uuid: uuid))
+            case .deal(let uuid): path.append(PDDealRoute(uuid: uuid))
+            case .today: break
+            }
+            propertyDealsPath = path
+        }
+    }
+
+    /// Offline / unsynced state, just under each tab's navigation bar. (Inset on the TabView or the
+    /// NavigationStack, iOS 26 draws it over the bar and its buttons.)
+    private var syncBanner: some View {
+        Button {
+            showingPendingChanges = true
+        } label: {
+            SyncStatusBanner(isOnline: connectivity.isOnline, pendingCount: sync.pendingCount,
+                             failedCount: sync.failedCount)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("sync.banner")
     }
 
     private func showsMyWork(_ permissions: PermissionSet) -> Bool {
@@ -64,6 +102,7 @@ struct MainTabView: View {
         switch NavigationPolicy(session: session).home {
         case .myWork: .myWork
         case .fieldService: .fieldService
+        case .propertyDeals: .propertyDeals
         case .tasks: .tasks
         case .shop: .shop
         case .more: .more
@@ -177,6 +216,10 @@ struct MoreView: View {
         if permissions.shows(.invoices) {
             NavigationLink { InvoicesListView() } label: { Label("Invoices", systemImage: "doc.text") }
                 .accessibilityIdentifier("more.invoices")
+        }
+        if permissions.shows(.purchaseOrders) {
+            NavigationLink(value: PurchaseOrdersRoute()) { Label("Purchase orders", systemImage: "shippingbox.and.arrow.backward") }
+                .accessibilityIdentifier("more.purchaseOrders")
         }
         // Value links: these screens push further value routes (asset, report), and a destination
         // link above them makes SwiftUI rebuild the list, dropping its filters and the row tap.

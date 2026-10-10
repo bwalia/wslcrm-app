@@ -21,6 +21,8 @@ final class SessionStore {
     private(set) var workspaces: [Workspace] = []
     private(set) var workspace: Workspace?
     private(set) var permissions: PermissionSet = .none
+    /// Property Deals access in this workspace; nil when the plugin is off or the role can't read it.
+    private(set) var propertyDeals: PDAccess?
     /// Set when permissions could not be loaded (e.g. offline at first launch).
     private(set) var permissionsError: APIError?
     /// Incremented on every workspace change; feature roots use it as their identity so
@@ -38,6 +40,8 @@ final class SessionStore {
     @ObservationIgnored private let cache: ResponseCache
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var eventsTask: Task<Void, Never>?
+    /// Runs before the logout call, while the session can still authenticate (push token removal).
+    @ObservationIgnored var willSignOut: (() async -> Void)?
 
     private static let selectedWorkspaceKey = "selectedWorkspaceUuid"
     private static let sessionCacheNamespace = "_session"
@@ -89,7 +93,7 @@ final class SessionStore {
     }
 
     func unlock() async {
-        guard await biometrics.authenticate(reason: "Unlock your WSLCRM session") else { return }
+        guard await biometrics.authenticate(reason: "Unlock your \(Brand.current.name) session") else { return }
         if user != nil, workspace != nil {
             phase = .signedIn
         } else {
@@ -248,11 +252,23 @@ final class SessionStore {
             }
             permissionsError = apiError
         }
+        await reloadPropertyDealsAccess()
+    }
+
+    /// The plugin has no main menu entry, so `GET /property-deals/me` decides whether it shows.
+    private func reloadPropertyDealsAccess() async {
+        let api = PropertyDealsAPI(client: client, cache: cache)
+        if let me = try? await api.me() {
+            propertyDeals = PDAccess(me: me)
+        } else {
+            propertyDeals = nil
+        }
     }
 
     // MARK: - Sign out
 
     func signOut() async {
+        await willSignOut?()
         let refreshToken = await client.currentRefreshToken
         await auth.logout(refreshToken: refreshToken)
         await endLocalSession()
@@ -284,6 +300,7 @@ final class SessionStore {
         workspaces = []
         workspace = nil
         permissions = .none
+        propertyDeals = nil
         phase = .signedOut
     }
 }

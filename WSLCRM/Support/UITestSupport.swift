@@ -18,6 +18,10 @@ enum UITestSupport {
     /// signs in as, so RBAC can be exercised in the UI tests. Defaults to the engineer.
     static let roleArgument = "-UITestRole"
 
+    /// `-UITestNoSignal`: the phone reports no connection (requests still reach the stub, so screens
+    /// load), for checking what the app refuses to do offline.
+    static let noSignalArgument = "-UITestNoSignal"
+
     /// Reads one text field out of a multipart body, so the stub can echo what was sent without
     /// pulling in a parser. `nonisolated`: the stub server answers off the main actor.
     nonisolated static func multipartValue(_ name: String, in raw: String) -> String? {
@@ -57,10 +61,15 @@ enum UITestSupport {
            let role = UITestStubServer.Role(rawValue: ProcessInfo.processInfo.arguments[index + 1]) {
             UITestStubServer.shared.role = role
         }
-        return AppEnvironment(config: config, session: URLSession(configuration: configuration),
-                              tokenStore: InMemoryTokenStore(), cacheDirectory: temp.appendingPathComponent("cache"),
-                              queueFile: temp.appendingPathComponent("queue.json"), defaults: defaults,
-                              monitorConnectivity: false)
+        let environment = AppEnvironment(config: config, session: URLSession(configuration: configuration),
+                                         tokenStore: InMemoryTokenStore(), cacheDirectory: temp.appendingPathComponent("cache"),
+                                         queueFile: temp.appendingPathComponent("queue.json"), defaults: defaults,
+                                         monitorConnectivity: false)
+        if ProcessInfo.processInfo.arguments.contains(noSignalArgument) { environment.connectivity.update(online: false) }
+        // The "Turn on alerts" card would sit above every Today test; the push tests don't need it.
+        UserDefaults.standard.set(!ProcessInfo.processInfo.arguments.contains("-UITestShowPushPrompt"),
+                                  forKey: "pdPushPromptDismissed")
+        return environment
     }
 }
 
@@ -124,6 +133,14 @@ final class UITestStubServer: @unchecked Sendable {
     /// The three roles OPSAPI seeds for field service, with the grants it returns for each.
     enum Role: String, Sendable {
         case engineer, manager, telecaller
+        /// A Property Deals operator in "Demo Buyers Ltd" (the SPEC §5 scenario); the only role
+        /// whose workspace has the plugin on.
+        case propertyOperator = "operator"
+        /// The back office in "Demo Buyers Ltd": a Property Deals manager who also runs invoices
+        /// and purchase orders (opsapi #709/#710 seed these grants for `pd_manager`).
+        case propertyManager = "pdmanager"
+
+        var hasPropertyDeals: Bool { self == .propertyOperator || self == .propertyManager }
 
         var grants: [String: [String]] {
             switch self {
@@ -135,6 +152,10 @@ final class UITestStubServer: @unchecked Sendable {
                             "payments": ["manage"], "timesheets": ["read"], "timesheet_approvals": ["manage"],
                             "projects": ["manage"]]
             case .telecaller: ["fs_service_requests": ["create", "read", "update"], "customers": ["create", "read"]]
+            case .propertyOperator: ["projects": ["read", "update"], "crm_accounts": ["read"]]
+            case .propertyManager: ["projects": ["manage"], "crm_accounts": ["manage"], "customers": ["manage"],
+                                    "orders": ["manage"], "invoices": ["manage"], "payments": ["manage"],
+                                    "purchase_orders": ["manage"]]
             }
         }
 
@@ -144,6 +165,8 @@ final class UITestStubServer: @unchecked Sendable {
             case .engineer: ("Tom", "Fletcher", "tom.fletcher@dbs-limited.example")
             case .manager: ("Claire", "Donnelly", "claire.donnelly@dbs-limited.example")
             case .telecaller: ("Aisha", "Rahman", "aisha.rahman@dbs-limited.example")
+            case .propertyOperator: ("Sam", "Okafor", "sam.okafor@demo-buyers.example")
+            case .propertyManager: ("Priya", "Shah", "priya.shah@demo-buyers.example")
             }
         }
 
@@ -155,6 +178,8 @@ final class UITestStubServer: @unchecked Sendable {
                             "field_service_visits", "invoices", "field_service_parts", "timesheets",
                             "projects"]
             case .telecaller: ["customers", "field_service_requests"]
+            case .propertyOperator: ["crm_leads", "projects", "timesheets"]
+            case .propertyManager: ["crm_leads", "projects", "timesheets", "invoices", "purchase_orders"]
             }
         }
     }
@@ -173,6 +198,11 @@ final class UITestStubServer: @unchecked Sendable {
     private var tasks: [String: [String: Any]] = [:]
     private var taskComments: [String: [[String: Any]]] = [:]
     private var timesheets: [String: [String: Any]] = [:]
+    private var propertyDeals = UITestPropertyDealsStub()
+    private var purchaseOrders = UITestPurchaseOrdersStub()
+
+    /// Writes the Property Deals stub received (for UI tests that check what reached the server).
+    var propertyDealsWrites: [String] { lock.withLock { propertyDeals.writes } }
 
     func reset() {
         lock.withLock {
@@ -195,15 +225,28 @@ final class UITestStubServer: @unchecked Sendable {
             tasks = Self.seededTasks()
             taskComments = [Self.reviewTaskUuid: [], Self.runningTaskUuid: [], Self.plainTaskUuid: []]
             timesheets = Self.seededTimesheets()
+            propertyDeals.reset()
+            purchaseOrders.reset()
         }
     }
 
     func handle(method: String, url: URL, body: Data) -> (Int, Any) {
-        lock.withLock { route(method: method, path: url.path, body: body) }
+        lock.withLock {
+            propertyDeals.query = url.query ?? ""
+            purchaseOrders.query = url.query ?? ""
+            return route(method: method, path: url.path, body: body)
+        }
     }
 
     private func route(method: String, path: String, body: Data) -> (Int, Any) {
         let json = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] ?? [:]
+        propertyDeals.isManager = role == .propertyManager
+        if let handled = propertyDeals.route(method: method, path: path, json: json, enabled: role.hasPropertyDeals) {
+            return handled
+        }
+        if role.grants["purchase_orders"] != nil, let handled = purchaseOrders.route(method: method, path: path, json: json) {
+            return handled
+        }
         switch (method, path) {
         case ("POST", "/auth/login"):
             let form = String(decoding: body, as: UTF8.self)
@@ -481,7 +524,7 @@ final class UITestStubServer: @unchecked Sendable {
             let uuid = Self.taskUuid(in: p)
             var list = taskComments[uuid] ?? []
             list.append(["uuid": "c\(list.count + 1)", "content": json["content"] as? String ?? "",
-                         "user_uuid": Self.userUuid, "created_at": "2026-09-19 09:00:00",
+                         "user_uuid": Self.userUuid, "created_at": "2026-09-19 09:00:00", "is_edited": false,
                          "user": ["uuid": Self.userUuid, "first_name": role.person.first,
                                   "last_name": role.person.last]])
             taskComments[uuid] = list
@@ -788,7 +831,8 @@ final class UITestStubServer: @unchecked Sendable {
     }
 
     private var namespace: [String: Any] {
-        ["id": 7, "uuid": Self.namespaceUuid, "name": "DBS Limited", "slug": "dbs-limited", "is_owner": false,
+        ["id": 7, "uuid": Self.namespaceUuid, "name": role.hasPropertyDeals ? "Demo Buyers Ltd" : "DBS Limited",
+         "slug": role.hasPropertyDeals ? "demo-buyers" : "dbs-limited", "is_owner": false,
          "status": "active", "member_status": "active"]
     }
 
