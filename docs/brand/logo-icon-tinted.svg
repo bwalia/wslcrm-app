@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <title>Workstation CRM app icon, tinted</title>
-  <defs><linearGradient id="grey" x1="190" y1="0" x2="860" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9A9A9A"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient></defs>
-  <path d="M236 330 L374 704 L512 446 L650 704 L828 262" fill="none" stroke="url(#grey)" stroke-width="108" stroke-linecap="round" stroke-linejoin="round"/><circle cx="236" cy="330" r="30" fill="#FFFFFF"/>
+  <defs><linearGradient id="fold" x1="0" y1="668" x2="0" y2="372" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#BDBDBD"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient><linearGradient id="fade" x1="0" y1="668" x2="0" y2="372" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#BDBDBD"/><stop offset="1" stop-color="#8C8C8C"/></linearGradient></defs>
+  <g transform="translate(512 520) scale(1.12) translate(-512 -520)"><polygon points="365.0,668.0 483.0,668.0 571.0,372.0 453.0,372.0" fill="url(#fold)"/><polygon points="541.0,668.0 659.0,668.0 747.0,372.0 629.0,372.0" fill="url(#fade)"/><polygon points="277.0,372.0 395.0,372.0 483.0,668.0 365.0,668.0" fill="#FFFFFF"/><polygon points="453.0,372.0 571.0,372.0 659.0,668.0 541.0,668.0" fill="#FFFFFF"/></g>
 </svg>

@@ -5,8 +5,8 @@ dark, tinted and clear variants. Open Icon Composer (Xcode › Open Developer To
 new icon and add these, back to front:
 
 1. `1-background.svg`: the night background with its pink glow. Fills the canvas; the system masks it.
-2. `2-route.svg`: the W route. Turn on glass and specular.
-3. `3-start.svg`: the start dot. Glass on; keep it the top layer.
+2. `2-ribbon-back.svg`: the W's two up-strokes (shaded, the last one fading). Glass on.
+3. `3-ribbon-front.svg`: the W's two down-strokes in white. Glass and specular on; keep it the top layer.
 
 Save as `AppIcon.icon` in `WSLCRM/Resources/`. The flat `AppIcon.appiconset` (with its dark
 and tinted images) stays as the fallback for iOS 17 and 18.

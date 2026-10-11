@@ -270,3 +270,69 @@ final class PropertyPASheetTests: XCTestCase {
                        "the screen keeps polling while the PA works")
     }
 }
+
+/// opsapi Week 3 "Think": rules-engine Today, Why #1, Prepare Me from records, Coach.
+final class PropertyPAWeek3Tests: XCTestCase {
+    private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
+        try JSONDecoder.opsAPI().decode(T.self, from: Data(json.utf8))
+    }
+
+    func testTodayKeepsTheEnginesOrderAndPacksTheBudget() throws {
+        let server = try decode(PAServerToday.self, """
+            {"cards": [
+               {"opportunity_uuid": "o1", "rank": 1, "person_name": "Sarah Collins", "property_address": "22 Station Road", "score": "87",
+                "signals": [{"key": "event_just_happened", "weight": 30, "text": "Second valuation yesterday", "ref": "pa_events:e1"}],
+                "action": "Call Sarah", "objective": "Find out about Tom", "minutes": 15},
+               {"opportunity_uuid": "o2", "rank": 2, "person_name": "Rick Hughes", "score": 40, "minutes": 10, "why_now": "Quiet for 3 weeks"}],
+             "budget": {"minutes": 15, "used": 15, "fits": [{"opportunity_uuid": "o1", "rank": 1, "score": 87, "minutes": 15}],
+                        "waits": [{"opportunity_uuid": "o2", "minutes": 10}]}}
+            """)
+        let full = PAMapping.today(from: server, budgeted: false)
+        XCTAssertEqual(full.cards.map(\.uuid), ["o1", "o2"])
+        XCTAssertEqual(full.cards[0].whyNow, "Second valuation yesterday", "the top signal, when there's no why_now")
+        XCTAssertEqual(full.cards[0].score, 87)
+        XCTAssertEqual(full.cards[0].estimatedMinutes, 15)
+        let packed = PAMapping.today(from: server, budgeted: true)
+        XCTAssertEqual(packed.cards.map(\.uuid), ["o1"])
+        XCTAssertEqual(packed.brief?.text, "1 thing fits in 15 minutes; 1 can wait.")
+    }
+
+    func testWhyListsTheRealSignalsWithTheirSources() throws {
+        let why = PAMapping.why(from: try decode(PAServerWhy.self, """
+            {"rank": 1, "of": 10, "score": 55, "signals": [{"key": "promised_decision", "weight": 25, "text": "She said she'd decide", "ref": "pa_events:e2"}],
+             "explanation": "Ranked by points from named signals"}
+            """), cardUuid: "o1")
+        XCTAssertEqual(why.signals.first?.label, "She said she'd decide")
+        XCTAssertEqual(why.signals.first?.points, 25)
+        XCTAssertEqual(why.signals.first?.source?.type, "event")
+        XCTAssertEqual(why.score, 55)
+    }
+
+    func testPrepareFromRecordsLabelsInferencesAndTurnsUnknownsIntoQuestions() throws {
+        let brief = PAMapping.brief(from: try decode(PAServerPrepare.self, """
+            {"opportunity_uuid": "o1", "snapshot": [{"text": "22 Station Road", "ref": "pa_opportunities:o1"}],
+             "price": [{"text": "Second valuation (£240,000)", "ref": "pa_events:e1", "label": "stated"}],
+             "objections": [{"text": "The valuation may anchor her", "ref": "pa_events:e1", "label": "inference"}],
+             "unknowns": ["motivation", "timescale"], "questions": [{"field": "motivation", "question": "Why is she selling?"}],
+             "playbook": [{"title": "A competing valuation", "rule": "Ask what it was based on", "ref": "pa_knowledge:k1"}],
+             "objective": "Find out about Tom", "recommended_action": "Call Sarah"}
+            """))
+        XCTAssertEqual(brief.sections.map(\.key), ["snapshot", "position", "objections", "questions", "playbook"])
+        XCTAssertEqual(brief.sections[0].facts[0].source?.type, "opportunity")
+        XCTAssertTrue(brief.sections[2].facts[0].isUnconfirmedJudgement, "an inference is never shown as a fact")
+        XCTAssertEqual(brief.sections[3].facts[0].text, "Why is she selling?")
+        XCTAssertEqual(brief.gaps, ["Motivation", "Timescale"])
+        XCTAssertEqual(brief.objective, "Call Sarah. Find out about Tom")
+    }
+
+    func testCoachingAsksQuestionsAndKeepsAssumptionsLabelled() throws {
+        let answer = PAMapping.answer(fromCoach: try decode(PAServerCoach.self, """
+            {"known": [{"text": "Won't go below £235,000", "ref": "pa_opportunities:o1:expectation_price"}],
+             "assumed": [{"text": "£225k might work", "is_inferred": true}],
+             "questions": ["Price or speed?"], "next_step": "Hand it off with the answers."}
+            """))
+        XCTAssertTrue(answer.answer.hasPrefix("Before any figure, find out:\n• Price or speed?"))
+        XCTAssertTrue(answer.answer.hasSuffix("Hand it off with the answers."))
+        XCTAssertEqual(answer.facts.map(\.isUnconfirmedJudgement), [false, true])
+    }
+}

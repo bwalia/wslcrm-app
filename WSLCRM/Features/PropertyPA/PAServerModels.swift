@@ -220,3 +220,102 @@ struct PAServerStartCapture: Encodable, Sendable, Equatable {
     var channel: String
     var opportunityUuid: String?
 }
+
+// MARK: - Week 3 "Think" (3259419): rules-engine Today, Why #1, Prepare Me, Coach, Teach
+
+/// A fact with the record it came from: `ref` is `table:uuid[:field]`.
+struct PAServerFact: Decodable, Sendable, Hashable {
+    var text: String
+    var ref: String?
+    var isInferred: Bool?
+    /// "stated", "inference", "judgement, unconfirmed".
+    var label: String?
+}
+
+struct PAServerSignal: Decodable, Sendable, Hashable {
+    var key: String
+    @LenientDouble var weight: Double? = nil
+    var text: String?
+    var ref: String?
+}
+
+/// `GET /today?minutes=`: my opportunities ranked by named, weighted signals (never by the AI).
+struct PAServerToday: Decodable, Sendable {
+    @LenientList var cards: [Card] = []
+    var budget: Budget?
+
+    struct Card: Decodable, Sendable, Hashable {
+        var opportunityUuid: String
+        var title: String?
+        var kind: String?
+        var personName: String?
+        var personUuid: String?
+        var propertyAddress: String?
+        @LenientDouble var score: Double? = nil
+        @LenientList var signals: [PAServerSignal] = []
+        var action: String?
+        var objective: String?
+        @LenientInt var minutes: Int? = nil
+        @LenientInt var rank: Int? = nil
+        var whyNow: String?
+    }
+
+    struct Budget: Decodable, Sendable {
+        @LenientInt var minutes: Int? = nil
+        @LenientInt var used: Int? = nil
+        @LenientList var fits: [Card] = []
+        @LenientList var waits: [Wait] = []
+    }
+
+    struct Wait: Decodable, Sendable, Hashable {
+        var opportunityUuid: String?
+        var title: String?
+        @LenientInt var minutes: Int? = nil
+    }
+}
+
+/// `GET /today/why/:opportunity_id`.
+struct PAServerWhy: Decodable, Sendable {
+    @LenientInt var rank: Int? = nil
+    @LenientInt var of: Int? = nil
+    @LenientDouble var score: Double? = nil
+    @LenientList var signals: [PAServerSignal] = []
+    var explanation: String?
+}
+
+/// `GET /prepare/:opportunity_id`: built from records (every fact has a ref), not by a model.
+struct PAServerPrepare: Decodable, Sendable {
+    var opportunityUuid: String?
+    var title: String?
+    var personName: String?
+    @LenientList var snapshot: [PAServerFact] = []
+    var lastInteraction: PAServerFact?
+    @LenientList var price: [PAServerFact] = []
+    @LenientList var decisionMakers: [PAServerFact] = []
+    @LenientList var promises: [PAServerFact] = []
+    @LenientList var objections: [PAServerFact] = []
+    @LenientList var unknowns: [String] = []
+    @LenientList var questions: [Question] = []
+    @LenientList var playbook: [Rule] = []
+    var objective: String?
+    var recommendedAction: String?
+
+    struct Question: Decodable, Sendable, Hashable { var field: String?; var question: String? }
+    struct Rule: Decodable, Sendable, Hashable { var key: String?; var title: String?; var rule: String?; var ref: String? }
+}
+
+/// `GET /coach/:opportunity_id?situation=`: known vs assumed, questions first, never a figure.
+struct PAServerCoach: Decodable, Sendable {
+    @LenientList var known: [PAServerFact] = []
+    @LenientList var assumed: [PAServerFact] = []
+    @LenientList var questions: [String] = []
+    @LenientList var playbook: [PAServerPrepare.Rule] = []
+    var nextStep: String?
+    var never: String?
+}
+
+struct PAServerTeach: Encodable, Sendable, Equatable {
+    var statement: String
+    var scope: String
+    var approve: Bool
+}

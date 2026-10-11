@@ -24,21 +24,26 @@ Open `index.html` for the visual guide.
 |---|---|
 | `logo-icon.svg` | iOS app icon, full bleed 1024 (iOS rounds the corners). Rendered into `WSLCRM/Resources/Assets.xcassets/AppIcon.appiconset`. |
 | `logo-icon-dark.svg` / `logo-icon-tinted.svg` | The iOS 18+ dark and tinted home-screen icons. |
-| `logo-glyph.svg` / `logo-glyph-on-dark.svg` | The mark alone: in-app, favicons, avatars. The start dot is ink on light and white on dark. |
+| `logo-glyph.svg` / `logo-glyph-on-dark.svg` | The round mark alone: in-app, favicons, avatars. The same disc works on light and dark. |
 | `logo-mono.svg` | One colour (`currentColor`) for embossing, watermarks and single-colour print. |
 | `lockup.svg` / `lockup-on-dark.svg` | Mark + wordmark, the default logo. |
 | `wordmark.svg` / `wordmark-on-dark.svg` | Wordmark alone, where the mark is already nearby. |
-| `icon-layers/` | Layers for Icon Composer (Liquid Glass). |
+| `icon-layers/` | Layers for Icon Composer (Liquid Glass): background, ribbon back strokes, ribbon front strokes. |
 | `png/` | PNG renders (`@2x`) and `brand-preview.png`. |
 
-**The mark** is a "W" drawn as one continuous route. It starts at a dot (the job, the place
-someone is heading) and its last stroke climbs past the first, so the W finishes as a tick:
-work, done. The colour runs light to deep along the route.
+**The mark** is the Workstation icon: a white "W" folded from one ribbon on a `#FF004E` disc.
+The two up-strokes sit behind the down-strokes and are shaded, so the W reads as a ribbon folding
+at each point; the last stroke fades towards the top. On the iOS home screen the disc becomes
+the full-bleed square (iOS rounds the corners), with the W a little larger.
 
-- **Clear space:** the height of the start dot's halo, about a quarter of the mark's height, on every side.
+**The logo** is the round mark with the wordmark **Workstation CRM** and an **AI** badge: a primary
+pill with white letters, read as "Workstation CRM (AI)". Write the product as *Workstation CRM*
+in running text; the badge marks the AI-assisted edition (the Property PA).
+
+- **Clear space:** a quarter of the disc's diameter on every side.
 - **Minimum size:** the mark is 16 px tall on screen; the lockup is 140 px wide.
-- **Don't:** recolour the route, flip or rotate it, move the start dot, outline it, add
-  effects, or set the full-colour logo on busy photos (use the mono mark there).
+- **Don't:** recolour the disc or the W, flip or rotate it, outline it, add effects, or set
+  the full-colour logo on busy photos (use the mono mark there).
 - The wordmark is **Plus Jakarta Sans ExtraBold** converted to outlines
   (SIL Open Font License, `fonts/OFL.txt`), so it renders the same everywhere.
 
@@ -57,7 +62,7 @@ dashboard look like one product.
 | Token | Hex | Role |
 |---|---|---|
 | Primary | `#FF004E` | The brand colour: the mark, "CRM", hero moments |
-| Primary 400 / 700 | `#FF6088` / `#C20035` | The route gradient's ends. 700 is the solid button fill on light (white text 6:1) |
+| Primary 400 / 700 | `#FF6088` / `#C20035` | Gradient ends and the dark icon's W. 700 is the solid button fill on light (white text 6:1) |
 | Primary 600 | `#E6003F` | App tint on light; button fill on dark |
 | Ink | `#0F172A` | Text and the wordmark on light |
 | Night | `#0B1120` / `#131A2B` | Dark backgrounds and surfaces; the icon background |
@@ -91,9 +96,9 @@ come with an icon and words.
 
 ## Shape and motion
 
-- Rounded everything: strokes with round caps and joins, cards at 14–18 pt corners.
-- The **route** is the brand motif: a single line with a start dot. Use it for empty states,
-  progress and onboarding illustrations.
+- Rounded containers (cards at 14–18 pt corners, the disc), crisp flat-cut strokes inside them.
+- The **folded ribbon** is the brand motif: bands that fold at an angle, front in white, back
+  shaded. Use it for empty states, progress and onboarding illustrations.
 - Motion is quick and calm: 150–250 ms, ease-out. Respect Reduce Motion.
 
 ## Voice

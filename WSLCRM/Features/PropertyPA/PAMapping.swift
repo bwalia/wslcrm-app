@@ -323,3 +323,82 @@ enum PAMapping {
         String(name.split(separator: " ").first ?? Substring(name))
     }
 }
+
+// MARK: - Week 3
+
+extension PAMapping {
+    /// A `table:uuid[:field]` ref as a source chip.
+    static func source(ref: String?, label: String? = nil) -> PASource? {
+        guard let ref else { return nil }
+        return source(PAServerRun.Source(type: nil, id: ref, label: label))
+    }
+
+    static func fact(_ f: PAServerFact, by author: String? = nil) -> PAFact {
+        let inferred = f.isInferred == true || f.label == "inference" || (f.label?.contains("judgement") ?? false)
+        return PAFact(text: f.text, kind: inferred ? .inferred : .stated, confirmed: inferred ? false : nil,
+                      by: inferred ? author : nil, source: source(ref: f.ref))
+    }
+
+    static func card(from c: PAServerToday.Card) -> PACard {
+        let name = c.personName ?? c.title ?? "Opportunity"
+        return PACard(uuid: c.opportunityUuid, rank: c.rank, kind: c.kind == "buy" ? .opportunity : .call,
+                      person: PACard.Person(uuid: c.personUuid, name: name),
+                      property: (c.propertyAddress ?? c.title).flatMap { $0 == name ? nil : PACard.Property(address: $0) },
+                      opportunityUuid: c.opportunityUuid, action: c.action ?? "Follow up with \(firstName(name))",
+                      whyNow: c.whyNow ?? c.signals.first?.text, objective: c.objective,
+                      estimatedMinutes: c.minutes, score: c.score)
+    }
+
+    /// The ranked day; with a time budget, only the cards that fit (and how many wait).
+    static func today(from server: PAServerToday, budgeted: Bool) -> PAToday {
+        var today = PAToday()
+        let cards = budgeted ? (server.budget?.fits ?? server.cards) : server.cards
+        today.cards = cards.map(card(from:))
+        today.mode = budgeted ? "minutes" : "full"
+        let waits = server.budget?.waits.count ?? 0
+        if budgeted, let budget = server.budget {
+            today.brief = .init(text: "\(today.cards.count) \(today.cards.count == 1 ? "thing fits" : "things fit") in \(budget.minutes ?? 0) minutes"
+                                + (waits > 0 ? "; \(waits) can wait." : "."))
+        }
+        return today
+    }
+
+    static func why(from server: PAServerWhy, cardUuid: String) -> PAWhy {
+        PAWhy(cardUuid: cardUuid, score: server.score,
+              signals: server.signals.map {
+                  PAWhy.Signal(key: $0.key, label: $0.text ?? Formatters.humanize($0.key), weight: $0.weight, points: $0.weight,
+                               source: source(ref: $0.ref))
+              },
+              explanation: server.explanation)
+    }
+
+    static func brief(from p: PAServerPrepare) -> PABrief {
+        var sections: [PABrief.Section] = []
+        func add(_ key: String, _ title: String, _ facts: [PAFact]) {
+            if !facts.isEmpty { sections.append(.init(key: key, title: title, facts: facts)) }
+        }
+        add("snapshot", "Snapshot", p.snapshot.map { fact($0) })
+        if let last = p.lastInteraction { add("last", "Last meaningful conversation", [fact(last)]) }
+        add("position", "Price and offers", p.price.map { fact($0) })
+        add("decision_makers", "Decision makers", p.decisionMakers.map { fact($0) })
+        add("promises", "Promises", p.promises.map { fact($0) })
+        add("objections", "Likely objections", p.objections.map { fact($0) })
+        add("questions", "Questions to establish", p.questions.compactMap { $0.question.map { PAFact(text: $0, kind: .proposed) } })
+        add("playbook", "Playbook", p.playbook.map {
+            PAFact(text: [$0.title, $0.rule].compactMap { $0 }.joined(separator: ": "), kind: .stated,
+                   source: source(ref: $0.ref, label: "Rule"))
+        })
+        let objective = [p.recommendedAction, p.objective].compactMap { $0 }.joined(separator: ". ")
+        return PABrief(opportunityUuid: p.opportunityUuid, sections: sections,
+                       gaps: p.unknowns.map { fieldLabels[$0] ?? Formatters.humanize($0) },
+                       objective: objective.isEmpty ? nil : objective)
+    }
+
+    /// Coaching: questions first, what's known (cited) and what's assumed, never a figure.
+    static func answer(fromCoach c: PAServerCoach) -> PAAnswer {
+        var text = "Before any figure, find out:\n" + c.questions.prefix(5).map { "• \($0)" }.joined(separator: "\n")
+        if let next = c.nextStep { text += "\n\n\(next)" }
+        let facts = c.known.map { fact($0) } + c.assumed.map { fact($0) }
+        return PAAnswer(answer: text, facts: facts, gaps: [], actions: [])
+    }
+}

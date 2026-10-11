@@ -6,6 +6,8 @@ BRAND_NAME = Workstation CRM
 BRAND_MARK = BrandMark-WSLCRM
 BRAND_APP_ICON = AppIcon
 BRAND_ACCENT_COLOR = AccentColor
+// Shown as a badge after the name: "Workstation CRM (AI)" (docs/brand/BRAND.md § Logo).
+BRAND_EDITION = AI
 BRAND_LEGAL_NAME =
 BRAND_STRAPLINE =
 BRAND_ADDRESS =
