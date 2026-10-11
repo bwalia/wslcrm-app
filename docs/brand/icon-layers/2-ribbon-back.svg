@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>Ribbon, back strokes</title>
+  <defs><linearGradient id="fold" x1="0" y1="668" x2="0" y2="372" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFE1E9"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient><linearGradient id="fade" x1="0" y1="668" x2="0" y2="372" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFE1E9"/><stop offset="1" stop-color="#FFB8CB"/></linearGradient></defs>
+  <polygon points="365.0,668.0 483.0,668.0 571.0,372.0 453.0,372.0" fill="url(#fold)"/><polygon points="541.0,668.0 659.0,668.0 747.0,372.0 629.0,372.0" fill="url(#fade)"/>
+</svg>

@@ -12,6 +12,8 @@ struct Brand: Sendable, Equatable {
     var company: ReportCompany
     /// The accent colour set; `<name>-Fill` and `<name>-Text` sit beside it (Tone.brand).
     var accentColorName: String = "AccentColor"
+    /// A badge after the name ("AI" for Workstation CRM (AI)); white-label brands leave it out.
+    var edition: String?
 
     static let current = Brand.fromBundle()
 
@@ -40,7 +42,8 @@ struct Brand: Sendable, Equatable {
                 email: value("WSLBrandEmail"),
                 companyNumber: value("WSLBrandCompanyNumber"),
                 vatNumber: value("WSLBrandVATNumber")),
-            accentColorName: value("WSLBrandAccentColor") ?? "AccentColor")
+            accentColorName: value("WSLBrandAccentColor") ?? "AccentColor",
+            edition: value("WSLBrandEdition"))
     }
 }
 

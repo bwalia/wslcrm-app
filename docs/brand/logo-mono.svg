@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="172 198 720 570" width="720" height="570">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="24 24 976 976" width="976" height="976">
   <title>Workstation CRM mark, one colour</title>
   <defs></defs>
-  <mask id="m"><rect x="172" y="198" width="720" height="570" fill="#fff"/><circle cx="236" cy="330" r="30" fill="#000"/></mask><g mask="url(#m)"><path d="M236 330 L374 704 L512 446 L650 704 L828 262" fill="none" stroke="currentColor" stroke-width="108" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <mask id="m"><rect x="24" y="24" width="976" height="976" fill="#fff"/><polygon points="365.0,668.0 483.0,668.0 571.0,372.0 453.0,372.0" fill="#000"/><polygon points="541.0,668.0 659.0,668.0 747.0,372.0 629.0,372.0" fill="#000"/><polygon points="277.0,372.0 395.0,372.0 483.0,668.0 365.0,668.0" fill="#000"/><polygon points="453.0,372.0 571.0,372.0 659.0,668.0 541.0,668.0" fill="#000"/></mask><circle cx="512" cy="512" r="480" fill="currentColor" mask="url(#m)"/>
 </svg>

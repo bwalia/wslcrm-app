@@ -83,9 +83,24 @@ struct LoginView: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 8) {
                 BrandMark(size: 88)
-                Text(Brand.current.name)
-                    .font(.largeTitle.bold())
-                    .accessibilityIdentifier("login.brandName")
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(Brand.current.name)
+                        .font(.largeTitle.bold())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    if let edition = Brand.current.edition {
+                        Text(edition)
+                            .font(.title2.weight(.heavy))
+                            .padding(.horizontal, 12).padding(.vertical, 3)
+                            .foregroundStyle(.white)
+                            .background(Tone.brand.solidColor, in: Capsule())
+                            .fixedSize()
+                            .accessibilityHidden(true)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel([Brand.current.name, Brand.current.edition].compactMap { $0 }.joined(separator: " "))
+                .accessibilityIdentifier("login.brandName")
                 Text("Sign in to your \(Brand.current.name) account")
                     .font(.title3)
                     .foregroundStyle(.secondaryText)

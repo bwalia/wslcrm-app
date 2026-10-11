@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # Usage: python3 docs/brand/tools/build-brand.py docs/brand   (needs fonttools; rsvg-convert for PNGs)
-"""Builds every Workstation CRM logo file from one definition of the mark.
+"""Builds every Workstation CRM (AI) logo file from one definition of the mark.
 
-The mark is a "W" drawn as one continuous route: it starts at a white dot (the job, where
-someone is going) and its last stroke climbs past the first, so the W ends as a tick. Its
-colour is the OpsAPI primary, #FF004E, running light to deep along the route.
+The mark is the Workstation icon: a white "W" folded from one ribbon on a #FF004E disc (the
+OpsAPI primary). The wordmark is "Workstation CRM" with an "AI" badge.
 
 Writes the SVGs into the brand folder, PNG renders into png/, the Icon Composer layers into
 icon-layers/, and (with --app) the iOS asset catalog images.
@@ -32,53 +31,46 @@ PRIMARY = "#FF004E"  # OpsAPI primary-500
 DEEP = "#C20035"  # OpsAPI primary-700
 WHITE = "#FFFFFF"
 
-# The route, on the 1024 icon grid. Round caps and joins at this width keep it friendly.
-ROUTE = "M236 330 L374 704 L512 446 L650 704 L828 262"
-START = (236, 330)
-STROKE = 108
-# Bounds of the route including the stroke: x 182–882, y 208–758.
-GLYPH_BOX = (172, 198, 720, 570)  # x, y, w, h with a little air
+# The mark: a white "W" folded from one ribbon, on a #FF004E disc (the Workstation icon).
+# Four flat-cut strokes on the 1024 grid; the up-strokes sit behind and are shaded, so the W reads
+# as a ribbon folding at each point.
+W_TOP, W_BOTTOM = 372, 668
+W_THICK, W_RUN = 118, 88
+W_LEFT = 512 - (4 * W_RUN + W_THICK) / 2
 
 
-def momentum(gid="momentum"):
-    return (f'<linearGradient id="{gid}" x1="190" y1="0" x2="860" y2="0" gradientUnits="userSpaceOnUse">'
-            f'<stop offset="0" stop-color="{ROSE}"/><stop offset="0.5" stop-color="{PRIMARY}"/>'
-            f'<stop offset="1" stop-color="{DEEP}"/></linearGradient>')
+def stroke_poly(i):
+    """Stroke i (0-3): down-right for even i, up-right for odd, as a parallelogram."""
+    x0 = W_LEFT + i * W_RUN
+    t, b = (W_TOP, W_BOTTOM) if i % 2 == 0 else (W_BOTTOM, W_TOP)
+    pts = [(x0, t), (x0 + W_THICK, t), (x0 + W_RUN + W_THICK, b), (x0 + W_RUN, b)]
+    return " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
 
 
-def route(stroke, extra=""):
-    return (f'<path d="{ROUTE}" fill="none" stroke="{stroke}" stroke-width="{STROKE}" '
-            f'stroke-linecap="round" stroke-linejoin="round"{extra}/>')
+def w_mark(front=WHITE, back="url(#fold)", last="url(#fade)"):
+    """The W: back strokes (up) first, then the front strokes (down) over them."""
+    return (f'<polygon points="{stroke_poly(1)}" fill="{back}"/>'
+            f'<polygon points="{stroke_poly(3)}" fill="{last}"/>'
+            f'<polygon points="{stroke_poly(0)}" fill="{front}"/>'
+            f'<polygon points="{stroke_poly(2)}" fill="{front}"/>')
 
 
-def start_dot(fill=WHITE, glow=True):
-    x, y = START
-    halo = (f'<circle cx="{x}" cy="{y}" r="40" fill="{fill}" opacity="0.6" filter="url(#soft)"/>' if glow else "")
-    return f'{halo}<circle cx="{x}" cy="{y}" r="30" fill="{fill}"/>'
+def w_defs(light="#FFFFFF", fold="#FFE1E9", fade_to="#FFB8CB"):
+    return (f'<linearGradient id="fold" x1="0" y1="{W_BOTTOM}" x2="0" y2="{W_TOP}" gradientUnits="userSpaceOnUse">'
+            f'<stop offset="0" stop-color="{fold}"/><stop offset="1" stop-color="{light}"/></linearGradient>'
+            f'<linearGradient id="fade" x1="0" y1="{W_BOTTOM}" x2="0" y2="{W_TOP}" gradientUnits="userSpaceOnUse">'
+            f'<stop offset="0" stop-color="{fold}"/><stop offset="1" stop-color="{fade_to}"/></linearGradient>')
 
 
-DEPTH_DEFS = (
-    '<linearGradient id="sheen" x1="0" y1="250" x2="0" y2="760" gradientUnits="userSpaceOnUse">'
-    '<stop offset="0" stop-color="#FFFFFF" stop-opacity="0.35"/><stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0"/>'
-    '</linearGradient>'
-    '<filter id="lift" x="-20%" y="-20%" width="140%" height="150%">'
-    '<feDropShadow dx="0" dy="24" stdDeviation="26" flood-color="#020611" flood-opacity="0.65"/></filter>'
-    '<filter id="soft" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="18"/></filter>')
+DISC_DEFS = (f'<radialGradient id="disc" cx="0.3" cy="0.25" r="0.85">'
+             f'<stop offset="0" stop-color="#FF2D6E"/><stop offset="0.6" stop-color="{PRIMARY}"/>'
+             f'<stop offset="1" stop-color="#E40046"/></radialGradient>'
+             '<filter id="lift" x="-20%" y="-20%" width="140%" height="150%">'
+             '<feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#7A0026" flood-opacity="0.35"/></filter>')
 
-BACKGROUND_DEFS = (
-    '<linearGradient id="bg" x1="0.1" y1="0" x2="0.9" y2="1">'
-    '<stop offset="0" stop-color="#1B2439"/><stop offset="0.55" stop-color="#0B1120"/><stop offset="1" stop-color="#060A14"/>'
-    '</linearGradient>'
-    '<radialGradient id="glow" cx="0.22" cy="0.16" r="0.75">'
-    '<stop offset="0" stop-color="#FF004E" stop-opacity="0.32"/><stop offset="0.6" stop-color="#FF004E" stop-opacity="0"/>'
-    '</radialGradient>'
-    '<radialGradient id="glow2" cx="0.9" cy="0.92" r="0.6">'
-    '<stop offset="0" stop-color="#FF6088" stop-opacity="0.22"/><stop offset="1" stop-color="#FF6088" stop-opacity="0"/>'
-    '</radialGradient>')
-
-BACKGROUND = ('<rect width="1024" height="1024" fill="url(#bg)"/>'
-              '<rect width="1024" height="1024" fill="url(#glow)"/>'
-              '<rect width="1024" height="1024" fill="url(#glow2)"/>')
+FULL_BLEED = '<rect width="1024" height="1024" fill="url(#disc)"/>'
+DISC = '<circle cx="512" cy="512" r="480" fill="url(#disc)"/>'
+GLYPH_BOX = (24, 24, 976, 976)  # the disc with a hair of air
 
 
 def svg(title, body, defs="", view="0 0 1024 1024", size=None):
@@ -97,36 +89,42 @@ def write(name, text):
 
 # MARK: Icon and mark
 
-LIFTED_MARK = (f'<g filter="url(#lift)">{route("url(#momentum)")}</g>'
-               f'{route("url(#sheen)")}{start_dot()}')
-
-# iOS masks the corners itself, so the icon is full bleed.
-write("logo-icon.svg", svg("Workstation CRM app icon", BACKGROUND + LIFTED_MARK, BACKGROUND_DEFS + momentum() + DEPTH_DEFS))
-# Dark appearance: the system draws its own dark backdrop behind a transparent icon.
-write("logo-icon-dark.svg", svg("Workstation CRM app icon, dark", LIFTED_MARK, momentum() + DEPTH_DEFS))
+# iOS masks the corners itself, so the app icon is full bleed: the W on brand red, a little larger.
+ICON_W = f'<g transform="translate(512 520) scale(1.12) translate(-512 -520)" filter="url(#lift)">{w_mark()}</g>'
+write("logo-icon.svg", svg("Workstation CRM app icon", FULL_BLEED + ICON_W, DISC_DEFS + w_defs()))
+# Dark appearance: the system draws its own dark backdrop behind a transparent icon; the W turns pink.
+write("logo-icon-dark.svg", svg("Workstation CRM app icon, dark",
+                                f'<g transform="translate(512 520) scale(1.12) translate(-512 -520)">'
+                                f'{w_mark(PRIMARY, "url(#fold)", "url(#fade)")}</g>',
+                                w_defs(light=PRIMARY, fold=DEEP, fade_to=ROSE)))
 # Tinted appearance: greyscale on transparent; the system tints it.
 write("logo-icon-tinted.svg", svg("Workstation CRM app icon, tinted",
-                                  route("url(#grey)") + start_dot(WHITE, glow=False),
-                                  '<linearGradient id="grey" x1="190" y1="0" x2="860" y2="0" gradientUnits="userSpaceOnUse">'
-                                  '<stop offset="0" stop-color="#9A9A9A"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient>'))
+                                  f'<g transform="translate(512 520) scale(1.12) translate(-512 -520)">'
+                                  f'{w_mark("#FFFFFF", "url(#fold)", "url(#fade)")}</g>',
+                                  w_defs(light="#FFFFFF", fold="#BDBDBD", fade_to="#8C8C8C")))
 
 gx, gy, gw, gh = GLYPH_BOX
 glyph_view = f"{gx} {gy} {gw} {gh}"
-# On light surfaces the white start dot needs an ink centre to stay visible.
-write("logo-glyph.svg", svg("Workstation CRM mark", route("url(#momentum)") + start_dot(INK, glow=False),
-                            momentum(), view=glyph_view))
-write("logo-glyph-on-dark.svg", svg("Workstation CRM mark, on dark", route("url(#momentum)") + start_dot(WHITE, glow=False),
-                                    momentum(), view=glyph_view))
-x, y = START
+# The round mark: exactly the Workstation icon. Works on light and dark.
+GLYPH = DISC + w_mark()
+write("logo-glyph.svg", svg("Workstation CRM mark", GLYPH, DISC_DEFS + w_defs(), view=glyph_view))
+write("logo-glyph-on-dark.svg", svg("Workstation CRM mark, on dark", GLYPH, DISC_DEFS + w_defs(), view=glyph_view))
 write("logo-mono.svg", svg("Workstation CRM mark, one colour",
                            f'<mask id="m"><rect x="{gx}" y="{gy}" width="{gw}" height="{gh}" fill="#fff"/>'
-                           f'<circle cx="{x}" cy="{y}" r="30" fill="#000"/></mask>'
-                           f'<g mask="url(#m)">{route("currentColor")}</g>', view=glyph_view))
+                           f'{w_mark("#000", "#000", "#000")}</mask>'
+                           f'<circle cx="512" cy="512" r="480" fill="currentColor" mask="url(#m)"/>', view=glyph_view))
 
 # Icon Composer layers (iOS 26 Liquid Glass), back to front.
-write("icon-layers/1-background.svg", svg("Background", BACKGROUND, BACKGROUND_DEFS))
-write("icon-layers/2-route.svg", svg("Route", route("url(#momentum)"), momentum()))
-write("icon-layers/3-start.svg", svg("Start dot", start_dot(WHITE, glow=False)))
+for old in ("icon-layers/2-route.svg", "icon-layers/3-start.svg"):
+    if os.path.exists(os.path.join(brand, old)):
+        os.remove(os.path.join(brand, old))
+write("icon-layers/1-background.svg", svg("Background", FULL_BLEED, DISC_DEFS))
+write("icon-layers/2-ribbon-back.svg", svg("Ribbon, back strokes",
+                                           f'<polygon points="{stroke_poly(1)}" fill="url(#fold)"/>'
+                                           f'<polygon points="{stroke_poly(3)}" fill="url(#fade)"/>', w_defs()))
+write("icon-layers/3-ribbon-front.svg", svg("Ribbon, front strokes",
+                                            f'<polygon points="{stroke_poly(0)}" fill="#FFFFFF"/>'
+                                            f'<polygon points="{stroke_poly(2)}" fill="#FFFFFF"/>'))
 
 # MARK: Wordmark and lockups (Plus Jakarta Sans ExtraBold, outlined)
 
@@ -161,31 +159,48 @@ def name_paths(size, x, baseline, color):
     return f'<path fill="{color}" d="{d1}"/><path fill="{PRIMARY}" d="{d2}"/>', w1 + gap + w2
 
 
+def ai_badge(size, x, baseline):
+    """The "AI" badge: a primary pill with white letters, sitting on the cap height."""
+    cap = CAP * size
+    letters, lw = text_path("AI", size * 0.62, 0, 0, tracking=0.02)
+    pad_x, h = size * 0.24, cap * 1.02
+    w = lw + 2 * pad_x
+    top = baseline - cap - (h - cap) / 2
+    ty = top + h / 2 + CAP * size * 0.62 / 2
+    pill = f'<rect x="{x:.1f}" y="{top:.1f}" width="{w:.1f}" height="{h:.1f}" rx="{h / 2:.1f}" fill="{PRIMARY}"/>'
+    return pill + f'<path fill="#FFFFFF" transform="translate({x + pad_x:.1f} {ty:.1f})" d="{letters}"/>', w
+
+
+def name_with_ai(size, x, baseline, color):
+    paths, width = name_paths(size, x, baseline, color)
+    badge, bw = ai_badge(size, x + width + size * 0.22, baseline)
+    return paths + badge, width + size * 0.22 + bw
+
+
 def wordmark(color, name, title):
     size = 160
-    paths, width = name_paths(size, 24, 24 + CAP * size, color)
+    paths, width = name_with_ai(size, 24, 24 + CAP * size, color)
     w, h = int(width + 48), int(CAP * size * 1.3 + 48)
     write(name, svg(title, paths, size=(w, h), view=f"0 0 {w} {h}"))
 
 
-def lockup(color, dot, name, title):
+def lockup(color, name, title):
     height = 190
     scale = height / gh
-    size = 140
+    size = 132
     cap = CAP * size
-    tx = 24 + gw * scale + 48
+    tx = 24 + gw * scale + 44
     baseline = 24 + height / 2 + cap / 2
-    paths, width = name_paths(size, tx, baseline, color)
+    paths, width = name_with_ai(size, tx, baseline, color)
     w, h = int(tx + width + 28), int(height + 48)
-    body = (f'<g transform="translate(24 24) scale({scale:.5f}) translate({-gx} {-gy})">'
-            f'{route("url(#momentum)")}{start_dot(dot, glow=False)}</g>{paths}')
-    write(name, svg(title, body, momentum(), size=(w, h), view=f"0 0 {w} {h}"))
+    body = f'<g transform="translate(24 24) scale({scale:.5f}) translate({-gx} {-gy})">{GLYPH}</g>{paths}'
+    write(name, svg(title, body, DISC_DEFS + w_defs(), size=(w, h), view=f"0 0 {w} {h}"))
 
 
-wordmark(INK, "wordmark.svg", "Workstation CRM")
-wordmark(WHITE, "wordmark-on-dark.svg", "Workstation CRM")
-lockup(INK, INK, "lockup.svg", "Workstation CRM")
-lockup(WHITE, WHITE, "lockup-on-dark.svg", "Workstation CRM")
+wordmark(INK, "wordmark.svg", "Workstation CRM (AI)")
+wordmark(WHITE, "wordmark-on-dark.svg", "Workstation CRM (AI)")
+lockup(INK, "lockup.svg", "Workstation CRM (AI)")
+lockup(WHITE, "lockup-on-dark.svg", "Workstation CRM (AI)")
 
 
 # MARK: Renders
