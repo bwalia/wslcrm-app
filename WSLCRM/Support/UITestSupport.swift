@@ -139,8 +139,12 @@ final class UITestStubServer: @unchecked Sendable {
         /// The back office in "Demo Buyers Ltd": a Property Deals manager who also runs invoices
         /// and purchase orders (opsapi #709/#710 seed these grants for `pd_manager`).
         case propertyManager = "pdmanager"
+        /// Property PA (mock): Sophie, a seller agent, and Ashley, her manager, in "Demo Buyers Ltd".
+        case paAgent = "paagent"
+        case paManager = "pamanager"
 
-        var hasPropertyDeals: Bool { self == .propertyOperator || self == .propertyManager }
+        var hasPropertyDeals: Bool { [.propertyOperator, .propertyManager, .paAgent, .paManager].contains(self) }
+        var hasPropertyPA: Bool { self == .paAgent || self == .paManager }
 
         var grants: [String: [String]] {
             switch self {
@@ -156,6 +160,8 @@ final class UITestStubServer: @unchecked Sendable {
             case .propertyManager: ["projects": ["manage"], "crm_accounts": ["manage"], "customers": ["manage"],
                                     "orders": ["manage"], "invoices": ["manage"], "payments": ["manage"],
                                     "purchase_orders": ["manage"]]
+            case .paAgent: ["projects": ["read", "update"], "crm_accounts": ["read"]]
+            case .paManager: ["projects": ["manage"], "crm_accounts": ["manage"]]
             }
         }
 
@@ -167,6 +173,8 @@ final class UITestStubServer: @unchecked Sendable {
             case .telecaller: ("Aisha", "Rahman", "aisha.rahman@dbs-limited.example")
             case .propertyOperator: ("Sam", "Okafor", "sam.okafor@demo-buyers.example")
             case .propertyManager: ("Priya", "Shah", "priya.shah@demo-buyers.example")
+            case .paAgent: ("Sophie", "Turner", "sophie@demo-buyers.example")
+            case .paManager: ("Ashley", "Brooks", "ashley@demo-buyers.example")
             }
         }
 
@@ -180,6 +188,7 @@ final class UITestStubServer: @unchecked Sendable {
             case .telecaller: ["customers", "field_service_requests"]
             case .propertyOperator: ["crm_leads", "projects", "timesheets"]
             case .propertyManager: ["crm_leads", "projects", "timesheets", "invoices", "purchase_orders"]
+            case .paAgent, .paManager: ["crm_leads", "projects", "timesheets"]
             }
         }
     }
@@ -200,6 +209,8 @@ final class UITestStubServer: @unchecked Sendable {
     private var timesheets: [String: [String: Any]] = [:]
     private var propertyDeals = UITestPropertyDealsStub()
     private var purchaseOrders = UITestPurchaseOrdersStub()
+    private var propertyPA = UITestPropertyPAStub()
+    private var query = ""
 
     /// Writes the Property Deals stub received (for UI tests that check what reached the server).
     var propertyDealsWrites: [String] { lock.withLock { propertyDeals.writes } }
@@ -227,6 +238,7 @@ final class UITestStubServer: @unchecked Sendable {
             timesheets = Self.seededTimesheets()
             propertyDeals.reset()
             purchaseOrders.reset()
+            propertyPA.reset()
         }
     }
 
@@ -234,13 +246,18 @@ final class UITestStubServer: @unchecked Sendable {
         lock.withLock {
             propertyDeals.query = url.query ?? ""
             purchaseOrders.query = url.query ?? ""
+            query = url.query ?? ""
             return route(method: method, path: url.path, body: body)
         }
     }
 
     private func route(method: String, path: String, body: Data) -> (Int, Any) {
         let json = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] ?? [:]
-        propertyDeals.isManager = role == .propertyManager
+        propertyDeals.isManager = role == .propertyManager || role == .paManager
+        propertyPA.isManager = role == .paManager
+        if let handled = propertyPA.route(method: method, path: path, query: query, json: json, body: body, enabled: role.hasPropertyPA) {
+            return handled
+        }
         if let handled = propertyDeals.route(method: method, path: path, json: json, enabled: role.hasPropertyDeals) {
             return handled
         }

@@ -21,6 +21,11 @@ struct PendingMutation: Codable, Identifiable, Sendable, Equatable {
         case pdCapture
         /// "Called" on a hot lead: log the call on its task, then close the task.
         case pdCalled
+        // Property PA
+        /// A voice note or typed note for the PA; the audio stays on the phone until it's accepted.
+        case paCapture
+        /// Done / Later on a PA card.
+        case paCardAction
     }
 
     /// One call in a chained write. Later steps refer to ids captured from earlier responses as

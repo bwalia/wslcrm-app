@@ -453,6 +453,10 @@ extension View {
             .navigationDestination(for: PDApprovalsRoute.self) { _ in PDApprovalsListView() }
             .navigationDestination(for: PDApprovalRoute.self) { PDApprovalDetailView(approvalUuid: $0.uuid) }
             .navigationDestination(for: PDLeadRoute.self) { PDLeadView(leadUuid: $0.uuid) }
+            .navigationDestination(for: PATodayRoute.self) { PATodayView(manager: $0.manager) }
+            .navigationDestination(for: PAPrepareRoute.self) { PAPrepareView(route: $0) }
+            .navigationDestination(for: PAHandoffRoute.self) { PAHandoffView(uuid: $0.uuid) }
+            .navigationDestination(for: PACaptureRoute.self) { PACaptureView(captureUuid: $0.uuid) }
             .navigationDestination(for: PDDueRoute.self) { _ in PDDueView() }
             .navigationDestination(for: PDRenovationsRoute.self) { _ in PDRenovationsListView() }
             .navigationDestination(for: PurchaseOrdersRoute.self) { PurchaseOrdersListView(route: $0) }
