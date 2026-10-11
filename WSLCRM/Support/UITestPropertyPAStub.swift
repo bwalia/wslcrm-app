@@ -24,6 +24,7 @@ struct UITestPropertyPAStub {
     private var runs: [String: [String: Any]] = [:]
     private var doneCards: Set<String> = []
     private var captureCount = 0
+    private var sheetReads: [String: Int] = [:]
 
     mutating func reset() {
         todayCards = ProcessInfo.processInfo.arguments.contains("-UITestPATodayCards")
@@ -35,6 +36,7 @@ struct UITestPropertyPAStub {
         runs = [:]
         doneCards = []
         captureCount = 0
+        sheetReads = [:]
     }
 
     mutating func route(method: String, path: String, query: String, json: [String: Any], body: Data, enabled: Bool) -> (Int, Any)? {
@@ -79,6 +81,39 @@ struct UITestPropertyPAStub {
             if (run["reads"] as? Int ?? 0) < 2 { return ok(["uuid": id, "status": "running"]) }
             return ok(["uuid": id, "status": "succeeded", "model": "private", "prompt_version": "seller-pa@1.1.0",
                        "output": output(mode: run["mode"] as? String ?? "ask", message: run["message"] as? String ?? "")])
+
+        // Week 2 capture: start, the confirm sheet (the PA still working on the first read), decide.
+        case ("POST", "/captures/start"):
+            guard let text = json["text"] as? String, !text.isEmpty else {
+                return (422, ["success": false, "error": "Validation failed", "details": ["text": "is required"]])
+            }
+            capture(from: text)
+            let id = "int-\(captureCount)"
+            writes.append("POST captures/start \(json["channel"] as? String ?? "")")
+            return (201, ["success": true, "data": ["interaction": interactions[id] ?? [:], "pa": ["run_uuid": "run-cap", "status": "running"]]])
+        case ("GET", let p) where p.hasPrefix("/interactions/") && p.hasSuffix("/capture"):
+            let id = String(p.dropFirst("/interactions/".count).dropLast("/capture".count))
+            guard let interaction = interactions[id] else { return notFound }
+            sheetReads[id, default: 0] += 1
+            let working = (sheetReads[id] ?? 0) <= 1
+            let rows = working ? [] : updates.filter { $0["source_interaction_uuid"] as? String == id }.map(Self.sheetRow)
+            return ok(["interaction": interaction, "author": "Sophie", "proposals": rows,
+                       "run": ["uuid": "run-cap", "status": working ? "running" : "succeeded"]])
+        case ("POST", let p) where p.hasPrefix("/interactions/") && p.hasSuffix("/decide"):
+            let id = String(p.dropFirst("/interactions/".count).dropLast("/decide".count))
+            let decisions = json["decisions"] as? [[String: Any]] ?? []
+            if json["confirm_rest"] as? Bool == true { writes.append("confirm_rest used") }
+            for decision in decisions {
+                guard let index = updates.firstIndex(where: { $0["uuid"] as? String == decision["uuid"] as? String
+                                                              && $0["source_interaction_uuid"] as? String == id }) else {
+                    return (422, ["success": false, "error": "Validation failed"])
+                }
+                let action = decision["action"] as? String ?? ""
+                updates[index]["status"] = ["confirm": "confirmed", "correct": "corrected", "reject": "rejected"][action] ?? "proposed"
+                if action == "correct" { updates[index]["new_value"] = decision["value"] }
+            }
+            writes.append("POST decide " + decisions.map { "\($0["uuid"] as? String ?? ""):\($0["action"] as? String ?? "")" }.joined(separator: ","))
+            return ok(["results": [], "sheet": [:]])
 
         // Captures and proposed updates.
         case ("GET", "/proposed-updates"):
@@ -273,6 +308,23 @@ struct UITestPropertyPAStub {
          "cards": [["uuid": "card-handoff", "rank": 1, "kind": "handoff", "person": ["name": "Sophie Turner"],
                     "handoff_uuid": Self.handoffUuid, "action": "Sophie asks: offer £230k to Sarah?"]],
          "handled_count": 14]
+    }
+
+    /// A proposal as the Week 2 sheet shows it: the server's label and kind.
+    static func sheetRow(_ update: [String: Any]) -> [String: Any] {
+        var row = update
+        let labels = ["expectation_price": "Seller's stated minimum", "our_position": "Price that might work",
+                      "decision_makers": "Decision makers"]
+        if let field = update["field"] as? String { row["label"] = labels[field] ?? field }
+        else if update["target_table"] as? String == "pa_events" { row["label"] = "Event" }
+        else if update["target_table"] as? String == "next_action" {
+            row["label"] = "Next action"
+            row["owner"] = ["user_uuid": UITestStubServer.userUuid, "name": "Sophie"]
+        }
+        let inferred = update["is_inferred"] as? Bool == true
+        row["kind"] = inferred ? "inferred" : (update["field"] == nil ? "proposed" : "stated")
+        row["kind_label"] = inferred ? "SOPHIE'S JUDGEMENT, UNCONFIRMED" : "Stated"
+        return row
     }
 
     static var why: [String: Any] {

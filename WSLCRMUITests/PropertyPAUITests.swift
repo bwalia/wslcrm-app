@@ -51,6 +51,12 @@ final class PropertyPAUITests: XCTestCase {
         field.typeText(text)
     }
 
+    /// A tab: in the tab bar on iPhone, a button in the top bar on iPad.
+    private func tab(_ name: String) -> XCUIElement {
+        let inBar = app.tabBars.buttons[name]
+        return inBar.exists ? inBar : app.buttons[name].firstMatch
+    }
+
     private func screenshot(_ name: String) {
         RunLoop.current.run(until: Date().addingTimeInterval(0.8))
         let attachment = XCTAttachment(screenshot: app.screenshot())
@@ -71,8 +77,9 @@ final class PropertyPAUITests: XCTestCase {
     /// no "Why #1?" and no time packing (the app never invents them).
     func testTodayFromTheBriefingInTheServersOrder() {
         launch()
-        XCTAssertTrue(app.tabBars.buttons["PA"].waitForExistence(timeout: 20), "the PA is home where it's on")
-        XCTAssertTrue(app.tabBars.buttons["Deals"].exists, "the plain screens are still there")
+        XCTAssertTrue(element("pa.today.brief", timeout: 20).exists, "the PA is home where it's on")
+        XCTAssertTrue(tab("PA").exists)
+        XCTAssertTrue(tab("Deals").exists, "the plain screens are still there")
         XCTAssertTrue(element("pa.today.brief").label.contains("Morning, Sophie"))
         element("pa.card.opp-sarah")
         XCTAssertTrue(text(containing: "She said she'd decide after the second valuation").exists, "why now, from the server")
@@ -108,7 +115,8 @@ final class PropertyPAUITests: XCTestCase {
         XCTAssertTrue(brief.exists)
         XCTAssertTrue(text(containing: "Lead with a quick, certain completion").exists)
         scrollTo("pa.prepare.section.sources")
-        XCTAssertTrue(text(containing: "Source: Valuation, 12 Oct").exists, "facts link to their source")
+        XCTAssertTrue(text(containing: "Valuation, 12 Oct").exists)
+        XCTAssertTrue(text(containing: "Source: Event").exists, "facts link to their source")
         XCTAssertTrue(scrollTo("pa.gap").label.contains("Tom's view on price"), "gaps are said, not hidden")
         screenshot("pa-04-prepare-me")
     }
@@ -125,7 +133,7 @@ final class PropertyPAUITests: XCTestCase {
         screenshot("pa-05-capture")
         element("pa.capture.send").tap()
 
-        let note = element("pa.capture.cap-1", timeout: 25)
+        let note = element("pa.capture.int-1", timeout: 25)
         note.tap()
         element("pa.confirm.who", timeout: 20)
         XCTAssertTrue(element("pa.confirm.who").label.contains("Sarah Collins"))
@@ -133,7 +141,7 @@ final class PropertyPAUITests: XCTestCase {
         XCTAssertTrue(text(containing: "Unconfirmed judgement").exists, "the £225k idea is labelled a judgement")
         scrollTo("pa.confirm.save")
         XCTAssertFalse(element("pa.confirm.save").isEnabled, "material fields need their own tick")
-        XCTAssertTrue(element("pa.confirm.blocker").label.contains("Seller's stated figure"))
+        XCTAssertTrue(element("pa.confirm.blocker").label.contains("Seller's stated minimum"), "the server's label")
         app.swipeDown()
         app.swipeDown()
         screenshot("pa-06-confirm")
@@ -227,8 +235,9 @@ final class PropertyPAUITests: XCTestCase {
 
     func testWorkspaceWithoutThePAKeepsTheDealsScreens() {
         launch(role: "operator")
-        XCTAssertTrue(app.tabBars.buttons["Deals"].waitForExistence(timeout: 20))
-        XCTAssertFalse(app.tabBars.buttons["PA"].exists, "PA off: no PA tab")
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 20))
+        XCTAssertTrue(tab("Deals").exists)
+        XCTAssertFalse(tab("PA").exists, "PA off: no PA tab")
         XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 15), "Deals Today still opens")
     }
 }

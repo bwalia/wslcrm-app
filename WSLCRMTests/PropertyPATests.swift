@@ -98,20 +98,21 @@ final class PropertyPATests: XCTestCase {
                                                        summary: "Voice note · 0:42", mutationContext: context)
         XCTAssertEqual(mutation.kind, .paCapture)
         let steps = try XCTUnwrap(mutation.steps)
-        XCTAssertEqual(steps.map(\.path), ["/api/v2/voice/transcribe", "/api/v2/property-pa/ask"])
+        XCTAssertEqual(steps.map(\.path), ["/api/v2/voice/transcribe", "/api/v2/property-pa/captures/start"])
         XCTAssertEqual(steps[0].upload?.raw, true, "the recording is the body, not a form")
         XCTAssertEqual(steps[0].upload?.mimeType, "audio/mp4")
         XCTAssertEqual(steps[0].captures, "transcript")
         XCTAssertEqual(steps[0].capturesField, "text")
-        let ask = json(steps[1].body)
-        XCTAssertEqual(ask["mode"] as? String, "capture")
-        XCTAssertEqual(ask["message"] as? String, "{{transcript}}")
-        XCTAssertEqual(ask["opportunity_uuid"] as? String, "o1")
+        let start = json(steps[1].body)
+        XCTAssertEqual(start["channel"] as? String, "voice")
+        XCTAssertEqual(start["text"] as? String, "{{transcript}}")
+        XCTAssertEqual(start["opportunity_uuid"] as? String, "o1")
         XCTAssertEqual(mutation.hints["audio"], "pa-1.m4a", "the recording is removed if the note is discarded")
 
         let typed = PropertyPAAPI.Mutations.capture(audioFile: nil, text: "Spoke to Sarah", context: nil, summary: "Note", mutationContext: context)
         XCTAssertEqual(typed.steps?.count, 1)
-        XCTAssertEqual(json(typed.steps?.first?.body)["message"] as? String, "Spoke to Sarah")
+        XCTAssertEqual(json(typed.steps?.first?.body)["text"] as? String, "Spoke to Sarah")
+        XCTAssertEqual(json(typed.steps?.first?.body)["channel"] as? String, "note")
     }
 
     func testATranscriptGoesIntoTheNextStepSafelyEscaped() throws {
@@ -121,7 +122,7 @@ final class PropertyPATests: XCTestCase {
         let endpoint = try XCTUnwrap(try mutation.endpoint(for: mutation.steps![1], uploadsDirectory: FileManager.default.temporaryDirectory))
         let body = try XCTUnwrap(endpoint.body)
         let decoded = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
-        XCTAssertEqual(decoded["message"] as? String, "She said \"no lower than 235\"\nCall at 11", "quotes and new lines survive")
+        XCTAssertEqual(decoded["text"] as? String, "She said \"no lower than 235\"\nCall at 11", "quotes and new lines survive")
         XCTAssertEqual(MutationQueue.value("text", in: Data(#"{"text": "hello"}"#.utf8)), "hello")
         XCTAssertEqual(MutationQueue.value("text", in: Data(#"{"data": {"text": "wrapped"}}"#.utf8)), "wrapped")
     }
@@ -164,7 +165,8 @@ final class PropertyPATests: XCTestCase {
             """)
         let answer = try PAMapping.answer(from: grounded)
         XCTAssertEqual(answer.answer, "Don't raise the offer yet.")
-        XCTAssertEqual(answer.facts.first?.source, PASource(type: "interaction", uuid: "i1", label: "Your note"))
+        XCTAssertEqual(answer.facts.first?.text, "Your note")
+        XCTAssertEqual(answer.facts.first?.source, PASource(type: "interaction", uuid: "i1", label: nil), "the label isn't said twice")
         XCTAssertEqual(answer.facts[1].source?.type, "lead")
         XCTAssertTrue(answer.facts.last?.isUnconfirmedJudgement ?? false)
         XCTAssertEqual(answer.gaps, ["Tom's view"])
@@ -237,5 +239,34 @@ final class PropertyPATests: XCTestCase {
         XCTAssertEqual(NavigationPolicy(permissions: permissions, isEngineerRole: false, hasPropertyDeals: true, hasPropertyPA: true).home, .propertyPA)
         XCTAssertEqual(NavigationPolicy(permissions: permissions, isEngineerRole: false, hasPropertyDeals: true).home, .propertyDeals,
                        "PA off: Deals Today as before")
+    }
+}
+
+/// opsapi Week 2: the confirm sheet from `GET /interactions/:id/capture`.
+final class PropertyPASheetTests: XCTestCase {
+    func testSheetUsesTheServersLabelsAndTheAuthorsJudgement() throws {
+        let sheet = try JSONDecoder.opsAPI().decode(PAServerSheet.self, from: Data("""
+            {"interaction": {"uuid": "i1", "transcript": "Spoke to Sarah", "opportunity_uuid": "o1"}, "author": "Sophie",
+             "run": {"uuid": "r1", "status": "succeeded"},
+             "proposals": [
+               {"uuid": "p1", "target_table": "pa_opportunities", "field": "expectation_price", "new_value": 235000, "material": true,
+                "status": "proposed", "label": "Seller's stated minimum", "kind": "stated", "source_quote": "won't go below 235"},
+               {"uuid": "p2", "target_table": "pa_opportunities", "field": "our_position", "new_value": "£225k with 4 weeks",
+                "is_inferred": true, "material": true, "status": "proposed", "label": "Price that might work", "kind": "inferred"},
+               {"uuid": "p3", "target_table": "next_action", "field": "_create", "new_value": {"title": "Call Sarah", "reason": "After Tom"},
+                "material": true, "status": "proposed", "owner": {"user_uuid": "u1", "name": "Sophie"}}]}
+            """.utf8))
+        let capture = PAMapping.capture(interactionUuid: "i1", sheet: sheet, opportunity: nil)
+        XCTAssertEqual(capture.status, .ready)
+        XCTAssertEqual(capture.updates.map(\.label), ["Seller's stated minimum", "Price that might work"])
+        XCTAssertTrue(capture.updates[1].isInferred)
+        XCTAssertEqual(capture.updates[1].by, "Sophie", "shown as Sophie's judgement")
+        XCTAssertEqual(capture.updates[0].quote, "won't go below 235")
+        XCTAssertEqual(capture.nextAction?.owner?.name, "Sophie")
+        XCTAssertEqual(capture.transcript, "Spoke to Sarah")
+
+        let working = try JSONDecoder.opsAPI().decode(PAServerSheet.self, from: Data(#"{"run": {"status": "running"}, "proposals": []}"#.utf8))
+        XCTAssertEqual(PAMapping.capture(interactionUuid: "i1", sheet: working, opportunity: nil).status, .extracting,
+                       "the screen keeps polling while the PA works")
     }
 }

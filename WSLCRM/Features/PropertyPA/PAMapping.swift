@@ -79,7 +79,7 @@ enum PAMapping {
     static func brief(from run: PAServerRun, opportunityUuid: String) throws -> PABrief {
         let output = try shown(run)
         var sections = [PABrief.Section(key: "brief", title: "Brief", facts: [PAFact(text: output.answer ?? "", kind: .stated)])]
-        let sources = output.sources.map { PAFact(text: $0.quote ?? $0.label ?? $0.title ?? label(forRef: $0), kind: .stated, source: source($0)) }
+        let sources = output.sources.map(sourceFact)
         if !sources.isEmpty { sections.append(.init(key: "sources", title: "Where this comes from", facts: sources)) }
         let inferred = output.inferences.map { PAFact(text: $0, kind: .inferred, confirmed: false) }
         if !inferred.isEmpty { sections.append(.init(key: "inferences", title: "Judgements, not facts", facts: inferred)) }
@@ -88,7 +88,7 @@ enum PAMapping {
 
     static func answer(from run: PAServerRun) throws -> PAAnswer {
         let output = try shown(run)
-        var facts = output.sources.map { PAFact(text: $0.quote ?? $0.label ?? $0.title ?? label(forRef: $0), kind: .stated, source: source($0)) }
+        var facts = output.sources.map(sourceFact)
         facts += output.inferences.map { PAFact(text: $0, kind: .inferred, confirmed: false) }
         let actions: [PAAnswer.Action] = output.actions.compactMap { value in
             guard case .object(let object) = value, case .string(let type)? = object["type"] else { return nil }
@@ -108,6 +108,14 @@ enum PAMapping {
             throw APIError.pa(output.withheld ?? "The PA's answer couldn't be checked, so it isn't shown.")
         }
         return output
+    }
+
+    /// A source as a fact row: the quote when there is one (the chip then names the record), else
+    /// the record's label (and the chip just its kind, so it isn't said twice).
+    static func sourceFact(_ s: PAServerRun.Source) -> PAFact {
+        var chip = source(s)
+        if s.quote == nil { chip?.label = nil }
+        return PAFact(text: s.quote ?? s.label ?? s.title ?? label(forRef: s), kind: .stated, source: chip)
     }
 
     static func source(_ s: PAServerRun.Source) -> PASource? {
@@ -145,13 +153,43 @@ enum PAMapping {
         var seen: [String: Int] = [:]
         var result: [PACapture] = []
         for update in updates {
-            guard let id = update.captureUuid else { continue }
+            // The confirm sheet is per note (interaction); fall back to the capture id.
+            guard let id = update.sourceInteractionUuid ?? update.captureUuid else { continue }
             if seen[id] != nil { continue }
             seen[id] = result.count
-            result.append(PACapture(uuid: id, status: .ready, summary: "\(updates.filter { $0.captureUuid == id }.count) changes to confirm",
+            let count = updates.filter { ($0.sourceInteractionUuid ?? $0.captureUuid) == id }.count
+            result.append(PACapture(uuid: id, status: .ready, summary: "\(count) \(count == 1 ? "change" : "changes") to confirm",
                                     createdAt: update.createdAt))
         }
         return result.sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
+    }
+
+    /// The Week 2 sheet: labels, kinds and the judgement wording come from the server.
+    static func capture(interactionUuid: String, sheet: PAServerSheet, opportunity: PAServerOpportunity?) -> PACapture {
+        let working = sheet.run?.status == "running" && sheet.proposals.isEmpty
+        let decided = !sheet.proposals.isEmpty && sheet.proposals.allSatisfy { $0.status != "proposed" }
+        var capture = PACapture(uuid: interactionUuid, status: working ? .extracting : (decided ? .confirmed : .ready),
+                                transcript: sheet.interaction?.transcript ?? sheet.interaction?.rawText,
+                                summary: sheet.interaction?.summary, createdAt: sheet.interaction?.at,
+                                error: sheet.run?.status == "failed" ? (sheet.run?.error ?? "The PA couldn't read this note.") : nil)
+        if let opportunity {
+            capture.resolved = .init(person: opportunity.personName.map { PACard.Person(uuid: opportunity.personUuid, name: $0) },
+                                     property: opportunity.propertyAddress.map { PACard.Property(address: $0) })
+        }
+        capture.updates = sheet.proposals.filter { $0.targetTable != "next_action" }.map { row in
+            PAProposedUpdate(uuid: row.uuid, label: row.label ?? fieldLabel(table: row.targetTable, field: row.field, value: row.newValue),
+                             oldValue: row.oldValue, newValue: row.newValue, display: display(row.newValue, field: row.field),
+                             kind: row.isInferred == true ? .inferred : (row.kind == "proposed" ? .proposed : .stated),
+                             by: row.isInferred == true ? sheet.author : nil, confidence: row.confidence, material: row.material,
+                             status: PAProposedUpdate.Status(rawValue: row.status ?? "") ?? .proposed, quote: row.sourceQuote)
+        }
+        if let next = sheet.proposals.first(where: { $0.targetTable == "next_action" }) {
+            var action = nextAction(from: PAServerProposedUpdate(uuid: next.uuid, targetTable: next.targetTable, newValue: next.newValue,
+                                                                 material: next.material))
+            action.owner = next.owner?.name.map { PACard.Person(uuid: next.owner?.userUuid, name: $0) }
+            capture.nextAction = action
+        }
+        return capture
     }
 
     static func capture(uuid: String, updates: [PAServerProposedUpdate], interaction: PAServerInteraction?,

@@ -183,3 +183,40 @@ struct PAManager: Decodable, Sendable, Hashable, Identifiable {
     var name: String
     var id: String { uuid }
 }
+
+/// `GET /interactions/:id/capture` (opsapi Week 2): the confirm sheet for one note, with the
+/// server's labels and kinds ("SOPHIE'S JUDGEMENT, UNCONFIRMED") and the PA run while it works.
+struct PAServerSheet: Decodable, Sendable {
+    var interaction: PAServerInteraction?
+    var author: String?
+    var run: Run?
+    @LenientList var proposals: [Row] = []
+
+    struct Run: Decodable, Sendable { var uuid: String?; var status: String?; var error: String? }
+
+    struct Row: Decodable, Sendable, Hashable {
+        var uuid: String
+        var targetTable: String?
+        var targetUuid: String?
+        var field: String?
+        var oldValue: JSONValue?
+        var newValue: JSONValue?
+        @LenientDouble var confidence: Double? = nil
+        var isInferred: Bool?
+        var material: Bool?
+        var sourceQuote: String?
+        var status: String?
+        var label: String?
+        var kind: String?
+        var kindLabel: String?
+        var owner: Owner?
+
+        struct Owner: Decodable, Sendable, Hashable { var userUuid: String?; var name: String? }
+    }
+}
+
+struct PAServerStartCapture: Encodable, Sendable, Equatable {
+    var text: String
+    var channel: String
+    var opportunityUuid: String?
+}

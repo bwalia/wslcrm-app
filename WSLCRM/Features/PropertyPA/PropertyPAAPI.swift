@@ -110,35 +110,26 @@ struct PropertyPAAPI: Sendable {
         return list.elements
     }
 
-    /// One capture for the confirm screen: its changes, what was said, and who it's about.
-    func capture(_ uuid: String) async throws -> PACapture {
-        let updates = try await proposedUpdates(captureUuid: uuid)
-        guard let first = updates.first else { throw APIError.pa("This voice note has no changes to confirm.") }
-        var interaction: PAServerInteraction?
-        if let id = first.sourceInteractionUuid { interaction = try? await data(.get("\(Self.base)/interactions/\(id)")) }
+    /// The confirm sheet for one note (keyed by its interaction), with the PA's run status while
+    /// it's still working out the changes.
+    func capture(_ interactionUuid: String) async throws -> PACapture {
+        let sheet: PAServerSheet = try await data(.get("\(Self.base)/interactions/\(interactionUuid)/capture"))
         var opportunity: PAServerOpportunity?
-        if let id = interaction?.opportunityUuid ?? updates.first(where: { $0.targetTable == "pa_opportunities" })?.targetUuid {
+        if let id = sheet.interaction?.opportunityUuid ?? sheet.proposals.first(where: { $0.targetTable == "pa_opportunities" })?.targetUuid {
             opportunity = try? await data(.get("\(Self.base)/opportunities/\(id)"))
         }
-        return PAMapping.capture(uuid: uuid, updates: updates, interaction: interaction, opportunity: opportunity)
+        return PAMapping.capture(interactionUuid: interactionUuid, sheet: sheet, opportunity: opportunity)
     }
 
-    /// Each decision is its own call (confirm / correct / reject). Never queued: material fields
-    /// need a signal and the person's tap. A 409 (already decided) is skipped.
+    /// The person's decisions on the sheet, in one call. Never queued (material fields need a
+    /// signal and a tap), and never `confirm_rest`: nothing is confirmed without its own tick.
     func confirm(captureUuid: String, _ body: PAConfirmBody) async throws -> PACapture {
-        for decision in body.decisions {
-            let path = "\(Self.base)/proposed-updates/\(decision.updateUuid)/\(decision.action.rawValue)"
-            do {
-                if decision.action == .correct, let value = decision.value {
-                    struct Correction: Encodable, Sendable { let value: JSONValue }
-                    let _: JSONValue = try await data(.post(path, json: Correction(value: value)))
-                } else {
-                    let _: JSONValue = try await data(.post(path, json: EmptyBody()))
-                }
-            } catch let error as APIError {
-                if case .validation(let server) = error, server.status == 409 { continue }
-                throw error
-            }
+        struct Decision: Encodable, Sendable { let uuid: String; let action: String; let value: JSONValue? }
+        struct Body: Encodable, Sendable { let decisions: [Decision]; let confirmRest: Bool }
+        let decisions = body.decisions.map { Decision(uuid: $0.updateUuid, action: $0.action.rawValue, value: $0.value) }
+        if !decisions.isEmpty {
+            let _: JSONValue = try await data(.post("\(Self.base)/interactions/\(captureUuid)/decide",
+                                                     json: Body(decisions: decisions, confirmRest: false)))
         }
         return try await capture(captureUuid)
     }
@@ -207,8 +198,8 @@ struct PropertyPAAPI: Sendable {
     // MARK: Offline-capable writes
 
     enum Mutations {
-        /// A voice note is transcribed by the workspace's private speech service, then handed to
-        /// the PA to work out what changed. Kept on the phone until both steps are done. A typed
+        /// A voice note is transcribed by the workspace's private speech service, then started as a
+        /// capture (`POST /captures/start`): the note is saved and the PA proposes the changes. Kept on the phone until both steps are done. A typed
         /// note skips the first step.
         static func capture(audioFile: String?, text: String?, context: PAContext?, summary: String,
                             mutationContext: MutationContext) -> PendingMutation {
@@ -220,11 +211,12 @@ struct PropertyPAAPI: Sendable {
                                    captures: "transcript", capturesField: "text"))
                 message = "{{transcript}}"
             }
-            var ask: [String: String] = ["message": message, "mode": "capture"]
-            if let opportunity = context?.opportunityUuid { ask["opportunity_uuid"] = opportunity }
-            let body = (try? JSONSerialization.data(withJSONObject: ask, options: [.sortedKeys])) ?? Data("{}".utf8)
-            steps.append(.init(label: "Send to your PA", method: .post, path: "\(base)/ask", body: body))
-            var mutation = PendingMutation(kind: .paCapture, method: .post, path: "\(base)/ask", body: nil,
+            var start: [String: String] = ["text": message, "channel": audioFile == nil ? "note" : "voice"]
+            if let opportunity = context?.opportunityUuid { start["opportunity_uuid"] = opportunity }
+            if let person = context?.personUuid { start["person_uuid"] = person }
+            let body = (try? JSONSerialization.data(withJSONObject: start, options: [.sortedKeys])) ?? Data("{}".utf8)
+            steps.append(.init(label: "Send to your PA", method: .post, path: "\(base)/captures/start", body: body))
+            var mutation = PendingMutation(kind: .paCapture, method: .post, path: "\(base)/captures/start", body: nil,
                                            namespaceId: mutationContext.namespaceId, userId: mutationContext.userId,
                                            entityId: "pa-capture-\(UUID().uuidString)", jobId: nil, summary: summary,
                                            hints: audioFile.map { ["audio": $0] } ?? [:])
