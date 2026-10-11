@@ -144,12 +144,14 @@
 		B671FCEF207E9228FC026B7B /* SimproModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98EA00C366B2D02AB7CEC8B0 /* SimproModels.swift */; };
 		B72466D607DF175AC2440CA3 /* ShopCatalogViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1AD955B0F4D53D6C60BF29A /* ShopCatalogViews.swift */; };
 		BA4C3601B30A5530637092D8 /* shop_quote_detail.json in Resources */ = {isa = PBXBuildFile; fileRef = E16F01A768744A2E76CC6F08 /* shop_quote_detail.json */; };
+		BD3149389F46514E8BAF141B /* PAMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C467369A9BC9183AB29ADCD /* PAMapping.swift */; };
 		BF3A397604074289E69A4C56 /* fs_pr610_payloads.json in Resources */ = {isa = PBXBuildFile; fileRef = 67D1252188219C15A46F074A /* fs_pr610_payloads.json */; };
 		BFB72D5431212A5442E6B90F /* ReportsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02A6E03FDF1CB0B042DF571D /* ReportsViews.swift */; };
 		BFDA826FAF9EFEEB33800384 /* ServiceRequestsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 097CDC517A0D13A841E88800 /* ServiceRequestsViews.swift */; };
 		C02113D36A1BD5359CD2BA2B /* StatusPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3762EFCA144C5B2F18FA349B /* StatusPresentation.swift */; };
 		C1FF95AA0ACF7D99887692FA /* MyWorkRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F59BF39424DBAE2327BBEFF /* MyWorkRefresh.swift */; };
 		C364ACB11F0E8C5CEAB4C77A /* PropertyDealsApprovalsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE8D210FFB59E1BAB2482BA4 /* PropertyDealsApprovalsTests.swift */; };
+		C38BCF34CE13E05A4E41020F /* PAServerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56D7549D2AB5441CE59B19E7 /* PAServerModels.swift */; };
 		C569B37C161E77F491FEDB63 /* NetworkLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71CC3CDAD09443A2B5D7919D /* NetworkLogger.swift */; };
 		C68644F62EC283B2AFD6B21D /* PDPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C8B76E9FAB3865EF96C577C /* PDPresentation.swift */; };
 		C6D67B8CC550BFA0B31B6D5E /* ServerErrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0582F75815E1CE7C44AF8ADF /* ServerErrorTests.swift */; };
@@ -290,6 +292,7 @@
 		549B70CE068D1B9FAC34B586 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		55422755DC3C1397D367E0AB /* user_menu_owner_empty_permissions.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = user_menu_owner_empty_permissions.json; sourceTree = "<group>"; };
 		56019BD4B8DFC185D0168E2B /* QuotePDF.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotePDF.swift; sourceTree = "<group>"; };
+		56D7549D2AB5441CE59B19E7 /* PAServerModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PAServerModels.swift; sourceTree = "<group>"; };
 		57F286B4344957499FD2B49A /* error_catalogued_validation.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = error_catalogued_validation.json; sourceTree = "<group>"; };
 		5B7F0676428C6A64D8DD9681 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 		5BF51AEECF3E47DA69BBBB69 /* APIEndpoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEndpoint.swift; sourceTree = "<group>"; };
@@ -322,6 +325,7 @@
 		76B7D8A86AE17C56B43A8488 /* PermissionSet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionSet.swift; sourceTree = "<group>"; };
 		78B6F9224365763E446F27F4 /* PropertyPAAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropertyPAAPI.swift; sourceTree = "<group>"; };
 		79E8CCBFD3C16167C05552EC /* WorkManagementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkManagementTests.swift; sourceTree = "<group>"; };
+		7C467369A9BC9183AB29ADCD /* PAMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PAMapping.swift; sourceTree = "<group>"; };
 		7D7070D52AB52E16752DCD75 /* fs_checkout_response.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = fs_checkout_response.json; sourceTree = "<group>"; };
 		7DA3F1AEC543935D65747205 /* WorkManagementUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkManagementUITests.swift; sourceTree = "<group>"; };
 		7E094D72D0C8B74C3994DDA2 /* DBSLimitedTourUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DBSLimitedTourUITests.swift; sourceTree = "<group>"; };
@@ -520,7 +524,9 @@
 				0CF7566A83DDA5A2A795800D /* PACaptureViews.swift */,
 				6ABF3C23382C09AD407446D3 /* PAConversationViews.swift */,
 				4C00AE57BFC9B9BA59DDF59B /* PAFactViews.swift */,
+				7C467369A9BC9183AB29ADCD /* PAMapping.swift */,
 				F5D33118E936BAE0A09ACCBF /* PAModels.swift */,
+				56D7549D2AB5441CE59B19E7 /* PAServerModels.swift */,
 				A09280EE573C07011327EB8F /* PATodayView.swift */,
 				78B6F9224365763E446F27F4 /* PropertyPAAPI.swift */,
 			);
@@ -1145,7 +1151,9 @@
 				8E417B734224717F7F1E659C /* PACaptureViews.swift in Sources */,
 				7CC0498D6498640900F404CA /* PAConversationViews.swift in Sources */,
 				56A136A5F36C2A9EB8E21142 /* PAFactViews.swift in Sources */,
+				BD3149389F46514E8BAF141B /* PAMapping.swift in Sources */,
 				220878D1D340AE6533E975D3 /* PAModels.swift in Sources */,
+				C38BCF34CE13E05A4E41020F /* PAServerModels.swift in Sources */,
 				454B17845D1C7022851DE16F /* PATodayView.swift in Sources */,
 				FBF9F4EE24D7E1395C13E608 /* PDApprovalsViews.swift in Sources */,
 				9B96F4D74DE36D8035F412C9 /* PDCapture.swift in Sources */,

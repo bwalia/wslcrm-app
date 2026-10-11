@@ -51,7 +51,7 @@ struct PAMe: Decodable, Sendable, Equatable {
     var permissions: [String: [String]]?
     /// Where speech becomes text: `server` (private STT) or `on_device`.
     var stt: String?
-    @LenientInt var maxAudioSeconds: Int?
+    @LenientInt var maxAudioSeconds: Int? = nil
     var timezone: String?
 
     enum Role: String, LenientEnum, Hashable {
@@ -86,7 +86,7 @@ struct PAFact: Decodable, Sendable, Hashable, Identifiable {
 
     var text: String
     var kind: Kind?
-    @LenientDouble var confidence: Double?
+    @LenientDouble var confidence: Double? = nil
     var confirmed: Bool?
     /// Whose judgement an inferred fact is.
     var by: String?
@@ -105,7 +105,7 @@ struct PAToday: Decodable, Sendable {
     var brief: Brief?
     @LenientList var cards: [PACard] = []
     /// Manager view: how many things the PA is handling without them.
-    @LenientInt var handledCount: Int?
+    @LenientInt var handledCount: Int? = nil
 
     struct Brief: Decodable, Sendable, Hashable {
         var text: String
@@ -134,7 +134,7 @@ struct PACard: Decodable, Sendable, Hashable, Identifiable {
     }
 
     var uuid: String
-    @LenientInt var rank: Int?
+    @LenientInt var rank: Int? = nil
     var kind: Kind?
     var person: Person?
     var property: Property?
@@ -146,8 +146,8 @@ struct PACard: Decodable, Sendable, Hashable, Identifiable {
     var whyNow: String?
     var objective: String?
     var paView: String?
-    @LenientInt var estimatedMinutes: Int?
-    @LenientDouble var score: Double?
+    @LenientInt var estimatedMinutes: Int? = nil
+    @LenientDouble var score: Double? = nil
 
     var id: String { uuid }
     var title: String { [person?.name, property?.address].compactMap { $0 }.joined(separator: " · ") }
@@ -156,16 +156,16 @@ struct PACard: Decodable, Sendable, Hashable, Identifiable {
 /// `GET /why/:cardId`: the real signals and weights behind a card's rank.
 struct PAWhy: Decodable, Sendable {
     var cardUuid: String?
-    @LenientDouble var score: Double?
+    @LenientDouble var score: Double? = nil
     @LenientList var signals: [Signal] = []
     var explanation: String?
 
     struct Signal: Decodable, Sendable, Hashable, Identifiable {
         var key: String
         var label: String
-        @LenientDouble var value: Double?
-        @LenientDouble var weight: Double?
-        @LenientDouble var points: Double?
+        @LenientDouble var value: Double? = nil
+        @LenientDouble var weight: Double? = nil
+        @LenientDouble var points: Double? = nil
         var source: PASource?
         var id: String { key }
     }
@@ -284,10 +284,13 @@ struct PAProposedUpdate: Decodable, Sendable, Hashable, Identifiable {
     var display: String?
     var kind: PAFact.Kind?
     var by: String?
-    @LenientDouble var confidence: Double?
+    @LenientDouble var confidence: Double? = nil
     /// Price, offer, decision makers, next action time: always confirmed one by one.
     var material: Bool?
     var status: Status?
+    /// The words from the note this change rests on (the server refuses an uninferred change
+    /// without them).
+    var quote: String?
 
     var id: String { uuid }
     var isMaterial: Bool { material ?? false }
@@ -353,7 +356,7 @@ struct PAKnowledgeRule: Decodable, Sendable, Identifiable, Hashable {
     var category: String?
     @LenientList var triggers: [String] = []
     var scope: String?
-    @LenientInt var version: Int?
+    @LenientInt var version: Int? = nil
     var status: String?
 
     var id: String { uuid }
