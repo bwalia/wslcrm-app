@@ -1320,12 +1320,13 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dictate a note about a lead or property. The recording stays on this phone.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record a voice note for your PA, or dictate a note about a lead or property. PA voice notes go to Workstation's private speech service, never a public AI; dictated notes stay on this device.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach existing photos to a job or a property.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn your voice note into text on this phone. The audio isn't uploaded.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn a dictated note into text on this device. That audio isn't uploaded.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1333,7 +1334,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm;
 				PRODUCT_NAME = WSLCRM;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = "Debug-Int";
 		};
@@ -1532,12 +1533,13 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dictate a note about a lead or property. The recording stays on this phone.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record a voice note for your PA, or dictate a note about a lead or property. PA voice notes go to Workstation's private speech service, never a public AI; dictated notes stay on this device.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach existing photos to a job or a property.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn your voice note into text on this phone. The audio isn't uploaded.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn a dictated note into text on this device. That audio isn't uploaded.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1545,7 +1547,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm;
 				PRODUCT_NAME = WSLCRM;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = "Release-Int";
 		};
@@ -1648,12 +1650,13 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dictate a note about a lead or property. The recording stays on this phone.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record a voice note for your PA, or dictate a note about a lead or property. PA voice notes go to Workstation's private speech service, never a public AI; dictated notes stay on this device.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach existing photos to a job or a property.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn your voice note into text on this phone. The audio isn't uploaded.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn a dictated note into text on this device. That audio isn't uploaded.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1661,7 +1664,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm;
 				PRODUCT_NAME = WSLCRM;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = "Debug-DBS-Int";
 		};
@@ -1849,12 +1852,13 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dictate a note about a lead or property. The recording stays on this phone.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record a voice note for your PA, or dictate a note about a lead or property. PA voice notes go to Workstation's private speech service, never a public AI; dictated notes stay on this device.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach existing photos to a job or a property.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn your voice note into text on this phone. The audio isn't uploaded.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn a dictated note into text on this device. That audio isn't uploaded.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1862,7 +1866,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm;
 				PRODUCT_NAME = WSLCRM;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = "Debug-Local";
 		};
@@ -1989,12 +1993,13 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dictate a note about a lead or property. The recording stays on this phone.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record a voice note for your PA, or dictate a note about a lead or property. PA voice notes go to Workstation's private speech service, never a public AI; dictated notes stay on this device.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach existing photos to a job or a property.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn your voice note into text on this phone. The audio isn't uploaded.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn a dictated note into text on this device. That audio isn't uploaded.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -2002,7 +2007,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm;
 				PRODUCT_NAME = WSLCRM;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = "Release-DBS-Int";
 		};
@@ -2112,12 +2117,13 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dictate a note about a lead or property. The recording stays on this phone.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record a voice note for your PA, or dictate a note about a lead or property. PA voice notes go to Workstation's private speech service, never a public AI; dictated notes stay on this device.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach existing photos to a job or a property.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn your voice note into text on this phone. The audio isn't uploaded.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn a dictated note into text on this device. That audio isn't uploaded.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -2125,7 +2131,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm;
 				PRODUCT_NAME = WSLCRM;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = "Release-Prod";
 		};
@@ -2211,12 +2217,13 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dictate a note about a lead or property. The recording stays on this phone.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record a voice note for your PA, or dictate a note about a lead or property. PA voice notes go to Workstation's private speech service, never a public AI; dictated notes stay on this device.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach existing photos to a job or a property.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn your voice note into text on this phone. The audio isn't uploaded.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn a dictated note into text on this device. That audio isn't uploaded.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -2224,7 +2231,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm;
 				PRODUCT_NAME = WSLCRM;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = "Debug-Prod";
 		};
