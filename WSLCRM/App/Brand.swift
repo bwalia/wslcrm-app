@@ -2,7 +2,7 @@ import Foundation
 
 /// White-label identity for this build, from `BRAND_*` build settings through Info.plist.
 ///
-/// Config/Brand-Default.xcconfig gives the house brand ("Workstation CRM" and its mark). A brand
+/// Config/Brand-Default.xcconfig gives the house brand ("Workstation AI-native CRM" and its mark). A brand
 /// xcconfig such as Config/Brand-DBS.xcconfig swaps in a customer's name, mark, app icon and the
 /// company details printed on report PDFs, without touching code.
 struct Brand: Sendable, Equatable {
@@ -12,8 +12,6 @@ struct Brand: Sendable, Equatable {
     var company: ReportCompany
     /// The accent colour set; `<name>-Fill` and `<name>-Text` sit beside it (Tone.brand).
     var accentColorName: String = "AccentColor"
-    /// A badge after the name ("AI" for Workstation CRM (AI)); white-label brands leave it out.
-    var edition: String?
 
     static let current = Brand.fromBundle()
 
@@ -29,7 +27,7 @@ struct Brand: Sendable, Equatable {
             // An unexpanded "$(BRAND_X)" means the setting was never defined for this build.
             return trimmed.isEmpty || trimmed.hasPrefix("$(") ? nil : trimmed
         }
-        let name = value("WSLBrandName") ?? "Workstation CRM"
+        let name = value("WSLBrandName") ?? "Workstation AI‑native CRM"
         return Brand(
             name: name,
             markImageName: value("WSLBrandMark"),
@@ -42,8 +40,7 @@ struct Brand: Sendable, Equatable {
                 email: value("WSLBrandEmail"),
                 companyNumber: value("WSLBrandCompanyNumber"),
                 vatNumber: value("WSLBrandVATNumber")),
-            accentColorName: value("WSLBrandAccentColor") ?? "AccentColor",
-            edition: value("WSLBrandEdition"))
+            accentColorName: value("WSLBrandAccentColor") ?? "AccentColor")
     }
 }
 

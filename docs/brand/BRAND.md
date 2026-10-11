@@ -1,6 +1,6 @@
-# Workstation CRM brand
+# Workstation AI-native CRM brand
 
-**Workstation CRM runs the work: jobs, visits, boards, timesheets and property deals, from the
+**Workstation AI-native CRM runs the work: jobs, visits, boards, timesheets and property deals, from the
 office to the van.** It is the phone and tablet side of OpsAPI, so it shares OpsAPI's colours
 and type, and adds a mark and a style of its own.
 
@@ -8,10 +8,12 @@ Open `index.html` for the visual guide.
 
 ## Name
 
-- Write **Workstation CRM**: "Workstation" as one word, "CRM" in capitals.
-  Not "WorkStation", "Workstation crm" or "WSL CRM".
+- Write **Workstation AI-native CRM**: "Workstation" as one word, "AI-native" with a hyphen and a
+  capital AI, "CRM" in capitals. In app text, use a non-breaking hyphen (U+2011) so a line never
+  breaks after "AI-".
+- Under the iOS home-screen icon the name is **Workstation CRM** (iOS shows about 12 characters).
 - **WSLCRM** is the code name (bundle, scheme, repo). People never see it in the app.
-- In the wordmark, "Workstation" is ink (white on dark) and "CRM" is the primary pink.
+- In the wordmark, "Workstation" is ink (white on dark) and "AI-native CRM" is the primary pink.
 
 ## Tagline
 
@@ -36,9 +38,7 @@ The two up-strokes sit behind the down-strokes and are shaded, so the W reads as
 at each point; the last stroke fades towards the top. On the iOS home screen the disc becomes
 the full-bleed square (iOS rounds the corners), with the W a little larger.
 
-**The logo** is the round mark with the wordmark **Workstation CRM** and an **AI** badge: a primary
-pill with white letters, read as "Workstation CRM (AI)". Write the product as *Workstation CRM*
-in running text; the badge marks the AI-assisted edition (the Property PA).
+**The logo** is the round mark with the wordmark **Workstation AI-native CRM**.
 
 - **Clear space:** a quarter of the disc's diameter on every side.
 - **Minimum size:** the mark is 16 px tall on screen; the lockup is 140 px wide.

@@ -158,7 +158,7 @@ final class SimproDemoTests: XCTestCase {
     func testBrandFallsBackToHouseBrandForEmptyOrUnexpandedValues() {
         let info: [String: String] = ["WSLBrandName": "$(BRAND_NAME)", "WSLBrandMark": "  "]
         let brand = Brand.from(info: { info[$0] })
-        XCTAssertEqual(brand.name, "Workstation CRM")
+        XCTAssertEqual(brand.name, "Workstation AI‑native CRM")
         XCTAssertNil(brand.markImageName)
         XCTAssertEqual(brand.accentColorName, "AccentColor")
         XCTAssertEqual(brand.company.legalFooter, "")

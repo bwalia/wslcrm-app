@@ -1315,7 +1315,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
-				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
@@ -1528,7 +1528,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
-				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
@@ -1645,7 +1645,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
-				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
@@ -1847,7 +1847,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
-				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
@@ -1988,7 +1988,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
-				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
@@ -2112,7 +2112,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
-				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
@@ -2212,7 +2212,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
-				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
