@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # Usage: python3 docs/brand/tools/build-brand.py docs/brand   (needs fonttools; rsvg-convert for PNGs)
-"""Builds every Workstation CRM (AI) logo file from one definition of the mark.
+"""Builds every Workstation AI-native CRM logo file from one definition of the mark.
 
 The mark is the Workstation icon: a white "W" folded from one ribbon on a #FF004E disc (the
-OpsAPI primary). The wordmark is "Workstation CRM" with an "AI" badge.
+OpsAPI primary). The wordmark is "Workstation AI-native CRM".
 
 Writes the SVGs into the brand folder, PNG renders into png/, the Icon Composer layers into
 icon-layers/, and (with --app) the iOS asset catalog images.
@@ -148,38 +148,20 @@ def text_path(text, size, x, baseline, tracking=-0.02):
 CAP = font["OS/2"].sCapHeight / upm
 
 
-NAME, PRODUCT = "Workstation", "CRM"
+NAME, PRODUCT = "Workstation", "AI-native CRM"
 
 
 def name_paths(size, x, baseline, color):
-    """"Workstation" in the text colour, "CRM" in the primary, one word-space apart."""
+    """"Workstation" in the text colour, "AI-native CRM" in the primary, one word-space apart."""
     d1, w1 = text_path(NAME, size, x, baseline)
     gap = size * 0.26
     d2, w2 = text_path(PRODUCT, size, x + w1 + gap, baseline)
     return f'<path fill="{color}" d="{d1}"/><path fill="{PRIMARY}" d="{d2}"/>', w1 + gap + w2
 
 
-def ai_badge(size, x, baseline):
-    """The "AI" badge: a primary pill with white letters, sitting on the cap height."""
-    cap = CAP * size
-    letters, lw = text_path("AI", size * 0.62, 0, 0, tracking=0.02)
-    pad_x, h = size * 0.24, cap * 1.02
-    w = lw + 2 * pad_x
-    top = baseline - cap - (h - cap) / 2
-    ty = top + h / 2 + CAP * size * 0.62 / 2
-    pill = f'<rect x="{x:.1f}" y="{top:.1f}" width="{w:.1f}" height="{h:.1f}" rx="{h / 2:.1f}" fill="{PRIMARY}"/>'
-    return pill + f'<path fill="#FFFFFF" transform="translate({x + pad_x:.1f} {ty:.1f})" d="{letters}"/>', w
-
-
-def name_with_ai(size, x, baseline, color):
-    paths, width = name_paths(size, x, baseline, color)
-    badge, bw = ai_badge(size, x + width + size * 0.22, baseline)
-    return paths + badge, width + size * 0.22 + bw
-
-
 def wordmark(color, name, title):
     size = 160
-    paths, width = name_with_ai(size, 24, 24 + CAP * size, color)
+    paths, width = name_paths(size, 24, 24 + CAP * size, color)
     w, h = int(width + 48), int(CAP * size * 1.3 + 48)
     write(name, svg(title, paths, size=(w, h), view=f"0 0 {w} {h}"))
 
@@ -191,16 +173,16 @@ def lockup(color, name, title):
     cap = CAP * size
     tx = 24 + gw * scale + 44
     baseline = 24 + height / 2 + cap / 2
-    paths, width = name_with_ai(size, tx, baseline, color)
+    paths, width = name_paths(size, tx, baseline, color)
     w, h = int(tx + width + 28), int(height + 48)
     body = f'<g transform="translate(24 24) scale({scale:.5f}) translate({-gx} {-gy})">{GLYPH}</g>{paths}'
     write(name, svg(title, body, DISC_DEFS + w_defs(), size=(w, h), view=f"0 0 {w} {h}"))
 
 
-wordmark(INK, "wordmark.svg", "Workstation CRM (AI)")
-wordmark(WHITE, "wordmark-on-dark.svg", "Workstation CRM (AI)")
-lockup(INK, "lockup.svg", "Workstation CRM (AI)")
-lockup(WHITE, "lockup-on-dark.svg", "Workstation CRM (AI)")
+wordmark(INK, "wordmark.svg", "Workstation AI-native CRM")
+wordmark(WHITE, "wordmark-on-dark.svg", "Workstation AI-native CRM")
+lockup(INK, "lockup.svg", "Workstation AI-native CRM")
+lockup(WHITE, "lockup-on-dark.svg", "Workstation AI-native CRM")
 
 
 # MARK: Renders
@@ -241,4 +223,4 @@ if app_assets:
         render(B("logo-glyph-on-dark.svg"), os.path.join(mark, f"BrandMark-WSLCRM-Dark@{scale}x.png"),
                int(96 * gw / gh) * scale)
 
-print("Built the Workstation CRM brand files in", brand)
+print("Built the Workstation AI-native CRM brand files in", brand)

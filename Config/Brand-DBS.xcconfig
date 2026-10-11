@@ -4,6 +4,7 @@
 // (03806201). They print on the report PDFs' letterhead and footer, as on DBS's own Simpro reports.
 
 BRAND_NAME = DBS Ltd
+BRAND_DISPLAY_NAME = DBS Ltd
 BRAND_MARK = BrandMark-DBS
 BRAND_APP_ICON = AppIcon-DBS
 BRAND_ACCENT_COLOR = AccentColor-DBS

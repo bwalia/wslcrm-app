@@ -4,7 +4,7 @@ import UIKit
 // MARK: - Tones
 
 /// Semantic colours. Every use is paired with an icon and text, never colour alone.
-/// `brand` is the build's own accent (Workstation CRM pink, DBS blue) for primary actions.
+/// `brand` is the build's own accent (Workstation pink, DBS blue) for primary actions.
 enum Tone: Sendable {
     case brand, neutral, info, progress, success, warning, danger
 
