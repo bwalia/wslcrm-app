@@ -225,7 +225,13 @@ actor MutationQueue {
                 throw error.naming(step.label)
             }
             var captured: String?
-            if step.captures != nil {
+            if step.captures != nil, let field = step.capturesField {
+                guard let value = Self.value(field, in: data) else {
+                    throw APIError.validation(ServerError(status: 0, message: "\(step.label): the server didn't return \(field)",
+                                                          fieldErrors: [:], rawBody: String(decoding: data.prefix(300), as: UTF8.self)))
+                }
+                captured = value
+            } else if step.captures != nil {
                 guard let uuid = Self.uuid(in: data) else {
                     throw APIError.validation(ServerError(status: 0, message: "\(step.label): the server didn't return an id",
                                                           fieldErrors: [:], rawBody: String(decoding: data.prefix(300), as: UTF8.self)))
@@ -241,6 +247,13 @@ actor MutationQueue {
             }
             persist()
         }
+    }
+
+    /// A string field from `{ data: { field } }` or `{ field }`.
+    static func value(_ field: String, in data: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        let inner = json["data"] as? [String: Any] ?? json
+        return (inner[field] as? String) ?? (json[field] as? String)
     }
 
     /// `uuid` from `{ data: { uuid } }`, `{ data: { lead: { uuid } } }` or `{ uuid }`.

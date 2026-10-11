@@ -39,18 +39,22 @@ struct PendingMutation: Codable, Identifiable, Sendable, Equatable {
         var upload: Upload?
         /// Keep the response's `uuid` under this key for the steps after it.
         var captures: String?
+        /// Capture this field of the response (`data.<field>` or `<field>`) instead of `uuid`,
+        /// e.g. a transcript's `text`. Values put into a later JSON body are JSON-escaped.
+        var capturesField: String?
         /// Sent as `Idempotency-Key`, the same on every retry, so a lost response can't duplicate the row.
         var idempotencyKey: String
         var done = false
 
         init(label: String, method: HTTPMethod, path: String, body: Data? = nil, upload: Upload? = nil,
-             captures: String? = nil, idempotencyKey: String = UUID().uuidString) {
+             captures: String? = nil, capturesField: String? = nil, idempotencyKey: String = UUID().uuidString) {
             self.label = label
             self.method = method
             self.path = path
             self.body = body
             self.upload = upload
             self.captures = captures
+            self.capturesField = capturesField
             self.idempotencyKey = idempotencyKey
         }
     }
@@ -62,6 +66,8 @@ struct PendingMutation: Codable, Identifiable, Sendable, Equatable {
         var mimeType: String
         /// Form fields, as name/value pairs; values may use `{{key}}`.
         var fields: [[String]]
+        /// Send the file itself as the body (with `mimeType` as its Content-Type), not as a form.
+        var raw: Bool?
     }
 
     enum State: Codable, Sendable, Equatable {
@@ -133,11 +139,21 @@ struct PendingMutation: Codable, Identifiable, Sendable, Equatable {
 
     var isChain: Bool { steps != nil }
 
+    /// A captured value as it goes inside a JSON string: quotes, backslashes and control
+    /// characters escaped. Ids are unchanged.
+    static func jsonEscaped(_ value: String) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: [value], options: [.fragmentsAllowed]),
+              let text = String(data: data, encoding: .utf8) else { return value }
+        return String(text.dropFirst(2).dropLast(2))
+    }
+
     /// A step with captured ids filled in. Nil when it needs an id an earlier step didn't return.
     func endpoint(for step: Step, uploadsDirectory: URL) throws -> Endpoint? {
-        func fill(_ text: String) -> String? {
+        func fill(_ text: String, json: Bool = false) -> String? {
             var result = text
-            for (key, value) in results ?? [:] { result = result.replacingOccurrences(of: "{{\(key)}}", with: value) }
+            for (key, value) in results ?? [:] {
+                result = result.replacingOccurrences(of: "{{\(key)}}", with: json ? Self.jsonEscaped(value) : value)
+            }
             return result.contains("{{") ? nil : result
         }
         guard let path = fill(step.path) else { return nil }
@@ -149,10 +165,17 @@ struct PendingMutation: Codable, Identifiable, Sendable, Equatable {
                 fields.append((pair[0], value))
             }
             let data = try Data(contentsOf: uploadsDirectory.appendingPathComponent(upload.fileName))
+            if upload.raw == true {
+                endpoint = endpoint.withRawBody(data)
+                endpoint.headers["Content-Type"] = upload.mimeType
+                endpoint = endpoint.withIdempotencyKey(step.idempotencyKey)
+                endpoint.namespaceOverride = namespaceId
+                return endpoint
+            }
             endpoint = endpoint.withMultipart(fields: fields, file: .init(fieldName: upload.fieldName, filename: upload.fileName,
                                                                           mimeType: upload.mimeType, data: data))
         } else if let body = step.body {
-            guard let text = fill(String(decoding: body, as: UTF8.self)) else { return nil }
+            guard let text = fill(String(decoding: body, as: UTF8.self), json: true) else { return nil }
             endpoint = endpoint.withRawBody(Data(text.utf8))
         }
         endpoint = endpoint.withIdempotencyKey(step.idempotencyKey)

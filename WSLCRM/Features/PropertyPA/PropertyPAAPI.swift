@@ -1,30 +1,35 @@
 import Foundation
 
-/// Property PA (`property_pa` plugin). Envelope `{ success, data, meta? }`, nulls left out.
-/// Reads that screens open from go through the offline cache. Model calls (Prepare me, Ask PA)
-/// may answer 202 with a job; `awaitJob` polls until it's done. No model, prompt or provider
-/// detail ever lives in the app: the server routes every call to the private model.
+/// Property PA (`property_pa` plugin, `projects/property-pa` in opsapi). Envelope
+/// `{ success, data, meta? }`, nulls left out. Wire shapes are in `PAServerModels.swift` and are
+/// mapped to the screen models by `PAMapping`. No model, prompt or provider detail lives in the
+/// app: every PA answer runs on the server (JobShout → the private model) and is checked by
+/// OpsAPI's grounding check before it's shown.
 struct PropertyPAAPI: Sendable {
     let client: APIClient
     let cache: ResponseCache
 
-    /// One place to change if opsapi mounts the plugin elsewhere.
     static let base = "/api/v2/property-pa"
 
-    // MARK: Gate
+    // MARK: Gate and Today
 
-    /// Nil when the PA is off for this workspace (404 / `enabled: false`) or this person.
+    /// Nil when the PA is off for this workspace (404 `PLUGIN_DISABLED`) or this person can't read
+    /// it. `GET /briefing` doubles as the gate until a `/me` exists.
     func me() async throws -> PAMe? {
         do {
-            let fetched: Fetched<PAMe> = try await cachedData(.get("\(Self.base)/me"), cacheKey: "pa/me")
-            return fetched.value.enabled == false ? nil : fetched.value
+            let fetched = try await briefing()
+            return PAMapping.me(from: fetched.value)
         } catch let error as APIError {
-            if case .notFound = error { return nil }
-            throw error
+            switch error {
+            case .notFound, .forbidden: return nil
+            default: throw error
+            }
         }
     }
 
-    // MARK: Today
+    func briefing() async throws -> Fetched<PAServerBriefing> {
+        try await cachedData(.get("\(Self.base)/briefing"), cacheKey: "pa/briefing")
+    }
 
     enum TodayMode: Hashable, Sendable {
         case full
@@ -37,98 +42,185 @@ struct PropertyPAAPI: Sendable {
         }
     }
 
+    /// Ranked cards. Until opsapi's `GET /today` ships (Week 3), the cards come from the briefing,
+    /// in its order (next action due first, then longest without contact).
     func today(mode: TodayMode = .full, manager: Bool = false) async throws -> Fetched<PAToday> {
         var query = [URLQueryItem(name: "mode", value: mode.query)]
         if manager { query.append(URLQueryItem(name: "role", value: "manager")) }
-        return try await cachedData(.get("\(Self.base)/today", query: query),
-                                    cacheKey: "pa/today/\(manager ? "manager" : "agent")/\(mode.query)")
+        do {
+            return try await cachedData(.get("\(Self.base)/today", query: query),
+                                        cacheKey: "pa/today/\(manager ? "manager" : "agent")/\(mode.query)")
+        } catch let error as APIError {
+            guard case .notFound(let server) = error, server.code != "PLUGIN_DISABLED" else { throw error }
+            let fetched = try await briefing()
+            return Fetched(value: PAMapping.today(from: fetched.value, manager: manager), cachedAt: fetched.cachedAt)
+        }
     }
 
+    /// Not built yet on the server; screens hide "Why #1?" for cards without a score.
     func why(cardUuid: String) async throws -> PAWhy {
         try await data(.get("\(Self.base)/why/\(cardUuid)"))
     }
 
-    // MARK: Prepare me and Ask PA
+    // MARK: Talk to the PA
 
-    func prepare(opportunityUuid: String, progress: @Sendable (PAJob<PABrief>.Status) async -> Void = { _ in }) async throws -> PABrief {
-        try await awaitJob(.post("\(Self.base)/prepare/\(opportunityUuid)", json: EmptyBody()), progress: progress)
+    func prepare(opportunityUuid: String, name: String,
+                 progress: @Sendable (PAJob<PABrief>.Status) async -> Void = { _ in }) async throws -> PABrief {
+        let run = try await run(PAServerAskBody(message: "Prepare me for my call with \(name).", mode: "prepare",
+                                                opportunityUuid: opportunityUuid), progress: progress)
+        return try PAMapping.brief(from: run, opportunityUuid: opportunityUuid)
     }
 
-    func ask(_ body: PAAskBody, progress: @Sendable (PAJob<PAAnswer>.Status) async -> Void = { _ in }) async throws -> PAAnswer {
-        try await awaitJob(Endpoint.post("\(Self.base)/ask", json: body).withIdempotencyKey(UUID().uuidString), progress: progress)
+    func ask(_ body: PAAskBody, mode: String = "ask",
+             progress: @Sendable (PAJob<PAAnswer>.Status) async -> Void = { _ in }) async throws -> PAAnswer {
+        let run = try await run(PAServerAskBody(message: body.question, mode: mode,
+                                                opportunityUuid: body.context?.opportunityUuid), progress: progress)
+        return try PAMapping.answer(from: run)
     }
 
-    // MARK: Capture
+    /// Starts a PA run and polls `GET /ask/:id` until it's finished.
+    func run<P>(_ body: PAServerAskBody, pollEvery: Duration = .seconds(3), timeout: Duration = .seconds(480),
+                progress: @Sendable (PAJob<P>.Status) async -> Void = { _ in }) async throws -> PAServerRun {
+        var run: PAServerRun = try await data(Endpoint.post("\(Self.base)/ask", json: body).withIdempotencyKey(UUID().uuidString))
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while run.status == .running {
+            await progress(.running)
+            if clock.now >= deadline { throw APIError.pa("The PA is taking too long. Try again in a minute.") }
+            try await Task.sleep(for: pollEvery)
+            run = try await data(.get("\(Self.base)/ask/\(run.uuid)"))
+        }
+        await progress(run.status == .succeeded ? .done : .failed)
+        if run.status == .failed { throw APIError.pa(run.error ?? "The PA couldn't finish that.") }
+        return run
+    }
 
-    /// Captures waiting for this person: still being worked on, or ready to confirm.
+    // MARK: Captures and proposed updates
+
+    /// Captures with changes still waiting for a decision, newest first.
     func captures() async throws -> [PACapture] {
-        let envelope: Envelope.Standard<LossyArray<PACapture>> = try await client.send(
-            .get("\(Self.base)/captures", query: [URLQueryItem(name: "status", value: "open")]))
-        return envelope.data.elements
+        PAMapping.captureSummaries(from: try await proposedUpdates(status: "proposed"))
     }
 
-    func capture(_ uuid: String) async throws -> PACapture {
-        try await data(.get("\(Self.base)/capture/\(uuid)"))
+    func proposedUpdates(status: String? = nil, captureUuid: String? = nil) async throws -> [PAServerProposedUpdate] {
+        var query: [URLQueryItem] = []
+        if let status { query.append(URLQueryItem(name: "status", value: status)) }
+        if let captureUuid { query.append(URLQueryItem(name: "capture_uuid", value: captureUuid)) }
+        let list: LossyArray<PAServerProposedUpdate> = try await data(.get("\(Self.base)/proposed-updates", query: query))
+        return list.elements
     }
 
-    /// Confirming is never queued: material fields need a signal and the person's tap.
+    /// The confirm sheet for one note (keyed by its interaction), with the PA's run status while
+    /// it's still working out the changes.
+    func capture(_ interactionUuid: String) async throws -> PACapture {
+        let sheet: PAServerSheet = try await data(.get("\(Self.base)/interactions/\(interactionUuid)/capture"))
+        var opportunity: PAServerOpportunity?
+        if let id = sheet.interaction?.opportunityUuid ?? sheet.proposals.first(where: { $0.targetTable == "pa_opportunities" })?.targetUuid {
+            opportunity = try? await data(.get("\(Self.base)/opportunities/\(id)"))
+        }
+        return PAMapping.capture(interactionUuid: interactionUuid, sheet: sheet, opportunity: opportunity)
+    }
+
+    /// The person's decisions on the sheet, in one call. Never queued (material fields need a
+    /// signal and a tap), and never `confirm_rest`: nothing is confirmed without its own tick.
     func confirm(captureUuid: String, _ body: PAConfirmBody) async throws -> PACapture {
-        try await data(.post("\(Self.base)/capture/\(captureUuid)/confirm", json: body))
+        struct Decision: Encodable, Sendable { let uuid: String; let action: String; let value: JSONValue? }
+        struct Body: Encodable, Sendable { let decisions: [Decision]; let confirmRest: Bool }
+        let decisions = body.decisions.map { Decision(uuid: $0.updateUuid, action: $0.action.rawValue, value: $0.value) }
+        if !decisions.isEmpty {
+            let _: JSONValue = try await data(.post("\(Self.base)/interactions/\(captureUuid)/decide",
+                                                     json: Body(decisions: decisions, confirmRest: false)))
+        }
+        return try await capture(captureUuid)
     }
 
     // MARK: Handoffs
 
-    func handoff(_ body: PAHandoffBody) async throws -> PAHandoff {
-        try await data(Endpoint.post("\(Self.base)/handoff", json: body).withIdempotencyKey(UUID().uuidString))
+    /// People who can answer a handoff: `GET /managers` when the server has it, else workspace
+    /// members with a manager or owner role (needs `users.read`).
+    func managers() async throws -> [PAManager] {
+        if let list: LossyArray<PAManager> = try? await data(.get("\(Self.base)/managers")) { return list.elements }
+        let envelope: Envelope.Standard<LossyArray<JSONValue>> = try await client.send(
+            .get("/api/v2/namespace/members", query: [URLQueryItem(name: "per_page", value: "200")]))
+        return PAMapping.managers(fromMembers: envelope.data.elements)
     }
 
+    func handoff(_ body: PAHandoffBody) async throws -> PAHandoff {
+        guard let to = body.toUserUuid else { throw APIError.pa("Choose who to ask.") }
+        let sent: PAServerHandoff = try await data(Endpoint.post("\(Self.base)/handoffs", json: PAServerHandoffBody(
+            toUserUuid: to, question: body.question, opportunityUuid: body.opportunityUuid,
+            paRecommendation: body.recommendation)).withIdempotencyKey(UUID().uuidString))
+        return PAMapping.handoff(sent, fromName: nil)
+    }
+
+    /// There's no single-handoff route: it's found in my inbox (or what I sent).
     func handoffDetail(_ uuid: String) async throws -> PAHandoff {
-        try await data(.get("\(Self.base)/handoffs/\(uuid)"))
+        for box in ["inbox", "sent"] {
+            let list: LossyArray<PAServerHandoff> = try await data(.get("\(Self.base)/handoffs",
+                                                                       query: [URLQueryItem(name: "box", value: box)]))
+            if let found = list.elements.first(where: { $0.uuid == uuid }) {
+                let summary = try? await briefing().value.handoffsForMe.first { $0.uuid == uuid }
+                return PAMapping.handoff(found, fromName: summary?.fromName)
+            }
+        }
+        throw APIError.pa("That question isn't waiting for you any more.")
     }
 
     /// Sent while the manager is looking at it, after Face ID; never queued.
     func reply(handoffUuid: String, _ body: PAHandoffReply) async throws -> PAHandoff {
-        try await data(.post("\(Self.base)/handoffs/\(handoffUuid)/reply", json: body))
+        struct Body: Encodable, Sendable { let reply: String; let decision: String }
+        let text = body.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let reply = text.isEmpty ? "Agreed." : text
+        let _: JSONValue = try await data(.post("\(Self.base)/handoffs/\(handoffUuid)/reply",
+                                                 json: Body(reply: reply, decision: body.decision == .agree ? "agree" : reply)))
+        return try await handoffDetail(handoffUuid)
     }
 
     // MARK: Teach PA
 
+    /// A rule in the person's words becomes a proposed version; it isn't used until approved.
     func teach(_ body: PATeachBody) async throws -> PAKnowledgeRule {
-        try await data(Endpoint.post("\(Self.base)/teach", json: body).withIdempotencyKey(UUID().uuidString))
+        let request = PAMapping.knowledgeBody(text: body.text, scope: body.scope.rawValue)
+        let proposal: PAServerKnowledgeProposal = try await data(
+            Endpoint.post("\(Self.base)/knowledge", json: request).withIdempotencyKey(UUID().uuidString))
+        return PAKnowledgeRule(uuid: proposal.knowledgeUuid, rule: request.rule, rationale: request.rationale,
+                               category: request.domain, triggers: request.triggers ?? [], scope: request.scope,
+                               version: proposal.version, status: proposal.status ?? "proposed")
     }
 
-    func approve(ruleUuid: String) async throws -> PAKnowledgeRule {
-        try await data(.post("\(Self.base)/knowledge/\(ruleUuid)/approve", json: EmptyBody()))
+    func approve(ruleUuid: String, version: Int = 1) async throws -> PAKnowledgeRule {
+        let rule: PAServerKnowledge = try await data(.post("\(Self.base)/knowledge/\(ruleUuid)/versions/\(version)/approve",
+                                                           json: EmptyBody()))
+        return PAKnowledgeRule(uuid: rule.uuid, rule: rule.rule ?? "", rationale: rule.rationale, category: nil,
+                               triggers: rule.triggers, scope: rule.scope, version: rule.currentVersion, status: rule.status)
     }
 
     // MARK: Offline-capable writes
 
     enum Mutations {
-        /// A voice note (kept on the phone until the server has it) or a typed note.
+        /// A voice note is transcribed by the workspace's private speech service, then started as a
+        /// capture (`POST /captures/start`): the note is saved and the PA proposes the changes. Kept on the phone until both steps are done. A typed
+        /// note skips the first step.
         static func capture(audioFile: String?, text: String?, context: PAContext?, summary: String,
                             mutationContext: MutationContext) -> PendingMutation {
-            var fields: [[String]] = []
-            if let context {
-                if let card = context.cardUuid { fields.append(["card_uuid", card]) }
-                if let opportunity = context.opportunityUuid { fields.append(["opportunity_uuid", opportunity]) }
-                if let person = context.personUuid { fields.append(["person_uuid", person]) }
-            }
-            let step: PendingMutation.Step
+            var steps: [PendingMutation.Step] = []
+            var message = text ?? ""
             if let audioFile {
-                step = .init(label: "Voice note", method: .post, path: "\(base)/capture",
-                             upload: .init(fileName: audioFile, fieldName: "audio", mimeType: "audio/mp4", fields: fields),
-                             captures: "capture")
-            } else {
-                var body: [String: String] = ["text": text ?? ""]
-                for pair in fields where pair.count == 2 { body[pair[0]] = pair[1] }
-                let data = (try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])) ?? Data("{}".utf8)
-                step = .init(label: "Note", method: .post, path: "\(base)/capture", body: data, captures: "capture")
+                steps.append(.init(label: "Transcribe", method: .post, path: "/api/v2/voice/transcribe",
+                                   upload: .init(fileName: audioFile, fieldName: "audio", mimeType: "audio/mp4", fields: [], raw: true),
+                                   captures: "transcript", capturesField: "text"))
+                message = "{{transcript}}"
             }
-            var mutation = PendingMutation(kind: .paCapture, method: .post, path: "\(base)/capture", body: nil,
+            var start: [String: String] = ["text": message, "channel": audioFile == nil ? "note" : "voice"]
+            if let opportunity = context?.opportunityUuid { start["opportunity_uuid"] = opportunity }
+            if let person = context?.personUuid { start["person_uuid"] = person }
+            let body = (try? JSONSerialization.data(withJSONObject: start, options: [.sortedKeys])) ?? Data("{}".utf8)
+            steps.append(.init(label: "Send to your PA", method: .post, path: "\(base)/captures/start", body: body))
+            var mutation = PendingMutation(kind: .paCapture, method: .post, path: "\(base)/captures/start", body: nil,
                                            namespaceId: mutationContext.namespaceId, userId: mutationContext.userId,
                                            entityId: "pa-capture-\(UUID().uuidString)", jobId: nil, summary: summary,
                                            hints: audioFile.map { ["audio": $0] } ?? [:])
-            mutation.steps = [step]
+            mutation.steps = steps
             mutation.results = [:]
             return mutation
         }
@@ -138,6 +230,7 @@ struct PropertyPAAPI: Sendable {
             case later(Date)
         }
 
+        /// Not on the server yet (Week 3): queued so nothing is lost, and the card hides meanwhile.
         static func card(_ card: PACard, action: CardAction, context: MutationContext) -> PendingMutation {
             let path: String
             let body: Data
@@ -161,47 +254,6 @@ struct PropertyPAAPI: Sendable {
     }
 
     // MARK: Helpers
-
-    /// POST that answers either the result (200) or a job (202), then polls the job.
-    func awaitJob<T: Decodable & Sendable>(_ endpoint: Endpoint, pollEvery: Duration = .seconds(2),
-                                           timeout: Duration = .seconds(420),
-                                           progress: @Sendable (PAJob<T>.Status) async -> Void) async throws -> T {
-        let (data, _) = try await client.sendRaw(endpoint)
-        let decoder = JSONDecoder.opsAPI()
-        if let job = try? decoder.decode(Envelope.Standard<PAJob<T>>.self, from: data).data {
-            return try await poll(job, pollEvery: pollEvery, timeout: timeout, progress: progress)
-        }
-        do {
-            return try decoder.decode(Envelope.Standard<T>.self, from: data).data
-        } catch {
-            throw APIError.decoding(endpoint: endpoint.summary, description: String(describing: error),
-                                    body: String(decoding: data.prefix(2_000), as: UTF8.self))
-        }
-    }
-
-    private func poll<T: Decodable & Sendable>(_ first: PAJob<T>, pollEvery: Duration, timeout: Duration,
-                                               progress: @Sendable (PAJob<T>.Status) async -> Void) async throws -> T {
-        var job = first
-        let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: timeout)
-        while true {
-            await progress(job.status)
-            switch job.status {
-            case .done:
-                if let result = job.result { return result }
-                throw APIError.pa("The PA finished without an answer.")
-            case .failed:
-                throw APIError.pa(job.error ?? "The PA couldn't finish that.")
-            default:
-                break
-            }
-            if clock.now >= deadline {
-                throw APIError.pa("The PA is taking too long. Try again in a minute.")
-            }
-            try await Task.sleep(for: pollEvery)
-            job = try await data(.get("\(Self.base)/jobs/\(job.jobUuid)"))
-        }
-    }
 
     private func data<T: Decodable & Sendable>(_ endpoint: Endpoint) async throws -> T {
         let envelope: Envelope.Standard<T> = try await client.send(endpoint)
@@ -232,7 +284,7 @@ struct PropertyPAAPI: Sendable {
 }
 
 extension APIError {
-    /// A PA job that finished badly, shown like any other server message.
+    /// A PA problem, shown like any other server message.
     static func pa(_ message: String) -> APIError {
         .validation(ServerError(status: 422, message: message, fieldErrors: [:], rawBody: ""))
     }

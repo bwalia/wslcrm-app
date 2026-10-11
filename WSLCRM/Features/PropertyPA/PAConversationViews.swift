@@ -54,7 +54,7 @@ struct PAPrepareView: View {
     private func load() async {
         state = .loading
         do {
-            let brief = try await services.propertyPA.prepare(opportunityUuid: route.opportunityUuid) { status in
+            let brief = try await services.propertyPA.prepare(opportunityUuid: route.opportunityUuid, name: route.title) { status in
                 await MainActor.run { self.status = status }
             }
             state = .loaded(brief)
@@ -162,7 +162,8 @@ struct PAAskView: View {
         turns.append(turn)
         Task {
             do {
-                let answer = try await services.propertyPA.ask(PAAskBody(question: text, context: context))
+                let answer = try await services.propertyPA.ask(PAAskBody(question: text, context: context),
+                                                               mode: context?.opportunityUuid == nil ? "ask" : "coach")
                 update(turn.id) { $0.answer = answer }
             } catch {
                 update(turn.id) { $0.error = PDApprovalDetailView.describe(error.asAPIError) }
@@ -191,6 +192,9 @@ struct PAHandoffSheet: View {
     @State private var sending = false
     @State private var error: APIError?
     @State private var sent: PAHandoff?
+    @State private var managers: [PAManager] = []
+    @State private var to: String?
+    @State private var managersMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -203,6 +207,16 @@ struct PAHandoffSheet: View {
                             .accessibilityIdentifier("pa.handoff.sent")
                     }
                 } else {
+                    Section {
+                        if managers.isEmpty {
+                            Text(managersMessage ?? "Finding your managers…").foregroundStyle(.secondaryText)
+                        } else {
+                            Picker("Ask", selection: $to) {
+                                ForEach(managers) { Text($0.name).tag(String?.some($0.uuid)) }
+                            }
+                            .accessibilityIdentifier("pa.handoff.to")
+                        }
+                    }
                     Section {
                         TextField("The exact question", text: $question, axis: .vertical)
                             .lineLimit(2...6)
@@ -228,7 +242,7 @@ struct PAHandoffSheet: View {
                 if sent == nil {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Send") { Task { await send() } }
-                            .disabled(question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sending)
+                            .disabled(question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || to == nil || sending)
                             .accessibilityIdentifier("pa.handoff.send")
                     }
                 }
@@ -236,6 +250,15 @@ struct PAHandoffSheet: View {
             .onAppear {
                 if question.isEmpty, let lastQuestion { question = lastQuestion }
                 if recommendation.isEmpty, let lastAnswer { recommendation = String(lastAnswer.prefix(400)) }
+            }
+            .task {
+                do {
+                    managers = try await services.propertyPA.managers()
+                    to = managers.first?.uuid
+                    if managers.isEmpty { managersMessage = "No manager is set up in this workspace yet." }
+                } catch {
+                    managersMessage = "Couldn't find your managers. Ask on the web for now."
+                }
             }
         }
     }
@@ -246,7 +269,7 @@ struct PAHandoffSheet: View {
         do {
             let trimmed = recommendation.trimmingCharacters(in: .whitespacesAndNewlines)
             sent = try await services.propertyPA.handoff(PAHandoffBody(
-                opportunityUuid: context?.opportunityUuid, question: question.trimmingCharacters(in: .whitespacesAndNewlines),
+                toUserUuid: to, opportunityUuid: context?.opportunityUuid, question: question.trimmingCharacters(in: .whitespacesAndNewlines),
                 recommendation: trimmed.isEmpty ? nil : trimmed))
             error = nil
         } catch {
@@ -462,7 +485,7 @@ struct PATeachSheet: View {
         working = true
         defer { working = false }
         do {
-            proposed = try await services.propertyPA.approve(ruleUuid: rule.uuid)
+            proposed = try await services.propertyPA.approve(ruleUuid: rule.uuid, version: rule.version ?? 1)
             error = nil
         } catch {
             self.error = error.asAPIError

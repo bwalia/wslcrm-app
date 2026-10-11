@@ -276,6 +276,7 @@ struct PACaptureView: View {
             } else if let person = capture.resolved?.person {
                 Section {
                     Label([person.name, capture.resolved?.property?.address].compactMap { $0 }.joined(separator: " · "), systemImage: "person.crop.circle")
+                        .accessibilityElement(children: .combine)
                         .accessibilityIdentifier("pa.confirm.who")
                 }
             }
@@ -475,6 +476,9 @@ struct PAUpdateRow: View {
                     Text("was \(update.shownValue)").font(.caption).strikethrough().foregroundStyle(.secondaryText)
                 } else {
                     Text(update.shownValue).font(.headline).strikethrough(rejected).italic(update.isInferred)
+                }
+                if let quote = update.quote, !quote.isEmpty {
+                    Text("“\(quote)”").font(.caption).foregroundStyle(.secondaryText).lineLimit(3)
                 }
                 HStack(spacing: 6) {
                     if update.isInferred { PAUnconfirmedBadge(by: update.by) }

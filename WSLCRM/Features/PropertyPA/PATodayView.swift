@@ -90,7 +90,7 @@ struct PATodayView: View {
                     Text(manager ? "What needs you" : "Your brief")
                 }
             }
-            if !manager { modePicker }
+            if !manager, today.mode != "briefing" { modePicker }
             if let cachedAt { CachedDataNotice(savedAt: cachedAt) }
             if !manager { capturesSection }
 
@@ -354,7 +354,7 @@ struct PACardView: View {
                 .font(.subheadline.weight(.semibold))
             }
         }
-        if isTop, !manager {
+        if isTop, !manager, card.score != nil {
             Button("Why is this #1?", systemImage: "questionmark.circle") { onWhy() }
                 .font(.footnote)
                 .buttonStyle(.borderless)
