@@ -42,30 +42,46 @@ struct PropertyPAAPI: Sendable {
         }
     }
 
-    /// Ranked cards. Until opsapi's `GET /today` ships (Week 3), the cards come from the briefing,
-    /// in its order (next action due first, then longest without contact).
+    /// The ranked day from opsapi's rules engine (`GET /today?minutes=`). Managers see the
+    /// questions waiting for them (from the briefing). A server without Week 3 falls back to the
+    /// briefing's order, with no score (so no "Why #1?").
     func today(mode: TodayMode = .full, manager: Bool = false) async throws -> Fetched<PAToday> {
-        var query = [URLQueryItem(name: "mode", value: mode.query)]
-        if manager { query.append(URLQueryItem(name: "role", value: "manager")) }
+        if manager {
+            let fetched = try await briefing()
+            return Fetched(value: PAMapping.today(from: fetched.value, manager: true), cachedAt: fetched.cachedAt)
+        }
+        var query: [URLQueryItem] = []
+        if case .minutes(let n) = mode { query.append(URLQueryItem(name: "minutes", value: String(n))) }
         do {
-            return try await cachedData(.get("\(Self.base)/today", query: query),
-                                        cacheKey: "pa/today/\(manager ? "manager" : "agent")/\(mode.query)")
+            let fetched: Fetched<PAServerToday> = try await cachedData(.get("\(Self.base)/today", query: query),
+                                                                       cacheKey: "pa/today/\(mode.query)")
+            var today = PAMapping.today(from: fetched.value, budgeted: mode != .full)
+            if mode == .full, let briefing = try? await briefing().value { today.brief = .init(text: PAMapping.agentBrief(briefing)) }
+            return Fetched(value: today, cachedAt: fetched.cachedAt)
         } catch let error as APIError {
             guard case .notFound(let server) = error, server.code != "PLUGIN_DISABLED" else { throw error }
             let fetched = try await briefing()
-            return Fetched(value: PAMapping.today(from: fetched.value, manager: manager), cachedAt: fetched.cachedAt)
+            return Fetched(value: PAMapping.today(from: fetched.value, manager: false), cachedAt: fetched.cachedAt)
         }
     }
 
-    /// Not built yet on the server; screens hide "Why #1?" for cards without a score.
+    /// The real signals and weights behind a card's rank (`GET /today/why/:opportunity_id`).
     func why(cardUuid: String) async throws -> PAWhy {
-        try await data(.get("\(Self.base)/why/\(cardUuid)"))
+        let why: PAServerWhy = try await data(.get("\(Self.base)/today/why/\(cardUuid)"))
+        return PAMapping.why(from: why, cardUuid: cardUuid)
     }
 
     // MARK: Talk to the PA
 
+    /// Prepare Me from records (`GET /prepare/:id`, Week 3): instant and cited. Without it, a PA run.
     func prepare(opportunityUuid: String, name: String,
                  progress: @Sendable (PAJob<PABrief>.Status) async -> Void = { _ in }) async throws -> PABrief {
+        do {
+            let prepared: PAServerPrepare = try await data(.get("\(Self.base)/prepare/\(opportunityUuid)"))
+            return PAMapping.brief(from: prepared)
+        } catch let error as APIError {
+            guard case .notFound(let server) = error, server.code != "PLUGIN_DISABLED", !server.message.contains("Opportunity") else { throw error }
+        }
         let run = try await run(PAServerAskBody(message: "Prepare me for my call with \(name).", mode: "prepare",
                                                 opportunityUuid: opportunityUuid), progress: progress)
         return try PAMapping.brief(from: run, opportunityUuid: opportunityUuid)
@@ -73,6 +89,13 @@ struct PropertyPAAPI: Sendable {
 
     func ask(_ body: PAAskBody, mode: String = "ask",
              progress: @Sendable (PAJob<PAAnswer>.Status) async -> Void = { _ in }) async throws -> PAAnswer {
+        // Coaching on an opportunity: questions first, known vs assumed (`GET /coach/:id`, Week 3).
+        if mode == "coach", let opportunity = body.context?.opportunityUuid {
+            if let coach: PAServerCoach = try? await data(.get("\(Self.base)/coach/\(opportunity)",
+                                                                query: [URLQueryItem(name: "situation", value: String(body.question.prefix(2000)))])) {
+                return PAMapping.answer(fromCoach: coach)
+            }
+        }
         let run = try await run(PAServerAskBody(message: body.question, mode: mode,
                                                 opportunityUuid: body.context?.opportunityUuid), progress: progress)
         return try PAMapping.answer(from: run)
@@ -180,6 +203,12 @@ struct PropertyPAAPI: Sendable {
 
     /// A rule in the person's words becomes a proposed version; it isn't used until approved.
     func teach(_ body: PATeachBody) async throws -> PAKnowledgeRule {
+        // Week 3: the rule in the person's words; approved separately (with Face ID for company rules).
+        if let proposal: PAServerKnowledgeProposal = try? await data(Endpoint.post("\(Self.base)/knowledge/teach",
+                json: PAServerTeach(statement: body.text, scope: body.scope.rawValue, approve: false)).withIdempotencyKey(UUID().uuidString)) {
+            return PAKnowledgeRule(uuid: proposal.knowledgeUuid, rule: body.text, rationale: nil, category: nil, triggers: [],
+                                   scope: body.scope.rawValue, version: proposal.version, status: proposal.status ?? "proposed")
+        }
         let request = PAMapping.knowledgeBody(text: body.text, scope: body.scope.rawValue)
         let proposal: PAServerKnowledgeProposal = try await data(
             Endpoint.post("\(Self.base)/knowledge", json: request).withIdempotencyKey(UUID().uuidString))

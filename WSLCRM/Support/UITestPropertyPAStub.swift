@@ -7,8 +7,8 @@ import Foundation
 /// How It Works (fake data): Sophie (seller agent), Ashley (manager), Sarah / 22 Station Road,
 /// Michael, Rick and seven more sellers. Model answers are canned.
 ///
-/// `-UITestPATodayCards` also serves the routes opsapi hasn't built yet (`/today` ranked cards and
-/// `/why`, Week 3) in the shape the app asked for; without it they're 404 as on the real server.
+/// Answers as opsapi Week 3 ("Think": rules-engine `/today`, `/today/why`, `/prepare`, `/coach`,
+/// `/knowledge/teach`). `-UITestPAWeek1` turns those off (404), as on a server without Week 3.
 struct UITestPropertyPAStub {
     static let sarahOpportunity = "opp-sarah"
     static let handoffUuid = "c0000000-0000-4000-8000-000000000001"
@@ -16,7 +16,7 @@ struct UITestPropertyPAStub {
 
     var isManager = false
     var writes: [String] = []
-    private var todayCards = false
+    private var week3 = true
     private var updates: [[String: Any]] = []
     private var interactions: [String: [String: Any]] = [:]
     private var handoffs: [[String: Any]] = []
@@ -27,7 +27,7 @@ struct UITestPropertyPAStub {
     private var sheetReads: [String: Int] = [:]
 
     mutating func reset() {
-        todayCards = ProcessInfo.processInfo.arguments.contains("-UITestPATodayCards")
+        week3 = !ProcessInfo.processInfo.arguments.contains("-UITestPAWeek1")
         writes = []
         updates = []
         interactions = [:]
@@ -53,11 +53,25 @@ struct UITestPropertyPAStub {
         switch (method, sub) {
         case ("GET", "/briefing"):
             return ok(briefing)
-        case ("GET", "/today") where todayCards:
-            return ok(isManager ? managerToday : agentToday(query: query))
-        case ("GET", let p) where p.hasPrefix("/why/") && todayCards:
+        case ("GET", "/today") where week3:
+            return ok(agentToday(query: query))
+        case ("GET", let p) where p.hasPrefix("/today/why/") && week3:
             return ok(Self.why)
-        case ("POST", let p) where p.hasPrefix("/cards/") && todayCards:
+        case ("GET", let p) where p.hasPrefix("/prepare/") && week3:
+            return ok(prepare)
+        case ("GET", let p) where p.hasPrefix("/coach/") && week3:
+            writes.append("GET coach")
+            return ok(Self.coach)
+        case ("POST", "/knowledge/teach") where week3:
+            guard let statement = json["statement"] as? String, !statement.isEmpty else {
+                return (422, ["success": false, "error": "Validation failed"])
+            }
+            let id = "k0000000-0000-4000-8000-00000000000\(knowledge.count + 1)"
+            knowledge[id] = ["uuid": id, "key": "rule_\(knowledge.count + 1)", "scope": json["scope"] ?? "company", "status": "draft",
+                             "current_version": 0, "title": String(statement.prefix(60)), "rule": statement, "triggers": []]
+            writes.append("POST knowledge/teach \(json["scope"] as? String ?? "")")
+            return (201, ["success": true, "data": ["knowledge_uuid": id, "version": 1, "status": "proposed"]])
+        case ("POST", let p) where p.hasPrefix("/cards/"):
             let parts = p.split(separator: "/")
             if parts.count == 3 { doneCards.insert(String(parts[1])) }
             return ok(["ok": true])
@@ -286,28 +300,48 @@ struct UITestPropertyPAStub {
                 } : []]
     }
 
+    /// Week 3 Today: cards ranked by the rules engine; `?minutes=` packs a time budget.
     private func agentToday(query: String) -> [String: Any] {
-        var cards = UITestPropertyPAStubFixtures.cards.filter { !doneCards.contains($0["uuid"] as? String ?? "") }
-        if let raw = param("mode", in: query), raw.hasPrefix("minutes:"), let minutes = Int(raw.dropFirst("minutes:".count)) {
-            var used = 0
-            cards = cards.filter { card in
-                let need = card["estimated_minutes"] as? Int ?? 10
-                guard used + need <= minutes else { return false }
-                used += need
-                return true
-            }
+        var cards = UITestPropertyPAStubFixtures.rankedCards.filter { !doneCards.contains($0["opportunity_uuid"] as? String ?? "") }
+        // A confirmed next action becomes the top signal on Sarah's card.
+        if updates.contains(where: { $0["target_table"] as? String == "next_action" && $0["status"] as? String == "confirmed" }),
+           let index = cards.firstIndex(where: { $0["opportunity_uuid"] as? String == Self.sarahOpportunity }) {
+            cards[index]["why_now"] = "Next action due: She'll decide after speaking to Tom"
         }
-        return ["generated_at": UITestPropertyDealsStub.iso(minutes: -5),
-                "brief": ["text": "Morning, Sophie. Sarah is the one today: her second valuation was yesterday and she said she'd decide after it.",
-                          "sources": [["type": "event", "uuid": "ev-valuation", "label": "Second valuation, yesterday"]]],
-                "cards": cards]
+        var out: [String: Any] = ["cards": cards, "weights": ["event_just_happened": 30, "promised_decision": 25]]
+        if let raw = param("minutes", in: query), let minutes = Int(raw) {
+            var used = 0
+            var fits: [[String: Any]] = []
+            var waits: [[String: Any]] = []
+            for card in cards {
+                let need = card["minutes"] as? Int ?? 10
+                if used + need <= minutes { used += need; fits.append(card) }
+                else { waits.append(["opportunity_uuid": card["opportunity_uuid"] ?? "", "title": card["title"] ?? "", "minutes": need]) }
+            }
+            out["budget"] = ["minutes": minutes, "used": used, "fits": fits, "waits": waits]
+        }
+        return out
     }
 
-    private var managerToday: [String: Any] {
-        ["brief": ["text": "One decision needs you. Everything else is being handled."],
-         "cards": [["uuid": "card-handoff", "rank": 1, "kind": "handoff", "person": ["name": "Sophie Turner"],
-                    "handoff_uuid": Self.handoffUuid, "action": "Sophie asks: offer £230k to Sarah?"]],
-         "handled_count": 14]
+    private var prepare: [String: Any] {
+        var playbook: [[String: Any]] = [["key": "seller_competing_valuation", "title": "A competing valuation",
+                                          "rule": "Ask what the other agent based it on before talking price.", "ref": "pa_knowledge:k-seed-1"]]
+        if approvedRule {
+            playbook.insert(["key": "valuation_is_anchor", "title": "Company rule: an agent's valuation is not the seller's minimum",
+                             "rule": "Treat it as their anchor.", "ref": "pa_knowledge:k-1"], at: 0)
+        }
+        return ["opportunity_uuid": Self.sarahOpportunity, "title": "22 Station Road", "person_name": "Sarah Collins",
+                "snapshot": [["text": "22 Station Road, YO24 1AB", "ref": "pa_opportunities:\(Self.sarahOpportunity)"],
+                             ["text": "Warm, leaning hot", "ref": "pa_opportunities:\(Self.sarahOpportunity):temperature", "label": "stated"]],
+                "last_interaction": ["text": "Said she'd decide after the second valuation", "ref": "crm_activities:int-0"],
+                "price": [["text": "Second valuation (£240,000)", "ref": "pa_events:ev-valuation", "label": "stated"]],
+                "decision_makers": [["text": "Sarah", "ref": "pa_opportunities:\(Self.sarahOpportunity):decision_makers"]],
+                "promises": [["text": "Decide after the second valuation", "ref": "pa_events:ev-promise", "label": "stated"]],
+                "objections": [["text": "Another agent's valuation may anchor Sarah's expectations", "ref": "pa_events:ev-valuation", "label": "inference"]],
+                "unknowns": ["motivation", "timescale"],
+                "questions": [["field": "motivation", "question": "Why is Sarah selling, and why now?"],
+                              ["field": "timescale", "question": "Is there a date Sarah needs to be out by?"]],
+                "playbook": playbook, "objective": "Find out whether Tom agrees", "recommended_action": "Call Sarah"]
     }
 
     /// A proposal as the Week 2 sheet shows it: the server's label and kind.
@@ -327,11 +361,22 @@ struct UITestPropertyPAStub {
         return row
     }
 
+    static var coach: [String: Any] {
+        ["known": [["text": "She won't go below £235,000", "ref": "pa_opportunities:opp-sarah:expectation_price", "label": "stated"]],
+         "assumed": [["text": "£225,000 might work with a 4-week completion", "ref": "pa_opportunities:opp-sarah:our_position",
+                      "is_inferred": true, "label": "judgement, unconfirmed"]],
+         "questions": ["What matters more to Sarah: the price, or a quick and certain completion?",
+                       "Has everyone who must agree seen the figures? What do they think?"],
+         "next_step": "Ask these before discussing any figure. Changing the offer is a decision for someone with authority: hand it off with the answers.",
+         "never": "The PA does not suggest a higher offer or a price cut."]
+    }
+
     static var why: [String: Any] {
-        ["card_uuid": "opp-sarah", "score": 87,
-         "signals": [["key": "event_just_happened", "label": "Second valuation yesterday", "weight": 30, "points": 30],
-                     ["key": "promised_decision", "label": "She said she'd decide after the second valuation", "weight": 25, "points": 25],
-                     ["key": "temperature", "label": "Warm, leaning hot", "weight": 20, "points": 16]]]
+        ["rank": 1, "of": 10, "score": 87,
+         "signals": [["key": "event_just_happened", "weight": 30, "text": "Second valuation yesterday", "ref": "pa_events:ev-valuation"],
+                     ["key": "promised_decision", "weight": 25, "text": "She said she'd decide after the second valuation", "ref": "pa_events:ev-promise"],
+                     ["key": "temperature", "weight": 16, "text": "Warm, leaning hot"]],
+         "explanation": "Ranked by points from named signals (weights above), highest first. The order is decided by these rules, not by the AI."]
     }
 
     static let transcript = "Spoke to Sarah. Second agent valued it at 240k. She won't go below 235. Her husband Tom needs to agree. I reckon 225 might work if we can complete in four weeks. Call her tomorrow at 11."
@@ -376,22 +421,24 @@ enum UITestPropertyPAStubFixtures {
         return rows
     }
 
-    /// Week 3 `/today` cards (behind `-UITestPATodayCards`).
-    static var cards: [[String: Any]] {
+    /// Week 3 `/today` cards, ranked by the rules engine.
+    static var rankedCards: [[String: Any]] {
         var cards: [[String: Any]] = [
-            ["uuid": "card-sarah", "rank": 1, "kind": "call", "person": ["name": "Sarah Collins", "phone": "+44 7700 900111"],
-             "property": ["address": "22 Station Road"], "opportunity_uuid": UITestPropertyPAStub.sarahOpportunity, "action": "Call Sarah",
-             "why_now": "Her second valuation was yesterday and she said she'd decide after it.",
-             "objective": "Find out what the other agent said, and whether Tom agrees.", "estimated_minutes": 15, "score": 87],
-            ["uuid": "card-michael", "rank": 2, "kind": "call", "person": ["name": "Michael Grant"], "property": ["address": "14 Green Lane"],
-             "opportunity_uuid": "opp-michael", "action": "Call Michael back", "why_now": "You promised a follow-up this week.",
-             "estimated_minutes": 10, "score": 72],
-            ["uuid": "card-rick", "rank": 3, "kind": "message", "person": ["name": "Rick Hughes"], "property": ["address": "18 Market Street"],
-             "opportunity_uuid": "opp-rick", "action": "Check in with Rick", "why_now": "Quiet for 3 weeks.", "estimated_minutes": 5, "score": 58],
+            ["opportunity_uuid": UITestPropertyPAStub.sarahOpportunity, "rank": 1, "title": "22 Station Road", "kind": "sell",
+             "person_name": "Sarah Collins", "person_uuid": "person-sarah", "property_address": "22 Station Road", "score": 87,
+             "signals": [["key": "event_just_happened", "weight": 30, "text": "Second valuation yesterday", "ref": "pa_events:ev-valuation"]],
+             "action": "Call Sarah", "objective": "Find out whether Tom agrees", "minutes": 15,
+             "why_now": "Second valuation yesterday; she said she'd decide after it"],
+            ["opportunity_uuid": "opp-michael", "rank": 2, "title": "14 Green Lane", "kind": "sell", "person_name": "Michael Grant",
+             "property_address": "14 Green Lane", "score": 72, "signals": [], "action": "Call Michael back", "minutes": 10,
+             "why_now": "You promised a follow-up this week"],
+            ["opportunity_uuid": "opp-rick", "rank": 3, "title": "18 Market Street", "kind": "sell", "person_name": "Rick Hughes",
+             "property_address": "18 Market Street", "score": 58, "signals": [], "action": "Send Rick a short personal follow-up",
+             "minutes": 5, "why_now": "21 days since a meaningful conversation"],
         ]
         for index in 4...10 {
-            cards.append(["uuid": "card-\(index)", "rank": index, "kind": "call", "person": ["name": "Seller \(index)"],
-                          "opportunity_uuid": "opp-\(index)", "action": "Follow up", "estimated_minutes": 10, "score": 50 - Double(index)])
+            cards.append(["opportunity_uuid": "opp-\(index)", "rank": index, "title": "Seller \(index)", "person_name": "Seller \(index)",
+                          "score": 50 - Double(index), "signals": [], "action": "Check in", "minutes": 10, "why_now": "Nothing pressing"])
         }
         return cards
     }

@@ -73,10 +73,10 @@ final class PropertyPAUITests: XCTestCase {
 
     // MARK: Scene 1 — "What do I need to focus on today?"
 
-    /// opsapi Week 1: Today comes from `GET /briefing`, in the server's order. No score yet, so
-    /// no "Why #1?" and no time packing (the app never invents them).
+    /// A server without Week 3: Today comes from `GET /briefing`, in the server's order. No score,
+    /// so no "Why #1?" and no time packing (the app never invents them).
     func testTodayFromTheBriefingInTheServersOrder() {
-        launch()
+        launch(extra: ["-UITestPAWeek1"])
         XCTAssertTrue(element("pa.today.brief", timeout: 20).exists, "the PA is home where it's on")
         XCTAssertTrue(tab("PA").exists)
         XCTAssertTrue(tab("Deals").exists, "the plain screens are still there")
@@ -89,36 +89,66 @@ final class PropertyPAUITests: XCTestCase {
         screenshot("pa-01-today")
     }
 
-    /// Week 3 (`-UITestPATodayCards`): ranked cards with the real signals, and "30 min".
+    /// Week 3: cards ranked by opsapi's rules engine, the real signals and weights, and "30 min".
     func testRankedCardsExplainWhyAndFitThirtyMinutes() {
-        launch(extra: ["-UITestPATodayCards"])
-        element("pa.card.card-sarah", timeout: 20)
+        launch()
+        element("pa.card.opp-sarah", timeout: 20)
         element("pa.card.why").tap()
         element("pa.why.event_just_happened")
         XCTAssertTrue(text(containing: "doesn't make up the score").exists)
         screenshot("pa-02-why")
         app.buttons["Done"].firstMatch.tap()
         app.buttons["30 min"].firstMatch.tap()
-        scrollTo("pa.card.card-rick")
-        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "pa.card.card-4").firstMatch.waitForExistence(timeout: 3),
+        scrollTo("pa.card.opp-rick")
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "pa.card.opp-4").firstMatch.waitForExistence(timeout: 3),
                        "only what fits in 30 minutes")
         screenshot("pa-03-thirty-minutes")
     }
 
     // MARK: Scene 2 — "Prepare me for Sarah."
 
-    func testPrepareMeIsAGroundedRunWithSourcesAndGaps() {
+    /// Week 3 Prepare Me is built from records: every fact cited, unknowns turned into questions.
+    func testPrepareMeIsBuiltFromRecordsWithSourcesAndGaps() {
         launch()
-        element("pa.card.opp-sarah")
+        element("pa.card.opp-sarah", timeout: 20)
         element("pa.card.prepare").tap()
-        let brief = element("pa.prepare.section.brief", timeout: 30)
-        XCTAssertTrue(brief.exists)
-        XCTAssertTrue(text(containing: "Lead with a quick, certain completion").exists)
-        scrollTo("pa.prepare.section.sources")
-        XCTAssertTrue(text(containing: "Valuation, 12 Oct").exists)
+        XCTAssertTrue(element("pa.prepare.objective", timeout: 20).label.contains("Find out whether Tom agrees"))
+        element("pa.prepare.section.snapshot")
+        XCTAssertTrue(text(containing: "22 Station Road, YO24 1AB").exists)
+        scrollTo("pa.prepare.section.position")
+        XCTAssertTrue(text(containing: "Second valuation (£240,000)").exists)
         XCTAssertTrue(text(containing: "Source: Event").exists, "facts link to their source")
-        XCTAssertTrue(scrollTo("pa.gap").label.contains("Tom's view on price"), "gaps are said, not hidden")
+        scrollTo("pa.prepare.section.objections")
+        XCTAssertTrue(text(containing: "Unconfirmed judgement").exists, "an inference is labelled")
+        scrollTo("pa.prepare.section.questions")
+        XCTAssertTrue(text(containing: "Why is Sarah selling, and why now?").exists, "unknowns become questions")
+        XCTAssertTrue(scrollTo("pa.gap").label.contains("Motivation"), "gaps are said, not hidden")
         screenshot("pa-04-prepare-me")
+    }
+
+    /// A server without Week 3: Prepare Me is a PA run, held to the grounding check.
+    func testPrepareMeFallsBackToAGroundedRun() {
+        launch(extra: ["-UITestPAWeek1"])
+        element("pa.card.opp-sarah", timeout: 20)
+        element("pa.card.prepare").tap()
+        element("pa.prepare.section.brief", timeout: 30)
+        XCTAssertTrue(text(containing: "Lead with a quick, certain completion").exists)
+        XCTAssertTrue(scrollTo("pa.gap").label.contains("Tom's view on price"))
+    }
+
+    /// Week 3 coaching on a card: questions before any figure, known vs assumed, no higher offer.
+    func testCoachingOnACardAsksQuestionsFirst() {
+        launch()
+        element("pa.card.opp-sarah", timeout: 20)
+        element("pa.card.ask").tap()
+        type("She won't move below 235k. What now?", into: "pa.ask.field")
+        element("pa.ask.send").tap()
+        let answer = element("pa.ask.answer", timeout: 20)
+        XCTAssertTrue(answer.label.contains("Before any figure"))
+        XCTAssertTrue(answer.label.contains("price, or a quick and certain completion"))
+        XCTAssertFalse(answer.label.contains("offer £"), "never a figure to offer")
+        XCTAssertTrue(text(containing: "Unconfirmed judgement").exists, "the assumption is labelled")
+        screenshot("pa-08b-coach")
     }
 
     // MARK: Scene 3 — the voice note after the call
@@ -227,7 +257,8 @@ final class PropertyPAUITests: XCTestCase {
 
         element("pa.card.opp-sarah")
         element("pa.card.prepare").tap()
-        element("pa.prepare.section.brief", timeout: 30)
+        element("pa.prepare.objective", timeout: 30)
+        XCTAssertTrue(scrollTo("pa.prepare.section.playbook").exists)
         XCTAssertTrue(text(containing: "Company rule").exists, "the new rule is in the next brief")
     }
 

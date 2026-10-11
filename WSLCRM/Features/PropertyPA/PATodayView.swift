@@ -16,8 +16,13 @@ struct PATodayView: View {
     @State private var captures: [PACapture] = []
     @State private var why: PACard?
     @State private var laterCard: PACard?
-    @State private var asking: PAContext?
-    @State private var showingAsk = false
+    /// The Ask PA sheet and what it's about. One value, so the sheet never opens with a stale context.
+    @State private var asking: AskSheet?
+
+    struct AskSheet: Identifiable {
+        let id = UUID()
+        var context: PAContext?
+    }
     @State private var showingTeach = false
     @State private var showingCapture = false
     @State private var captureContext: PAContext?
@@ -59,8 +64,8 @@ struct PATodayView: View {
         .sheet(item: $laterCard) { card in
             PALaterSheet(card: card) { until in queue(card, .later(until)) }
         }
-        .sheet(isPresented: $showingAsk) {
-            NavigationStack { PAAskView(context: asking) }
+        .sheet(item: $asking) { sheet in
+            NavigationStack { PAAskView(context: sheet.context) }
         }
         .sheet(isPresented: $showingTeach) {
             PATeachSheet()
@@ -100,7 +105,7 @@ struct PATodayView: View {
                     PACardView(card: card, isTop: index == 0, manager: manager,
                                onWhy: { why = card },
                                onCall: { calledCard = card },
-                               onAsk: { asking = context(for: card); showingAsk = true },
+                               onAsk: { asking = AskSheet(context: context(for: card)) },
                                onDone: { queue(card, .done) },
                                onLater: { laterCard = card })
                 }
@@ -201,7 +206,7 @@ struct PATodayView: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
-            Button { asking = nil; showingAsk = true } label: { Label("Ask PA", systemImage: "bubble.left.and.text.bubble.right") }
+            Button { asking = AskSheet(context: nil) } label: { Label("Ask PA", systemImage: "bubble.left.and.text.bubble.right") }
                 .accessibilityIdentifier("pa.ask")
         }
         if session.propertyPA?.can("create", "knowledge") ?? false {
@@ -343,6 +348,7 @@ struct PACardView: View {
                     }
                     Button { onAsk() } label: { Label("Ask PA", systemImage: "bubble.left") }
                         .buttonStyle(.bordered)
+                        .accessibilityIdentifier("pa.card.ask")
                     Button { onLater() } label: { Label("Later", systemImage: "clock.arrow.circlepath") }
                         .buttonStyle(.bordered)
                         .accessibilityIdentifier("pa.card.later")
