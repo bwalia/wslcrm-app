@@ -149,23 +149,26 @@ struct PermissionSet: Sendable, Equatable {
 /// seeds (`NamespaceRoleQueries.createFieldServiceRoles`): a telecaller logs requests, a service
 /// manager runs the board, an engineer works their own visits.
 struct NavigationPolicy: Sendable, Equatable {
-    enum Home: Sendable, Equatable { case myWork, fieldService, propertyDeals, tasks, shop, more }
+    enum Home: Sendable, Equatable { case propertyPA, myWork, fieldService, propertyDeals, tasks, shop, more }
 
     let permissions: PermissionSet
     let isEngineerRole: Bool
     /// Property Deals is on for the workspace and the role can read it (`GET /property-deals/me`).
     let hasPropertyDeals: Bool
+    /// The Property PA is on for this workspace and person (`GET /property-pa/me`).
+    let hasPropertyPA: Bool
 
-    init(permissions: PermissionSet, isEngineerRole: Bool, hasPropertyDeals: Bool = false) {
+    init(permissions: PermissionSet, isEngineerRole: Bool, hasPropertyDeals: Bool = false, hasPropertyPA: Bool = false) {
         self.permissions = permissions
         self.isEngineerRole = isEngineerRole
         self.hasPropertyDeals = hasPropertyDeals
+        self.hasPropertyPA = hasPropertyPA
     }
 
     @MainActor
     init(session: SessionStore) {
         self.init(permissions: session.permissions, isEngineerRole: session.policy.isEngineerRole,
-                  hasPropertyDeals: session.propertyDeals != nil)
+                  hasPropertyDeals: session.propertyDeals != nil, hasPropertyPA: session.propertyPA != nil)
     }
 
     var showsMyWork: Bool {
@@ -193,9 +196,13 @@ struct NavigationPolicy: Sendable, Equatable {
     /// would otherwise put an empty tab in front of them, as with the shop.
     var showsPropertyDeals: Bool { hasPropertyDeals }
 
+    /// The PA is the home wherever it's on: the system of work, with the CRM underneath.
+    var showsPropertyPA: Bool { hasPropertyPA }
+
     /// Engineers land on My Work (opsapi #610); managers and telecallers on Field Service; property
     /// operators on Today; people who only work projects on their tasks.
     var home: Home {
+        if showsPropertyPA { return .propertyPA }
         if isEngineerRole, showsMyWork { return .myWork }
         if showsFieldService { return .fieldService }
         if showsPropertyDeals { return .propertyDeals }

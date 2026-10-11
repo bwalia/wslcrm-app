@@ -14,6 +14,7 @@ struct Services: Sendable {
     let timesheets: TimesheetsAPI
     let shop: ShopAPI
     let propertyDeals: PropertyDealsAPI
+    let propertyPA: PropertyPAAPI
 
     init(client: APIClient, cache: ResponseCache) {
         self.client = client
@@ -27,6 +28,7 @@ struct Services: Sendable {
         timesheets = TimesheetsAPI(client: client)
         shop = ShopAPI(client: client)
         propertyDeals = PropertyDealsAPI(client: client, cache: cache)
+        propertyPA = PropertyPAAPI(client: client, cache: cache)
     }
 
     /// Used only as the environment default (previews); never talks to a real server.

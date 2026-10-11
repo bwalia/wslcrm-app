@@ -23,6 +23,9 @@ final class SessionStore {
     private(set) var permissions: PermissionSet = .none
     /// Property Deals access in this workspace; nil when the plugin is off or the role can't read it.
     private(set) var propertyDeals: PDAccess?
+    /// The Property PA for this workspace and person; nil when it's off (the app falls back to
+    /// the plain screens).
+    private(set) var propertyPA: PAMe?
     /// Set when permissions could not be loaded (e.g. offline at first launch).
     private(set) var permissionsError: APIError?
     /// Incremented on every workspace change; feature roots use it as their identity so
@@ -253,6 +256,11 @@ final class SessionStore {
             permissionsError = apiError
         }
         await reloadPropertyDealsAccess()
+        await reloadPropertyPAAccess()
+    }
+
+    private func reloadPropertyPAAccess() async {
+        propertyPA = try? await PropertyPAAPI(client: client, cache: cache).me()
     }
 
     /// The plugin has no main menu entry, so `GET /property-deals/me` decides whether it shows.
@@ -301,6 +309,7 @@ final class SessionStore {
         workspace = nil
         permissions = .none
         propertyDeals = nil
+        propertyPA = nil
         phase = .signedOut
     }
 }

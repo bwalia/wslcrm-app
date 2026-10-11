@@ -8,12 +8,18 @@ struct MainTabView: View {
     @State private var selection: Tab = .myWork
     @State private var showingPendingChanges = false
     @State private var propertyDealsPath = NavigationPath()
+    @State private var propertyPAPath = NavigationPath()
 
-    enum Tab: Hashable { case myWork, fieldService, propertyDeals, tasks, shop, more }
+    enum Tab: Hashable { case propertyPA, myWork, fieldService, propertyDeals, tasks, shop, more }
 
     var body: some View {
         let permissions = session.permissions
         TabView(selection: $selection) {
+            if NavigationPolicy(session: session).showsPropertyPA {
+                NavigationStack(path: $propertyPAPath) { PATodayView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
+                    .tabItem { Label("PA", systemImage: "sparkles") }
+                    .tag(Tab.propertyPA)
+            }
             if showsMyWork(permissions) {
                 NavigationStack { MyWorkView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
                     .tabItem { Label("My Work", systemImage: "person.badge.clock") }
@@ -64,6 +70,18 @@ struct MainTabView: View {
             router.clear()
         case .open:
             router.clear()
+            if link.target.isPA {
+                guard NavigationPolicy(session: session).showsPropertyPA else { return }
+                selection = .propertyPA
+                var path = NavigationPath()
+                switch link.target {
+                case .handoff(let uuid): path.append(PAHandoffRoute(uuid: uuid))
+                case .paCapture(let uuid): path.append(PACaptureRoute(uuid: uuid))
+                default: break
+                }
+                propertyPAPath = path
+                return
+            }
             guard NavigationPolicy(session: session).showsPropertyDeals else { return }
             selection = .propertyDeals
             var path = NavigationPath()
@@ -72,6 +90,7 @@ struct MainTabView: View {
             case .approval(let uuid): path.append(PDApprovalRoute(uuid: uuid))
             case .deal(let uuid): path.append(PDDealRoute(uuid: uuid))
             case .today: break
+            case .paCard, .paBrief, .handoff, .paCapture: break
             }
             propertyDealsPath = path
         }
@@ -100,6 +119,7 @@ struct MainTabView: View {
 
     private func initialTab(_ permissions: PermissionSet) -> Tab {
         switch NavigationPolicy(session: session).home {
+        case .propertyPA: .propertyPA
         case .myWork: .myWork
         case .fieldService: .fieldService
         case .propertyDeals: .propertyDeals

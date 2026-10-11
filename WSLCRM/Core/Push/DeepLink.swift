@@ -13,6 +13,22 @@ struct AppDeepLink: Equatable, Sendable, Identifiable {
         case deal(String)
         /// The daily digest: open Today.
         case today
+        // Property PA
+        /// A priority card is due (e.g. a promised follow-up): open the PA.
+        case paCard(String)
+        /// The morning brief: open the PA.
+        case paBrief
+        /// A decision is needed, or a reply came back.
+        case handoff(String)
+        /// A voice note has been worked through: open the confirm screen.
+        case paCapture(String)
+
+        var isPA: Bool {
+            switch self {
+            case .paCard, .paBrief, .handoff, .paCapture: true
+            default: false
+            }
+        }
     }
 
     let id = UUID()
@@ -38,7 +54,7 @@ struct AppDeepLink: Equatable, Sendable, Identifiable {
 
     /// From `wslcrm://pd/<route>/<uuid>?namespace_id=<uuid>`.
     init?(url: URL) {
-        guard url.scheme == "wslcrm", url.host == "pd" else { return nil }
+        guard url.scheme == "wslcrm", url.host == "pd" || url.host == "pa" else { return nil }
         let parts = url.pathComponents.filter { $0 != "/" }
         guard let target = Self.target(route: parts.first, uuid: parts.dropFirst().first) else { return nil }
         let namespace = URLComponents(url: url, resolvingAgainstBaseURL: false)?
@@ -53,6 +69,10 @@ struct AppDeepLink: Equatable, Sendable, Identifiable {
         case ("approval", let id?): return .approval(id)
         case ("deal", let id?): return .deal(id)
         case ("digest", _), ("today", _): return .today
+        case ("pa_card", let id?): return .paCard(id)
+        case ("pa_brief", _): return .paBrief
+        case ("handoff", let id?): return .handoff(id)
+        case ("pa_capture_ready", let id?): return .paCapture(id)
         default: return nil
         }
     }
