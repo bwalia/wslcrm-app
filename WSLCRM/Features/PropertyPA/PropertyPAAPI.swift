@@ -47,6 +47,13 @@ struct PropertyPAAPI: Sendable {
     /// briefing's order, with no score (so no "Why #1?").
     func today(mode: TodayMode = .full, manager: Bool = false) async throws -> Fetched<PAToday> {
         if manager {
+            // Week 4: exceptions only across the team; without it, the questions waiting (briefing).
+            do {
+                let fetched: Fetched<JSONValue> = try await cachedData(.get("\(Self.base)/manager/today"), cacheKey: "pa/manager-today")
+                return Fetched(value: PAMapping.managerToday(from: fetched.value), cachedAt: fetched.cachedAt)
+            } catch let error as APIError {
+                guard case .notFound(let server) = error, server.code != "PLUGIN_DISABLED" else { throw error }
+            }
             let fetched = try await briefing()
             return Fetched(value: PAMapping.today(from: fetched.value, manager: true), cachedAt: fetched.cachedAt)
         }
@@ -205,11 +212,12 @@ struct PropertyPAAPI: Sendable {
     func teach(_ body: PATeachBody) async throws -> PAKnowledgeRule {
         // Week 3: the rule in the person's words; approved separately (with Face ID for company rules).
         if let proposal: PAServerKnowledgeProposal = try? await data(Endpoint.post("\(Self.base)/knowledge/teach",
-                json: PAServerTeach(statement: body.text, scope: body.scope.rawValue, approve: false)).withIdempotencyKey(UUID().uuidString)) {
-            return PAKnowledgeRule(uuid: proposal.knowledgeUuid, rule: body.text, rationale: nil, category: nil, triggers: [],
+                json: PAServerTeach(statement: body.text, scope: body.scope.rawValue, approve: false, triggers: body.triggers)).withIdempotencyKey(UUID().uuidString)) {
+            return PAKnowledgeRule(uuid: proposal.knowledgeUuid, rule: body.text, rationale: nil, category: nil, triggers: body.triggers,
                                    scope: body.scope.rawValue, version: proposal.version, status: proposal.status ?? "proposed")
         }
-        let request = PAMapping.knowledgeBody(text: body.text, scope: body.scope.rawValue)
+        var request = PAMapping.knowledgeBody(text: body.text, scope: body.scope.rawValue)
+        request.triggers = body.triggers.isEmpty ? nil : body.triggers
         let proposal: PAServerKnowledgeProposal = try await data(
             Endpoint.post("\(Self.base)/knowledge", json: request).withIdempotencyKey(UUID().uuidString))
         return PAKnowledgeRule(uuid: proposal.knowledgeUuid, rule: request.rule, rationale: request.rationale,

@@ -336,3 +336,35 @@ final class PropertyPAWeek3Tests: XCTestCase {
         XCTAssertEqual(answer.facts.map(\.isUnconfirmedJudgement), [false, true])
     }
 }
+
+/// opsapi Week 4: Manager Today, exceptions only.
+final class PropertyPAManagerTests: XCTestCase {
+    func testManagerTodayKeepsTheServersGroupsAndSummary() throws {
+        let json = try JSONDecoder.opsAPI().decode(JSONValue.self, from: Data("""
+            {"handoffs": [{"uuid": "h1", "question": "Offer £230k?", "from_name": "Sophie Turner", "opportunity_uuid": "o1"}],
+             "unusual_negotiations": [],
+             "relationship_risks": [{"uuid": "o3", "title": "Rick Dawson", "text": "Rick: no meaningful contact for 21 days", "owner_name": "Sophie Turner"}],
+             "overdue_actions": [], "deal_risks": [{"name": "7 Mill Lane", "deal_uuid": "d1"}], "top_opportunities": [{"opportunity_uuid": "o1", "title": "Sarah", "score": 70}],
+             "summary": "3 need you. Everything else (10) is being handled."}
+            """.utf8))
+        let today = PAMapping.managerToday(from: json)
+        XCTAssertEqual(today.cards.map(\.kind), [.handoff, .relationshipRisk, .dealRisk, .opportunity])
+        XCTAssertEqual(today.cards[0].handoffUuid, "h1", "a handoff opens its decision card")
+        XCTAssertEqual(today.cards[0].person?.name, "Sophie Turner")
+        XCTAssertEqual(today.cards[1].opportunityUuid, "o3", "a relationship risk opens the opportunity")
+        XCTAssertEqual(today.cards[1].action, "Rick: no meaningful contact for 21 days")
+        XCTAssertEqual(today.cards[2].dealUuid, "d1")
+        XCTAssertEqual(today.cards[3].score, 70)
+        XCTAssertEqual(today.brief?.text, "3 need you. Everything else (10) is being handled.")
+    }
+}
+
+final class PropertyPATeachTests: XCTestCase {
+    func testTriggersAreSuggestedFromTheRulesWords() {
+        XCTAssertEqual(PATeachBody.suggestedTriggers(for: "An agent's valuation is not the seller's minimum price."),
+                       ["valuation", "price"])
+        XCTAssertEqual(PATeachBody.suggestedTriggers(for: "If both partners must agree, speak to both."), ["decision_makers"])
+        XCTAssertEqual(PATeachBody.suggestedTriggers(for: "Be kind."), [], "nothing guessed when nothing matches")
+        XCTAssertTrue(PATeachBody.triggerChoices.contains { $0.key == "always" })
+    }
+}

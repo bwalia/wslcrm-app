@@ -232,7 +232,9 @@ final class PropertyPAUITests: XCTestCase {
     func testManagerAgreesWithFaceIDAndTheReplyGoesBack() {
         launch(role: "pamanager", extra: ["-UITestBiometric", "pass"])
         element("pa.managerView", timeout: 20).tap()
-        element("pa.card.handoff-c0000000-0000-4000-8000-000000000001")
+        element("pa.card.handoffs:c0000000-0000-4000-8000-000000000001")
+        XCTAssertTrue(text(containing: "Everything else (10) is being handled").exists, "exceptions only")
+        XCTAssertTrue(text(containing: "no meaningful contact for 21 days").exists, "a relationship at risk")
         screenshot("pa-10-manager-today")
         element("pa.card.decide").tap()
         XCTAssertTrue(element("pa.handoff.question.text").label.contains("£230k"))

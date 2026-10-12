@@ -53,6 +53,18 @@ struct UITestPropertyPAStub {
         switch (method, sub) {
         case ("GET", "/briefing"):
             return ok(briefing)
+        case ("GET", "/manager/today") where week3:
+            guard isManager else { return (403, ["success": false, "error": "For managers"]) }
+            let open = handoffs.filter { $0["status"] as? String == "open" }.map {
+                ["uuid": $0["uuid"] ?? "", "question": $0["question"] ?? "", "from_name": "Sophie Turner",
+                 "opportunity_uuid": Self.sarahOpportunity, "pa_recommendation": $0["pa_recommendation"] ?? ""] as [String: Any]
+            }
+            return ok(["handoffs": open, "unusual_negotiations": [],
+                       "relationship_risks": [["uuid": "opp-rick", "title": "Rick Dawson — 18 Market Street",
+                                               "text": "Rick Dawson — 18 Market Street: no meaningful contact for 21 days (warm)",
+                                               "owner_name": "Sophie Turner", "days": 21]],
+                       "overdue_actions": [], "deal_risks": [], "top_opportunities": [],
+                       "summary": "\(open.count + 1) need you. Everything else (10) is being handled."])
         case ("GET", "/today") where week3:
             return ok(agentToday(query: query))
         case ("GET", let p) where p.hasPrefix("/today/why/") && week3:

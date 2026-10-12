@@ -402,3 +402,59 @@ extension PAMapping {
         return PAAnswer(answer: text, facts: facts, gaps: [], actions: [])
     }
 }
+
+// MARK: - Week 4: Manager Today
+
+extension PAMapping {
+    /// `GET /manager/today`: exceptions only, in the server's groups and order. Each row becomes a
+    /// card; a handoff opens its decision card, the rest open the opportunity's brief.
+    static func managerToday(from json: JSONValue) -> PAToday {
+        guard case .object(let root) = json else { return PAToday() }
+        func s(_ o: [String: JSONValue], _ keys: String...) -> String? {
+            for key in keys { if case .string(let v)? = o[key], !v.isEmpty { return v } }
+            return nil
+        }
+        func n(_ o: [String: JSONValue], _ key: String) -> Double? {
+            if case .number(let v)? = o[key] { return v }
+            if case .string(let v)? = o[key] { return Double(v) }
+            return nil
+        }
+        var cards: [PACard] = []
+        let groups: [(String, PACard.Kind)] = [("handoffs", .handoff), ("unusual_negotiations", .negotiation),
+                                               ("overdue_actions", .task), ("relationship_risks", .relationshipRisk),
+                                               ("deal_risks", .dealRisk), ("top_opportunities", .opportunity)]
+        for (key, kind) in groups {
+            guard case .array(let rows)? = root[key] else { continue }
+            for (index, value) in rows.enumerated() {
+                guard case .object(let o) = value else { continue }
+                let id = s(o, "uuid", "opportunity_uuid", "ref") ?? "\(key)-\(index)"
+                let opportunity = kind == .relationshipRisk ? (s(o, "opportunity_uuid") ?? s(o, "uuid")) : s(o, "opportunity_uuid")
+                let who = s(o, "from_name", "owner_name", "person_name")
+                cards.append(PACard(uuid: "\(key):\(id)", rank: cards.count + 1, kind: kind,
+                                    person: who.map { PACard.Person(name: $0) },
+                                    opportunityUuid: opportunity, dealUuid: s(o, "deal_uuid"),
+                                    handoffUuid: kind == .handoff ? s(o, "uuid") : nil,
+                                    action: s(o, "question", "text", "title", "name") ?? Formatters.humanize(key),
+                                    whyNow: s(o, "reason", "why_now", "pa_recommendation"),
+                                    score: n(o, "score")))
+            }
+        }
+        var today = PAToday()
+        today.cards = cards
+        today.mode = "manager"
+        if let summary = s(root, "summary") { today.brief = .init(text: summary) }
+        return today
+    }
+
+    static func groupLabel(_ kind: PACard.Kind) -> String {
+        switch kind {
+        case .handoff: "Waiting for your decision"
+        case .negotiation: "Unusual negotiation"
+        case .task: "Overdue action"
+        case .relationshipRisk: "Relationship at risk"
+        case .dealRisk: "Deal at risk"
+        case .opportunity: "Top opportunity"
+        default: ""
+        }
+    }
+}
