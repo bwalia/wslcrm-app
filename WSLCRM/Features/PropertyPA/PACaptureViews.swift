@@ -26,16 +26,25 @@ final class PARecorder {
         }
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .spokenAudio, options: .duckOthers)
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
+            // `.notifyOthersOnDeactivation` is only valid when *de*activating — passing it to
+            // setActive(true) yields OSStatus -50 (paramErr) and the mic never starts.
+            try session.setCategory(.playAndRecord, mode: .spokenAudio,
+                                    options: [.defaultToSpeaker, .allowBluetoothHFP])
+            try session.setActive(true)
             let name = "pa-\(UUID().uuidString).m4a"
             let directory = PendingUploads.defaultDirectory()
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let recorder = try AVAudioRecorder(url: directory.appendingPathComponent(name), settings: [
-                AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 16_000, AVNumberOfChannelsKey: 1,
+            let url = directory.appendingPathComponent(name)
+            let recorder = try AVAudioRecorder(url: url, settings: [
+                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                AVSampleRateKey: 16_000,
+                AVNumberOfChannelsKey: 1,
                 AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue,
             ])
-            guard recorder.record(forDuration: limit) else { throw CocoaError(.fileWriteUnknown) }
+            recorder.isMeteringEnabled = true
+            guard recorder.prepareToRecord(), recorder.record(forDuration: limit) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
             self.recorder = recorder
             elapsed = 0
             state = .recording

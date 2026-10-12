@@ -140,6 +140,7 @@ final class SessionStore {
             phase = .twoFactor(TwoFactorChallenge(sessionToken: sessionToken, email: response.email, startedAt: Date()))
         } else if let token = response.token, let refresh = response.refreshToken {
             await client.setTokens(AuthTokens(accessToken: token, refreshToken: refresh))
+            enableFaceIDUnlockAfterSignIn()
             await loadSessionContext()
         } else {
             throw APIError.decoding(endpoint: "POST /auth/login", description: "No session_token in response", body: "")
@@ -156,6 +157,7 @@ final class SessionStore {
                                                   fieldErrors: [:], rawBody: ""))
             }
             await client.setTokens(AuthTokens(accessToken: response.token, refreshToken: refreshToken))
+            enableFaceIDUnlockAfterSignIn()
             apply(user: response.user, workspaces: response.namespaces, current: response.currentNamespace)
             await chooseInitialWorkspace()
             // Warm the offline copy of the user profile.
@@ -178,6 +180,14 @@ final class SessionStore {
 
     func cancelTwoFactor() {
         phase = .signedOut
+    }
+
+    /// After a successful password / 2FA sign-in, turn on Face ID (or Touch ID) unlock when the
+    /// device supports it so the next open asks for biometrics instead of the password again.
+    /// The person can still turn it off in Settings.
+    private func enableFaceIDUnlockAfterSignIn() {
+        guard biometrics.availableKind != .none else { return }
+        biometrics.isEnabled = true
     }
 
     func requestPasswordReset(email: String) async throws {

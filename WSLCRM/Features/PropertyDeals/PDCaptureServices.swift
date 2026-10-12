@@ -122,8 +122,10 @@ private final class SpeechSession: @unchecked Sendable {
 
     func start() throws {
         let audio = AVAudioSession.sharedInstance()
-        try audio.setCategory(.record, mode: .measurement, options: .duckOthers)
-        try audio.setActive(true, options: .notifyOthersOnDeactivation)
+        // `.notifyOthersOnDeactivation` is only valid when deactivating (OSStatus -50 otherwise).
+        try audio.setCategory(.playAndRecord, mode: .measurement,
+                              options: [.defaultToSpeaker, .allowBluetoothHFP])
+        try audio.setActive(true)
         let input = engine.inputNode
         let request = request
         input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { buffer, _ in
