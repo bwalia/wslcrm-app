@@ -384,6 +384,8 @@ struct PATeachSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
     @State private var scope: PATeachBody.Scope = .personal
+    @State private var triggers: Set<String> = []
+    @State private var triggersTouched = false
     @State private var proposed: PAKnowledgeRule?
     @State private var working = false
     @State private var error: APIError?
@@ -402,8 +404,26 @@ struct PATeachSheet: View {
                                   text: $text, axis: .vertical)
                             .lineLimit(3...8)
                             .accessibilityIdentifier("pa.teach.text")
+                            .onChange(of: text) { _, value in
+                                if !triggersTouched { triggers = Set(PATeachBody.suggestedTriggers(for: value)) }
+                            }
                     } header: {
                         Text("Teach your PA")
+                    }
+                    Section {
+                        ForEach(PATeachBody.triggerChoices, id: \.key) { choice in
+                            Toggle(choice.label, isOn: Binding(
+                                get: { triggers.contains(choice.key) },
+                                set: { on in
+                                    triggersTouched = true
+                                    if on { triggers.insert(choice.key) } else { triggers.remove(choice.key) }
+                                }))
+                            .accessibilityIdentifier("pa.teach.trigger.\(choice.key)")
+                        }
+                    } header: {
+                        Text("When should the PA use this?")
+                    } footer: {
+                        Text("The PA brings the rule up in Prepare me, coaching and answers when one of these is true.")
                     }
                     Section {
                         Picker("Who it's for", selection: $scope) {
@@ -439,7 +459,11 @@ struct PATeachSheet: View {
                 if let rationale = rule.rationale { Text(rationale).font(.subheadline).foregroundStyle(.secondaryText) }
             }
             if !rule.triggers.isEmpty {
-                Section("When it applies") { ForEach(rule.triggers, id: \.self) { Text($0) } }
+                Section("When it applies") {
+                    ForEach(rule.triggers, id: \.self) { key in
+                        Text(PATeachBody.triggerChoices.first { $0.key == key }?.label ?? Formatters.humanize(key))
+                    }
+                }
             }
             Section {
                 if rule.isApproved {
@@ -468,7 +492,8 @@ struct PATeachSheet: View {
         working = true
         defer { working = false }
         do {
-            proposed = try await services.propertyPA.teach(PATeachBody(text: text.trimmingCharacters(in: .whitespacesAndNewlines), scope: scope))
+            proposed = try await services.propertyPA.teach(PATeachBody(text: text.trimmingCharacters(in: .whitespacesAndNewlines), scope: scope,
+                                                                      triggers: PATeachBody.triggerChoices.map(\.key).filter(triggers.contains)))
             error = nil
         } catch {
             self.error = error.asAPIError

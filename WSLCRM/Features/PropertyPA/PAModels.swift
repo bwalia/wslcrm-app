@@ -371,6 +371,28 @@ struct PATeachBody: Encodable, Sendable, Equatable {
 
     var text: String
     var scope: Scope
+    /// When the PA should use the rule (opsapi's situation triggers); none means it's never picked.
+    var triggers: [String] = []
+
+    /// The situations opsapi recognises (`property_pa/brief.lua` Br.triggers), in plain words.
+    static let triggerChoices: [(key: String, label: String)] = [
+        ("always", "Always"), ("valuation", "A valuation"), ("price", "Talking price"), ("offer", "Making an offer"),
+        ("objection", "An objection"), ("promise", "A promise to keep"), ("decision_makers", "Several decision makers"),
+        ("first_call", "A first call"), ("cold", "Gone quiet"), ("deadline", "A deadline"),
+    ]
+
+    /// Triggers suggested by the rule's own words (the person can change them).
+    static func suggestedTriggers(for text: String) -> [String] {
+        let t = text.lowercased()
+        var out: [String] = []
+        let words: [(String, [String])] = [("valuation", ["valuation", "valued"]), ("price", ["price", "£", "minimum"]),
+                                           ("offer", ["offer"]), ("objection", ["objection", "won't", "refuse"]),
+                                           ("promise", ["promise", "promised", "call back"]), ("decision_makers", ["husband", "wife", "partner", "both"]),
+                                           ("first_call", ["first call", "new seller"]), ("cold", ["quiet", "cold", "no reply"]),
+                                           ("deadline", ["deadline", "by the", "date"])]
+        for (key, hints) in words where hints.contains(where: { t.contains($0) }) { out.append(key) }
+        return out
+    }
 }
 
 // MARK: - Helpers

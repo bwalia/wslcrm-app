@@ -54,6 +54,7 @@
 		46972ECFF6E74606C8DF852D /* error_catalogued_validation.json in Resources */ = {isa = PBXBuildFile; fileRef = 57F286B4344957499FD2B49A /* error_catalogued_validation.json */; };
 		46EBFD40994B921F0612E31C /* ShopTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F107A1C3DC8B24F27F4545F /* ShopTests.swift */; };
 		4899BCB5CA1CED2FC744A0C5 /* UITestPropertyDealsStub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DD05E7B93089428028A16BE /* UITestPropertyDealsStub.swift */; };
+		4911560B1372EEB17CEE07CF /* PropertyPAIntTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22543553D7ED944337789FF5 /* PropertyPAIntTourUITests.swift */; };
 		4A7A6B03BCAE28A8FD6FBE06 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D58A7EFA82284F56BC642D /* LoginView.swift */; };
 		4AACED68F1059C1FB65B740C /* MutationQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D93FE4A9E20414B58A119C4 /* MutationQueue.swift */; };
 		4E7E1DE01AFAA07E5FF7D977 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = D29DEAEBDB5859AAF34AE22A /* README.md */; };
@@ -247,6 +248,7 @@
 		1D93FE4A9E20414B58A119C4 /* MutationQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MutationQueue.swift; sourceTree = "<group>"; };
 		1DD05E7B93089428028A16BE /* UITestPropertyDealsStub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestPropertyDealsStub.swift; sourceTree = "<group>"; };
 		1FF0C3F7211BAA712C7F76E9 /* PhotosSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotosSection.swift; sourceTree = "<group>"; };
+		22543553D7ED944337789FF5 /* PropertyPAIntTourUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropertyPAIntTourUITests.swift; sourceTree = "<group>"; };
 		22750ADEF7F365102908C141 /* InvoiceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoiceModels.swift; sourceTree = "<group>"; };
 		24BDE4BC91E0E2EA634744B9 /* UITestPurchaseOrdersStub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestPurchaseOrdersStub.swift; sourceTree = "<group>"; };
 		24D514275F54F4356155819A /* JobsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobsListView.swift; sourceTree = "<group>"; };
@@ -511,6 +513,7 @@
 				CECE926D83FDD851416D937D /* PropertyDealsBackOfficeUITests.swift */,
 				5108B9643074CCFA5097A253 /* PropertyDealsIntTourUITests.swift */,
 				A1EFA7816D0FE5017470E70E /* PropertyDealsUITests.swift */,
+				22543553D7ED944337789FF5 /* PropertyPAIntTourUITests.swift */,
 				EB80730BFBEC2643D2BA2A8E /* PropertyPAUITests.swift */,
 				A63A69BBADAFD24F37A56667 /* RoleAccessUITests.swift */,
 				7DA3F1AEC543935D65747205 /* WorkManagementUITests.swift */,
@@ -1264,6 +1267,7 @@
 				988900197007DBF8E12F70AB /* PropertyDealsBackOfficeUITests.swift in Sources */,
 				CEEF30810127E052C3927515 /* PropertyDealsIntTourUITests.swift in Sources */,
 				883BF11A2D60FCB47C04B934 /* PropertyDealsUITests.swift in Sources */,
+				4911560B1372EEB17CEE07CF /* PropertyPAIntTourUITests.swift in Sources */,
 				F087237B14964B51536D8791 /* PropertyPAUITests.swift in Sources */,
 				8EAB66965D1FDCC5D1CB64A6 /* RoleAccessUITests.swift in Sources */,
 				30ECD74C0586974267975B40 /* WorkManagementUITests.swift in Sources */,

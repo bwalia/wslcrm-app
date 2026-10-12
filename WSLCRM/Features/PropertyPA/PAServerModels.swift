@@ -318,4 +318,5 @@ struct PAServerTeach: Encodable, Sendable, Equatable {
     var statement: String
     var scope: String
     var approve: Bool
+    var triggers: [String]
 }

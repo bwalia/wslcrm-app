@@ -295,7 +295,7 @@ struct PACardView: View {
                         .background(Tone.brand.color.opacity(0.14), in: Capsule())
                         .accessibilityLabel("Number \(rank)")
                 }
-                Text(card.title.isEmpty ? card.action : card.title).font(.headline)
+                Text(card.title.isEmpty ? PAMapping.groupLabel(card.kind ?? .unknown) : card.title).font(.headline)
                     .accessibilityIdentifier("pa.card.\(card.uuid)")
                 Spacer()
                 if let minutes = card.estimatedMinutes {
@@ -346,16 +346,25 @@ struct PACardView: View {
                     if let phone = card.person?.phone, let url = URL(string: "sms:\(phone.filter { $0.isNumber || $0 == "+" })") {
                         Link(destination: url) { Label("Message", systemImage: "message") }.buttonStyle(.bordered)
                     }
+                    if let deal = card.dealUuid {
+                        NavigationLink(value: PDDealRoute(uuid: deal)) { Label("Open deal", systemImage: "house") }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("pa.card.deal")
+                    }
                     Button { onAsk() } label: { Label("Ask PA", systemImage: "bubble.left") }
                         .buttonStyle(.bordered)
                         .accessibilityIdentifier("pa.card.ask")
-                    Button { onLater() } label: { Label("Later", systemImage: "clock.arrow.circlepath") }
-                        .buttonStyle(.bordered)
-                        .accessibilityIdentifier("pa.card.later")
-                    Button { onDone() } label: { Label("Done", systemImage: "checkmark") }
-                        .buttonStyle(.bordered)
-                        .tint(Tone.success.solidColor)
-                        .accessibilityIdentifier("pa.card.done")
+                    // Done / Later need opsapi's card routes (requested); until then they'd only queue
+                    // writes the server can't take.
+                    if PAFeatures.cardActions {
+                        Button { onLater() } label: { Label("Later", systemImage: "clock.arrow.circlepath") }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("pa.card.later")
+                        Button { onDone() } label: { Label("Done", systemImage: "checkmark") }
+                            .buttonStyle(.bordered)
+                            .tint(Tone.success.solidColor)
+                            .accessibilityIdentifier("pa.card.done")
+                    }
                 }
                 .font(.subheadline.weight(.semibold))
             }
@@ -468,4 +477,10 @@ struct PALaterSheet: View {
         let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
         return Calendar.current.date(bySettingHour: hour, minute: 0, second: 0, of: tomorrow) ?? tomorrow
     }
+}
+
+/// PA features that wait on opsapi routes. Turn one on when the route ships.
+enum PAFeatures {
+    /// `POST /cards/:id/done|later` (requested in ios-pa-native-client.md; not built yet).
+    static let cardActions = false
 }
