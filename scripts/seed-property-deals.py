@@ -54,6 +54,9 @@ PEOPLE = [
     ("owner", "Jordan", "Hale", "pd.owner", None),
     ("manager", "Priya", "Shah", "pd.manager", "pd_manager"),
     ("operator", "Sam", "Okafor", "pd.operator", "pd_operator"),
+    # Property PA (How It Works): Sophie, a seller agent, and Ashley, her manager.
+    ("sophie", "Sophie", "Turner", "pd.sophie", "pd_operator"),
+    ("ashley", "Ashley", "Brooks", "pd.ashley", "pd_manager"),
 ]
 
 
@@ -339,6 +342,81 @@ def back_office(s) -> None:
                 "text": "Yes please, can you come round tomorrow? We'd like to sell quickly, ideally before we move."})
 
 
+# How It Works sellers (fake): name, address, postcode, temperature, expectation, motivation, days since contact.
+PA_SELLERS = [
+    ("Sarah", "Hughes", "22 Station Road", "LE1 1AA", "hot", None, "Relocating for work; wants certainty", 1),
+    ("Michael", "Grant", "14 Green Lane", "LE2 2BB", "warm", 260000, "Downsizing after the children left", 4),
+    ("Rick", "Dawson", "18 Market Street", "LE3 3CC", "warm", 195000, "Inherited; lives abroad", 21),
+    ("Priya", "Shah", "7 Mill Close", "LE4 4DD", "warm", 210000, "Divorce; both must agree", 6),
+    ("Gary", "Lowe", "51 Church Street", "LE5 5EE", "cold", 300000, "Testing the market", 30),
+    ("Helen", "Price", "3 Orchard Way", "LE6 6FF", "hot", 175000, "Moving into care; family deciding", 2),
+    ("Tom", "Baker", "88 Victoria Road", "LE7 7GG", "cold", 240000, "Probate not yet granted", 45),
+    ("Linda", "Cole", "12 Park Avenue", "LE8 8HH", "warm", 285000, "Wants to buy a bungalow nearby", 9),
+    ("Dev", "Patel", "40 King Street", "LE9 9JJ", "warm", 160000, "Tired landlord; tenant leaving", 12),
+    ("Ann", "Morris", "5 Elm Grove", "LE10 0KK", "cold", 220000, "Repossession risk; arrears", 60),
+]
+PA = "/api/v2/property-pa"
+
+
+def property_pa(s) -> None:
+    """Property PA on, set up, and Sophie's How It Works day built through the PA's own routes
+    (as Sophie), so it works without platform-admin rights."""
+    print("15. Property PA on, set up")
+    s.call("owner", "PUT", "/api/v2/namespace/plugins/property_pa", {"enabled": True})
+    s.call("owner", "POST", PA + "/setup", {}, ok=(200, 201, 409))
+    have = s.call("sophie", "GET", PA + "/opportunities?per_page=100&mine=true")
+    have = have if isinstance(have, list) else (have.get("data") or [])
+    if any(str(o.get("title", "")).startswith("Sarah Hughes") for o in have):
+        print("16. Sophie's day already there (Sarah Hughes exists) — leaving it")
+        return
+    print("16. Sophie's day: 10 sellers and James the buyer")
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    def person(first, last, roles_note):
+        c = s.call("sophie", "POST", "/api/v2/crm/contacts",
+                   {"first_name": first, "last_name": last, "email": f"{first}.{last}@example.invalid".lower(),
+                    "mobile": f"07700 900{100 + len(first) * 7 + len(last)}", "notes": roles_note})
+        return (c.get("contact") or c)["uuid"]
+
+    def house(address, postcode, **extra):
+        return s.call("sophie", "POST", P + "/properties",
+                      {"address_line1": address, "town": "Leicester", "postcode": postcode, **extra})["uuid"]
+
+    def talk(opp, who, days, summary):
+        s.call("sophie", "POST", PA + "/interactions",
+               {"channel": "call", "direction": "outbound", "summary": summary, "opportunity_uuid": opp,
+                "person_uuid": who, "at": iso(now - datetime.timedelta(days=days)), "meaningful": True})
+
+    for i, (first, last, address, postcode, temp, price, motivation, days) in enumerate(PA_SELLERS):
+        who = person(first, last, "Seller (How It Works demo, fake)")
+        prop = house(address, postcode, **({"bedrooms": 3, "tenure": "freehold"} if i == 0 else {}))
+        body = {"kind": "sell", "person_uuid": who, "property_uuid": prop, "title": f"{first} {last} — {address}",
+                "motivation": motivation, "temperature": temp,
+                "decision_makers": [{"name": f"{first} {last}", "role": "owner"}]}
+        if price:
+            body["expectation_price"] = price
+        opp = s.call("sophie", "POST", PA + "/opportunities", body)["uuid"]
+        talk(opp, who, days, f"Spoke to {first}: {motivation}.")
+        if i == 0:
+            talk(opp, who, 3, "Sarah said she would decide after the second valuation.")
+            s.call("sophie", "POST", PA + "/events", {"kind": "valuation", "at": iso(now - datetime.timedelta(days=1)),
+                                                     "title": "Second agent's valuation", "opportunity_uuid": opp,
+                                                     "person_uuid": who, "property_uuid": prop})
+            s.call("sophie", "POST", PA + "/events", {"kind": "promise", "at": iso(now - datetime.timedelta(hours=2)),
+                                                     "title": "Sarah will decide after the second valuation",
+                                                     "opportunity_uuid": opp, "person_uuid": who})
+        elif i == 1:
+            s.call("sophie", "POST", PA + "/events", {"kind": "promise", "at": iso(now + datetime.timedelta(days=2)),
+                                                     "title": "We promised Michael a follow-up with comparables this week",
+                                                     "opportunity_uuid": opp, "person_uuid": who})
+    james = person("James", "Carter", "Buyer (How It Works demo, fake)")
+    milton = house("94 Milton Road", "LE11 1LL", bedrooms=2, tenure="leasehold")
+    jopp = s.call("sophie", "POST", PA + "/opportunities",
+                  {"kind": "buy", "person_uuid": james, "property_uuid": milton, "temperature": "warm",
+                   "title": "James Carter — buying 94 Milton Road", "motivation": "First-time buyer, mortgage in principle"})["uuid"]
+    talk(jopp, james, 5, "James viewed 94 Milton Road and liked it; checking his mortgage.")
+
+
 def main() -> None:
     password = dbs.seed_password()
     otp = dbs.test_otp()
@@ -347,6 +425,7 @@ def main() -> None:
     scenario(s)
     parties(s)
     back_office(s)
+    property_pa(s)
 
     out = ROOT / "build" / f"{SLUG}.env"
     out.parent.mkdir(exist_ok=True)
