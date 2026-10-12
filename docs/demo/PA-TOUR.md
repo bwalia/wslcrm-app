@@ -9,15 +9,26 @@ Everything below runs on **int** with the How It Works demo data (fake people an
 
 ## Try it
 
-TestFlight build 9 or later, workspace **Demo Buyers Ltd**. Password and the test 2FA code are in
-`build/demo-buyers-ltd.env` (ask Balinder).
+TestFlight **1.0.0 (10)** or later (**Workstation AI-native CRM**), workspace **Demo Buyers Ltd**.
+Password and the test 2FA code are in `build/demo-buyers-ltd.env` (ask Balinder).
 
 | Sign in as | Who | What you see |
 |---|---|---|
-| `pd.sophie` | Sophie Turner, seller agent | Her PA Today: 10 sellers and a buyer, ranked |
-| `pd.ashley` | Ashley Brooks, manager | Manager Today (exceptions only) and Teach PA |
+| `pd.sophie` | Sophie Turner, seller agent | **Speaks to the PA.** PA Today mic → Speak (or Type). |
+| `pd.ashley` | Ashley Brooks, manager | Manager Today (exceptions only) and Teach PA — not the after-call mic flow. |
 
 The **PA** tab is first. The **Deals** tab still has the plain CRM screens.
+
+### Speak to the PA (verified on int, 13 Oct 2026)
+
+1. Sign in as **`pd.sophie`** → PA tab → floating mic → **Speak** → record a short note → Save.
+2. Speech goes to `POST /api/v2/voice/transcribe` (Workstation private STT). A typed note skips that step.
+3. The note is saved via `POST .../captures/start` and appears under voice notes / confirm.
+
+**JobShout is not linked on Demo Buyers Ltd yet.** Expect a clear server message:
+*"The PA isn't connected: set the JobShout Seller PA agent id in the Property PA settings."*
+The transcript still saves; proposed CRM updates and Ask PA chat stay empty until that agent id is set
+(Workspace → AI providers / Property PA settings). TTS (the PA reading aloud) is not in the app.
 
 ## The tour
 
