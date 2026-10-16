@@ -30,7 +30,7 @@ struct SettingsView: View {
             } header: {
                 Text("Security")
             } footer: {
-                Text("When on, \(Brand.current.name) asks for \(session.biometrics.displayName) when you open it or return after five minutes.")
+                Text("On after you sign in. \(Brand.current.name) then asks for \(session.biometrics.displayName) when you open it or return after five minutes, instead of the password.")
             }
 
             if session.propertyDeals != nil {
