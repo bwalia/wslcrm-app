@@ -9,25 +9,35 @@ struct CRMHomeView: View {
 
     var body: some View {
         List {
-            Section {
-                switch stats {
-                case .idle, .loading:
-                    SkeletonRow()
-                case .failed(let error):
-                    InlineErrorRow(error: error) { Task { await load() } }
-                case .loaded(let stats):
-                    statsGrid(stats)
+            // The figures come from deals (`GET /crm/dashboard/stats` needs crm_deals read).
+            if session.permissions.can(.read, .crmDeals) {
+                Section {
+                    switch stats {
+                    case .idle, .loading:
+                        SkeletonRow()
+                    case .failed(let error):
+                        InlineErrorRow(error: error) { Task { await load() } }
+                    case .loaded(let stats):
+                        statsGrid(stats)
+                    }
                 }
             }
             Section {
-                NavigationLink { DealPipelineView() } label: {
-                    Label("Deal pipeline", systemImage: "rectangle.split.3x1")
+                // The board lists pipelines (crm_pipelines) and then their deals (crm_deals).
+                if session.permissions.can(.read, .crmDeals), session.permissions.can(.read, .crmPipelines) {
+                    NavigationLink { DealPipelineView() } label: {
+                        Label("Deal pipeline", systemImage: "rectangle.split.3x1")
+                    }
                 }
-                NavigationLink { CRMAccountsListView() } label: {
-                    Label("Accounts", systemImage: "building.2")
+                if session.permissions.can(.read, .crmAccounts) {
+                    NavigationLink { CRMAccountsListView() } label: {
+                        Label("Accounts", systemImage: "building.2")
+                    }
                 }
-                NavigationLink { CRMContactsListView() } label: {
-                    Label("Contacts", systemImage: "person.crop.circle")
+                if session.permissions.can(.read, .crmContacts) {
+                    NavigationLink { CRMContactsListView() } label: {
+                        Label("Contacts", systemImage: "person.crop.circle")
+                    }
                 }
             }
         }
@@ -37,6 +47,7 @@ struct CRMHomeView: View {
     }
 
     private func load() async {
+        guard session.permissions.can(.read, .crmDeals) else { return }
         if stats.value == nil { stats = .loading }
         do {
             stats = .loaded(try await services.crm.dashboardStats())
@@ -80,10 +91,11 @@ struct StatTile: View {
     }
 }
 
+/// What the person may change, per CRM area: the server checks each one separately (opsapi #849).
 private extension SessionStore {
-    var canCreateCRM: Bool { permissions.can(.create, .crmAccounts) }
-    var canUpdateCRM: Bool { permissions.can(.update, .crmAccounts) }
-    var canDeleteCRM: Bool { permissions.can(.delete, .crmAccounts) }
+    func canCreate(_ module: Module) -> Bool { permissions.can(.create, module) }
+    func canUpdate(_ module: Module) -> Bool { permissions.can(.update, module) }
+    func canDelete(_ module: Module) -> Bool { permissions.can(.delete, module) }
 }
 
 // MARK: - Accounts
@@ -121,7 +133,7 @@ struct CRMAccountsListView: View {
         }
         .navigationTitle("Accounts")
         .toolbar {
-            if session.canCreateCRM {
+            if session.canCreate(.crmAccounts) {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("New account", systemImage: "plus") { creating = true }
                 }
@@ -157,7 +169,7 @@ struct CRMAccountDetailView: View {
         .task { await load() }
         .refreshable { await load() }
         .toolbar {
-            if session.canUpdateCRM, state.value != nil {
+            if session.canUpdate(.crmAccounts), state.value != nil {
                 ToolbarItem(placement: .topBarTrailing) { Button("Edit") { editing = true } }
             }
         }
@@ -214,7 +226,7 @@ struct CRMAccountDetailView: View {
                     }
                 }
             }
-            if session.canDeleteCRM {
+            if session.canDelete(.crmAccounts) {
                 Section {
                     DeleteButton(title: "Delete account", message: "Contacts and deals keep their link to this account's name.") {
                         do {
@@ -366,7 +378,7 @@ struct CRMContactsListView: View {
         }
         .navigationTitle("Contacts")
         .toolbar {
-            if session.canCreateCRM {
+            if session.canCreate(.crmContacts) {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("New contact", systemImage: "plus") { creating = true }
                 }
@@ -407,7 +419,7 @@ struct CRMContactDetailView: View {
                         if let phone = contact.phone { PhoneLinkRow(name: "Phone", phone: phone) }
                         if let email = contact.email { EmailLinkRow(email: email) }
                     }
-                    if session.canDeleteCRM {
+                    if session.canDelete(.crmContacts) {
                         Section {
                             DeleteButton(title: "Delete contact", message: "This removes the contact from CRM.") {
                                 do {
@@ -429,7 +441,7 @@ struct CRMContactDetailView: View {
         .task { await load() }
         .refreshable { await load() }
         .toolbar {
-            if session.canUpdateCRM, state.value != nil {
+            if session.canUpdate(.crmContacts), state.value != nil {
                 ToolbarItem(placement: .topBarTrailing) { Button("Edit") { editing = true } }
             }
         }
@@ -653,7 +665,7 @@ struct DealPipelineView: View {
         }
         .navigationTitle("Pipeline")
         .toolbar {
-            if session.canCreateCRM {
+            if session.canCreate(.crmDeals) {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("New deal", systemImage: "plus") { creating = true }
                 }
@@ -709,12 +721,12 @@ private struct DealPipelineContent: View {
                     ForEach(deals) { deal in
                         NavigationLink { CRMDealDetailView(dealUuid: deal.uuid) } label: { DealRow(deal: deal) }
                             .contextMenu {
-                                if session.permissions.can(.update, .crmAccounts) {
+                                if session.canUpdate(.crmDeals) {
                                     moveMenu(deal)
                                 }
                             }
                             .swipeActions(edge: .trailing) {
-                                if session.permissions.can(.update, .crmAccounts), let next = nextStage(after: stage) {
+                                if session.canUpdate(.crmDeals), let next = nextStage(after: stage) {
                                     Button("Move to \(Formatters.humanize(next))") {
                                         Task { await move(deal, to: next) }
                                     }
@@ -795,7 +807,7 @@ struct CRMDealDetailView: View {
         .task { await load() }
         .refreshable { await load() }
         .toolbar {
-            if session.canUpdateCRM, state.value != nil {
+            if session.canUpdate(.crmDeals), state.value != nil {
                 ToolbarItem(placement: .topBarTrailing) { Button("Edit") { editing = true } }
             }
         }
@@ -832,7 +844,7 @@ struct CRMDealDetailView: View {
                 }
                 .padding(.vertical, 4)
             }
-            if session.canUpdateCRM {
+            if session.canUpdate(.crmDeals) {
                 Section("Stage") {
                     if !deal.pipelineStages.isEmpty {
                         Menu {
@@ -873,7 +885,7 @@ struct CRMDealDetailView: View {
                 DetailRow(label: "Closed", value: deal.actualCloseDate.flatMap { Formatters.day($0.date()) })
                 DetailRow(label: "Lost reason", value: deal.lostReason)
             }
-            if session.canDeleteCRM {
+            if session.canDelete(.crmDeals) {
                 Section {
                     DeleteButton(title: "Delete deal", message: "This removes the deal from the pipeline.") {
                         do {

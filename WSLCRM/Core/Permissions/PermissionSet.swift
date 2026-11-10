@@ -11,7 +11,12 @@ enum Module: String, Sendable {
     case fsContracts = "fs_contracts"
     case fsReports = "fs_reports"
     case simproSync = "simpro_sync"
+    /// CRM is checked per area since opsapi #849: accounts, contacts, deals and pipelines each have
+    /// their own grant (before that, any signed-in member could do everything).
     case crmAccounts = "crm_accounts"
+    case crmContacts = "crm_contacts"
+    case crmDeals = "crm_deals"
+    case crmPipelines = "crm_pipelines"
     case customers
     case products
     case orders
@@ -38,7 +43,10 @@ enum Module: String, Sendable {
         case .fsContracts: "contracts"
         case .fsReports: "reports"
         case .simproSync: "Simpro sync"
-        case .crmAccounts: "CRM"
+        case .crmAccounts: "CRM accounts"
+        case .crmContacts: "CRM contacts"
+        case .crmDeals: "deals"
+        case .crmPipelines: "deal pipelines"
         case .customers: "customers"
         case .products: "products"
         case .orders: "orders"
@@ -129,7 +137,7 @@ struct PermissionSet: Sendable, Equatable {
             case .jobs: [.fsJobs]
             case .visits: [.fsVisits, .fsJobs]
             case .serviceRequests: [.fsServiceRequests]
-            case .crm: [.crmAccounts]
+            case .crm: [.crmAccounts, .crmContacts, .crmDeals]
             case .customers: [.customers]
             case .products: [.products]
             case .orders: [.orders]
