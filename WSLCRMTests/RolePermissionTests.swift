@@ -21,6 +21,30 @@ final class RolePermissionTests: XCTestCase {
         return #"{"menu":[\#(menuJSON)],"namespace":{"uuid":"ns","is_owner":false},"permissions":{\#(grants)},"is_admin":false}"#
     }
 
+    /// opsapi #849 checks CRM per area (crm_accounts, crm_contacts, crm_deals, crm_pipelines). The app
+    /// must offer each area's buttons on its own grant, not on crm_accounts for all of CRM.
+    func testCRMIsGatedPerArea() throws {
+        let salesRep = try permissions(menu(keys: ["namespace"],
+                                            permissions: ["crm_deals": ["create", "read", "update"],
+                                                          "crm_pipelines": ["read"]]))
+        XCTAssertTrue(salesRep.shows(.crm), "deals alone open the CRM tab")
+        XCTAssertTrue(salesRep.can(.create, .crmDeals))
+        XCTAssertTrue(salesRep.can(.update, .crmDeals))
+        XCTAssertFalse(salesRep.can(.delete, .crmDeals))
+        XCTAssertTrue(salesRep.can(.read, .crmPipelines))
+        XCTAssertFalse(salesRep.can(.create, .crmAccounts), "no account buttons without crm_accounts")
+        XCTAssertFalse(salesRep.can(.read, .crmContacts))
+
+        let accountsOnly = try permissions(menu(keys: ["namespace"], permissions: ["crm_accounts": ["manage"]]))
+        XCTAssertTrue(accountsOnly.shows(.crm))
+        XCTAssertTrue(accountsOnly.can(.delete, .crmAccounts))
+        XCTAssertFalse(accountsOnly.can(.update, .crmDeals), "crm_accounts no longer covers deals")
+        XCTAssertFalse(accountsOnly.can(.create, .crmContacts), "or contacts")
+
+        let none = try permissions(menu(keys: ["namespace"], permissions: ["customers": ["read"]]))
+        XCTAssertFalse(none.shows(.crm))
+    }
+
     /// Logs customer complaints; no jobs, visits, parts or invoices.
     private func telecaller() throws -> PermissionSet {
         try permissions(menu(keys: ["namespace", "customers", "field_service_requests"],
