@@ -1,0 +1,50 @@
+{
+ "data": {
+  "can_take_unassigned": true,
+  "is_manager": false,
+  "meetings": [],
+  "overdue": [
+   {
+    "ai_score": 84,
+    "bucket": "overdue",
+    "company_name": "Lee Labs 1793790536",
+    "email": "ann.1793790536@e2e.invalid",
+    "first_name": "Ann",
+    "last_name": "Lee 1793790536",
+    "next_action_at": "2026-11-04 12:08:00+00",
+    "next_action_note": "Call Ann Lee 1793790536",
+    "next_action_type": "call",
+    "phone": "+447700900536",
+    "status": "new",
+    "uuid": "86b06b8d-7e1f-4645-b882-7df09ee6a746"
+   },
+   {
+    "bucket": "overdue",
+    "email": "ann.1793790577@e2e.invalid",
+    "first_name": "Dup",
+    "next_action_at": "2026-11-04 12:09:00+00",
+    "next_action_note": "Call Dup",
+    "next_action_type": "call",
+    "status": "contacting",
+    "uuid": "a82b98af-3097-4c24-9d07-7c0613acfa69"
+   }
+  ],
+  "today": [
+   {
+    "bucket": "today",
+    "company_name": "Khan Dental Ltd",
+    "email": "amira@e2e.invalid",
+    "first_name": "Amira",
+    "last_name": "Khan",
+    "next_action_at": "2026-11-10 10:00:00+00",
+    "next_action_note": "Call Amira Khan",
+    "next_action_type": "call",
+    "phone": "+44 7700 900123",
+    "status": "new",
+    "uuid": "3106b6c6-2e81-492b-9c35-e6f28051a50f"
+   }
+  ],
+  "unassigned": 0
+ },
+ "success": true
+}
