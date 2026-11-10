@@ -1,0 +1,224 @@
+{
+ "data": {
+  "currency": "GBP",
+  "recent_days": 30,
+  "stages": [
+   {
+    "count": 6,
+    "key": "new",
+    "label": "New",
+    "leads": [
+     {
+      "ai_score": 84,
+      "ai_status": "done",
+      "ai_summary": "A school business manager wants 40 business laptops for staff before the spring term. Clear need, near deadline.",
+      "company_name": "Lee Labs 1793790536",
+      "contact_attempts": 0,
+      "created_at": "2026-11-04 11:08:56.11691",
+      "currency": "GBP",
+      "email": "ann.1793790536@e2e.invalid",
+      "estimated_value": 30400,
+      "first_name": "Ann",
+      "last_name": "Lee 1793790536",
+      "next_action_at": "2026-11-04 12:08:00+00",
+      "next_action_type": "call",
+      "owner_email": "lp-rep1@e2e.invalid",
+      "owner_name": "Ravi Rep",
+      "owner_user_uuid": "898328ad-0a05-4b2d-bf9c-cbf8edefabdd",
+      "phone": "+447700900536",
+      "priority": "medium",
+      "source": "website",
+      "stage_changed_at": "2026-11-04 11:08:56.11691+00",
+      "status": "new",
+      "uuid": "86b06b8d-7e1f-4645-b882-7df09ee6a746"
+     },
+     {
+      "ai_status": "skipped",
+      "contact_attempts": 0,
+      "created_at": "2026-11-04 11:16:29.390169",
+      "email": "queue.1793790981@e2e.invalid",
+      "first_name": "Queue",
+      "last_name": "1793790981",
+      "next_action_at": "2026-11-04 12:16:00+00",
+      "next_action_type": "call",
+      "owner_email": "lp-rep1@e2e.invalid",
+      "owner_name": "Ravi Rep",
+      "owner_user_uuid": "898328ad-0a05-4b2d-bf9c-cbf8edefabdd",
+      "priority": "medium",
+      "source": "website",
+      "stage_changed_at": "2026-11-04 11:16:29.390169+00",
+      "status": "new",
+      "uuid": "93cfd0f5-c0ed-4157-92f5-9271815b18ac"
+     }
+    ],
+    "open": true,
+    "overdue": 5,
+    "value": 45400
+   },
+   {
+    "count": 14,
+    "key": "contacting",
+    "label": "Contacting",
+    "leads": [
+     {
+      "ai_status": "skipped",
+      "contact_attempts": 0,
+      "created_at": "2026-11-04 11:09:44.724962",
+      "email": "ann.1793790577@e2e.invalid",
+      "first_name": "Dup",
+      "next_action_at": "2026-11-04 12:09:00+00",
+      "next_action_type": "call",
+      "owner_email": "lp-rep1@e2e.invalid",
+      "owner_name": "Ravi Rep",
+      "owner_user_uuid": "898328ad-0a05-4b2d-bf9c-cbf8edefabdd",
+      "priority": "medium",
+      "source": "manual",
+      "stage_changed_at": "2026-11-04 11:09:47.190355+00",
+      "status": "contacting",
+      "uuid": "a82b98af-3097-4c24-9d07-7c0613acfa69"
+     },
+     {
+      "ai_status": "skipped",
+      "contact_attempts": 0,
+      "created_at": "2026-11-04 11:10:39.236393",
+      "email": "ann.1793790631@e2e.invalid",
+      "first_name": "Dup",
+      "next_action_at": "2026-11-04 12:10:00+00",
+      "next_action_type": "call",
+      "owner_email": "lp-rep1@e2e.invalid",
+      "owner_name": "Ravi Rep",
+      "owner_user_uuid": "898328ad-0a05-4b2d-bf9c-cbf8edefabdd",
+      "priority": "medium",
+      "source": "manual",
+      "stage_changed_at": "2026-11-04 11:10:41.813802+00",
+      "status": "contacting",
+      "uuid": "efb7f4d2-cc31-4b7f-b2bb-cbcc955cfb50"
+     }
+    ],
+    "open": true,
+    "overdue": 13,
+    "value": 352000
+   },
+   {
+    "count": 0,
+    "key": "qualified",
+    "label": "Qualified",
+    "leads": [],
+    "open": true,
+    "overdue": 0,
+    "value": 0
+   },
+   {
+    "count": 1,
+    "key": "meeting",
+    "label": "Meeting",
+    "leads": [
+     {
+      "ai_status": "pending",
+      "company_name": "Park & Co Architects",
+      "contact_attempts": 1,
+      "created_at": "2026-11-10 08:55:31.016071",
+      "email": "chloe@e2e.invalid",
+      "estimated_value": 8500,
+      "first_name": "Chloe",
+      "last_name": "Park",
+      "next_action_at": "2026-11-11 10:00:00+00",
+      "next_action_type": "meeting",
+      "owner_email": "lp-rep1@e2e.invalid",
+      "owner_name": "Ravi Rep",
+      "owner_user_uuid": "898328ad-0a05-4b2d-bf9c-cbf8edefabdd",
+      "phone": "+44 7700 900789",
+      "priority": "medium",
+      "source": "phone_app",
+      "stage_changed_at": "2026-11-10 08:55:31.438121+00",
+      "status": "meeting",
+      "uuid": "880cf623-6e12-49bf-afcd-88012a1d1f39"
+     }
+    ],
+    "open": true,
+    "overdue": 0,
+    "value": 8500
+   },
+   {
+    "count": 20,
+    "key": "converted",
+    "label": "Converted",
+    "leads": [
+     {
+      "contact_attempts": 0,
+      "created_at": "2026-11-05 06:29:25.293542",
+      "currency": "GBP",
+      "email": "pd2.1793860165@e2e.invalid",
+      "estimated_value": 250000,
+      "first_name": "Pd",
+      "last_name": "Check",
+      "owner_email": "lp-rep1@e2e.invalid",
+      "owner_name": "Ravi Rep",
+      "owner_user_uuid": "898328ad-0a05-4b2d-bf9c-cbf8edefabdd",
+      "priority": "medium",
+      "source": "website",
+      "stage_changed_at": "2026-11-05 06:29:25.302827+00",
+      "status": "converted",
+      "uuid": "b25afacc-f553-4b11-b317-716983016c2e"
+     },
+     {
+      "contact_attempts": 0,
+      "created_at": "2026-11-05 06:29:24.801043",
+      "currency": "GBP",
+      "email": "pd1.1793860164@e2e.invalid",
+      "estimated_value": 250000,
+      "first_name": "Pd",
+      "last_name": "Check",
+      "owner_email": "lp-rep1@e2e.invalid",
+      "owner_name": "Ravi Rep",
+      "owner_user_uuid": "898328ad-0a05-4b2d-bf9c-cbf8edefabdd",
+      "priority": "medium",
+      "source": "website",
+      "stage_changed_at": "2026-11-05 06:29:24.833505+00",
+      "status": "converted",
+      "uuid": "68cd7db2-e21c-4d97-9c6d-29b419b032c7"
+     }
+    ],
+    "open": false,
+    "overdue": 0,
+    "value": 1948000
+   },
+   {
+    "count": 0,
+    "key": "nurture",
+    "label": "Nurture",
+    "leads": [],
+    "open": false,
+    "overdue": 0,
+    "value": 0
+   },
+   {
+    "count": 1,
+    "key": "lost",
+    "label": "Lost",
+    "leads": [
+     {
+      "company_name": "Stone Media",
+      "contact_attempts": 0,
+      "created_at": "2026-11-10 08:55:31.059024",
+      "email": "eve@e2e.invalid",
+      "first_name": "Eve",
+      "last_name": "Stone",
+      "owner_email": "lp-rep1@e2e.invalid",
+      "owner_name": "Ravi Rep",
+      "owner_user_uuid": "898328ad-0a05-4b2d-bf9c-cbf8edefabdd",
+      "priority": "medium",
+      "source": "website",
+      "stage_changed_at": "2026-11-10 08:55:31.462+00",
+      "status": "lost",
+      "uuid": "e750dde9-7ee0-45c0-8f44-6abca5ede9da"
+     }
+    ],
+    "open": false,
+    "overdue": 0,
+    "value": 0
+   }
+  ]
+ },
+ "success": true
+}

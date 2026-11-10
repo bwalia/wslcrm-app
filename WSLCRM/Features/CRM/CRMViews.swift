@@ -23,6 +23,11 @@ struct CRMHomeView: View {
                 }
             }
             Section {
+                if session.permissions.shows(.leads) {
+                    NavigationLink { LeadsHomeView() } label: {
+                        Label("Leads", systemImage: "person.crop.circle.badge.plus")
+                    }
+                }
                 // The board lists pipelines (crm_pipelines) and then their deals (crm_deals).
                 if session.permissions.can(.read, .crmDeals), session.permissions.can(.read, .crmPipelines) {
                     NavigationLink { DealPipelineView() } label: {

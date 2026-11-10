@@ -1,0 +1,65 @@
+{
+ "data": [
+  {
+   "activity_uuid": "39bb4cf7-af22-4fff-a0c8-79026e28d89a",
+   "at": "2026-11-10 13:00:00+00",
+   "by": "Ravi Rep",
+   "detail": null,
+   "due_at": "2026-11-10 13:00:00+00",
+   "kind": "activity",
+   "location": null,
+   "meeting_url": null,
+   "outcome": null,
+   "outcome_label": null,
+   "status": "planned",
+   "title": "Call Ben Ortiz",
+   "type": "call"
+  },
+  {
+   "at": "2026-11-10 08:55:31.306713+00",
+   "by": "Ravi Rep",
+   "detail": "first call",
+   "from": "new",
+   "kind": "stage",
+   "title": "Moved to Contacting",
+   "to": "contacting"
+  },
+  {
+   "activity_uuid": "7c4855a3-de93-48ec-ac11-bf25337378b1",
+   "at": "2026-11-10 08:55:31.306713+00",
+   "by": "Ravi Rep",
+   "detail": "Rang the office, no answer.",
+   "due_at": "2026-11-10 10:00:00+00",
+   "kind": "activity",
+   "location": null,
+   "meeting_url": null,
+   "outcome": "no_answer",
+   "outcome_label": "No answer",
+   "status": "completed",
+   "title": "Call Ben Ortiz",
+   "type": "call"
+  },
+  {
+   "at": "2026-11-10 08:55:30.992834+00",
+   "detail": "Source: referral",
+   "kind": "created",
+   "title": "Lead created"
+  },
+  {
+   "activity_uuid": "03887a59-e874-4b60-b62f-f424c522a647",
+   "at": "2026-11-09 12:55:30+00",
+   "by": "Ravi Rep",
+   "detail": "Try Ben again",
+   "due_at": "2026-11-09 12:55:30+00",
+   "kind": "activity",
+   "location": null,
+   "meeting_url": null,
+   "outcome": null,
+   "outcome_label": null,
+   "status": "planned",
+   "title": "Call Ben Ortiz",
+   "type": "call"
+  }
+ ],
+ "success": true
+}

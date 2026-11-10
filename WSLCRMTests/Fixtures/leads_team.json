@@ -1,0 +1,23 @@
+{
+ "data": [
+  {
+   "email": "lp-owner@e2e.invalid",
+   "is_manager": true,
+   "name": "Olivia Owner",
+   "uuid": "4b2fa076-2fe2-4b92-8aab-08928f809e58"
+  },
+  {
+   "email": "lp-rep1@e2e.invalid",
+   "is_manager": false,
+   "name": "Ravi Rep",
+   "uuid": "898328ad-0a05-4b2d-bf9c-cbf8edefabdd"
+  },
+  {
+   "email": "lp-rep2@e2e.invalid",
+   "is_manager": false,
+   "name": "Rosa Rep",
+   "uuid": "02363055-70e2-428e-a79e-259140fb3bfa"
+  }
+ ],
+ "success": true
+}

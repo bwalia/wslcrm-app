@@ -10,7 +10,7 @@ struct MainTabView: View {
     @State private var propertyDealsPath = NavigationPath()
     @State private var propertyPAPath = NavigationPath()
 
-    enum Tab: Hashable { case propertyPA, myWork, fieldService, propertyDeals, tasks, shop, more }
+    enum Tab: Hashable { case propertyPA, myWork, fieldService, propertyDeals, leads, tasks, shop, more }
 
     var body: some View {
         let permissions = session.permissions
@@ -34,6 +34,11 @@ struct MainTabView: View {
                 NavigationStack(path: $propertyDealsPath) { PDTodayView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
                     .tabItem { Label("Deals", systemImage: "house.and.flag") }
                     .tag(Tab.propertyDeals)
+            }
+            if NavigationPolicy(session: session).showsLeadsTab {
+                NavigationStack { LeadsHomeView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
+                    .tabItem { Label("Leads", systemImage: "person.crop.circle.badge.plus") }
+                    .tag(Tab.leads)
             }
             if NavigationPolicy(session: session).showsTasks {
                 NavigationStack { MyTasksView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
@@ -123,6 +128,7 @@ struct MainTabView: View {
         case .myWork: .myWork
         case .fieldService: .fieldService
         case .propertyDeals: .propertyDeals
+        case .leads: .leads
         case .tasks: .tasks
         case .shop: .shop
         case .more: .more
@@ -217,6 +223,10 @@ struct MoreView: View {
     @ViewBuilder
     private var moduleLinks: some View {
         let permissions = session.permissions
+        if permissions.shows(.leads) {
+            NavigationLink { LeadsHomeView() } label: { Label("Leads", systemImage: "person.crop.circle.badge.plus") }
+                .accessibilityIdentifier("more.leads")
+        }
         if permissions.shows(.crm) {
             NavigationLink { CRMHomeView() } label: { Label("CRM", systemImage: "person.2.crop.square.stack") }
                 .accessibilityIdentifier("more.crm")

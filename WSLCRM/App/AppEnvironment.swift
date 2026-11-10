@@ -6,6 +6,7 @@ struct Services: Sendable {
     let client: APIClient
     let fieldService: FieldServiceAPI
     let crm: CRMAPI
+    let leads: LeadsAPI
     let commerce: CommerceAPI
     let invoices: InvoicesAPI
     let purchaseOrders: PurchaseOrdersAPI
@@ -20,6 +21,7 @@ struct Services: Sendable {
         self.client = client
         fieldService = FieldServiceAPI(client: client, cache: cache)
         crm = CRMAPI(client: client)
+        leads = LeadsAPI(client: client)
         commerce = CommerceAPI(client: client)
         invoices = InvoicesAPI(client: client)
         purchaseOrders = PurchaseOrdersAPI(client: client)

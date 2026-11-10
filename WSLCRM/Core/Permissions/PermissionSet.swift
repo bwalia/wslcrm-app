@@ -17,6 +17,8 @@ enum Module: String, Sendable {
     case crmContacts = "crm_contacts"
     case crmDeals = "crm_deals"
     case crmPipelines = "crm_pipelines"
+    /// The lead pipeline (opsapi #849): members work their own and unassigned leads; `manage` sees all.
+    case crmLeads = "crm_leads"
     case customers
     case products
     case orders
@@ -47,6 +49,7 @@ enum Module: String, Sendable {
         case .crmContacts: "CRM contacts"
         case .crmDeals: "deals"
         case .crmPipelines: "deal pipelines"
+        case .crmLeads: "leads"
         case .customers: "customers"
         case .products: "products"
         case .orders: "orders"
@@ -119,7 +122,7 @@ struct PermissionSet: Sendable, Equatable {
     }
 
     enum Feature: Sendable, CaseIterable {
-        case jobs, visits, serviceRequests, crm, customers, products, orders, invoices, purchaseOrders
+        case jobs, visits, serviceRequests, crm, leads, customers, products, orders, invoices, purchaseOrders
         case projects, timesheets, shop
 
         var menuKeys: Set<String> {
@@ -127,7 +130,8 @@ struct PermissionSet: Sendable, Equatable {
             case .jobs: ["field_service_jobs", "field_service"]
             case .visits: ["field_service_visits", "field_service_jobs"]
             case .serviceRequests: ["field_service_requests"]
-            case .crm: ["crm", "crm_leads"]
+            case .crm: ["crm"]
+            case .leads: ["crm_leads"]
             case .customers: ["customers"]
             case .products: ["products"]
             case .orders: ["orders"]
@@ -146,6 +150,7 @@ struct PermissionSet: Sendable, Equatable {
             case .visits: [.fsVisits, .fsJobs]
             case .serviceRequests: [.fsServiceRequests]
             case .crm: [.crmAccounts, .crmContacts, .crmDeals]
+            case .leads: [.crmLeads]
             case .customers: [.customers]
             case .products: [.products]
             case .orders: [.orders]
@@ -165,7 +170,7 @@ struct PermissionSet: Sendable, Equatable {
 /// seeds (`NamespaceRoleQueries.createFieldServiceRoles`): a telecaller logs requests, a service
 /// manager runs the board, an engineer works their own visits.
 struct NavigationPolicy: Sendable, Equatable {
-    enum Home: Sendable, Equatable { case propertyPA, myWork, fieldService, propertyDeals, tasks, shop, more }
+    enum Home: Sendable, Equatable { case propertyPA, myWork, fieldService, propertyDeals, leads, tasks, shop, more }
 
     let permissions: PermissionSet
     let isEngineerRole: Bool
@@ -200,6 +205,12 @@ struct NavigationPolicy: Sendable, Equatable {
         permissions.shows(.projects) || permissions.grantsRead(.projects)
     }
 
+    /// Leads get a tab of their own for people whose day is leads (sales). Where field service, Property
+    /// Deals or the PA already fill the tab bar, Leads sits under More (and CRM) instead.
+    var showsLeadsTab: Bool {
+        permissions.shows(.leads) && !showsPropertyPA && !showsPropertyDeals && !showsFieldService && !showsMyWork
+    }
+
     /// The shop back office gets a tab only where the workspace has the shop feature (its menu
     /// carries `shop`). Admins pass every grant check, so a grant alone would put an empty tab in
     /// front of them on workspaces that don't sell online.
@@ -223,6 +234,7 @@ struct NavigationPolicy: Sendable, Equatable {
         if showsFieldService { return .fieldService }
         if showsPropertyDeals { return .propertyDeals }
         if showsMyWork { return .myWork }
+        if showsLeadsTab { return .leads }
         if showsTasks { return .tasks }
         if showsShop { return .shop }
         return .more

@@ -1,0 +1,97 @@
+{
+ "data": {
+  "ai_status": "pending",
+  "analysis": {
+   "created_at": "2026-11-10 08:55:31.387321+00",
+   "requested_by_uuid": "898328ad-0a05-4b2d-bf9c-cbf8edefabdd",
+   "result": null,
+   "status": "pending",
+   "trigger": "call",
+   "uuid": "a25250a3-24f2-4350-8f21-ebfa54248784"
+  },
+  "assigned_at": "2026-11-10 08:55:31.225838+00",
+  "call_outcomes": {
+   "callback": "Call back later",
+   "connected": "Spoke to them",
+   "no_answer": "No answer",
+   "not_interested": "Not interested",
+   "voicemail": "Left a message",
+   "wrong_number": "Wrong number"
+  },
+  "company_name": "Park & Co Architects",
+  "contact_attempts": 1,
+  "created_at": "2026-11-10 08:55:31.016071",
+  "email": "chloe@e2e.invalid",
+  "estimated_value": 8500,
+  "first_contacted_at": "2026-11-10 08:55:31.375381+00",
+  "first_name": "Chloe",
+  "id": 92,
+  "is_open": true,
+  "last_contacted_at": "2026-11-10 08:55:31.375381+00",
+  "last_name": "Park",
+  "meetings": [
+   {
+    "attendees": [
+     {
+      "email": "chloe@e2e.invalid",
+      "name": "Chloe Park",
+      "role": "lead"
+     },
+     {
+      "email": "lp-rep1@e2e.invalid",
+      "name": "Ravi Rep",
+      "role": "staff"
+     }
+    ],
+    "duration_minutes": 45,
+    "ends_at": "2026-11-11 10:45:00+00",
+    "ics_sequence": 0,
+    "invite": {
+     "enabled": false,
+     "error": null,
+     "sent_sequence": null,
+     "up_to_date": false
+    },
+    "lead_uuid": "880cf623-6e12-49bf-afcd-88012a1d1f39",
+    "meeting_url": "https://meet.example.com/park-demo",
+    "owner_user_uuid": "898328ad-0a05-4b2d-bf9c-cbf8edefabdd",
+    "starts_at": "2026-11-11 10:00:00+00",
+    "status": "planned",
+    "subject": "Rendering workstation demo",
+    "type": "video",
+    "type_label": "Video call",
+    "uuid": "30c7c507-b82f-446b-ac2c-d5769e9ec502"
+   }
+  ],
+  "metadata": {
+   "value_from": "person"
+  },
+  "namespace_id": 37,
+  "next_action_at": "2026-11-11 10:00:00+00",
+  "next_action_note": "Rendering workstation demo",
+  "next_action_type": "meeting",
+  "notes": "Two rendering workstations, needs them before the new year.",
+  "owner_email": "lp-rep1@e2e.invalid",
+  "owner_name": "Ravi Rep",
+  "owner_user_uuid": "898328ad-0a05-4b2d-bf9c-cbf8edefabdd",
+  "permissions": {
+   "can_assign_any": false,
+   "can_convert": true,
+   "can_work": true,
+   "is_manager": false
+  },
+  "phone": "+44 7700 900789",
+  "priority": "medium",
+  "qualification": [],
+  "referrals": [],
+  "score": 0,
+  "source": "phone_app",
+  "stage": "meeting",
+  "stage_changed_at": "2026-11-10 08:55:31.438121+00",
+  "stage_label": "Meeting",
+  "status": "meeting",
+  "updated_at": "2026-11-10 08:55:31.438121",
+  "uuid": "880cf623-6e12-49bf-afcd-88012a1d1f39"
+ },
+ "success": true
+}
