@@ -3,8 +3,9 @@ import Foundation
 /// `/auth/*` and the user/namespace endpoints.
 struct AuthAPI: Sendable {
     let client: APIClient
-    /// Brands the OTP email (the server default is another product's name).
-    static let appName = "Workstation AI-native CRM"
+    /// Names the sign-in code email ("Your <name> Verification Code"): the build's brand, so a
+    /// white-label build (Config/Brand-*.xcconfig) doesn't send its users Workstation's name.
+    static var appName: String { Brand.current.name }
 
     /// Step 1. Form-encoded — the server does not parse JSON on this route.
     func login(identifier: String, password: String) async throws -> LoginResponse {

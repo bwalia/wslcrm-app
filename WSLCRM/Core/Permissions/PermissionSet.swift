@@ -107,7 +107,15 @@ struct PermissionSet: Sendable, Equatable {
     func shows(_ feature: Feature) -> Bool {
         if !menuKeys.isEmpty, !feature.menuKeys.isDisjoint(with: menuKeys) { return true }
         // Fall back to grants when the menu module is disabled or unavailable.
-        return feature.modules.contains { can(.read, $0) }
+        return feature.modules.contains { grantsRead($0) }
+    }
+
+    /// A read grant that says something about what this workspace uses. Owners and admins pass every
+    /// check, so once the menu has loaded it decides for them: a workspace that only runs projects
+    /// gives its owner a projects app, not every module OpsAPI has. Without a menu, grants decide.
+    func grantsRead(_ module: Module) -> Bool {
+        if (isAdmin || isOwner), !menuKeys.isEmpty { return false }
+        return can(.read, module)
     }
 
     enum Feature: Sendable, CaseIterable {
@@ -180,16 +188,16 @@ struct NavigationPolicy: Sendable, Equatable {
     }
 
     var showsMyWork: Bool {
-        permissions.shows(.visits) || permissions.can(.read, .fsVisits)
+        permissions.shows(.visits) || permissions.grantsRead(.fsVisits)
     }
 
     var showsFieldService: Bool {
-        permissions.shows(.jobs) || permissions.shows(.serviceRequests) || permissions.can(.read, .fsServiceRequests)
+        permissions.shows(.jobs) || permissions.shows(.serviceRequests) || permissions.grantsRead(.fsServiceRequests)
     }
 
     /// Project cards: a tab of their own, and a "for today" block on My Work.
     var showsTasks: Bool {
-        permissions.shows(.projects) || permissions.can(.read, .projects)
+        permissions.shows(.projects) || permissions.grantsRead(.projects)
     }
 
     /// The shop back office gets a tab only where the workspace has the shop feature (its menu

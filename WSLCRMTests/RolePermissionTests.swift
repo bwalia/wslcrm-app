@@ -45,6 +45,45 @@ final class RolePermissionTests: XCTestCase {
         XCTAssertFalse(none.shows(.crm))
     }
 
+    /// One app, one module: someone whose role only has projects gets a projects app — Tasks is home,
+    /// and no field service, CRM, shop, customers or invoices appear anywhere.
+    func testProjectsOnlyMemberGetsAProjectsApp() throws {
+        let pm = try permissions(menu(keys: ["namespace", "projects", "timesheets"],
+                                      permissions: ["projects": ["create", "read", "update"], "timesheets": ["create", "read"]]))
+        let nav = NavigationPolicy(permissions: pm, isEngineerRole: false)
+        XCTAssertEqual(nav.home, .tasks)
+        XCTAssertTrue(nav.showsTasks)
+        XCTAssertFalse(nav.showsMyWork)
+        XCTAssertFalse(nav.showsFieldService)
+        XCTAssertFalse(nav.showsShop)
+        XCTAssertTrue(pm.shows(.timesheets))
+        for other: PermissionSet.Feature in [.crm, .customers, .products, .orders, .invoices, .purchaseOrders, .shop, .jobs] {
+            XCTAssertFalse(pm.shows(other), "\(other) must not appear")
+        }
+    }
+
+    /// The owner of a workspace that only uses projects: owners pass every grant check, so the
+    /// workspace's menu decides what the app offers them.
+    func testOwnerOfAProjectsOnlyWorkspaceGetsAProjectsApp() {
+        let owner = PermissionSet(isAdmin: false, isOwner: true, grants: [:], menuKeys: ["namespace", "projects", "timesheets"])
+        let nav = NavigationPolicy(permissions: owner, isEngineerRole: false)
+        XCTAssertEqual(nav.home, .tasks)
+        XCTAssertFalse(nav.showsMyWork)
+        XCTAssertFalse(nav.showsFieldService)
+        XCTAssertFalse(owner.shows(.crm))
+        XCTAssertFalse(owner.shows(.invoices))
+        XCTAssertTrue(owner.can(.delete, .projects), "an owner still may do everything in what they use")
+
+        // With the field service menu on, the same owner gets field service as well.
+        let fsOwner = PermissionSet(isAdmin: false, isOwner: true, grants: [:],
+                                    menuKeys: ["projects", "field_service_jobs", "field_service_visits"])
+        XCTAssertTrue(NavigationPolicy(permissions: fsOwner, isEngineerRole: false).showsFieldService)
+        // And if the menu couldn't load, grants decide: an owner sees everything rather than nothing.
+        let noMenu = PermissionSet(isAdmin: false, isOwner: true, grants: [:], menuKeys: [])
+        XCTAssertTrue(noMenu.shows(.crm))
+        XCTAssertTrue(NavigationPolicy(permissions: noMenu, isEngineerRole: false).showsFieldService)
+    }
+
     /// Logs customer complaints; no jobs, visits, parts or invoices.
     private func telecaller() throws -> PermissionSet {
         try permissions(menu(keys: ["namespace", "customers", "field_service_requests"],
