@@ -196,6 +196,12 @@ struct PermissionGrants: Decodable, Sendable, Equatable {
 /// `GET /api/v2/user/menu` — backend-driven navigation and the caller's permissions.
 struct MenuResponse: Decodable, Sendable {
     let menu: [MenuItem]
+    /// The web sidebar, in order: `menu` without Settings, each item carrying its `group`.
+    let mainMenu: [MenuItem]
+    /// The bottom of the web sidebar (Settings).
+    let secondaryMenu: [MenuItem]
+    /// The sidebar's collapsible groups, in the order the web shows them.
+    let groups: [MenuGroup]
     let namespace: MenuNamespace?
     let permissions: PermissionGrants
     let isAdmin: Bool
@@ -205,6 +211,17 @@ struct MenuResponse: Decodable, Sendable {
         let name: String?
         let module: String?
         let priority: Int?
+        /// A Lucide icon name, as the web uses (`Users`, `Wallet`).
+        var icon: String?
+        /// The web dashboard page (`/dashboard/crm`).
+        var path: String?
+        /// The sidebar group key (`sales`); nil for the items above the groups.
+        var group: String?
+    }
+
+    struct MenuGroup: Decodable, Sendable, Hashable {
+        let key: String
+        let name: String?
     }
 
     struct MenuNamespace: Decodable, Sendable {
@@ -212,11 +229,14 @@ struct MenuResponse: Decodable, Sendable {
         let isOwner: Bool?
     }
 
-    enum CodingKeys: String, CodingKey { case menu, namespace, permissions, isAdmin }
+    enum CodingKeys: String, CodingKey { case menu, mainMenu, secondaryMenu, groups, namespace, permissions, isAdmin }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         menu = c.decodeLossyArray(MenuItem.self, forKey: .menu)
+        mainMenu = c.decodeLossyArray(MenuItem.self, forKey: .mainMenu)
+        secondaryMenu = c.decodeLossyArray(MenuItem.self, forKey: .secondaryMenu)
+        groups = c.decodeLossyArray(MenuGroup.self, forKey: .groups)
         namespace = try? c.decodeIfPresent(MenuNamespace.self, forKey: .namespace)
         permissions = (try? c.decodeIfPresent(PermissionGrants.self, forKey: .permissions)) ?? PermissionGrants([:])
         isAdmin = c.decodeFlexibleBool(forKey: .isAdmin) ?? false

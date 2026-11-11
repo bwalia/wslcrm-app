@@ -151,7 +151,7 @@ final class PropertyDealsBackOfficeUITests: XCTestCase {
 
     func testPurchaseOrderAcknowledgeReceiveAndBill() {
         launch()
-        app.tabBars.buttons["More"].tap()
+        app.tabBars.buttons["Menu"].tap()
         element("more.purchaseOrders").tap()
         element("po.row.PO-000002")
         screenshot("po-01-list")

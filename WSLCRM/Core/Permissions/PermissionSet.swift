@@ -226,9 +226,11 @@ struct NavigationPolicy: Sendable, Equatable {
     /// The PA is the home wherever it's on: the system of work, with the CRM underneath.
     var showsPropertyPA: Bool { hasPropertyPA }
 
-    /// Engineers land on My Work (opsapi #610); managers and telecallers on Field Service; property
-    /// operators on Today; people who only work projects on their tasks.
+    /// Platform admins (root) land on the Menu, which is the web's full menu; engineers on My Work
+    /// (opsapi #610); managers and telecallers on Field Service; property operators on Today; people
+    /// who only work projects on their tasks.
     var home: Home {
+        if permissions.isAdmin { return .more }
         if showsPropertyPA { return .propertyPA }
         if isEngineerRole, showsMyWork { return .myWork }
         if showsFieldService { return .fieldService }
@@ -238,6 +240,24 @@ struct NavigationPolicy: Sendable, Equatable {
         if showsTasks { return .tasks }
         if showsShop { return .shop }
         return .more
+    }
+
+    /// The tabs in front of Menu, at most four: an iPhone tab bar holds five, and a sixth would hide
+    /// the rest behind the system's own "More". Everything stays reachable from Menu.
+    var tabs: [Home] {
+        var all: [Home] = []
+        if showsPropertyPA { all.append(.propertyPA) }
+        if showsMyWork { all.append(.myWork) }
+        if showsFieldService { all.append(.fieldService) }
+        if showsPropertyDeals { all.append(.propertyDeals) }
+        if showsLeadsTab { all.append(.leads) }
+        if showsTasks { all.append(.tasks) }
+        if showsShop { all.append(.shop) }
+        // The home tab always makes the cut.
+        if let index = all.firstIndex(of: home), index >= 4 {
+            all.insert(all.remove(at: index), at: 0)
+        }
+        return Array(all.prefix(4))
     }
 }
 

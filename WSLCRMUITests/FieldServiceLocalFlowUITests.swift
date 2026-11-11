@@ -143,7 +143,7 @@ final class FieldServiceLocalFlowUITests: XCTestCase {
     }
 
     private func signOut() {
-        let more = app.tabBars.buttons["More"].firstMatch
+        let more = app.tabBars.buttons["Menu"].firstMatch
         XCTAssertTrue(more.waitForExistence(timeout: 20))
         more.tap()
         let button = element("more.signOut")

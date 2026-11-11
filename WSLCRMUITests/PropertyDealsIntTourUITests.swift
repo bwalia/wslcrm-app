@@ -98,7 +98,7 @@ final class PropertyDealsIntTourUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Shop"].waitForExistence(timeout: 30))
         snapshot("int-05-shop")
 
-        app.tabBars.buttons["More"].tap()
+        app.tabBars.buttons["Menu"].tap()
         element("more.invoices").tap()
         XCTAssertTrue(app.navigationBars["Invoices"].waitForExistence(timeout: 30))
         snapshot("int-06-invoices")

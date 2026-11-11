@@ -13,52 +13,53 @@ struct MainTabView: View {
     enum Tab: Hashable { case propertyPA, myWork, fieldService, propertyDeals, leads, tasks, shop, more }
 
     var body: some View {
-        let permissions = session.permissions
+        let navigation = NavigationPolicy(session: session)
+        let tabs = navigation.tabs
         TabView(selection: $selection) {
-            if NavigationPolicy(session: session).showsPropertyPA {
+            if tabs.contains(.propertyPA) {
                 NavigationStack(path: $propertyPAPath) { PATodayView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
                     .tabItem { Label("PA", systemImage: "sparkles") }
                     .tag(Tab.propertyPA)
             }
-            if showsMyWork(permissions) {
+            if tabs.contains(.myWork) {
                 NavigationStack { MyWorkView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
                     .tabItem { Label("My Work", systemImage: "person.badge.clock") }
                     .tag(Tab.myWork)
             }
-            if showsFieldService(permissions) {
+            if tabs.contains(.fieldService) {
                 NavigationStack { FieldServiceHubView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
                     .tabItem { Label("Field Service", systemImage: "wrench.and.screwdriver") }
                     .tag(Tab.fieldService)
             }
-            if NavigationPolicy(session: session).showsPropertyDeals {
+            if tabs.contains(.propertyDeals) {
                 NavigationStack(path: $propertyDealsPath) { PDTodayView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
                     .tabItem { Label("Deals", systemImage: "house.and.flag") }
                     .tag(Tab.propertyDeals)
             }
-            if NavigationPolicy(session: session).showsLeadsTab {
+            if tabs.contains(.leads) {
                 NavigationStack { LeadsHomeView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
                     .tabItem { Label("Leads", systemImage: "person.crop.circle.badge.plus") }
                     .tag(Tab.leads)
             }
-            if NavigationPolicy(session: session).showsTasks {
+            if tabs.contains(.tasks) {
                 NavigationStack { MyTasksView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
                     .tabItem { Label("Tasks", systemImage: "checklist") }
                     .tag(Tab.tasks)
             }
-            if NavigationPolicy(session: session).showsShop {
+            if tabs.contains(.shop) {
                 NavigationStack { ShopHomeView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
                     .tabItem { Label("Shop", systemImage: "storefront") }
                     .tag(Tab.shop)
             }
-            NavigationStack { MoreView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
-                .tabItem { Label("More", systemImage: "ellipsis.circle") }
+            NavigationStack { MenuView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
+                .tabItem { Label("Menu", systemImage: "line.3.horizontal") }
                 .tag(Tab.more)
         }
         .sheet(isPresented: $showingPendingChanges) {
             NavigationStack { PendingChangesView() }
         }
         .onAppear {
-            selection = initialTab(permissions)
+            selection = initialTab()
             openPendingLink()
         }
         .onChange(of: router.pending) { openPendingLink() }
@@ -76,7 +77,7 @@ struct MainTabView: View {
         case .open:
             router.clear()
             if link.target.isPA {
-                guard NavigationPolicy(session: session).showsPropertyPA else { return }
+                guard NavigationPolicy(session: session).tabs.contains(.propertyPA) else { return }
                 selection = .propertyPA
                 var path = NavigationPath()
                 switch link.target {
@@ -87,7 +88,7 @@ struct MainTabView: View {
                 propertyPAPath = path
                 return
             }
-            guard NavigationPolicy(session: session).showsPropertyDeals else { return }
+            guard NavigationPolicy(session: session).tabs.contains(.propertyDeals) else { return }
             selection = .propertyDeals
             var path = NavigationPath()
             switch link.target {
@@ -114,16 +115,12 @@ struct MainTabView: View {
         .accessibilityIdentifier("sync.banner")
     }
 
-    private func showsMyWork(_ permissions: PermissionSet) -> Bool {
-        NavigationPolicy(permissions: permissions, isEngineerRole: session.policy.isEngineerRole).showsMyWork
-    }
-
-    private func showsFieldService(_ permissions: PermissionSet) -> Bool {
-        NavigationPolicy(permissions: permissions, isEngineerRole: session.policy.isEngineerRole).showsFieldService
-    }
-
-    private func initialTab(_ permissions: PermissionSet) -> Tab {
-        switch NavigationPolicy(session: session).home {
+    private func initialTab() -> Tab {
+        let navigation = NavigationPolicy(session: session)
+        let home = navigation.home
+        // A home that didn't get a tab (shouldn't happen: `tabs` keeps it) falls back to Menu.
+        guard home == .more || navigation.tabs.contains(home) else { return .more }
+        return switch home {
         case .propertyPA: .propertyPA
         case .myWork: .myWork
         case .fieldService: .fieldService
@@ -133,153 +130,5 @@ struct MainTabView: View {
         case .shop: .shop
         case .more: .more
         }
-    }
-}
-
-struct MoreView: View {
-    @Environment(SessionStore.self) private var session
-    @Environment(SyncCenter.self) private var sync
-    @State private var confirmingSignOut = false
-
-    var body: some View {
-        List {
-            if let user = session.user {
-                Section {
-                    HStack(spacing: 14) {
-                        Text(user.initials)
-                            .font(.headline)
-                            .frame(width: 48, height: 48)
-                            .background(Color.accentColor.opacity(0.15), in: Circle())
-                            .accessibilityHidden(true)
-                        VStack(alignment: .leading) {
-                            Text(user.displayName).font(.headline)
-                            Text(user.email).font(.subheadline).foregroundStyle(.secondaryText)
-                        }
-                    }
-                    .accessibilityElement(children: .combine)
-                    NavigationLink {
-                        WorkspacePickerView(isInitialChoice: false)
-                    } label: {
-                        LabeledContent {
-                            Text(session.workspace?.name ?? "None")
-                        } label: {
-                            Label("Workspace", systemImage: "building.2")
-                        }
-                    }
-                    .accessibilityIdentifier("more.workspace")
-                }
-            }
-
-            Section("Modules") {
-                moduleLinks
-            }
-
-            Section {
-                NavigationLink {
-                    PendingChangesView()
-                } label: {
-                    LabeledContent {
-                        Text(sync.mutations.isEmpty ? "All synced" : "\(sync.mutations.count)")
-                    } label: {
-                        Label("Unsynced changes", systemImage: "arrow.triangle.2.circlepath")
-                    }
-                }
-                .accessibilityIdentifier("more.pendingChanges")
-                NavigationLink {
-                    SettingsView()
-                } label: {
-                    Label("Settings", systemImage: "gearshape")
-                }
-                .accessibilityIdentifier("more.settings")
-            }
-
-            Section {
-                Button("Sign out", role: .destructive) { confirmingSignOut = true }
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("more.signOut")
-            }
-        }
-        .navigationTitle("More")
-        .confirmationDialog(signOutTitle, isPresented: $confirmingSignOut, titleVisibility: .visible) {
-            Button("Sign out", role: .destructive) {
-                Task { await session.signOut() }
-            }
-        } message: {
-            if hasUnsynced {
-                Text("You have \(sync.mutations.count) change(s) that haven't reached the server. They stay on this device and sync the next time you sign in.")
-            }
-        }
-    }
-
-    private var hasUnsynced: Bool {
-        guard let user = session.user else { return false }
-        return sync.hasUnsyncedWrites(forUser: user.uuid)
-    }
-
-    private var signOutTitle: String {
-        hasUnsynced ? "Sign out with unsynced changes?" : "Sign out of \(Brand.current.name)?"
-    }
-
-    @ViewBuilder
-    private var moduleLinks: some View {
-        let permissions = session.permissions
-        if permissions.shows(.leads) {
-            NavigationLink { LeadsHomeView() } label: { Label("Leads", systemImage: "person.crop.circle.badge.plus") }
-                .accessibilityIdentifier("more.leads")
-        }
-        if permissions.shows(.crm) {
-            NavigationLink { CRMHomeView() } label: { Label("CRM", systemImage: "person.2.crop.square.stack") }
-                .accessibilityIdentifier("more.crm")
-        }
-        if permissions.shows(.customers) {
-            NavigationLink { CustomersListView() } label: { Label("Customers", systemImage: "person.crop.rectangle.stack") }
-                .accessibilityIdentifier("more.customers")
-        }
-        if permissions.shows(.products) {
-            NavigationLink { ProductsListView() } label: { Label("Products", systemImage: "shippingbox") }
-                .accessibilityIdentifier("more.products")
-        }
-        if permissions.shows(.orders) {
-            NavigationLink { OrdersListView() } label: { Label("Orders", systemImage: "cart") }
-                .accessibilityIdentifier("more.orders")
-        }
-        if permissions.shows(.invoices) {
-            NavigationLink { InvoicesListView() } label: { Label("Invoices", systemImage: "doc.text") }
-                .accessibilityIdentifier("more.invoices")
-        }
-        if permissions.shows(.purchaseOrders) {
-            NavigationLink(value: PurchaseOrdersRoute()) { Label("Purchase orders", systemImage: "shippingbox.and.arrow.backward") }
-                .accessibilityIdentifier("more.purchaseOrders")
-        }
-        // Value links: these screens push further value routes (asset, report), and a destination
-        // link above them makes SwiftUI rebuild the list, dropping its filters and the row tap.
-        if permissions.can(.read, .fsAssets) {
-            NavigationLink(value: FieldServiceArea.customerAssets) {
-                Label("Assets", systemImage: "air.conditioner.horizontal")
-            }
-            .accessibilityIdentifier("more.customerAssets")
-        }
-        if permissions.can(.read, .fsReports) {
-            NavigationLink(value: FieldServiceArea.reports) {
-                Label("Reports", systemImage: "chart.bar.doc.horizontal")
-            }
-            .accessibilityIdentifier("more.reports")
-        }
-        // Work management. Projects are membership- and grant-gated; logging your own time is
-        // not, so timesheets are offered to everyone signed in. My tasks has its own tab.
-        if permissions.shows(.projects) || permissions.can(.read, .projects) {
-            NavigationLink(value: FieldServiceArea.projects) {
-                Label("Projects", systemImage: "square.stack.3d.up")
-            }
-            .accessibilityIdentifier("more.projects")
-            NavigationLink(value: FieldServiceArea.reviewQueue) {
-                Label("Waiting for me", systemImage: "person.crop.circle.badge.questionmark")
-            }
-            .accessibilityIdentifier("more.reviewQueue")
-        }
-        NavigationLink(value: FieldServiceArea.timesheets) {
-            Label("Timesheets", systemImage: "clock.badge.checkmark")
-        }
-        .accessibilityIdentifier("more.timesheets")
     }
 }

@@ -56,9 +56,9 @@ final class WorkManagementUITests: XCTestCase {
     /// The More tab's list is lazy, so a row below the fold does not exist until it is scrolled
     /// to — waiting for it without scrolling waits for ever.
     private func openMore(_ identifier: String, file: StaticString = #filePath, line: UInt = #line) {
-        XCTAssertTrue(app.tabBars.buttons["More"].firstMatch.waitForExistence(timeout: 20),
+        XCTAssertTrue(app.tabBars.buttons["Menu"].firstMatch.waitForExistence(timeout: 20),
                       "signed in and on the tab bar", file: file, line: line)
-        app.tabBars.buttons["More"].firstMatch.tap()
+        app.tabBars.buttons["Menu"].firstMatch.tap()
         let link = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
         for _ in 0..<8 where !(link.waitForExistence(timeout: 2) && link.isHittable) {
             app.swipeUp()

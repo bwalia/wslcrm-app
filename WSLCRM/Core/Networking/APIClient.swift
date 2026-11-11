@@ -191,6 +191,18 @@ actor APIClient {
 
     // MARK: - Refresh
 
+    /// The access token to hand a web page: refreshed first when it has under two minutes left, or
+    /// always when `forceRefresh` (the page itself was turned away).
+    func accessTokenForWeb(forceRefresh: Bool = false) async throws -> String {
+        guard let current = tokens else {
+            throw APIError.unauthorized(ServerError(status: 401, message: "Not signed in", fieldErrors: [:], rawBody: ""))
+        }
+        if !forceRefresh, !JWT.isExpiring(current.accessToken, within: 120, now: now()) {
+            return current.accessToken
+        }
+        return try await refreshedTokens(replacing: current.accessToken).accessToken
+    }
+
     /// Returns valid tokens, refreshing at most once for any number of concurrent callers.
     private func refreshedTokens(replacing staleAccessToken: String?) async throws -> AuthTokens {
         // Another request already refreshed while this one was in flight.

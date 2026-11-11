@@ -501,7 +501,7 @@ final class DBSLimitedTourUITests: XCTestCase {
         signIn(env["DBS_TOM"]!)
         TourNarration.chapter("An engineer surveys an asset",
                               "The condition of the plant, recorded on site")
-        openTab("More")
+        openTab("Menu")
         element("more.customerAssets", timeout: 30).tap()
         // Condition 4 and worse: a short list with the St Mary Magdalene heat pump on it.
         element("customerAssets.filter.condition", timeout: 30).tap()
@@ -534,7 +534,7 @@ final class DBSLimitedTourUITests: XCTestCase {
         signIn(env["DBS_CLAIRE"]!)
         TourNarration.chapter("Customers, catalogue and permissions",
                               "The rest of the platform, and what a role is allowed to see")
-        openTab("More")
+        openTab("Menu")
         element("more.settings", timeout: 40)
         snapshot("more-01-modules")
 
