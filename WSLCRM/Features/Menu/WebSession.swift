@@ -63,6 +63,9 @@ struct WebSession: Sendable, Equatable {
             localStorage.setItem('current_namespace', JSON.stringify(ns));
             localStorage.setItem('namespace-storage', JSON.stringify({ state: { currentNamespace: ns }, version: 0 }));
             localStorage.removeItem('menu-storage');
+            // The app supplies the navigation: the dashboard leaves out its own top bar, sidebar and
+            // footer (opsapi-dashboard lib/embed.ts).
+            localStorage.setItem('opsapi-embed', 'app');
           } catch (e) {}
         })();
         """

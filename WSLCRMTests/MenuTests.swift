@@ -149,6 +149,7 @@ final class MenuTests: XCTestCase {
         XCTAssertEqual((state?["user"] as? [String: Any])?["email"] as? String, "root@example.com")
         XCTAssertNotNil(store["namespace-storage"])
         XCTAssertNil(store["menu-storage"], "another workspace's cached menu is dropped")
+        XCTAssertEqual(store["opsapi-embed"], "app", "the dashboard hides its own top bar, sidebar and footer")
     }
 
     func testTheScriptDoesNothingOnAnotherSite() throws {

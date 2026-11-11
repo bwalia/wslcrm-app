@@ -131,6 +131,9 @@ private struct DashboardWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
+        // Pinch-to-zoom stays available (accessibility) even though the dashboard turns off the
+        // zoom-on-tap that iPhones do for small text boxes — the same as Safari.
+        configuration.ignoresViewportScaleLimits = true
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
