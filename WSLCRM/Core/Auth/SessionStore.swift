@@ -21,6 +21,8 @@ final class SessionStore {
     private(set) var workspaces: [Workspace] = []
     private(set) var workspace: Workspace?
     private(set) var permissions: PermissionSet = .none
+    /// The web dashboard's sidebar for this person in this workspace (the Menu tab).
+    private(set) var menu: AppMenu = .empty
     /// Property Deals access in this workspace; nil when the plugin is off or the role can't read it.
     private(set) var propertyDeals: PDAccess?
     /// The Property PA for this workspace and person; nil when it's off (the app falls back to
@@ -251,6 +253,7 @@ final class SessionStore {
             let (menu, data) = try await auth.menu()
             await cache.store(data, key: "menu", namespaceId: workspace.uuid)
             permissions = PermissionSet(menu: menu)
+            self.menu = AppMenu(menu)
             if menu.namespace?.isOwner == true, let index = workspaces.firstIndex(where: { $0.uuid == workspace.uuid }) {
                 workspaces[index].isOwner = true
             }
@@ -260,8 +263,10 @@ final class SessionStore {
             if let entry = await cache.load(key: "menu", namespaceId: workspace.uuid),
                let menu = try? JSONDecoder.opsAPI().decode(MenuResponse.self, from: entry.data) {
                 permissions = PermissionSet(menu: menu)
+                self.menu = AppMenu(menu)
             } else {
                 permissions = .none
+                self.menu = .empty
             }
             permissionsError = apiError
         }
@@ -281,6 +286,16 @@ final class SessionStore {
         } else {
             propertyDeals = nil
         }
+    }
+
+    /// What a web dashboard page needs to open signed in as this person, in this workspace. nil
+    /// when signed out or when the server has no dashboard next to it.
+    func webSession(forceRefresh: Bool = false) async throws -> WebSession? {
+        guard let user, let workspace, let dashboard = DashboardURL.forAPI(await client.currentBaseURL) else {
+            return nil
+        }
+        let token = try await client.accessTokenForWeb(forceRefresh: forceRefresh)
+        return WebSession(dashboard: dashboard, accessToken: token, user: user, workspace: workspace)
     }
 
     // MARK: - Sign out
@@ -318,6 +333,7 @@ final class SessionStore {
         workspaces = []
         workspace = nil
         permissions = .none
+        menu = .empty
         propertyDeals = nil
         propertyPA = nil
         phase = .signedOut

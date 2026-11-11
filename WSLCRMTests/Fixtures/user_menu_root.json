@@ -1,0 +1,1735 @@
+{
+ "menu": [
+  {
+   "key": "dashboard",
+   "name": "Dashboard",
+   "module": "dashboard",
+   "priority": 1,
+   "icon": "LayoutDashboard",
+   "path": "/dashboard"
+  },
+  {
+   "key": "namespace",
+   "name": "My Workspace",
+   "module": "namespace",
+   "priority": 2,
+   "icon": "Building2",
+   "path": "/dashboard/namespace",
+   "group": "admin"
+  },
+  {
+   "key": "apps",
+   "name": "Apps",
+   "priority": 2,
+   "icon": "LayoutGrid",
+   "path": "/dashboard/apps"
+  },
+  {
+   "key": "my_tasks",
+   "name": "My Tasks",
+   "module": "projects",
+   "priority": 2,
+   "icon": "ListTodo",
+   "path": "/dashboard/my-tasks"
+  },
+  {
+   "key": "vault",
+   "name": "Secret Vault",
+   "module": "vault",
+   "priority": 3,
+   "icon": "Shield",
+   "path": "/dashboard/namespace/vault",
+   "group": "developer"
+  },
+  {
+   "key": "namespaces",
+   "name": "All Namespaces",
+   "module": "namespaces",
+   "priority": 3,
+   "icon": "Building2",
+   "path": "/dashboard/namespaces",
+   "group": "admin"
+  },
+  {
+   "key": "projects",
+   "name": "Projects",
+   "module": "projects",
+   "priority": 4,
+   "icon": "Kanban",
+   "path": "/dashboard/projects",
+   "group": "work"
+  },
+  {
+   "key": "services",
+   "name": "Services",
+   "module": "services",
+   "priority": 5,
+   "icon": "Rocket",
+   "path": "/dashboard/services",
+   "group": "developer"
+  },
+  {
+   "key": "users",
+   "name": "Users",
+   "module": "users",
+   "priority": 6,
+   "icon": "Users",
+   "path": "/dashboard/users",
+   "group": "admin"
+  },
+  {
+   "key": "roles",
+   "name": "Roles",
+   "module": "roles",
+   "priority": 7,
+   "icon": "Shield",
+   "path": "/dashboard/roles",
+   "group": "admin"
+  },
+  {
+   "key": "orders",
+   "name": "Orders",
+   "module": "orders",
+   "priority": 8,
+   "icon": "ShoppingCart",
+   "path": "/dashboard/orders",
+   "group": "commerce"
+  },
+  {
+   "key": "products",
+   "name": "Products",
+   "module": "products",
+   "priority": 9,
+   "icon": "Package",
+   "path": "/dashboard/products",
+   "group": "commerce"
+  },
+  {
+   "key": "stores",
+   "name": "Stores",
+   "module": "stores",
+   "priority": 10,
+   "icon": "Store",
+   "path": "/dashboard/stores",
+   "group": "commerce"
+  },
+  {
+   "key": "customers",
+   "name": "Customers",
+   "module": "customers",
+   "priority": 11,
+   "icon": "UserCircle",
+   "path": "/dashboard/customers",
+   "group": "sales"
+  },
+  {
+   "key": "chat",
+   "name": "AI Navigator",
+   "module": "chat",
+   "priority": 13,
+   "icon": "MessageSquare",
+   "path": "/dashboard/chat"
+  },
+  {
+   "key": "reports",
+   "name": "Audit Logs",
+   "module": "reports",
+   "priority": 14,
+   "icon": "BarChart3",
+   "path": "/dashboard/reports",
+   "group": "admin"
+  },
+  {
+   "key": "hospitals",
+   "name": "Hospitals",
+   "module": "hospitals",
+   "priority": 20,
+   "icon": "Building2",
+   "path": "/dashboard/hospitals",
+   "group": "healthcare"
+  },
+  {
+   "key": "patients",
+   "name": "Patients",
+   "module": "patients",
+   "priority": 21,
+   "icon": "UserCircle",
+   "path": "/dashboard/patients",
+   "group": "healthcare"
+  },
+  {
+   "key": "care_home",
+   "name": "Care Home",
+   "module": "care_home",
+   "priority": 22,
+   "icon": "Heart",
+   "path": "/dashboard/care-home",
+   "group": "healthcare"
+  },
+  {
+   "key": "tax",
+   "name": "Tax Returns",
+   "module": "tax_transactions",
+   "priority": 30,
+   "icon": "Calculator",
+   "path": "/dashboard/tax",
+   "group": "tax"
+  },
+  {
+   "key": "tax_agent",
+   "name": "File with AI",
+   "module": "tax_transactions",
+   "priority": 30,
+   "icon": "Sparkles",
+   "path": "/dashboard/tax/agent",
+   "group": "tax"
+  },
+  {
+   "key": "tax_bank_accounts",
+   "name": "Bank Accounts",
+   "module": "tax_bank_accounts",
+   "priority": 31,
+   "icon": "Landmark",
+   "path": "/dashboard/tax/bank-accounts",
+   "group": "tax"
+  },
+  {
+   "key": "tax_statements",
+   "name": "Statements",
+   "module": "tax_statements",
+   "priority": 32,
+   "icon": "FileUp",
+   "path": "/dashboard/tax/statements",
+   "group": "tax"
+  },
+  {
+   "key": "tax_transactions",
+   "name": "Transactions",
+   "module": "tax_transactions",
+   "priority": 33,
+   "icon": "ArrowLeftRight",
+   "path": "/dashboard/tax/transactions",
+   "group": "tax"
+  },
+  {
+   "key": "tax_reports",
+   "name": "Reports",
+   "module": "tax_transactions",
+   "priority": 34,
+   "icon": "BarChart3",
+   "path": "/dashboard/tax/reports",
+   "group": "tax"
+  },
+  {
+   "key": "tax_categories",
+   "name": "Categories",
+   "module": "tax_categories",
+   "priority": 35,
+   "icon": "Tags",
+   "path": "/dashboard/tax/categories",
+   "group": "tax"
+  },
+  {
+   "key": "tax_file",
+   "name": "File your tax",
+   "module": "tax_statements",
+   "priority": 35,
+   "icon": "Building2",
+   "path": "/dashboard/tax/file",
+   "group": "tax"
+  },
+  {
+   "key": "tax_hmrc",
+   "name": "HMRC settings",
+   "module": "tax_statements",
+   "priority": 36,
+   "icon": "Settings",
+   "path": "/dashboard/tax/settings",
+   "group": "tax"
+  },
+  {
+   "key": "field_service_requests",
+   "name": "Service Requests",
+   "module": "fs_service_requests",
+   "priority": 37,
+   "icon": "ClipboardList",
+   "path": "/dashboard/field-service/requests",
+   "group": "field_service"
+  },
+  {
+   "key": "field_service_jobs",
+   "name": "Service Jobs",
+   "module": "fs_jobs",
+   "priority": 38,
+   "icon": "Wrench",
+   "path": "/dashboard/field-service",
+   "group": "field_service"
+  },
+  {
+   "key": "field_service_visits",
+   "name": "Site Visits",
+   "module": "fs_visits",
+   "priority": 39,
+   "icon": "MapPin",
+   "path": "/dashboard/field-service/visits",
+   "group": "field_service"
+  },
+  {
+   "key": "shop",
+   "name": "Shop",
+   "module": "shop",
+   "priority": 40,
+   "icon": "ShoppingCart",
+   "path": "/dashboard/shop",
+   "group": "commerce"
+  },
+  {
+   "key": "invoices",
+   "name": "Invoices",
+   "module": "invoices",
+   "priority": 40,
+   "icon": "FileText",
+   "path": "/dashboard/invoices",
+   "group": "finance"
+  },
+  {
+   "key": "employees",
+   "name": "Employees",
+   "module": "employees",
+   "priority": 41,
+   "icon": "Users",
+   "path": "/dashboard/employees",
+   "group": "work"
+  },
+  {
+   "key": "field_service_assets",
+   "name": "Assets",
+   "module": "fs_assets",
+   "priority": 41,
+   "icon": "HardDrive",
+   "path": "/dashboard/field-service/assets",
+   "group": "field_service"
+  },
+  {
+   "key": "shop_analytics",
+   "name": "Shop Analytics",
+   "module": "shop_analytics",
+   "priority": 41,
+   "icon": "BarChart3",
+   "path": "/dashboard/shop/analytics",
+   "group": "commerce"
+  },
+  {
+   "key": "purchase_orders",
+   "name": "Purchase Orders",
+   "module": "purchase_orders",
+   "priority": 41,
+   "icon": "ClipboardCheck",
+   "path": "/dashboard/purchase-orders",
+   "group": "finance"
+  },
+  {
+   "key": "field_service_parts",
+   "name": "Parts",
+   "module": "fs_parts",
+   "priority": 42,
+   "icon": "Boxes",
+   "path": "/dashboard/field-service/parts",
+   "group": "field_service"
+  },
+  {
+   "key": "timesheets",
+   "name": "Timesheets",
+   "module": "timesheets",
+   "priority": 42,
+   "icon": "Clock",
+   "path": "/dashboard/timesheets",
+   "group": "work"
+  },
+  {
+   "key": "field_service_contracts",
+   "name": "Contracts",
+   "module": "fs_contracts",
+   "priority": 43,
+   "icon": "ScrollText",
+   "path": "/dashboard/field-service/contracts",
+   "group": "field_service"
+  },
+  {
+   "key": "academy",
+   "name": "Academy",
+   "module": "courses",
+   "priority": 44,
+   "icon": "BookOpen",
+   "path": "/dashboard/academy",
+   "group": "content"
+  },
+  {
+   "key": "accounting",
+   "name": "Bookkeeping",
+   "module": "accounting",
+   "priority": 44,
+   "icon": "BookOpen",
+   "path": "/dashboard/accounting",
+   "group": "finance"
+  },
+  {
+   "key": "crm_leads",
+   "name": "Leads",
+   "module": "crm_accounts",
+   "priority": 45,
+   "icon": "UserPlus",
+   "path": "/dashboard/leads",
+   "group": "sales"
+  },
+  {
+   "key": "forms",
+   "name": "Forms",
+   "module": "forms",
+   "priority": 45,
+   "icon": "ClipboardList",
+   "path": "/dashboard/forms",
+   "group": "sales"
+  },
+  {
+   "key": "field_service_reports",
+   "name": "Reports",
+   "module": "fs_reports",
+   "priority": 46,
+   "icon": "BarChart3",
+   "path": "/dashboard/field-service/reports",
+   "group": "field_service"
+  },
+  {
+   "key": "ats",
+   "name": "Hiring",
+   "module": "ats_jobs",
+   "priority": 46,
+   "icon": "Briefcase",
+   "path": "/dashboard/ats"
+  },
+  {
+   "key": "crm",
+   "name": "CRM",
+   "module": "crm_accounts",
+   "priority": 46,
+   "icon": "Contact",
+   "path": "/dashboard/crm",
+   "group": "sales"
+  },
+  {
+   "key": "cms",
+   "name": "Content",
+   "module": "cms",
+   "priority": 46,
+   "icon": "FileText",
+   "path": "/dashboard/cms",
+   "group": "content"
+  },
+  {
+   "key": "field_service_simpro",
+   "name": "Simpro Sync",
+   "module": "simpro_sync",
+   "priority": 48,
+   "icon": "RefreshCw",
+   "path": "/dashboard/field-service/simpro",
+   "group": "field_service"
+  },
+  {
+   "key": "document_templates",
+   "name": "Templates",
+   "module": "invoices",
+   "priority": 48,
+   "icon": "LayoutTemplate",
+   "path": "/dashboard/templates",
+   "group": "finance"
+  },
+  {
+   "key": "domains",
+   "name": "Domains",
+   "module": "domains",
+   "priority": 60,
+   "icon": "Globe",
+   "path": "/dashboard/domains",
+   "group": "developer"
+  },
+  {
+   "key": "billing",
+   "name": "Billing",
+   "module": "billing",
+   "priority": 60,
+   "icon": "Wallet",
+   "path": "/dashboard/billing",
+   "group": "finance"
+  },
+  {
+   "key": "billing_subscriptions",
+   "name": "Subscriptions",
+   "module": "subscriptions",
+   "priority": 61,
+   "icon": "RefreshCw",
+   "path": "/dashboard/billing/subscriptions",
+   "group": "finance"
+  },
+  {
+   "key": "billing_licenses",
+   "name": "Licences",
+   "module": "licenses",
+   "priority": 62,
+   "icon": "KeyRound",
+   "path": "/dashboard/billing/licenses",
+   "group": "finance"
+  },
+  {
+   "key": "plugin:property_pa:today",
+   "name": "PA today",
+   "module": "property_pa_records",
+   "priority": 91,
+   "icon": "Sunrise",
+   "path": "/dashboard/property-pa/today",
+   "group": "plugin:property_pa"
+  },
+  {
+   "key": "plugin:helpdesk:overview",
+   "name": "Support overview",
+   "module": "helpdesk_tickets",
+   "priority": 91,
+   "icon": "LayoutDashboard",
+   "path": "/dashboard/plugins/helpdesk/overview",
+   "group": "plugin:helpdesk"
+  },
+  {
+   "key": "plugin:property_deals:today",
+   "name": "Deals today",
+   "module": "property_deals_tasks",
+   "priority": 91,
+   "icon": "Target",
+   "path": "/dashboard/property-deals/today",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:opsapi_marketing:guide",
+   "name": "Getting started",
+   "module": "opsapi_marketing_campaigns",
+   "priority": 91,
+   "icon": "BookOpen",
+   "path": "/dashboard/opsapi-marketing/guide",
+   "group": "plugin:opsapi_marketing"
+  },
+  {
+   "key": "plugin:ai_runner:runs",
+   "name": "AI Runs",
+   "module": "ai_runs",
+   "priority": 91,
+   "icon": "Bot",
+   "path": "/dashboard/ai-runner/runs",
+   "group": "plugin:ai_runner"
+  },
+  {
+   "key": "plugin:property_deals:deals",
+   "name": "Deals",
+   "module": "property_deals_deals",
+   "priority": 92,
+   "icon": "Kanban",
+   "path": "/dashboard/property-deals/deals",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:ai_runner:runners",
+   "name": "Runners & sources",
+   "module": "ai_runners",
+   "priority": 92,
+   "icon": "Server",
+   "path": "/dashboard/ai-runner/runners",
+   "group": "plugin:ai_runner"
+  },
+  {
+   "key": "plugin:property_pa:capture",
+   "name": "PA capture",
+   "module": "property_pa_records",
+   "priority": 92,
+   "icon": "NotebookPen",
+   "path": "/dashboard/property-pa/capture",
+   "group": "plugin:property_pa"
+  },
+  {
+   "key": "plugin:opsapi_marketing:overview",
+   "name": "Overview",
+   "module": "opsapi_marketing_analytics",
+   "priority": 92,
+   "icon": "LayoutDashboard",
+   "path": "/dashboard/opsapi-marketing/overview",
+   "group": "plugin:opsapi_marketing"
+  },
+  {
+   "key": "plugin:helpdesk:tickets",
+   "name": "Tickets",
+   "module": "helpdesk_tickets",
+   "priority": 92,
+   "icon": "LifeBuoy",
+   "path": "/dashboard/plugins/helpdesk/tickets",
+   "group": "plugin:helpdesk"
+  },
+  {
+   "key": "plugin:property_pa:opportunities",
+   "name": "My opportunities",
+   "module": "property_pa_records",
+   "priority": 93,
+   "icon": "Users",
+   "path": "/dashboard/property-pa/opportunities",
+   "group": "plugin:property_pa"
+  },
+  {
+   "key": "plugin:ai_runner:machines",
+   "name": "Machines",
+   "module": "ai_runners",
+   "priority": 93,
+   "icon": "Monitor",
+   "path": "/dashboard/ai-runner/machines",
+   "group": "plugin:ai_runner"
+  },
+  {
+   "key": "plugin:property_deals:renovations",
+   "name": "Renovations",
+   "module": "property_deals_deals",
+   "priority": 93,
+   "icon": "Hammer",
+   "path": "/dashboard/property-deals/renovations",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:opsapi_marketing:campaigns",
+   "name": "Campaigns",
+   "module": "opsapi_marketing_campaigns",
+   "priority": 93,
+   "icon": "Send",
+   "path": "/dashboard/opsapi-marketing/campaigns",
+   "group": "plugin:opsapi_marketing"
+  },
+  {
+   "key": "plugin:ai_runner:work-log",
+   "name": "Work log",
+   "module": "ai_runs",
+   "priority": 94,
+   "icon": "ClipboardList",
+   "path": "/dashboard/ai-runner/work-log",
+   "group": "plugin:ai_runner"
+  },
+  {
+   "key": "plugin:opsapi_marketing:lists",
+   "name": "Lists",
+   "module": "opsapi_marketing_lists",
+   "priority": 94,
+   "icon": "Users",
+   "path": "/dashboard/opsapi-marketing/lists",
+   "group": "plugin:opsapi_marketing"
+  },
+  {
+   "key": "plugin:property_deals:approvals",
+   "name": "Approvals",
+   "module": "property_deals_approvals",
+   "priority": 94,
+   "icon": "CheckSquare",
+   "path": "/dashboard/property-deals/approvals",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:property_pa:manager",
+   "name": "Manager today",
+   "module": "property_pa_handoffs",
+   "priority": 94,
+   "icon": "ShieldCheck",
+   "path": "/dashboard/property-pa/manager",
+   "group": "plugin:property_pa"
+  },
+  {
+   "key": "plugin:property_pa:insights",
+   "name": "PA insights",
+   "module": "property_pa_knowledge",
+   "priority": 95,
+   "icon": "BarChart3",
+   "path": "/dashboard/property-pa/insights",
+   "group": "plugin:property_pa"
+  },
+  {
+   "key": "tax_filing_requests",
+   "name": "Filing requests",
+   "module": "tax_filing_requests",
+   "priority": 95,
+   "icon": "Inbox",
+   "path": "/dashboard/tax/filing-requests",
+   "group": "tax"
+  },
+  {
+   "key": "plugin:opsapi_marketing:studio",
+   "name": "Studio",
+   "module": "opsapi_marketing_templates",
+   "priority": 95,
+   "icon": "Palette",
+   "path": "/dashboard/opsapi-marketing/studio",
+   "group": "plugin:opsapi_marketing"
+  },
+  {
+   "key": "plugin:property_deals:map",
+   "name": "Deal finder",
+   "module": "property_deals_properties",
+   "priority": 95,
+   "icon": "MapPin",
+   "path": "/dashboard/property-deals/map",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:ai_runner:settings",
+   "name": "AI run settings",
+   "module": "ai_runs_settings",
+   "priority": 95,
+   "icon": "Settings",
+   "path": "/dashboard/ai-runner/settings",
+   "group": "plugin:ai_runner"
+  },
+  {
+   "key": "plugin:property_pa:knowledge",
+   "name": "PA knowledge",
+   "module": "property_pa_knowledge",
+   "priority": 96,
+   "icon": "BookOpen",
+   "path": "/dashboard/property-pa/knowledge",
+   "group": "plugin:property_pa"
+  },
+  {
+   "key": "plugin:opsapi_marketing:unsubscribed",
+   "name": "Unsubscribed",
+   "module": "opsapi_marketing_consent",
+   "priority": 96,
+   "icon": "ShieldOff",
+   "path": "/dashboard/opsapi-marketing/unsubscribed",
+   "group": "plugin:opsapi_marketing"
+  },
+  {
+   "key": "plugin:property_deals:buyers",
+   "name": "Buyers",
+   "module": "property_deals_buyers",
+   "priority": 96,
+   "icon": "Handshake",
+   "path": "/dashboard/property-deals/buyers",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:property_deals:suppliers",
+   "name": "Suppliers",
+   "module": "property_deals_suppliers",
+   "priority": 97,
+   "icon": "Wrench",
+   "path": "/dashboard/property-deals/suppliers",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:opsapi_marketing:settings",
+   "name": "Settings",
+   "module": "opsapi_marketing_settings",
+   "priority": 97,
+   "icon": "Settings",
+   "path": "/dashboard/opsapi-marketing/settings",
+   "group": "plugin:opsapi_marketing"
+  },
+  {
+   "key": "plugin:property_deals:compliance",
+   "name": "Compliance",
+   "module": "property_deals_compliance",
+   "priority": 98,
+   "icon": "Shield",
+   "path": "/dashboard/property-deals/compliance",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:property_deals:reports",
+   "name": "Deal reports",
+   "module": "property_deals_reports",
+   "priority": 99,
+   "icon": "BarChart",
+   "path": "/dashboard/property-deals/reports",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "activity",
+   "name": "Activity",
+   "module": "activity",
+   "priority": 99,
+   "icon": "Activity",
+   "path": "/dashboard/namespace/activity",
+   "group": "admin"
+  },
+  {
+   "key": "settings",
+   "name": "Settings",
+   "module": "settings",
+   "priority": 100,
+   "icon": "Settings",
+   "path": "/dashboard/settings"
+  },
+  {
+   "key": "plugin:property_deals:settings",
+   "name": "Deals settings",
+   "module": "property_deals_settings",
+   "priority": 100,
+   "icon": "Settings",
+   "path": "/dashboard/property-deals/settings",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:property_deals:holidays",
+   "name": "Bank holidays",
+   "module": "property_deals_settings",
+   "priority": 101,
+   "icon": "CalendarDays",
+   "path": "/dashboard/plugins/property-deals/holidays",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "api-keys",
+   "name": "API Keys",
+   "module": "settings",
+   "priority": 101,
+   "icon": "Key",
+   "path": "/dashboard/namespace/api-keys",
+   "group": "developer"
+  },
+  {
+   "key": "webhooks",
+   "name": "Webhooks",
+   "module": "webhooks",
+   "priority": 102,
+   "icon": "Webhook",
+   "path": "/dashboard/namespace/webhooks",
+   "group": "developer"
+  },
+  {
+   "key": "sso",
+   "name": "Single sign-on",
+   "module": "namespace",
+   "priority": 103,
+   "icon": "KeyRound",
+   "path": "/dashboard/namespace/sso",
+   "group": "admin"
+  },
+  {
+   "key": "plugins",
+   "name": "Plugins",
+   "module": "namespace",
+   "priority": 103,
+   "icon": "Puzzle",
+   "path": "/dashboard/namespace/plugins",
+   "group": "admin"
+  }
+ ],
+ "main_menu": [
+  {
+   "key": "dashboard",
+   "name": "Dashboard",
+   "module": "dashboard",
+   "priority": 1,
+   "icon": "LayoutDashboard",
+   "path": "/dashboard"
+  },
+  {
+   "key": "namespace",
+   "name": "My Workspace",
+   "module": "namespace",
+   "priority": 2,
+   "icon": "Building2",
+   "path": "/dashboard/namespace",
+   "group": "admin"
+  },
+  {
+   "key": "apps",
+   "name": "Apps",
+   "priority": 2,
+   "icon": "LayoutGrid",
+   "path": "/dashboard/apps"
+  },
+  {
+   "key": "my_tasks",
+   "name": "My Tasks",
+   "module": "projects",
+   "priority": 2,
+   "icon": "ListTodo",
+   "path": "/dashboard/my-tasks"
+  },
+  {
+   "key": "vault",
+   "name": "Secret Vault",
+   "module": "vault",
+   "priority": 3,
+   "icon": "Shield",
+   "path": "/dashboard/namespace/vault",
+   "group": "developer"
+  },
+  {
+   "key": "namespaces",
+   "name": "All Namespaces",
+   "module": "namespaces",
+   "priority": 3,
+   "icon": "Building2",
+   "path": "/dashboard/namespaces",
+   "group": "admin"
+  },
+  {
+   "key": "projects",
+   "name": "Projects",
+   "module": "projects",
+   "priority": 4,
+   "icon": "Kanban",
+   "path": "/dashboard/projects",
+   "group": "work"
+  },
+  {
+   "key": "services",
+   "name": "Services",
+   "module": "services",
+   "priority": 5,
+   "icon": "Rocket",
+   "path": "/dashboard/services",
+   "group": "developer"
+  },
+  {
+   "key": "users",
+   "name": "Users",
+   "module": "users",
+   "priority": 6,
+   "icon": "Users",
+   "path": "/dashboard/users",
+   "group": "admin"
+  },
+  {
+   "key": "roles",
+   "name": "Roles",
+   "module": "roles",
+   "priority": 7,
+   "icon": "Shield",
+   "path": "/dashboard/roles",
+   "group": "admin"
+  },
+  {
+   "key": "orders",
+   "name": "Orders",
+   "module": "orders",
+   "priority": 8,
+   "icon": "ShoppingCart",
+   "path": "/dashboard/orders",
+   "group": "commerce"
+  },
+  {
+   "key": "products",
+   "name": "Products",
+   "module": "products",
+   "priority": 9,
+   "icon": "Package",
+   "path": "/dashboard/products",
+   "group": "commerce"
+  },
+  {
+   "key": "stores",
+   "name": "Stores",
+   "module": "stores",
+   "priority": 10,
+   "icon": "Store",
+   "path": "/dashboard/stores",
+   "group": "commerce"
+  },
+  {
+   "key": "customers",
+   "name": "Customers",
+   "module": "customers",
+   "priority": 11,
+   "icon": "UserCircle",
+   "path": "/dashboard/customers",
+   "group": "sales"
+  },
+  {
+   "key": "chat",
+   "name": "AI Navigator",
+   "module": "chat",
+   "priority": 13,
+   "icon": "MessageSquare",
+   "path": "/dashboard/chat"
+  },
+  {
+   "key": "reports",
+   "name": "Audit Logs",
+   "module": "reports",
+   "priority": 14,
+   "icon": "BarChart3",
+   "path": "/dashboard/reports",
+   "group": "admin"
+  },
+  {
+   "key": "hospitals",
+   "name": "Hospitals",
+   "module": "hospitals",
+   "priority": 20,
+   "icon": "Building2",
+   "path": "/dashboard/hospitals",
+   "group": "healthcare"
+  },
+  {
+   "key": "patients",
+   "name": "Patients",
+   "module": "patients",
+   "priority": 21,
+   "icon": "UserCircle",
+   "path": "/dashboard/patients",
+   "group": "healthcare"
+  },
+  {
+   "key": "care_home",
+   "name": "Care Home",
+   "module": "care_home",
+   "priority": 22,
+   "icon": "Heart",
+   "path": "/dashboard/care-home",
+   "group": "healthcare"
+  },
+  {
+   "key": "tax",
+   "name": "Tax Returns",
+   "module": "tax_transactions",
+   "priority": 30,
+   "icon": "Calculator",
+   "path": "/dashboard/tax",
+   "group": "tax"
+  },
+  {
+   "key": "tax_agent",
+   "name": "File with AI",
+   "module": "tax_transactions",
+   "priority": 30,
+   "icon": "Sparkles",
+   "path": "/dashboard/tax/agent",
+   "group": "tax"
+  },
+  {
+   "key": "tax_bank_accounts",
+   "name": "Bank Accounts",
+   "module": "tax_bank_accounts",
+   "priority": 31,
+   "icon": "Landmark",
+   "path": "/dashboard/tax/bank-accounts",
+   "group": "tax"
+  },
+  {
+   "key": "tax_statements",
+   "name": "Statements",
+   "module": "tax_statements",
+   "priority": 32,
+   "icon": "FileUp",
+   "path": "/dashboard/tax/statements",
+   "group": "tax"
+  },
+  {
+   "key": "tax_transactions",
+   "name": "Transactions",
+   "module": "tax_transactions",
+   "priority": 33,
+   "icon": "ArrowLeftRight",
+   "path": "/dashboard/tax/transactions",
+   "group": "tax"
+  },
+  {
+   "key": "tax_reports",
+   "name": "Reports",
+   "module": "tax_transactions",
+   "priority": 34,
+   "icon": "BarChart3",
+   "path": "/dashboard/tax/reports",
+   "group": "tax"
+  },
+  {
+   "key": "tax_categories",
+   "name": "Categories",
+   "module": "tax_categories",
+   "priority": 35,
+   "icon": "Tags",
+   "path": "/dashboard/tax/categories",
+   "group": "tax"
+  },
+  {
+   "key": "tax_file",
+   "name": "File your tax",
+   "module": "tax_statements",
+   "priority": 35,
+   "icon": "Building2",
+   "path": "/dashboard/tax/file",
+   "group": "tax"
+  },
+  {
+   "key": "tax_hmrc",
+   "name": "HMRC settings",
+   "module": "tax_statements",
+   "priority": 36,
+   "icon": "Settings",
+   "path": "/dashboard/tax/settings",
+   "group": "tax"
+  },
+  {
+   "key": "field_service_requests",
+   "name": "Service Requests",
+   "module": "fs_service_requests",
+   "priority": 37,
+   "icon": "ClipboardList",
+   "path": "/dashboard/field-service/requests",
+   "group": "field_service"
+  },
+  {
+   "key": "field_service_jobs",
+   "name": "Service Jobs",
+   "module": "fs_jobs",
+   "priority": 38,
+   "icon": "Wrench",
+   "path": "/dashboard/field-service",
+   "group": "field_service"
+  },
+  {
+   "key": "field_service_visits",
+   "name": "Site Visits",
+   "module": "fs_visits",
+   "priority": 39,
+   "icon": "MapPin",
+   "path": "/dashboard/field-service/visits",
+   "group": "field_service"
+  },
+  {
+   "key": "shop",
+   "name": "Shop",
+   "module": "shop",
+   "priority": 40,
+   "icon": "ShoppingCart",
+   "path": "/dashboard/shop",
+   "group": "commerce"
+  },
+  {
+   "key": "invoices",
+   "name": "Invoices",
+   "module": "invoices",
+   "priority": 40,
+   "icon": "FileText",
+   "path": "/dashboard/invoices",
+   "group": "finance"
+  },
+  {
+   "key": "employees",
+   "name": "Employees",
+   "module": "employees",
+   "priority": 41,
+   "icon": "Users",
+   "path": "/dashboard/employees",
+   "group": "work"
+  },
+  {
+   "key": "field_service_assets",
+   "name": "Assets",
+   "module": "fs_assets",
+   "priority": 41,
+   "icon": "HardDrive",
+   "path": "/dashboard/field-service/assets",
+   "group": "field_service"
+  },
+  {
+   "key": "shop_analytics",
+   "name": "Shop Analytics",
+   "module": "shop_analytics",
+   "priority": 41,
+   "icon": "BarChart3",
+   "path": "/dashboard/shop/analytics",
+   "group": "commerce"
+  },
+  {
+   "key": "purchase_orders",
+   "name": "Purchase Orders",
+   "module": "purchase_orders",
+   "priority": 41,
+   "icon": "ClipboardCheck",
+   "path": "/dashboard/purchase-orders",
+   "group": "finance"
+  },
+  {
+   "key": "field_service_parts",
+   "name": "Parts",
+   "module": "fs_parts",
+   "priority": 42,
+   "icon": "Boxes",
+   "path": "/dashboard/field-service/parts",
+   "group": "field_service"
+  },
+  {
+   "key": "timesheets",
+   "name": "Timesheets",
+   "module": "timesheets",
+   "priority": 42,
+   "icon": "Clock",
+   "path": "/dashboard/timesheets",
+   "group": "work"
+  },
+  {
+   "key": "field_service_contracts",
+   "name": "Contracts",
+   "module": "fs_contracts",
+   "priority": 43,
+   "icon": "ScrollText",
+   "path": "/dashboard/field-service/contracts",
+   "group": "field_service"
+  },
+  {
+   "key": "academy",
+   "name": "Academy",
+   "module": "courses",
+   "priority": 44,
+   "icon": "BookOpen",
+   "path": "/dashboard/academy",
+   "group": "content"
+  },
+  {
+   "key": "accounting",
+   "name": "Bookkeeping",
+   "module": "accounting",
+   "priority": 44,
+   "icon": "BookOpen",
+   "path": "/dashboard/accounting",
+   "group": "finance"
+  },
+  {
+   "key": "crm_leads",
+   "name": "Leads",
+   "module": "crm_accounts",
+   "priority": 45,
+   "icon": "UserPlus",
+   "path": "/dashboard/leads",
+   "group": "sales"
+  },
+  {
+   "key": "forms",
+   "name": "Forms",
+   "module": "forms",
+   "priority": 45,
+   "icon": "ClipboardList",
+   "path": "/dashboard/forms",
+   "group": "sales"
+  },
+  {
+   "key": "field_service_reports",
+   "name": "Reports",
+   "module": "fs_reports",
+   "priority": 46,
+   "icon": "BarChart3",
+   "path": "/dashboard/field-service/reports",
+   "group": "field_service"
+  },
+  {
+   "key": "ats",
+   "name": "Hiring",
+   "module": "ats_jobs",
+   "priority": 46,
+   "icon": "Briefcase",
+   "path": "/dashboard/ats"
+  },
+  {
+   "key": "crm",
+   "name": "CRM",
+   "module": "crm_accounts",
+   "priority": 46,
+   "icon": "Contact",
+   "path": "/dashboard/crm",
+   "group": "sales"
+  },
+  {
+   "key": "cms",
+   "name": "Content",
+   "module": "cms",
+   "priority": 46,
+   "icon": "FileText",
+   "path": "/dashboard/cms",
+   "group": "content"
+  },
+  {
+   "key": "field_service_simpro",
+   "name": "Simpro Sync",
+   "module": "simpro_sync",
+   "priority": 48,
+   "icon": "RefreshCw",
+   "path": "/dashboard/field-service/simpro",
+   "group": "field_service"
+  },
+  {
+   "key": "document_templates",
+   "name": "Templates",
+   "module": "invoices",
+   "priority": 48,
+   "icon": "LayoutTemplate",
+   "path": "/dashboard/templates",
+   "group": "finance"
+  },
+  {
+   "key": "domains",
+   "name": "Domains",
+   "module": "domains",
+   "priority": 60,
+   "icon": "Globe",
+   "path": "/dashboard/domains",
+   "group": "developer"
+  },
+  {
+   "key": "billing",
+   "name": "Billing",
+   "module": "billing",
+   "priority": 60,
+   "icon": "Wallet",
+   "path": "/dashboard/billing",
+   "group": "finance"
+  },
+  {
+   "key": "billing_subscriptions",
+   "name": "Subscriptions",
+   "module": "subscriptions",
+   "priority": 61,
+   "icon": "RefreshCw",
+   "path": "/dashboard/billing/subscriptions",
+   "group": "finance"
+  },
+  {
+   "key": "billing_licenses",
+   "name": "Licences",
+   "module": "licenses",
+   "priority": 62,
+   "icon": "KeyRound",
+   "path": "/dashboard/billing/licenses",
+   "group": "finance"
+  },
+  {
+   "key": "plugin:property_pa:today",
+   "name": "PA today",
+   "module": "property_pa_records",
+   "priority": 91,
+   "icon": "Sunrise",
+   "path": "/dashboard/property-pa/today",
+   "group": "plugin:property_pa"
+  },
+  {
+   "key": "plugin:helpdesk:overview",
+   "name": "Support overview",
+   "module": "helpdesk_tickets",
+   "priority": 91,
+   "icon": "LayoutDashboard",
+   "path": "/dashboard/plugins/helpdesk/overview",
+   "group": "plugin:helpdesk"
+  },
+  {
+   "key": "plugin:property_deals:today",
+   "name": "Deals today",
+   "module": "property_deals_tasks",
+   "priority": 91,
+   "icon": "Target",
+   "path": "/dashboard/property-deals/today",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:opsapi_marketing:guide",
+   "name": "Getting started",
+   "module": "opsapi_marketing_campaigns",
+   "priority": 91,
+   "icon": "BookOpen",
+   "path": "/dashboard/opsapi-marketing/guide",
+   "group": "plugin:opsapi_marketing"
+  },
+  {
+   "key": "plugin:ai_runner:runs",
+   "name": "AI Runs",
+   "module": "ai_runs",
+   "priority": 91,
+   "icon": "Bot",
+   "path": "/dashboard/ai-runner/runs",
+   "group": "plugin:ai_runner"
+  },
+  {
+   "key": "plugin:property_deals:deals",
+   "name": "Deals",
+   "module": "property_deals_deals",
+   "priority": 92,
+   "icon": "Kanban",
+   "path": "/dashboard/property-deals/deals",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:ai_runner:runners",
+   "name": "Runners & sources",
+   "module": "ai_runners",
+   "priority": 92,
+   "icon": "Server",
+   "path": "/dashboard/ai-runner/runners",
+   "group": "plugin:ai_runner"
+  },
+  {
+   "key": "plugin:property_pa:capture",
+   "name": "PA capture",
+   "module": "property_pa_records",
+   "priority": 92,
+   "icon": "NotebookPen",
+   "path": "/dashboard/property-pa/capture",
+   "group": "plugin:property_pa"
+  },
+  {
+   "key": "plugin:opsapi_marketing:overview",
+   "name": "Overview",
+   "module": "opsapi_marketing_analytics",
+   "priority": 92,
+   "icon": "LayoutDashboard",
+   "path": "/dashboard/opsapi-marketing/overview",
+   "group": "plugin:opsapi_marketing"
+  },
+  {
+   "key": "plugin:helpdesk:tickets",
+   "name": "Tickets",
+   "module": "helpdesk_tickets",
+   "priority": 92,
+   "icon": "LifeBuoy",
+   "path": "/dashboard/plugins/helpdesk/tickets",
+   "group": "plugin:helpdesk"
+  },
+  {
+   "key": "plugin:property_pa:opportunities",
+   "name": "My opportunities",
+   "module": "property_pa_records",
+   "priority": 93,
+   "icon": "Users",
+   "path": "/dashboard/property-pa/opportunities",
+   "group": "plugin:property_pa"
+  },
+  {
+   "key": "plugin:ai_runner:machines",
+   "name": "Machines",
+   "module": "ai_runners",
+   "priority": 93,
+   "icon": "Monitor",
+   "path": "/dashboard/ai-runner/machines",
+   "group": "plugin:ai_runner"
+  },
+  {
+   "key": "plugin:property_deals:renovations",
+   "name": "Renovations",
+   "module": "property_deals_deals",
+   "priority": 93,
+   "icon": "Hammer",
+   "path": "/dashboard/property-deals/renovations",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:opsapi_marketing:campaigns",
+   "name": "Campaigns",
+   "module": "opsapi_marketing_campaigns",
+   "priority": 93,
+   "icon": "Send",
+   "path": "/dashboard/opsapi-marketing/campaigns",
+   "group": "plugin:opsapi_marketing"
+  },
+  {
+   "key": "plugin:ai_runner:work-log",
+   "name": "Work log",
+   "module": "ai_runs",
+   "priority": 94,
+   "icon": "ClipboardList",
+   "path": "/dashboard/ai-runner/work-log",
+   "group": "plugin:ai_runner"
+  },
+  {
+   "key": "plugin:opsapi_marketing:lists",
+   "name": "Lists",
+   "module": "opsapi_marketing_lists",
+   "priority": 94,
+   "icon": "Users",
+   "path": "/dashboard/opsapi-marketing/lists",
+   "group": "plugin:opsapi_marketing"
+  },
+  {
+   "key": "plugin:property_deals:approvals",
+   "name": "Approvals",
+   "module": "property_deals_approvals",
+   "priority": 94,
+   "icon": "CheckSquare",
+   "path": "/dashboard/property-deals/approvals",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:property_pa:manager",
+   "name": "Manager today",
+   "module": "property_pa_handoffs",
+   "priority": 94,
+   "icon": "ShieldCheck",
+   "path": "/dashboard/property-pa/manager",
+   "group": "plugin:property_pa"
+  },
+  {
+   "key": "plugin:property_pa:insights",
+   "name": "PA insights",
+   "module": "property_pa_knowledge",
+   "priority": 95,
+   "icon": "BarChart3",
+   "path": "/dashboard/property-pa/insights",
+   "group": "plugin:property_pa"
+  },
+  {
+   "key": "tax_filing_requests",
+   "name": "Filing requests",
+   "module": "tax_filing_requests",
+   "priority": 95,
+   "icon": "Inbox",
+   "path": "/dashboard/tax/filing-requests",
+   "group": "tax"
+  },
+  {
+   "key": "plugin:opsapi_marketing:studio",
+   "name": "Studio",
+   "module": "opsapi_marketing_templates",
+   "priority": 95,
+   "icon": "Palette",
+   "path": "/dashboard/opsapi-marketing/studio",
+   "group": "plugin:opsapi_marketing"
+  },
+  {
+   "key": "plugin:property_deals:map",
+   "name": "Deal finder",
+   "module": "property_deals_properties",
+   "priority": 95,
+   "icon": "MapPin",
+   "path": "/dashboard/property-deals/map",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:ai_runner:settings",
+   "name": "AI run settings",
+   "module": "ai_runs_settings",
+   "priority": 95,
+   "icon": "Settings",
+   "path": "/dashboard/ai-runner/settings",
+   "group": "plugin:ai_runner"
+  },
+  {
+   "key": "plugin:property_pa:knowledge",
+   "name": "PA knowledge",
+   "module": "property_pa_knowledge",
+   "priority": 96,
+   "icon": "BookOpen",
+   "path": "/dashboard/property-pa/knowledge",
+   "group": "plugin:property_pa"
+  },
+  {
+   "key": "plugin:opsapi_marketing:unsubscribed",
+   "name": "Unsubscribed",
+   "module": "opsapi_marketing_consent",
+   "priority": 96,
+   "icon": "ShieldOff",
+   "path": "/dashboard/opsapi-marketing/unsubscribed",
+   "group": "plugin:opsapi_marketing"
+  },
+  {
+   "key": "plugin:property_deals:buyers",
+   "name": "Buyers",
+   "module": "property_deals_buyers",
+   "priority": 96,
+   "icon": "Handshake",
+   "path": "/dashboard/property-deals/buyers",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:property_deals:suppliers",
+   "name": "Suppliers",
+   "module": "property_deals_suppliers",
+   "priority": 97,
+   "icon": "Wrench",
+   "path": "/dashboard/property-deals/suppliers",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:opsapi_marketing:settings",
+   "name": "Settings",
+   "module": "opsapi_marketing_settings",
+   "priority": 97,
+   "icon": "Settings",
+   "path": "/dashboard/opsapi-marketing/settings",
+   "group": "plugin:opsapi_marketing"
+  },
+  {
+   "key": "plugin:property_deals:compliance",
+   "name": "Compliance",
+   "module": "property_deals_compliance",
+   "priority": 98,
+   "icon": "Shield",
+   "path": "/dashboard/property-deals/compliance",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:property_deals:reports",
+   "name": "Deal reports",
+   "module": "property_deals_reports",
+   "priority": 99,
+   "icon": "BarChart",
+   "path": "/dashboard/property-deals/reports",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "activity",
+   "name": "Activity",
+   "module": "activity",
+   "priority": 99,
+   "icon": "Activity",
+   "path": "/dashboard/namespace/activity",
+   "group": "admin"
+  },
+  {
+   "key": "plugin:property_deals:settings",
+   "name": "Deals settings",
+   "module": "property_deals_settings",
+   "priority": 100,
+   "icon": "Settings",
+   "path": "/dashboard/property-deals/settings",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "plugin:property_deals:holidays",
+   "name": "Bank holidays",
+   "module": "property_deals_settings",
+   "priority": 101,
+   "icon": "CalendarDays",
+   "path": "/dashboard/plugins/property-deals/holidays",
+   "group": "plugin:property_deals"
+  },
+  {
+   "key": "api-keys",
+   "name": "API Keys",
+   "module": "settings",
+   "priority": 101,
+   "icon": "Key",
+   "path": "/dashboard/namespace/api-keys",
+   "group": "developer"
+  },
+  {
+   "key": "webhooks",
+   "name": "Webhooks",
+   "module": "webhooks",
+   "priority": 102,
+   "icon": "Webhook",
+   "path": "/dashboard/namespace/webhooks",
+   "group": "developer"
+  },
+  {
+   "key": "sso",
+   "name": "Single sign-on",
+   "module": "namespace",
+   "priority": 103,
+   "icon": "KeyRound",
+   "path": "/dashboard/namespace/sso",
+   "group": "admin"
+  },
+  {
+   "key": "plugins",
+   "name": "Plugins",
+   "module": "namespace",
+   "priority": 103,
+   "icon": "Puzzle",
+   "path": "/dashboard/namespace/plugins",
+   "group": "admin"
+  }
+ ],
+ "secondary_menu": [
+  {
+   "key": "settings",
+   "name": "Settings",
+   "module": "settings",
+   "priority": 100,
+   "icon": "Settings",
+   "path": "/dashboard/settings"
+  }
+ ],
+ "groups": [
+  {
+   "key": "sales",
+   "name": "Sales & CRM",
+   "icon": "Contact"
+  },
+  {
+   "key": "finance",
+   "name": "Finance",
+   "icon": "Wallet"
+  },
+  {
+   "key": "commerce",
+   "name": "Shop & Orders",
+   "icon": "ShoppingCart"
+  },
+  {
+   "key": "work",
+   "name": "Projects & Team",
+   "icon": "Kanban"
+  },
+  {
+   "key": "field_service",
+   "name": "Field Service",
+   "icon": "Wrench"
+  },
+  {
+   "key": "healthcare",
+   "name": "Healthcare",
+   "icon": "Heart"
+  },
+  {
+   "key": "tax",
+   "name": "Tax",
+   "icon": "Calculator"
+  },
+  {
+   "key": "content",
+   "name": "Content & Learning",
+   "icon": "BookOpen"
+  },
+  {
+   "key": "plugin:ai_runner",
+   "name": "AI Runs",
+   "icon": "Bot"
+  },
+  {
+   "key": "plugin:helpdesk",
+   "name": "Helpdesk",
+   "icon": "Puzzle"
+  },
+  {
+   "key": "plugin:opsapi_marketing",
+   "name": "Marketing Cloud",
+   "icon": "Megaphone"
+  },
+  {
+   "key": "plugin:property_deals",
+   "name": "Property Deals",
+   "icon": "Home"
+  },
+  {
+   "key": "plugin:property_pa",
+   "name": "Property PA",
+   "icon": "Sparkles"
+  },
+  {
+   "key": "admin",
+   "name": "Administration",
+   "icon": "Building2"
+  },
+  {
+   "key": "developer",
+   "name": "Developer",
+   "icon": "Code"
+  }
+ ],
+ "namespace": {
+  "uuid": "ns-workstation",
+  "name": "Workstation",
+  "slug": "workstation",
+  "is_owner": true
+ },
+ "permissions": {},
+ "is_admin": true
+}

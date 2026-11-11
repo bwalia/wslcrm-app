@@ -13,6 +13,16 @@ quotes, catalogue and categories, stock, market prices, assistant chats and know
 appears only in workspaces whose menu includes `shop`; option groups and compatibility rules are
 still edited in the web dashboard.
 
+**Menu = the web's menu.** The Menu tab shows the web dashboard's sidebar as the server sends it
+(`GET /api/v2/user/menu`): the same groups, order and items for the same person in the same
+workspace, so the workspace's modules and the person's permissions apply exactly as on the web.
+Items the app has a screen for open it; every other module opens its web page inside the app
+(`Features/Menu/WebPageView.swift`), already signed in to the selected workspace. The dashboard
+address is the API's with `-ui` added (`int-opsapi` → `int-opsapi-ui`; `:8039` for a local stack).
+The page's storage is in-memory and thrown away when it closes, the sign-in script only runs on the
+dashboard's own origin, and links to other sites open in Safari. Platform admins land on Menu;
+everyone else keeps their role's home, and the tab bar holds at most four tabs plus Menu.
+
 No third-party dependencies — `URLSession`, `Codable`, Swift Concurrency, Keychain,
 CoreLocation and LocalAuthentication only.
 

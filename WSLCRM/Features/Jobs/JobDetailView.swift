@@ -460,6 +460,8 @@ extension View {
             .navigationDestination(for: PDDueRoute.self) { _ in PDDueView() }
             .navigationDestination(for: PDRenovationsRoute.self) { _ in PDRenovationsListView() }
             .navigationDestination(for: PurchaseOrdersRoute.self) { PurchaseOrdersListView(route: $0) }
+            .navigationDestination(for: NativeScreen.self) { $0.view }
+            .navigationDestination(for: WebPageRoute.self) { WebPageView(route: $0) }
             .navigationDestination(for: PurchaseOrderRoute.self) { PurchaseOrderDetailView(uuid: $0.uuid) }
             .navigationDestination(for: FieldServiceArea.self) { area in
                 switch area {
