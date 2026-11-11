@@ -61,7 +61,6 @@ struct WebPageView: View {
                     if isLoading { ProgressView().controlSize(.large) }
                 }
                 .accessibilityIdentifier("web.page")
-                .ignoresSafeArea(edges: .bottom)
         }
     }
 

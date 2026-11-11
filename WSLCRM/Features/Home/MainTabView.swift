@@ -10,46 +10,14 @@ struct MainTabView: View {
     @State private var propertyDealsPath = NavigationPath()
     @State private var propertyPAPath = NavigationPath()
 
-    enum Tab: Hashable { case propertyPA, myWork, fieldService, propertyDeals, leads, tasks, shop, more }
+    typealias Tab = NavigationPolicy.Home
 
     var body: some View {
-        let navigation = NavigationPolicy(session: session)
-        let tabs = navigation.tabs
+        let tabs = NavigationPolicy(session: session).tabs
         TabView(selection: $selection) {
-            if tabs.contains(.propertyPA) {
-                NavigationStack(path: $propertyPAPath) { PATodayView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
-                    .tabItem { Label("PA", systemImage: "sparkles") }
-                    .tag(Tab.propertyPA)
-            }
-            if tabs.contains(.myWork) {
-                NavigationStack { MyWorkView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
-                    .tabItem { Label("My Work", systemImage: "person.badge.clock") }
-                    .tag(Tab.myWork)
-            }
-            if tabs.contains(.fieldService) {
-                NavigationStack { FieldServiceHubView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
-                    .tabItem { Label("Field Service", systemImage: "wrench.and.screwdriver") }
-                    .tag(Tab.fieldService)
-            }
-            if tabs.contains(.propertyDeals) {
-                NavigationStack(path: $propertyDealsPath) { PDTodayView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
-                    .tabItem { Label("Deals", systemImage: "house.and.flag") }
-                    .tag(Tab.propertyDeals)
-            }
-            if tabs.contains(.leads) {
-                NavigationStack { LeadsHomeView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
-                    .tabItem { Label("Leads", systemImage: "person.crop.circle.badge.plus") }
-                    .tag(Tab.leads)
-            }
-            if tabs.contains(.tasks) {
-                NavigationStack { MyTasksView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
-                    .tabItem { Label("Tasks", systemImage: "checklist") }
-                    .tag(Tab.tasks)
-            }
-            if tabs.contains(.shop) {
-                NavigationStack { ShopHomeView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
-                    .tabItem { Label("Shop", systemImage: "storefront") }
-                    .tag(Tab.shop)
+            // In `tabs` order: the person's home first, then AI and Projects, then the rest.
+            ForEach(tabs, id: \.self) { tab in
+                content(for: tab)
             }
             NavigationStack { MenuView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
                 .tabItem { Label("Menu", systemImage: "line.3.horizontal") }
@@ -102,6 +70,62 @@ struct MainTabView: View {
         }
     }
 
+    @ViewBuilder
+    private func content(for tab: Tab) -> some View {
+        switch tab {
+        case .propertyPA:
+            NavigationStack(path: $propertyPAPath) { PATodayView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
+                .tabItem { Label("PA", systemImage: "sparkles") }
+                .tag(tab)
+        case .myWork:
+            NavigationStack { MyWorkView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
+                .tabItem { Label("My Work", systemImage: "person.badge.clock") }
+                .tag(tab)
+        case .fieldService:
+            NavigationStack { FieldServiceHubView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
+                .tabItem { Label("Field Service", systemImage: "wrench.and.screwdriver") }
+                .tag(tab)
+        case .propertyDeals:
+            NavigationStack(path: $propertyDealsPath) { PDTodayView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
+                .tabItem { Label("Deals", systemImage: "house.and.flag") }
+                .tag(tab)
+        case .leads:
+            NavigationStack { LeadsHomeView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
+                .tabItem { Label("Leads", systemImage: "person.crop.circle.badge.plus") }
+                .tag(tab)
+        case .tasks:
+            NavigationStack { MyTasksView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
+                .tabItem { Label("Tasks", systemImage: "checklist") }
+                .tag(tab)
+        case .shop:
+            NavigationStack { ShopHomeView().withAppDestinations().safeAreaInset(edge: .top, spacing: 0) { syncBanner } }
+                .tabItem { Label("Shop", systemImage: "storefront") }
+                .tag(tab)
+        // The AI chat and project management are the web's own pages, so they work exactly as there.
+        case .ai:
+            NavigationStack { webTab(AppMenu.aiChatKey, fallback: "AI Navigator").withAppDestinations() }
+                .tabItem { Label("AI", systemImage: "bubble.left.and.text.bubble.right") }
+                .tag(tab)
+        case .projects:
+            NavigationStack { webTab(AppMenu.projectsKey, fallback: "Projects").withAppDestinations() }
+                .tabItem { Label("Projects", systemImage: "rectangle.split.3x1") }
+                .tag(tab)
+        case .more:
+            EmptyView()
+        }
+    }
+
+    /// A tab that is a web dashboard page: the menu item's own name and address.
+    @ViewBuilder
+    private func webTab(_ key: String, fallback: String) -> some View {
+        if let route = session.menu.route(for: key) {
+            WebPageView(route: route)
+        } else {
+            ContentUnavailableView(fallback, systemImage: "exclamationmark.triangle",
+                                   description: Text("This isn't in your menu for this workspace."))
+        }
+    }
+
     /// Offline / unsynced state, just under each tab's navigation bar. (Inset on the TabView or the
     /// NavigationStack, iOS 26 draws it over the bar and its buttons.)
     private var syncBanner: some View {
@@ -117,18 +141,7 @@ struct MainTabView: View {
 
     private func initialTab() -> Tab {
         let navigation = NavigationPolicy(session: session)
-        let home = navigation.home
         // A home that didn't get a tab (shouldn't happen: `tabs` keeps it) falls back to Menu.
-        guard home == .more || navigation.tabs.contains(home) else { return .more }
-        return switch home {
-        case .propertyPA: .propertyPA
-        case .myWork: .myWork
-        case .fieldService: .fieldService
-        case .propertyDeals: .propertyDeals
-        case .leads: .leads
-        case .tasks: .tasks
-        case .shop: .shop
-        case .more: .more
-        }
+        return navigation.tabs.contains(navigation.home) ? navigation.home : .more
     }
 }

@@ -29,6 +29,17 @@ struct AppMenu: Sendable, Equatable {
 
     static let empty = AppMenu(sections: [], secondary: [])
 
+    /// The web's AI chat ("AI Navigator", `/dashboard/chat`) and project management.
+    static let aiChatKey = "chat"
+    static let projectsKey = "projects"
+
+    /// The web page of a menu item, by key — for the tabs that are web pages.
+    func route(for key: String) -> WebPageRoute? {
+        guard let item = sections.lazy.flatMap(\.items).first(where: { $0.key == key }),
+              let path = item.path, path.hasPrefix("/") else { return nil }
+        return WebPageRoute(title: item.name, path: path)
+    }
+
     var isEmpty: Bool { sections.isEmpty && secondary.isEmpty }
 
     init(sections: [Section], secondary: [Item]) {
@@ -124,7 +135,6 @@ enum MenuDestination: Hashable {
         case "shop": return .screen(.shop)
         case "invoices": return .area(.invoices)
         case "purchase_orders": return .purchaseOrders
-        case "projects": return .area(.projects)
         case "my_tasks": return .area(.myTasks)
         case "timesheets": return .area(.timesheets)
         case "field_service_jobs": return .screen(.fieldService)

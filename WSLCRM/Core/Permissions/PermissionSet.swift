@@ -170,7 +170,7 @@ struct PermissionSet: Sendable, Equatable {
 /// seeds (`NamespaceRoleQueries.createFieldServiceRoles`): a telecaller logs requests, a service
 /// manager runs the board, an engineer works their own visits.
 struct NavigationPolicy: Sendable, Equatable {
-    enum Home: Sendable, Equatable { case propertyPA, myWork, fieldService, propertyDeals, leads, tasks, shop, more }
+    enum Home: Sendable, Hashable { case propertyPA, myWork, fieldService, propertyDeals, leads, tasks, shop, ai, projects, more }
 
     let permissions: PermissionSet
     let isEngineerRole: Bool
@@ -242,10 +242,20 @@ struct NavigationPolicy: Sendable, Equatable {
         return .more
     }
 
+    /// The AI chat (the web's AI Navigator) gets a tab wherever this person's menu has it.
+    var showsAIChat: Bool { permissions.menuKeys.contains(AppMenu.aiChatKey) }
+
+    /// Project management as on the web (projects, boards, sprints, columns) gets a tab wherever this
+    /// person's menu has it.
+    var showsProjects: Bool { permissions.menuKeys.contains(AppMenu.projectsKey) }
+
     /// The tabs in front of Menu, at most four: an iPhone tab bar holds five, and a sixth would hide
-    /// the rest behind the system's own "More". Everything stays reachable from Menu.
+    /// the rest behind the system's own "More". The person's home comes first, then the AI chat and
+    /// projects; everything stays reachable from Menu.
     var tabs: [Home] {
         var all: [Home] = []
+        if showsAIChat { all.append(.ai) }
+        if showsProjects { all.append(.projects) }
         if showsPropertyPA { all.append(.propertyPA) }
         if showsMyWork { all.append(.myWork) }
         if showsFieldService { all.append(.fieldService) }
@@ -253,8 +263,8 @@ struct NavigationPolicy: Sendable, Equatable {
         if showsLeadsTab { all.append(.leads) }
         if showsTasks { all.append(.tasks) }
         if showsShop { all.append(.shop) }
-        // The home tab always makes the cut.
-        if let index = all.firstIndex(of: home), index >= 4 {
+        // The home tab comes first and always makes the cut.
+        if let index = all.firstIndex(of: home) {
             all.insert(all.remove(at: index), at: 0)
         }
         return Array(all.prefix(4))

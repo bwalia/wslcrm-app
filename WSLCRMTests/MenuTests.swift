@@ -194,26 +194,50 @@ final class MenuTests: XCTestCase {
 
     func testRootLandsOnTheMenuAndTheTabBarNeverOverflows() {
         let root = PermissionSet(isAdmin: true, isOwner: true, grants: [:],
-                                 menuKeys: ["field_service_jobs", "field_service_visits", "field_service_requests",
+                                 menuKeys: ["chat", "field_service_jobs", "field_service_visits", "field_service_requests",
                                             "projects", "shop", "crm_leads"])
         let navigation = NavigationPolicy(permissions: root, isEngineerRole: false, hasPropertyDeals: true, hasPropertyPA: true)
         XCTAssertEqual(navigation.home, .more, "root starts on the full menu, like the web")
         XCTAssertLessThanOrEqual(navigation.tabs.count, 4, "four tabs + Menu: nothing hides behind iOS's More")
-        XCTAssertEqual(navigation.tabs, [.propertyPA, .myWork, .fieldService, .propertyDeals])
+        XCTAssertEqual(navigation.tabs, [.ai, .projects, .propertyPA, .myWork], "the AI chat and projects come first")
+    }
+
+    func testAIChatAndProjectsAreTabsOnlyWhereTheMenuHasThem() {
+        let member = PermissionSet(isAdmin: false, isOwner: false, grants: ["fs_visits": ["read"]],
+                                   menuKeys: ["field_service_visits"])
+        let engineer = NavigationPolicy(permissions: member, isEngineerRole: true)
+        XCTAssertFalse(engineer.tabs.contains(.ai), "no chat in their menu (RBAC), so no AI tab")
+        XCTAssertFalse(engineer.tabs.contains(.projects))
+        XCTAssertEqual(engineer.tabs.first, .myWork)
+
+        let withChat = PermissionSet(isAdmin: false, isOwner: false, grants: ["fs_visits": ["read"]],
+                                     menuKeys: ["field_service_visits", "chat", "projects"])
+        XCTAssertEqual(NavigationPolicy(permissions: withChat, isEngineerRole: true).tabs, [.myWork, .ai, .projects, .tasks],
+                       "their home first, then the AI chat and projects; My Tasks too, as on the web")
+    }
+
+    func testAIChatAndProjectsOpenTheWebPagesFromTheMenu() throws {
+        let (_, menu) = try rootMenu()
+        XCTAssertEqual(menu.route(for: AppMenu.aiChatKey), WebPageRoute(title: "AI Navigator", path: "/dashboard/chat"))
+        XCTAssertEqual(menu.route(for: AppMenu.projectsKey), WebPageRoute(title: "Projects", path: "/dashboard/projects"))
+        XCTAssertNil(menu.route(for: "not-there"))
+        XCTAssertEqual(MenuDestination.of(item("projects", path: "/dashboard/projects", name: "Projects")),
+                       .web(WebPageRoute(title: "Projects", path: "/dashboard/projects")),
+                       "project management works exactly as on the web")
     }
 
     func testTheHomeTabAlwaysGetsAPlace() {
-        // A projects-only member: home is Tasks, which is well within the first four.
+        // A projects-only member: home is their tasks, first; the full projects page sits next to it.
         let member = PermissionSet(isAdmin: false, isOwner: false, grants: ["projects": ["read"]], menuKeys: ["projects"])
         let navigation = NavigationPolicy(permissions: member, isEngineerRole: false)
         XCTAssertEqual(navigation.home, .tasks)
-        XCTAssertEqual(navigation.tabs, [.tasks])
+        XCTAssertEqual(navigation.tabs, [.tasks, .projects])
 
         // An owner with PA, deals, field service and the shop: field service is home and stays.
         let owner = PermissionSet(isAdmin: false, isOwner: true, grants: [:],
                                   menuKeys: ["field_service_jobs", "field_service_visits", "projects", "shop"])
         let busy = NavigationPolicy(permissions: owner, isEngineerRole: false, hasPropertyDeals: true, hasPropertyPA: true)
-        XCTAssertTrue(busy.tabs.contains(busy.home))
+        XCTAssertEqual(busy.tabs.first, busy.home)
         XCTAssertEqual(busy.tabs.count, 4)
     }
 }
