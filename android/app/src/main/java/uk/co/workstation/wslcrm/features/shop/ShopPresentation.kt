@@ -30,6 +30,9 @@ data class ShopPolicy(val permissions: PermissionSet) {
     val canCreate: Boolean get() = permissions.can(Action.CREATE, Module.SHOP)
     val canUpdate: Boolean get() = permissions.can(Action.UPDATE, Module.SHOP)
     val canDelete: Boolean get() = permissions.can(Action.DELETE, Module.SHOP)
+    /** Saving a quote's customer to the CRM creates an account and a contact. */
+    val canSaveToCrm: Boolean get() = canUpdate && permissions.can(Action.CREATE, Module.CRM_ACCOUNTS) &&
+        permissions.can(Action.CREATE, Module.CRM_CONTACTS)
 }
 
 // Every status has a label, an icon and a tone, so status is never conveyed by colour alone.
