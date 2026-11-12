@@ -16,6 +16,9 @@ import uk.co.workstation.wslcrm.core.offline.ResponseCache
 import uk.co.workstation.wslcrm.core.permissions.FieldServicePolicy
 import uk.co.workstation.wslcrm.core.permissions.PermissionSet
 import uk.co.workstation.wslcrm.core.storage.KeyValueStore
+import uk.co.workstation.wslcrm.features.menu.AppMenu
+import uk.co.workstation.wslcrm.features.menu.DashboardUrl
+import uk.co.workstation.wslcrm.features.menu.WebSession
 import java.time.Instant
 
 /** The workspace and user a queued write belongs to. */
@@ -57,6 +60,10 @@ class SessionStore(
     var workspace by mutableStateOf<Workspace?>(null)
         private set
     var permissions by mutableStateOf(PermissionSet.NONE)
+        private set
+
+    /** The web dashboard's sidebar for this person in this workspace (the Menu tab). */
+    var menu by mutableStateOf(AppMenu.EMPTY)
         private set
 
     /** Set when permissions could not be loaded (e.g. offline at first launch). */
@@ -256,6 +263,7 @@ class SessionStore(
             val (menu, data) = auth.menu()
             cache.store(data, "menu", workspace.uuid)
             permissions = PermissionSet(menu)
+            this.menu = AppMenu.from(menu)
             if (menu.namespace?.isOwner == true) {
                 workspaces = workspaces.map { if (it.uuid == workspace.uuid) it.copy(isOwner = true) else it }
             }
@@ -264,8 +272,20 @@ class SessionStore(
             val error = e.asAPIError
             val cached = cache.load("menu", workspace.uuid)?.let { runCatching { OpsJson.decode(MenuResponse, it.data) }.getOrNull() }
             permissions = cached?.let(::PermissionSet) ?: PermissionSet.NONE
+            menu = cached?.let { AppMenu.from(it) } ?: AppMenu.EMPTY
             permissionsError = error
         }
+    }
+
+    /**
+     * What a web dashboard page needs to open signed in as this person, in this workspace. null when
+     * signed out or when the server has no dashboard next to it.
+     */
+    suspend fun webSession(forceRefresh: Boolean = false): WebSession? {
+        val user = user ?: return null
+        val workspace = workspace ?: return null
+        val dashboard = DashboardUrl.forApi(client.currentBaseUrl()) ?: return null
+        return WebSession(dashboard, client.accessTokenForWeb(forceRefresh), user, workspace)
     }
 
     // MARK: - Sign out
@@ -303,6 +323,7 @@ class SessionStore(
         workspaces = emptyList()
         workspace = null
         permissions = PermissionSet.NONE
+        menu = AppMenu.EMPTY
         phase = Phase.SignedOut
     }
 

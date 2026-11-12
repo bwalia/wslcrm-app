@@ -73,6 +73,14 @@ import uk.co.workstation.wslcrm.designsystem.SecondaryText
 import uk.co.workstation.wslcrm.designsystem.Tone
 import uk.co.workstation.wslcrm.designsystem.groupedSection
 import uk.co.workstation.wslcrm.features.shop.ShopNavHost
+import uk.co.workstation.wslcrm.features.menu.clearWebPageData
+import uk.co.workstation.wslcrm.features.menu.WebPageScreen
+import uk.co.workstation.wslcrm.features.menu.NotInMenu
+import uk.co.workstation.wslcrm.features.menu.MenuScreen
+import uk.co.workstation.wslcrm.features.menu.AppMenu
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.ViewKanban
+import androidx.compose.material.icons.filled.Forum
 
 /**
  * The app's root: one screen per [SessionStore.Phase] (mirrors `RootView`). Signed in, it shows
@@ -82,6 +90,8 @@ import uk.co.workstation.wslcrm.features.shop.ShopNavHost
 fun RootScreen() {
     val session = LocalAppContainer.current.session
     LaunchedEffect(Unit) { session.restore() }
+    // Signed out: nothing a web page stored (the session included) survives.
+    LaunchedEffect(session.phase) { if (session.phase == SessionStore.Phase.SignedOut) clearWebPageData() }
     when (val phase = session.phase) {
         SessionStore.Phase.Restoring -> LoadingState(Modifier.background(AppColors.groupedBackground))
         SessionStore.Phase.SignedOut -> SignInScreen(session)
@@ -223,7 +233,7 @@ fun WorkspacePickerScreen(session: SessionStore, initial: Boolean, onDone: () ->
     Scaffold(topBar = { TopAppBar(title = { Text(if (initial) "Choose a workspace" else "Workspace") }) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().background(AppColors.groupedBackground).padding(padding)) {
             session.permissionsError?.let { error -> item { InlineError(error) } }
-            groupedSection(footer = if (initial) "You can switch later from More." else null) {
+            groupedSection(footer = if (initial) "You can switch later from Menu." else null) {
                 session.workspaces.forEachIndexed { index, workspace ->
                     WorkspaceRow(workspace, selected = workspace.uuid == session.workspace?.uuid,
                         showDivider = index < session.workspaces.lastIndex, enabled = !busy) {
@@ -262,103 +272,58 @@ private fun WorkspaceRow(workspace: Workspace, selected: Boolean, showDivider: B
 
 // MARK: - Signed in
 
-private enum class Tab(val label: String) { SHOP("Shop"), MORE("More") }
+private enum class Tab(val label: String) { AI("AI"), PROJECTS("Projects"), SHOP("Shop"), MENU("Menu") }
 
 @Composable
 private fun MainScreen(session: SessionStore) {
     val navigation = NavigationPolicy(session.permissions)
+    val menu = session.menu
+    // The AI chat and project management are the web's own pages, so they work exactly as there.
     val tabs = buildList {
+        if (menu.has(AppMenu.AI_CHAT_KEY)) add(Tab.AI)
+        if (menu.has(AppMenu.PROJECTS_KEY)) add(Tab.PROJECTS)
         if (navigation.showsShop) add(Tab.SHOP)
-        add(Tab.MORE)
+        add(Tab.MENU)
     }
-    var selected by rememberSaveable { mutableStateOf(if (navigation.home == NavigationPolicy.Home.SHOP || navigation.showsShop) Tab.SHOP else Tab.MORE) }
-    if (selected !in tabs) selected = tabs.first()
+    // Platform admins land on the Menu (the web's full menu); shop staff on the shop.
+    var selected by rememberSaveable {
+        mutableStateOf(if (!session.permissions.isAdmin && navigation.home == NavigationPolicy.Home.SHOP) Tab.SHOP else Tab.MENU)
+    }
+    if (selected !in tabs) selected = Tab.MENU
 
     Scaffold(
         bottomBar = {
-            if (tabs.size > 1) {
-                NavigationBar {
-                    tabs.forEach { tab ->
-                        NavigationBarItem(
-                            selected = tab == selected,
-                            onClick = { selected = tab },
-                            icon = { Icon(if (tab == Tab.SHOP) Icons.Default.Storefront else Icons.Default.MoreHoriz, contentDescription = null) },
-                            label = { Text(tab.label) },
-                            modifier = Modifier.testTag("tab.${tab.name.lowercase()}"),
-                        )
-                    }
+            NavigationBar {
+                tabs.forEach { tab ->
+                    NavigationBarItem(
+                        selected = tab == selected,
+                        onClick = { selected = tab },
+                        icon = {
+                            Icon(
+                                when (tab) {
+                                    Tab.AI -> Icons.Default.Forum
+                                    Tab.PROJECTS -> Icons.Default.ViewKanban
+                                    Tab.SHOP -> Icons.Default.Storefront
+                                    Tab.MENU -> Icons.Default.Menu
+                                },
+                                contentDescription = null,
+                            )
+                        },
+                        label = { Text(tab.label) },
+                        modifier = Modifier.testTag("tab.${tab.name.lowercase()}"),
+                    )
                 }
             }
         },
     ) { padding ->
         Column(Modifier.padding(bottom = padding.calculateBottomPadding())) {
             when (selected) {
+                Tab.AI -> menu.route(AppMenu.AI_CHAT_KEY)?.let { WebPageScreen(session, it) } ?: NotInMenu("AI chat")
+                Tab.PROJECTS -> menu.route(AppMenu.PROJECTS_KEY)?.let { WebPageScreen(session, it) } ?: NotInMenu("Projects")
                 Tab.SHOP -> ShopNavHost()
-                Tab.MORE -> MoreScreen(session, showsShop = navigation.showsShop)
+                Tab.MENU -> MenuScreen(session, onOpenShop = { if (Tab.SHOP in tabs) selected = Tab.SHOP })
             }
         }
     }
 }
 
-@Composable
-private fun MoreScreen(session: SessionStore, showsShop: Boolean) {
-    val scope = rememberCoroutineScope()
-    var choosingWorkspace by remember { mutableStateOf(false) }
-    var confirmingSignOut by remember { mutableStateOf(false) }
-    if (choosingWorkspace) {
-        WorkspacePickerScreen(session, initial = false) { choosingWorkspace = false }
-        androidx.activity.compose.BackHandler { choosingWorkspace = false }
-        return
-    }
-    Scaffold(topBar = { TopAppBar(title = { Text("More") }) }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().background(AppColors.groupedBackground).padding(padding)) {
-            session.user?.let { user ->
-                groupedSection {
-                    GroupedRow {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(user.initials, fontWeight = FontWeight.Bold, modifier = Modifier
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape).padding(14.dp))
-                            Spacer(Modifier.size(14.dp))
-                            Column {
-                                Text(user.displayName, fontWeight = FontWeight.SemiBold)
-                                SecondaryText(user.email)
-                            }
-                        }
-                    }
-                    GroupedRow(onClick = if (session.workspaces.size > 1) ({ choosingWorkspace = true }) else null, showDivider = false) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Workspace")
-                            Text(session.workspace?.name ?: "None", color = AppColors.secondaryText)
-                        }
-                    }
-                }
-            }
-            session.permissionsError?.let { error -> item { InlineError(error) { scope.launch { session.reloadPermissions() } } } }
-            if (!showsShop) {
-                item {
-                    Notice(
-                        "This workspace doesn't use the shop back office. The other modules (field service, CRM, projects) are on their way to the Android app.",
-                        Tone.INFO, Modifier.padding(16.dp), Icons.Default.Info,
-                    )
-                }
-            }
-            groupedSection("About") {
-                DetailRow("Environment", session.environmentName)
-                DetailRow("Version", BuildConfig.VERSION_NAME, showDivider = false)
-            }
-            groupedSection {
-                GroupedRow(onClick = { confirmingSignOut = true }, showDivider = false) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = Tone.DANGER.textColor)
-                        Spacer(Modifier.size(12.dp))
-                        Text("Sign out", color = Tone.DANGER.textColor)
-                    }
-                }
-            }
-        }
-    }
-    if (confirmingSignOut) {
-        ConfirmDialog("Sign out of ${BuildConfig.BRAND_NAME}?", null, "Sign out", destructive = true,
-            onConfirm = { scope.launch { session.signOut() } }, onDismiss = { confirmingSignOut = false })
-    }
-}

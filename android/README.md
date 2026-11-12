@@ -2,10 +2,19 @@
 
 A native Kotlin/Compose mirror of the SwiftUI app in `../WSLCRM`. It has the core (networking,
 auth, offline queue, permissions, theme), the work-management rules, an app shell (sign-in with
-2FA, biometric unlock, workspace choice, Shop and More tabs) and the **shop back office**
+2FA, biometric unlock, workspace choice, AI, Projects, Shop and Menu tabs) and the **shop back office**
 (`features/shop`): dashboard, orders, quotes, products, categories, stock, market prices, and the
 shop assistant's chats and knowledge, over `/api/v2/shop/admin`. The Shop tab appears only where
-the workspace's menu includes `shop`. Field service, CRM and project screens come next.
+the workspace's menu includes `shop`.
+
+**Menu = the web's menu** (`features/menu`), as on iOS: the Menu tab shows the web dashboard's sidebar
+from `GET /api/v2/user/menu` (same groups, order and items for the person and workspace, so the
+workspace's modules and the person's permissions apply exactly as on the web). The shop opens its own
+screens; every other module opens its web page inside the app, signed in to the selected workspace
+(`WebPageScreen`: a WebView that first writes the dashboard's sign-in on its own origin, plus the
+in-app flag that hides the dashboard's top bar). The **AI** tab (the web's AI Navigator chat) and the
+**Projects** tab (the web's project management) appear wherever the person's menu has them. Web
+storage is wiped on sign-out; links to other sites open outside the app.
 
 ## Flavours
 

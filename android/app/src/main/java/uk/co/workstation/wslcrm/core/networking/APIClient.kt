@@ -198,6 +198,16 @@ class APIClient(
 
     // MARK: - Refresh
 
+    /**
+     * The access token to hand a web page: refreshed first when it has under two minutes left, or
+     * always when [forceRefresh] (the page itself was turned away).
+     */
+    suspend fun accessTokenForWeb(forceRefresh: Boolean = false): String = withContext(state) {
+        val current = tokens ?: throw APIError.notSignedIn()
+        if (!forceRefresh && !JWT.isExpiring(current.accessToken, 120, now())) current.accessToken
+        else refreshedTokens(current.accessToken).accessToken
+    }
+
     /** Returns valid tokens, refreshing at most once for any number of concurrent callers. Runs on [state]. */
     private suspend fun refreshedTokens(staleAccessToken: String?): AuthTokens {
         // Another request already refreshed while this one was in flight.
