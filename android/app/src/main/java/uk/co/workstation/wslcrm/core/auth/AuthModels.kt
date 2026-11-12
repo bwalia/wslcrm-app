@@ -167,12 +167,36 @@ data class MenuResponse(
     val namespace: MenuNamespace?,
     val permissions: PermissionGrants,
     val isAdmin: Boolean,
+    /** The web sidebar, in order: `menu` without Settings, each item carrying its `group`. */
+    val mainMenu: List<MenuItem> = emptyList(),
+    /** The bottom of the web sidebar (Settings). */
+    val secondaryMenu: List<MenuItem> = emptyList(),
+    /** The sidebar's groups, in the order the web shows them. */
+    val groups: List<MenuGroup> = emptyList(),
 ) {
-    data class MenuItem(val key: String, val name: String?, val module: String?, val priority: Int?) {
+    data class MenuItem(
+        val key: String,
+        val name: String?,
+        val module: String?,
+        val priority: Int?,
+        /** A Lucide icon name, as the web uses (`Users`). */
+        val icon: String? = null,
+        /** The web dashboard page (`/dashboard/crm`). */
+        val path: String? = null,
+        /** The sidebar group key (`sales`); null for the items above the groups. */
+        val group: String? = null,
+    ) {
         companion object : JsonDecodable<MenuItem> {
             override fun decode(json: JsonElement) = decodeObject(json) {
-                MenuItem(requireString("key"), string("name"), string("module"), flexibleInt("priority"))
+                MenuItem(requireString("key"), string("name"), string("module"), flexibleInt("priority"),
+                    string("icon"), string("path"), string("group"))
             }
+        }
+    }
+
+    data class MenuGroup(val key: String, val name: String?) {
+        companion object : JsonDecodable<MenuGroup> {
+            override fun decode(json: JsonElement) = decodeObject(json) { MenuGroup(requireString("key"), string("name")) }
         }
     }
 
@@ -189,6 +213,9 @@ data class MenuResponse(
                 namespace = optional("namespace", MenuNamespace),
                 permissions = optional("permissions", PermissionGrants) ?: PermissionGrants(emptyMap()),
                 isAdmin = flexibleBool("isAdmin") ?: false,
+                mainMenu = lossyList("mainMenu", MenuItem),
+                secondaryMenu = lossyList("secondaryMenu", MenuItem),
+                groups = lossyList("groups", MenuGroup),
             )
         }
     }
