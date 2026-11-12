@@ -132,6 +132,12 @@ fun ShopQuoteDetailScreen(nav: NavHostController, uuid: String) {
         loader.reload()
     }
 
+    fun sendTest() = actions.run {
+        val r = api.sendQuoteTest(uuid)
+        notice = "Test sent to ${r.to ?: "you"}${if (r.attached) " with the PDF attached" else ""}. " +
+            "The customer got nothing; its link opens a preview with confirm and pay turned off."
+    }
+
     fun saveToCrm() = actions.run {
         val r = api.saveQuoteCustomerToCrm(uuid)
         val parts = listOfNotNull(
@@ -184,6 +190,10 @@ fun ShopQuoteDetailScreen(nav: NavHostController, uuid: String) {
                                 if (canMakeOrder) {
                                     LargeButton("Create Order Authorisation", Icons.Default.AssignmentTurnedIn, Tone.PROGRESS,
                                         prominent = true, enabled = !actions.busy) { confirmingOrder = true }
+                                }
+                                if (canSend) {
+                                    LargeButton("Send test to me", Icons.Default.Send, Tone.PROGRESS,
+                                        prominent = false, enabled = !actions.busy) { sendTest() }
                                 }
                                 if (canSend) {
                                     LargeButton(

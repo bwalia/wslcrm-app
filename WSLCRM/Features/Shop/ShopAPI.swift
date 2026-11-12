@@ -86,6 +86,13 @@ struct ShopAPI: Sendable {
         try await one(.post(Self.base + "/quotes/\(uuid)/send", json: EmptyBody()))
     }
 
+    /// Sends the same email to the signed-in user instead, marked TEST. Its link opens a preview with
+    /// confirm and pay turned off, and the quote isn't marked as sent.
+    func sendQuoteTest(_ uuid: String) async throws -> ShopQuoteSendResult {
+        struct Body: Encodable, Sendable { let test = true }
+        return try await one(.post(Self.base + "/quotes/\(uuid)/send", json: Body()))
+    }
+
     /// Saves the quote's customer to the CRM: the company as an account, the person as a contact.
     func saveQuoteCustomerToCRM(_ uuid: String) async throws -> ShopCRMCustomerResult {
         try await one(.post(Self.base + "/quotes/\(uuid)/crm-customer", json: EmptyBody()))
