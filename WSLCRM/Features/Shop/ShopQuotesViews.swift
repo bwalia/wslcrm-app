@@ -122,6 +122,17 @@ struct ShopQuoteDetailView: View {
                     }
                     if canUpdate && sendable {
                         Button {
+                            Task { await sendTest() }
+                        } label: {
+                            Label("Send test to me", systemImage: "paperplane.circle")
+                        }
+                        .buttonStyle(.large(.progress, prominent: false))
+                        .listRowSeparator(.hidden)
+                        .disabled(busy)
+                        .accessibilityIdentifier("shopQuote.sendTest")
+                    }
+                    if canUpdate && sendable {
+                        Button {
                             confirmingSend = true
                         } label: {
                             Label(current.sentAt != nil ? "Send again" : current.isOrderAuthorisation ? "Send for authorisation" : "Email to customer",
@@ -305,6 +316,19 @@ struct ShopQuoteDetailView: View {
                 : "Sent to \(result.to ?? "the customer") (link only: the PDF could not be attached)."
             actionError = nil
             await load()
+        } catch {
+            actionError = error.asAPIError
+        }
+    }
+
+    private func sendTest() async {
+        busy = true
+        defer { busy = false }
+        do {
+            let result = try await services.shop.sendQuoteTest(current.uuid)
+            notice = "Test sent to \(result.to ?? "you")\((result.attached ?? false) ? " with the PDF attached" : "")."
+                + " The customer got nothing; its link opens a preview with confirm and pay turned off."
+            actionError = nil
         } catch {
             actionError = error.asAPIError
         }

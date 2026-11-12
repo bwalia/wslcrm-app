@@ -2,6 +2,7 @@ package uk.co.workstation.wslcrm.features.shop
 
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import uk.co.workstation.wslcrm.app.AppContainer
 import uk.co.workstation.wslcrm.core.networking.APIClient
 import uk.co.workstation.wslcrm.core.networking.Decoders
@@ -76,6 +77,13 @@ class ShopAPI(private val client: APIClient) {
     /** Emails the customer the Order Authorisation / quote with the PDF and the link to confirm and pay. */
     suspend fun sendQuote(uuid: String): ShopQuoteSendResult =
         one(Endpoint.post("$BASE/quotes/$uuid/send", EMPTY), ShopQuoteSendResult)
+
+    /**
+     * Sends the same email to the signed-in user instead, marked TEST. Its link opens a preview with
+     * confirm and pay turned off, and the quote isn't marked as sent.
+     */
+    suspend fun sendQuoteTest(uuid: String): ShopQuoteSendResult =
+        one(Endpoint.post("$BASE/quotes/$uuid/send", JsonObject(mapOf("test" to JsonPrimitive(true)))), ShopQuoteSendResult)
 
     /** Saves the quote's customer to the CRM: the company as an account, the person as a contact. */
     suspend fun saveQuoteCustomerToCrm(uuid: String): ShopCrmCustomerResult =
