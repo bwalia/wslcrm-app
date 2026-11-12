@@ -66,14 +66,23 @@ struct ShopQuoteDetailView: View {
     @State private var pendingStatus: ShopQuoteStatus?
     @State private var editingLine: ShopLine?
     @State private var editingDetails = false
+    @State private var confirmingOrder = false
+    @State private var confirmingSend = false
+    @State private var createdOrder: ShopQuote?
+    @State private var notice: String?
 
     private var current: ShopQuote { quote ?? summary }
     private var canUpdate: Bool { session.shopPolicy.canUpdate }
+    private var title: String { current.documentTitle ?? (current.isOrderAuthorisation ? "Order Authorisation" : "Quote") }
+    private var sendable: Bool { [.draft, .sent, .accepted].contains(current.status) && !current.isExpired }
 
     var body: some View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
+                    if current.isOrderAuthorisation {
+                        Text("Order Authorisation").font(.caption.weight(.semibold)).foregroundStyle(.secondaryText)
+                    }
                     Text(current.quoteNumber).font(.title3.bold().monospacedDigit())
                     current.status.badge
                     Text(ShopMoney.format(current.totalMinor, currency: current.currency) ?? "").font(.title2.monospacedDigit())
@@ -84,9 +93,53 @@ struct ShopQuoteDetailView: View {
                     }
                     Text(current.viewedAt.map { "Customer opened it \(Formatters.relative($0) ?? "")" } ?? "Customer hasn't opened it yet")
                         .font(.footnote).foregroundStyle(.secondaryText)
+                    if let sentAt = current.sentAt {
+                        Text("Sent \(Formatters.relative(sentAt) ?? "")").font(.footnote).foregroundStyle(.secondaryText)
+                    }
+                    if let authorisedAt = current.authorisedAt {
+                        Label("Confirmed by \(current.authorisedByName ?? "the customer") \(Formatters.relative(authorisedAt) ?? "")",
+                              systemImage: "checkmark.seal.fill")
+                            .font(.footnote.weight(.semibold)).foregroundStyle(Tone.success.textColor)
+                    }
                 }
                 .padding(.vertical, 4)
                 if let loadError { InlineErrorRow(error: loadError) { Task { await load() } } }
+            }
+
+            if (session.shopPolicy.canCreate && !current.isOrderAuthorisation && current.status != .cancelled)
+                || (canUpdate && sendable) {
+                Section {
+                    if session.shopPolicy.canCreate && !current.isOrderAuthorisation && current.status != .cancelled {
+                        Button {
+                            confirmingOrder = true
+                        } label: {
+                            Label("Create Order Authorisation", systemImage: "checkmark.rectangle.stack")
+                        }
+                        .buttonStyle(.large(.progress, prominent: true))
+                        .listRowSeparator(.hidden)
+                        .disabled(busy)
+                        .accessibilityIdentifier("shopQuote.createOrder")
+                    }
+                    if canUpdate && sendable {
+                        Button {
+                            confirmingSend = true
+                        } label: {
+                            Label(current.sentAt != nil ? "Send again" : current.isOrderAuthorisation ? "Send for authorisation" : "Email to customer",
+                                  systemImage: "paperplane")
+                        }
+                        .buttonStyle(.large(.progress, prominent: !current.isOrderAuthorisation ? false : true))
+                        .listRowSeparator(.hidden)
+                        .disabled(busy || current.customer.email == nil)
+                        .accessibilityIdentifier("shopQuote.send")
+                    }
+                    if let notice { Text(notice).font(.footnote).foregroundStyle(.secondaryText) }
+                } header: {
+                    Text(current.isOrderAuthorisation ? "Order Authorisation" : "Order")
+                } footer: {
+                    Text(current.isOrderAuthorisation
+                         ? "The customer gets the PDF and a link to check the order, accept the terms, confirm it and pay online."
+                         : "Makes a new Order Authorisation with these lines and prices, the VIP Trade discount if the customer is a member, and their address for delivery.")
+                }
             }
 
             let targets = canUpdate ? current.status.manualTargets : []
@@ -115,10 +168,37 @@ struct ShopQuoteDetailView: View {
                 if let phone = current.customer.phone { PhoneLinkRow(name: current.customer.name, phone: phone) }
                 if let address = current.customer.formattedAddress { MapsLinkRow(address: address) }
                 DetailRow(label: "VAT number", value: current.customer.vatNumber)
+                if session.shopPolicy.canSaveToCRM {
+                    Button {
+                        Task { await saveToCRM() }
+                    } label: {
+                        Label("Save customer to CRM", systemImage: "person.crop.circle.badge.plus")
+                    }
+                    .frame(minHeight: 44)
+                    .disabled(busy)
+                    .accessibilityIdentifier("shopQuote.saveToCRM")
+                }
+            }
+            if current.deliveryMethod != nil {
+                Section("Delivery") {
+                    DetailRow(label: "Method", value: current.deliveryMethod)
+                }
             }
 
             ShopLinesSection(lines: current.lines, currency: current.currency,
                              onEdit: canUpdate && current.linesEditable ? { editingLine = $0 } : nil)
+
+            if current.tradeDiscountMinor > 0 || current.discountMinor > 0 {
+                Section("Discounts (ex VAT)") {
+                    DetailRow(label: "Subtotal before discount", value: ShopMoney.format(current.listSubtotalMinor ?? current.subtotalMinor, currency: current.currency))
+                    if current.tradeDiscountMinor > 0 {
+                        DetailRow(label: "VIP Trade discount", value: "−" + (ShopMoney.format(current.tradeDiscountMinor, currency: current.currency) ?? ""))
+                    }
+                    if current.discountMinor > 0 {
+                        DetailRow(label: current.discountLabel ?? "Discount", value: "−" + (ShopMoney.format(current.discountMinor, currency: current.currency) ?? ""))
+                    }
+                }
+            }
 
             ShopTotalsSection(subtotal: current.subtotalMinor, vat: current.vatMinor, shipping: current.shippingMinor,
                               total: current.totalMinor, currency: current.currency)
@@ -142,8 +222,9 @@ struct ShopQuoteDetailView: View {
 
             Section("Links") {
                 if let link = current.publicUrl.flatMap(URL.init(string:)), link.scheme != nil {
-                    ShareLink(item: link, subject: Text("Quote \(current.quoteNumber)")) {
-                        Label("Share quote link with customer", systemImage: "square.and.arrow.up")
+                    ShareLink(item: link, subject: Text("\(title) \(current.quoteNumber)")) {
+                        Label(current.isOrderAuthorisation ? "Share order link with customer" : "Share quote link with customer",
+                              systemImage: "square.and.arrow.up")
                     }
                 }
                 if let orderUuid = current.orderUuid {
@@ -158,7 +239,7 @@ struct ShopQuoteDetailView: View {
                 DetailRow(label: "Created", value: Formatters.dateTime(current.createdAt))
             }
         }
-        .navigationTitle("Quote")
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .refreshable { await load() }
@@ -167,6 +248,19 @@ struct ShopQuoteDetailView: View {
             Button(status.actionTitle, role: status == .cancelled ? .destructive : nil) {
                 Task { await save(ShopQuoteUpdate(status: status.rawValue)) }
             }
+        }
+        .confirmationDialog("Create an Order Authorisation from \(current.quoteNumber)?", isPresented: $confirmingOrder,
+                            titleVisibility: .visible) {
+            Button("Create order") { Task { await createOrder() } }
+        } message: {
+            Text("A new order with the same lines and prices, the VIP Trade discount if the customer is a member, and their address as the delivery address. This quote stays as it is.")
+        }
+        .confirmationDialog("Email \(title) \(current.quoteNumber) to \(current.customer.email ?? "the customer")?",
+                            isPresented: $confirmingSend, titleVisibility: .visible) {
+            Button("Send") { Task { await send() } }
+        }
+        .navigationDestination(item: $createdOrder) { order in
+            ShopQuoteDetailView(summary: order, onChange: onChange)
         }
         .sheet(item: $editingLine) { line in
             NavigationStack {
@@ -187,6 +281,46 @@ struct ShopQuoteDetailView: View {
         current.lines.compactMap { existing in
             guard existing.id == line.id else { return ShopLineInput(existing) }
             return edited.map(ShopLineInput.init)
+        }
+    }
+
+    private func createOrder() async {
+        busy = true
+        defer { busy = false }
+        do {
+            createdOrder = try await services.shop.createOrderAuthorisation(fromQuote: current.uuid)
+            actionError = nil
+        } catch {
+            actionError = error.asAPIError
+        }
+    }
+
+    private func send() async {
+        busy = true
+        defer { busy = false }
+        do {
+            let result = try await services.shop.sendQuote(current.uuid)
+            notice = (result.attached ?? false)
+                ? "Sent to \(result.to ?? "the customer") with the PDF attached."
+                : "Sent to \(result.to ?? "the customer") (link only: the PDF could not be attached)."
+            actionError = nil
+            await load()
+        } catch {
+            actionError = error.asAPIError
+        }
+    }
+
+    private func saveToCRM() async {
+        busy = true
+        defer { busy = false }
+        do {
+            let r = try await services.shop.saveQuoteCustomerToCRM(current.uuid)
+            let parts = [(r.accountCreated ?? false) ? "company account created" : (r.accountUuid != nil ? "company account updated" : nil),
+                         (r.contactCreated ?? false) ? "contact created" : (r.contactUuid != nil ? "contact linked" : nil)].compactMap { $0 }
+            notice = "Saved to the CRM" + (parts.isEmpty ? "." : ": " + parts.joined(separator: ", ") + ".")
+            actionError = nil
+        } catch {
+            actionError = error.asAPIError
         }
     }
 

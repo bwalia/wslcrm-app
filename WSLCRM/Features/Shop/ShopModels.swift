@@ -377,6 +377,20 @@ struct ShopQuote: Identifiable, Hashable, Sendable {
     var orderNumber: String?
     var crmLeadId: Int?
     var createdAt: Date?
+    /// "order": an Order Authorisation built by staff for the customer to confirm and pay.
+    var kind: String? = nil
+    var documentTitle: String? = nil
+    /// Whole-order discounts, ex VAT, already taken off the subtotal.
+    var tradeDiscountMinor: Int = 0
+    var discountMinor: Int = 0
+    var discountLabel: String? = nil
+    var listSubtotalMinor: Int? = nil
+    var deliveryMethod: String? = nil
+    var sentAt: Date? = nil
+    var authorisedAt: Date? = nil
+    var authorisedByName: String? = nil
+
+    var isOrderAuthorisation: Bool { kind == "order" }
 
     var isExpired: Bool {
         guard let validUntil else { return false }
@@ -391,6 +405,8 @@ extension ShopQuote: Decodable {
         case uuid, quoteNumber, status, source, customer, lines, subtotalMinor, vatMinor, shippingMinor
         case totalMinor, currency, validUntil, viewedAt, notes, internalNotes, publicUrl, orderUuid, orderNumber
         case crmLeadId, createdAt
+        case kind, documentTitle, tradeDiscountMinor, discountMinor, discountLabel, listSubtotalMinor, deliveryMethod
+        case sentAt, authorisedAt, authorisedByName
     }
 
     init(from decoder: Decoder) throws {
@@ -415,7 +431,31 @@ extension ShopQuote: Decodable {
         orderNumber = c.decodeFlexibleString(forKey: .orderNumber)
         crmLeadId = c.decodeFlexibleInt(forKey: .crmLeadId)
         createdAt = c.decodeDate(forKey: .createdAt)
+        kind = try? c.decodeIfPresent(String.self, forKey: .kind)
+        documentTitle = try? c.decodeIfPresent(String.self, forKey: .documentTitle)
+        tradeDiscountMinor = c.decodeFlexibleInt(forKey: .tradeDiscountMinor) ?? 0
+        discountMinor = c.decodeFlexibleInt(forKey: .discountMinor) ?? 0
+        discountLabel = try? c.decodeIfPresent(String.self, forKey: .discountLabel)
+        listSubtotalMinor = c.decodeFlexibleInt(forKey: .listSubtotalMinor)
+        deliveryMethod = try? c.decodeIfPresent(String.self, forKey: .deliveryMethod)
+        sentAt = c.decodeDate(forKey: .sentAt)
+        authorisedAt = c.decodeDate(forKey: .authorisedAt)
+        authorisedByName = try? c.decodeIfPresent(String.self, forKey: .authorisedByName)
     }
+}
+
+/// POST /quotes/:uuid/send — who it went to and whether the PDF was attached.
+struct ShopQuoteSendResult: Decodable, Sendable {
+    let to: String?
+    let attached: Bool?
+}
+
+/// POST /quotes/:uuid/crm-customer.
+struct ShopCRMCustomerResult: Decodable, Sendable {
+    let accountUuid: String?
+    let contactUuid: String?
+    let accountCreated: Bool?
+    let contactCreated: Bool?
 }
 
 /// `PUT /quotes/:uuid`. Sending `lines` re-prices them all; a converted quote refuses line edits.

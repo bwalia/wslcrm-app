@@ -75,6 +75,22 @@ struct ShopAPI: Sendable {
         return try await one(Endpoint(.put, Self.base + "/quotes/\(uuid)").withRawBody(data))
     }
 
+    /// A new Order Authorisation from this quote: same lines and prices, the VIP Trade discount when the
+    /// customer is a member, their address as the delivery address. The quote itself stays as it is.
+    func createOrderAuthorisation(fromQuote uuid: String) async throws -> ShopQuote {
+        try await one(.post(Self.base + "/quotes/\(uuid)/order-authorisation", json: EmptyBody()))
+    }
+
+    /// Emails the customer the Order Authorisation / quote with the PDF and the link to confirm and pay.
+    func sendQuote(_ uuid: String) async throws -> ShopQuoteSendResult {
+        try await one(.post(Self.base + "/quotes/\(uuid)/send", json: EmptyBody()))
+    }
+
+    /// Saves the quote's customer to the CRM: the company as an account, the person as a contact.
+    func saveQuoteCustomerToCRM(_ uuid: String) async throws -> ShopCRMCustomerResult {
+        try await one(.post(Self.base + "/quotes/\(uuid)/crm-customer", json: EmptyBody()))
+    }
+
     // MARK: Products
 
     func products(search: String, status: ShopProductStatus?, lowStockOnly: Bool, page: Int,

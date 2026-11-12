@@ -14,6 +14,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.AssignmentTurnedIn
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -113,6 +116,30 @@ fun ShopQuoteDetailScreen(nav: NavHostController, uuid: String) {
     var pending by remember { mutableStateOf<ShopQuoteStatus?>(null) }
     var editingLine by remember { mutableStateOf<ShopLine?>(null) }
     var editingDetails by remember { mutableStateOf(false) }
+    var confirmingOrder by remember { mutableStateOf(false) }
+    var confirmingSend by remember { mutableStateOf(false) }
+    var notice by remember { mutableStateOf<String?>(null) }
+
+    fun createOrder() = actions.run {
+        val order = api.createOrderAuthorisation(fromQuote = uuid)
+        nav.navigate(ShopRoutes.quote(order.uuid))
+    }
+
+    fun send() = actions.run {
+        val r = api.sendQuote(uuid)
+        notice = if (r.attached) "Sent to ${r.to ?: "the customer"} with the PDF attached."
+        else "Sent to ${r.to ?: "the customer"} (link only: the PDF could not be attached)."
+        loader.reload()
+    }
+
+    fun saveToCrm() = actions.run {
+        val r = api.saveQuoteCustomerToCrm(uuid)
+        val parts = listOfNotNull(
+            if (r.accountCreated) "company account created" else if (r.accountUuid != null) "company account updated" else null,
+            if (r.contactCreated) "contact created" else if (r.contactUuid != null) "contact linked" else null,
+        )
+        notice = "Saved to the CRM" + if (parts.isEmpty()) "." else ": " + parts.joinToString(", ") + "."
+    }
 
     fun save(update: ShopQuoteUpdate, onDone: () -> Unit = {}) = actions.run(onDone) {
         val saved = api.updateQuote(uuid, update)
@@ -120,7 +147,8 @@ fun ShopQuoteDetailScreen(nav: NavHostController, uuid: String) {
         changes.post(EntityChange.Updated(QUOTE_KIND, uuid, saved))
     }
 
-    ShopScaffold("Quote", nav) { modifier ->
+    val screenTitle = ((loader.state as? LoadState.Loaded)?.value?.isOrderAuthorisation == true).let { if (it) "Order Authorisation" else "Quote" }
+    ShopScaffold(screenTitle, nav) { modifier ->
         when (val state = loader.state) {
             LoadState.Idle, LoadState.Loading -> LoadingState(modifier)
             is LoadState.Failed -> ErrorState(state.error, modifier) { loader.reload() }
@@ -130,6 +158,7 @@ fun ShopQuoteDetailScreen(nav: NavHostController, uuid: String) {
                 LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
                     groupedSection {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (quote.isOrderAuthorisation) SecondaryText("Order Authorisation")
                             Text(quote.quoteNumber, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                             quote.status.Badge()
                             Text(ShopMoney.format(quote.totalMinor, quote.currency).orEmpty(), style = MaterialTheme.typography.headlineSmall)
@@ -138,8 +167,34 @@ fun ShopQuoteDetailScreen(nav: NavHostController, uuid: String) {
                                     color = if (expired) Tone.WARNING.textColor else AppColors.secondaryText)
                             }
                             SecondaryText(quote.viewedAt?.let { "Customer opened it ${Formatters.relative(it)}" } ?: "Customer hasn't opened it yet")
+                            quote.sentAt?.let { SecondaryText("Sent ${Formatters.relative(it)}") }
+                            quote.authorisedAt?.let {
+                                SecondaryText("Confirmed by ${quote.authorisedByName ?: "the customer"} ${Formatters.relative(it)}",
+                                    color = Tone.SUCCESS.textColor)
+                            }
                         }
                         loader.refreshError?.let { InlineError(it) { loader.reload() } }
+                    }
+                    val canMakeOrder = policy.canCreate && !quote.isOrderAuthorisation && quote.status != ShopQuoteStatus.CANCELLED
+                    val canSend = policy.canUpdate && !expired &&
+                        quote.status in setOf(ShopQuoteStatus.DRAFT, ShopQuoteStatus.SENT, ShopQuoteStatus.ACCEPTED)
+                    if (canMakeOrder || canSend || notice != null) {
+                        item {
+                            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                if (canMakeOrder) {
+                                    LargeButton("Create Order Authorisation", Icons.Default.AssignmentTurnedIn, Tone.PROGRESS,
+                                        prominent = true, enabled = !actions.busy) { confirmingOrder = true }
+                                }
+                                if (canSend) {
+                                    LargeButton(
+                                        if (quote.sentAt != null) "Send again" else if (quote.isOrderAuthorisation) "Send for authorisation" else "Email to customer",
+                                        Icons.Default.Send, Tone.PROGRESS, prominent = quote.isOrderAuthorisation,
+                                        enabled = !actions.busy && quote.customer.email != null,
+                                    ) { confirmingSend = true }
+                                }
+                                notice?.let { SecondaryText(it) }
+                            }
+                        }
                     }
                     val targets = if (policy.canUpdate) quote.status.manualTargets else emptyList()
                     if (targets.isNotEmpty() || actions.error != null) {
@@ -158,9 +213,30 @@ fun ShopQuoteDetailScreen(nav: NavHostController, uuid: String) {
                         DetailRow("Name", quote.customer.name)
                         DetailRow("Company", quote.customer.company)
                         ContactRows(quote.customer.email, quote.customer.phone, quote.customer.formattedAddress)
-                        DetailRow("VAT number", quote.customer.vatNumber, showDivider = false)
+                        DetailRow("VAT number", quote.customer.vatNumber, showDivider = !policy.canSaveToCrm)
+                        if (policy.canSaveToCrm) {
+                            GroupedRow(onClick = { if (!actions.busy) saveToCrm() }, showDivider = false) {
+                                LabelWithIcon("Save customer to CRM", Icons.Default.PersonAdd)
+                            }
+                        }
+                    }
+                    quote.deliveryMethod?.let { method ->
+                        groupedSection("Delivery") { DetailRow("Method", method, showDivider = false) }
                     }
                     linesSection(quote.lines, quote.currency, onEdit = if (policy.canUpdate && quote.linesEditable) ({ editingLine = it }) else null)
+                    if (quote.tradeDiscountMinor > 0 || quote.discountMinor > 0) {
+                        groupedSection("Discounts (ex VAT)") {
+                            DetailRow("Subtotal before discount", ShopMoney.format(quote.listSubtotalMinor ?: quote.subtotalMinor, quote.currency))
+                            if (quote.tradeDiscountMinor > 0) {
+                                DetailRow("VIP Trade discount", "−" + ShopMoney.format(quote.tradeDiscountMinor, quote.currency).orEmpty(),
+                                    showDivider = quote.discountMinor > 0)
+                            }
+                            if (quote.discountMinor > 0) {
+                                DetailRow(quote.discountLabel ?: "Discount", "−" + ShopMoney.format(quote.discountMinor, quote.currency).orEmpty(),
+                                    showDivider = false)
+                            }
+                        }
+                    }
                     totalsSection(quote.subtotalMinor, quote.vatMinor, quote.shippingMinor, quote.totalMinor, quote.currency)
                     groupedSection("Notes") {
                         DetailRow("For the customer", quote.notes)
@@ -183,7 +259,11 @@ fun ShopQuoteDetailScreen(nav: NavHostController, uuid: String) {
                         DetailRow("Source", quote.source?.let(Formatters::humanize))
                         DetailRow("CRM lead", quote.crmLeadId?.let { "#$it" })
                         DetailRow("Created", Formatters.dateTime(quote.createdAt))
-                        quote.publicUrl?.takeIf { it.startsWith("http") }?.let { ShareRow("Share quote link with customer", it, "Quote ${quote.quoteNumber}") }
+                        quote.publicUrl?.takeIf { it.startsWith("http") }?.let {
+                            val title = quote.documentTitle ?: if (quote.isOrderAuthorisation) "Order Authorisation" else "Quote"
+                            ShareRow(if (quote.isOrderAuthorisation) "Share order link with customer" else "Share quote link with customer",
+                                it, "$title ${quote.quoteNumber}")
+                        }
                     }
                 }
 
@@ -203,6 +283,19 @@ fun ShopQuoteDetailScreen(nav: NavHostController, uuid: String) {
                 }
             }
         }
+    }
+
+    if (confirmingOrder) {
+        ConfirmDialog("Create an Order Authorisation?",
+            "A new order with the same lines and prices, the VIP Trade discount if the customer is a member, and their address as the delivery address. This quote stays as it is.",
+            "Create order", destructive = false,
+            onConfirm = { createOrder() }, onDismiss = { confirmingOrder = false })
+    }
+    if (confirmingSend) {
+        val q = (loader.state as? LoadState.Loaded)?.value
+        ConfirmDialog("Email it to ${q?.customer?.email ?: "the customer"}?",
+            "They get the PDF and a link to check it, accept the terms and pay online.", "Send", destructive = false,
+            onConfirm = { send() }, onDismiss = { confirmingSend = false })
     }
 
     pending?.let { target ->

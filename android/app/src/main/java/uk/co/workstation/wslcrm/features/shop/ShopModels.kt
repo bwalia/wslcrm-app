@@ -306,7 +306,21 @@ data class ShopQuote(
     val orderNumber: String? = null,
     val crmLeadId: Int? = null,
     val createdAt: Instant? = null,
+    /** "order": an Order Authorisation built by staff for the customer to confirm and pay. */
+    val kind: String? = null,
+    val documentTitle: String? = null,
+    /** Whole-order discounts, ex VAT, already taken off the subtotal. */
+    val tradeDiscountMinor: Long = 0,
+    val discountMinor: Long = 0,
+    val discountLabel: String? = null,
+    val listSubtotalMinor: Long? = null,
+    val deliveryMethod: String? = null,
+    val sentAt: Instant? = null,
+    val authorisedAt: Instant? = null,
+    val authorisedByName: String? = null,
 ) {
+    val isOrderAuthorisation: Boolean get() = kind == "order"
+
     fun isExpired(now: Instant = Instant.now()): Boolean =
         validUntil != null && validUntil < now && status in setOf(ShopQuoteStatus.DRAFT, ShopQuoteStatus.SENT, ShopQuoteStatus.ACCEPTED)
 
@@ -337,7 +351,38 @@ data class ShopQuote(
                 orderNumber = flexibleString("orderNumber"),
                 crmLeadId = flexibleInt("crmLeadId"),
                 createdAt = date("createdAt"),
+                kind = string("kind"),
+                documentTitle = string("documentTitle"),
+                tradeDiscountMinor = money("tradeDiscountMinor") ?: 0,
+                discountMinor = money("discountMinor") ?: 0,
+                discountLabel = string("discountLabel"),
+                listSubtotalMinor = money("listSubtotalMinor"),
+                deliveryMethod = string("deliveryMethod"),
+                sentAt = date("sentAt"),
+                authorisedAt = date("authorisedAt"),
+                authorisedByName = string("authorisedByName"),
             )
+        }
+    }
+}
+
+/** `POST /quotes/:uuid/send`: who it went to and whether the PDF was attached. */
+data class ShopQuoteSendResult(val to: String?, val attached: Boolean) {
+    companion object : JsonDecodable<ShopQuoteSendResult> {
+        override fun decode(json: JsonElement) = decodeObject(json) {
+            ShopQuoteSendResult(string("to"), flexibleBool("attached") ?: false)
+        }
+    }
+}
+
+/** `POST /quotes/:uuid/crm-customer`. */
+data class ShopCrmCustomerResult(
+    val accountUuid: String?, val contactUuid: String?, val accountCreated: Boolean, val contactCreated: Boolean,
+) {
+    companion object : JsonDecodable<ShopCrmCustomerResult> {
+        override fun decode(json: JsonElement) = decodeObject(json) {
+            ShopCrmCustomerResult(string("accountUuid"), string("contactUuid"),
+                flexibleBool("accountCreated") ?: false, flexibleBool("contactCreated") ?: false)
         }
     }
 }

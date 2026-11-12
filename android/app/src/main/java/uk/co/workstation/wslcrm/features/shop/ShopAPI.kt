@@ -66,6 +66,21 @@ class ShopAPI(private val client: APIClient) {
     suspend fun updateQuote(uuid: String, body: ShopQuoteUpdate): ShopQuote =
         one(Endpoint.put("$BASE/quotes/$uuid", body), ShopQuote)
 
+    /**
+     * A new Order Authorisation from this quote: same lines and prices, the VIP Trade discount when the
+     * customer is a member, their address as the delivery address. The quote itself stays as it is.
+     */
+    suspend fun createOrderAuthorisation(fromQuote: String): ShopQuote =
+        one(Endpoint.post("$BASE/quotes/$fromQuote/order-authorisation", EMPTY), ShopQuote)
+
+    /** Emails the customer the Order Authorisation / quote with the PDF and the link to confirm and pay. */
+    suspend fun sendQuote(uuid: String): ShopQuoteSendResult =
+        one(Endpoint.post("$BASE/quotes/$uuid/send", EMPTY), ShopQuoteSendResult)
+
+    /** Saves the quote's customer to the CRM: the company as an account, the person as a contact. */
+    suspend fun saveQuoteCustomerToCrm(uuid: String): ShopCrmCustomerResult =
+        one(Endpoint.post("$BASE/quotes/$uuid/crm-customer", EMPTY), ShopCrmCustomerResult)
+
     // MARK: Products
 
     suspend fun products(search: String, status: ShopProductStatus?, lowStockOnly: Boolean, page: Int, limit: Int = 30): Page<ShopProductSummary> {

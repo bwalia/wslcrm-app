@@ -7,6 +7,8 @@ struct ShopPolicy: Sendable {
     var canCreate: Bool { permissions.can(.create, .shop) }
     var canUpdate: Bool { permissions.can(.update, .shop) }
     var canDelete: Bool { permissions.can(.delete, .shop) }
+    /// Saving a quote's customer to the CRM creates an account and a contact.
+    var canSaveToCRM: Bool { permissions.can(.update, .shop) && permissions.can(.create, .crmAccounts) && permissions.can(.create, .crmContacts) }
 }
 
 extension SessionStore {

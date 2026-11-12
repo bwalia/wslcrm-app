@@ -14,6 +14,7 @@ enum class Module(val raw: String, val displayName: String) {
     FS_REPORTS("fs_reports", "reports"),
     SIMPRO_SYNC("simpro_sync", "Simpro sync"),
     CRM_ACCOUNTS("crm_accounts", "CRM"),
+    CRM_CONTACTS("crm_contacts", "CRM contacts"),
     CUSTOMERS("customers", "customers"),
     PRODUCTS("products", "products"),
     ORDERS("orders", "orders"),
