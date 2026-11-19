@@ -1,0 +1,8 @@
+{
+  "success": true,
+  "data": {
+    "channel": "whatsapp",
+    "link": "https://wa.me/447700900456?text=Stock%20enquiry",
+    "enquiry": { "uuid": "8d8d8d8d-0000-4000-8000-000000000001", "supplier_name": "Test Supplier Ltd", "qty": 3, "channel": "whatsapp", "answered": false }
+  }
+}

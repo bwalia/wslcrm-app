@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "data": {
+    "deal_code": "WS-UEEG-XBD6",
+    "supplier": { "uuid": "5a5a5a5a-0000-4000-8000-0000000000bb", "name": "No Phone Supplies", "contact_name": null, "email": "orders@example.com", "phone": null, "phone_intl": null },
+    "customer": { "name": "Ben Ode", "company": "Ode Labs", "email": "ben@example.com", "phone": null },
+    "template": { "uuid": null, "name": "Introduction", "builtin": true },
+    "templates": [ { "uuid": null, "name": "Introduction", "builtin": true } ],
+    "subject": "Introduction: Ben Ode (WS-UEEG-XBD6)",
+    "body": "Hello No Phone Supplies,\n\nI'd like to introduce Ben Ode of Ode Labs."
+  }
+}

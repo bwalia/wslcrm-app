@@ -1,0 +1,22 @@
+{
+  "success": true,
+  "data": {
+    "deal_code": "WS-UEEG-XBD6",
+    "supplier": {
+      "uuid": "5a5a5a5a-0000-4000-8000-0000000000aa",
+      "name": "Test Supplier Ltd",
+      "contact_name": "Sam",
+      "email": "price-test@example.com",
+      "phone": "07700 900456",
+      "phone_intl": "447700900456"
+    },
+    "subject": "Price request: WS-UEEG-XBD6",
+    "body": "Hello Sam,\n\nCould you price the following for us, please?\n\n1. 2 x HGX B300 server\n   - 8 x B300 GPU\n\nFor each line, please let us know: whether it is available (in stock, or the lead time), your price ex VAT, when you could deliver, and how long the price is valid.\n\nThanks,\nAlex Example\nWorkstation",
+    "customer_details": {},
+    "template": { "uuid": null, "name": "Price request", "builtin": true },
+    "templates": [
+      { "uuid": null, "kind": "price_request", "kind_label": "Price request", "name": "Price request", "subject": "Price request: {{deal_code}}", "body": "Hello {{contact_name}}", "supplier_uuid": null, "supplier_name": null, "is_default": false, "is_active": true, "builtin": true },
+      { "uuid": "7c7c7c7c-0000-4000-8000-000000000001", "kind": "price_request", "kind_label": "Price request", "name": "Short and friendly", "subject": "Quick price check {{deal_code}}", "body": "Hi {{contact_name}}", "supplier_uuid": null, "supplier_name": null, "is_default": true, "is_active": true, "builtin": false, "created_at": "2026-11-18 16:02:11", "updated_at": "2026-11-18 16:02:11" }
+    ]
+  }
+}

@@ -389,6 +389,8 @@ struct ShopQuote: Identifiable, Hashable, Sendable {
     var sentAt: Date? = nil
     var authorisedAt: Date? = nil
     var authorisedByName: String? = nil
+    /// The private deal (WS-XXXX-XXXX) linking it to supplier requests and POs. Staff only.
+    var dealCode: String? = nil
 
     var isOrderAuthorisation: Bool { kind == "order" }
 
@@ -406,7 +408,7 @@ extension ShopQuote: Decodable {
         case totalMinor, currency, validUntil, viewedAt, notes, internalNotes, publicUrl, orderUuid, orderNumber
         case crmLeadId, createdAt
         case kind, documentTitle, tradeDiscountMinor, discountMinor, discountLabel, listSubtotalMinor, deliveryMethod
-        case sentAt, authorisedAt, authorisedByName
+        case sentAt, authorisedAt, authorisedByName, dealCode
     }
 
     init(from decoder: Decoder) throws {
@@ -441,6 +443,7 @@ extension ShopQuote: Decodable {
         sentAt = c.decodeDate(forKey: .sentAt)
         authorisedAt = c.decodeDate(forKey: .authorisedAt)
         authorisedByName = try? c.decodeIfPresent(String.self, forKey: .authorisedByName)
+        dealCode = try? c.decodeIfPresent(String.self, forKey: .dealCode)
     }
 }
 

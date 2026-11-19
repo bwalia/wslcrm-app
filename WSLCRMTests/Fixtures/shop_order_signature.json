@@ -1,0 +1,1 @@
+{ "success": true, "data": { "signature": { "uuid": "sg000000-0000-4000-8000-000000000001", "signer_name": "Ben Ode", "note": null, "signed_at": "2026-11-19 10:00:00", "captured_by": "Alex Example", "image_sha256": "ab", "image_bytes": 5123 }, "can_sign": true, "status": "delivered" } }
