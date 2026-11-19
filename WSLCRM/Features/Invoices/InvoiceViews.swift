@@ -109,14 +109,14 @@ struct InvoiceRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(invoice.invoiceNumber).font(.subheadline.monospacedDigit().weight(.semibold))
+                Text(invoice.invoiceNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
                 Spacer()
                 invoice.displayStatus.badge
             }
             HStack(alignment: .firstTextBaseline) {
-                Text(invoice.customerName ?? "No customer").font(.headline).lineLimit(1)
+                Text(invoice.customerName ?? "No customer").font(.wsHeadline).lineLimit(1)
                 Spacer()
-                Text(Formatters.money(invoice.totalAmount, currency: invoice.currency) ?? "").font(.headline.monospacedDigit())
+                Text(Formatters.money(invoice.totalAmount, currency: invoice.currency) ?? "").font(.wsHeadline.monospacedDigit())
             }
             HStack {
                 if let due = invoice.dueDate {
@@ -126,7 +126,7 @@ struct InvoiceRow: View {
                     Text("· \(Formatters.money(invoice.balanceDue, currency: invoice.currency) ?? "") due")
                 }
             }
-            .font(.footnote)
+            .font(.wsFootnote)
             .foregroundStyle(.secondaryText)
         }
         .padding(.vertical, 4)
@@ -232,10 +232,10 @@ struct InvoiceDetailView: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     invoice.displayStatus.badge
-                    Text(invoice.customerName ?? "No customer").font(.title2.bold())
+                    Text(invoice.customerName ?? "No customer").font(.wsTitle2.bold())
                     if let email = invoice.customerEmail { Text(email).foregroundStyle(.secondaryText) }
                     HStack(alignment: .firstTextBaseline) {
-                        Text(Formatters.money(invoice.totalAmount, currency: invoice.currency) ?? "").font(.title.monospacedDigit().bold())
+                        Text(Formatters.money(invoice.totalAmount, currency: invoice.currency) ?? "").font(.wsTitle.monospacedDigit().bold())
                         if invoice.balanceDue > 0 && invoice.amountPaid > 0 {
                             Text("\(Formatters.money(invoice.balanceDue, currency: invoice.currency) ?? "") due")
                                 .foregroundStyle(.secondaryText)
@@ -243,7 +243,7 @@ struct InvoiceDetailView: View {
                     }
                     Text([invoice.issueDate.map { "Issued \(Formatters.day($0.date()) ?? "")" },
                           invoice.dueDate.map { "Due \(Formatters.day($0.date()) ?? "")" }].compactMap { $0 }.joined(separator: " · "))
-                        .font(.subheadline).foregroundStyle(.secondaryText)
+                        .font(.wsSubheadline).foregroundStyle(.secondaryText)
                 }
                 .padding(.vertical, 4)
             }
@@ -290,11 +290,11 @@ struct InvoiceDetailView: View {
                     } label: {
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(item.description).font(.body).foregroundStyle(.primary)
+                                Text(item.description).font(.wsBody).foregroundStyle(.primary)
                                 Text("\(item.quantity.formatted()) × \(Formatters.money(item.unitPrice, currency: invoice.currency) ?? "")"
                                      + (item.taxRate > 0 ? " · VAT \(item.taxRate.formatted())%" : "")
                                      + (item.discountPercent > 0 ? " · −\(item.discountPercent.formatted())%" : ""))
-                                    .font(.caption).foregroundStyle(.secondaryText)
+                                    .font(.wsCaption).foregroundStyle(.secondaryText)
                             }
                             Spacer()
                             Text(Formatters.money(item.lineTotal, currency: invoice.currency) ?? "").monospacedDigit().foregroundStyle(.primary)
@@ -326,10 +326,10 @@ struct InvoiceDetailView: View {
                     ForEach(invoice.payments) { payment in
                         HStack {
                             VStack(alignment: .leading) {
-                                Text(Formatters.money(payment.amount, currency: invoice.currency) ?? "").font(.headline.monospacedDigit())
+                                Text(Formatters.money(payment.amount, currency: invoice.currency) ?? "").font(.wsHeadline.monospacedDigit())
                                 Text([Formatters.humanize(payment.paymentMethod), payment.referenceNumber,
                                       payment.paymentDate.flatMap { Formatters.day($0.date()) }].compactMap { $0 }.joined(separator: " · "))
-                                    .font(.caption).foregroundStyle(.secondaryText)
+                                    .font(.wsCaption).foregroundStyle(.secondaryText)
                             }
                             Spacer()
                         }
@@ -479,7 +479,7 @@ struct PaymentSheet: View {
             Form {
                 Section {
                     TextField("Amount", value: $amount, format: .number).keyboardType(.decimalPad)
-                        .font(.title2.monospacedDigit())
+                        .font(.wsTitle2.monospacedDigit())
                     Picker("Method", selection: $method) {
                         ForEach(methods, id: \.self) { Text(Formatters.humanize($0)).tag($0) }
                     }

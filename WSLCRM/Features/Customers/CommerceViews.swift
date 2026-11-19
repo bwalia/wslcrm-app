@@ -19,9 +19,9 @@ struct CustomersListView: View {
                     }
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(customer.displayName).font(.headline)
+                        Text(customer.displayName).font(.wsHeadline)
                         Text([customer.email, customer.phone].compactMap { $0 }.joined(separator: " · "))
-                            .font(.subheadline).foregroundStyle(.secondaryText)
+                            .font(.wsSubheadline).foregroundStyle(.secondaryText)
                     }
                     .padding(.vertical, 4)
                 }
@@ -65,7 +65,7 @@ struct CustomerDetailView: View {
             case .loaded(let customer):
                 List {
                     Section {
-                        Text(customer.displayName).font(.title2.bold())
+                        Text(customer.displayName).font(.wsTitle2.bold())
                         if let phone = customer.phone { PhoneLinkRow(name: customer.displayName, phone: phone) }
                         EmailLinkRow(email: customer.email)
                     }
@@ -298,18 +298,18 @@ struct ProductRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(product.name).font(.headline).lineLimit(2)
+                Text(product.name).font(.wsHeadline).lineLimit(2)
                 Text([product.sku, product.categoryName, product.storeName].compactMap { $0 }.joined(separator: " · "))
-                    .font(.subheadline).foregroundStyle(.secondaryText)
+                    .font(.wsSubheadline).foregroundStyle(.secondaryText)
                 if product.trackInventory {
                     Label("\(product.inventoryQuantity) in stock", systemImage: product.isLowStock ? "exclamationmark.triangle.fill" : "cube.box")
-                        .font(.footnote)
+                        .font(.wsFootnote)
                         .foregroundStyle(product.isLowStock ? Tone.warning.textColor : .secondaryText)
                 }
             }
             Spacer()
             Text(Formatters.money(product.price, currency: product.storeCurrency) ?? "")
-                .font(.headline.monospacedDigit())
+                .font(.wsHeadline.monospacedDigit())
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
@@ -336,9 +336,9 @@ struct ProductDetailView: View {
             case .loaded(let product):
                 List {
                     Section {
-                        Text(product.name).font(.title2.bold())
+                        Text(product.name).font(.wsTitle2.bold())
                         HStack {
-                            Text(Formatters.money(product.price, currency: currency(for: product)) ?? "").font(.title3.monospacedDigit())
+                            Text(Formatters.money(product.price, currency: currency(for: product)) ?? "").font(.wsTitle3.monospacedDigit())
                             if let compare = product.comparePrice, compare > product.price {
                                 Text(Formatters.money(compare, currency: currency(for: product)) ?? "")
                                     .strikethrough().foregroundStyle(.secondaryText)
@@ -524,19 +524,19 @@ struct OrdersListView: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
-                            Text(order.orderNumber).font(.subheadline.monospacedDigit().weight(.semibold))
+                            Text(order.orderNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
                             Spacer()
                             order.status.badge
                         }
                         HStack {
-                            Text(order.customer?.displayName ?? "No customer").font(.headline)
+                            Text(order.customer?.displayName ?? "No customer").font(.wsHeadline)
                             Spacer()
                             Text(Formatters.money(order.totalAmount, currency: order.currency) ?? "")
-                                .font(.headline.monospacedDigit())
+                                .font(.wsHeadline.monospacedDigit())
                         }
                         Text([order.storeName, order.itemCount.map { "\($0) item\($0 == 1 ? "" : "s")" }, Formatters.dateTime(order.createdAt)]
                             .compactMap { $0 }.joined(separator: " · "))
-                            .font(.footnote).foregroundStyle(.secondaryText)
+                            .font(.wsFootnote).foregroundStyle(.secondaryText)
                     }
                     .padding(.vertical, 4)
                     .accessibilityElement(children: .combine)
@@ -582,14 +582,14 @@ struct OrderDetailView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(current.orderNumber).font(.title3.bold().monospacedDigit())
+                    Text(current.orderNumber).font(.wsTitle3.bold().monospacedDigit())
                     HStack {
                         current.status.badge
                         if let financial = current.financialStatus {
                             StatusBadge(text: Formatters.humanize(financial), systemImage: "creditcard", tone: financial == "paid" ? .success : .neutral)
                         }
                     }
-                    Text(Formatters.money(current.totalAmount, currency: current.currency) ?? "").font(.title2.monospacedDigit())
+                    Text(Formatters.money(current.totalAmount, currency: current.currency) ?? "").font(.wsTitle2.monospacedDigit())
                 }
                 .padding(.vertical, 4)
             }
@@ -633,9 +633,9 @@ struct OrderDetailView: View {
                 ForEach(current.items) { item in
                     HStack {
                         VStack(alignment: .leading) {
-                            Text(item.productTitle).font(.headline)
+                            Text(item.productTitle).font(.wsHeadline)
                             Text([item.variantTitle, item.sku, "× \(item.quantity)"].compactMap { $0 }.joined(separator: " · "))
-                                .font(.subheadline).foregroundStyle(.secondaryText)
+                                .font(.wsSubheadline).foregroundStyle(.secondaryText)
                         }
                         Spacer()
                         Text(Formatters.money(item.total, currency: current.currency) ?? "").monospacedDigit()
@@ -657,9 +657,9 @@ struct OrderDetailView: View {
                 Section("History") {
                     ForEach(history) { entry in
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("\(Formatters.humanize(entry.oldStatus)) → \(Formatters.humanize(entry.newStatus))").font(.subheadline)
+                            Text("\(Formatters.humanize(entry.oldStatus)) → \(Formatters.humanize(entry.newStatus))").font(.wsSubheadline)
                             Text([entry.changedBy, Formatters.dateTime(entry.createdAt), entry.notes].compactMap { $0 }.joined(separator: " · "))
-                                .font(.caption).foregroundStyle(.secondaryText)
+                                .font(.wsCaption).foregroundStyle(.secondaryText)
                         }
                     }
                 }

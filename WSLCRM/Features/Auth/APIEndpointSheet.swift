@@ -25,7 +25,7 @@ struct APIEndpointSheet: View {
                         .accessibilityIdentifier("endpoint.field")
                     if let error {
                         Text(error)
-                            .font(.footnote)
+                            .font(.wsFootnote)
                             .foregroundStyle(.red)
                             .accessibilityIdentifier("endpoint.error")
                     }

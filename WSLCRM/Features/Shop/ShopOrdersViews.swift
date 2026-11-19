@@ -6,18 +6,18 @@ struct ShopOrderRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(order.orderNumber).font(.subheadline.monospacedDigit().weight(.semibold))
+                Text(order.orderNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
                 Spacer()
                 order.status.badge
             }
             HStack {
-                Text(order.customerName).font(.headline).lineLimit(1)
+                Text(order.customerName).font(.wsHeadline).lineLimit(1)
                 Spacer()
-                Text(ShopMoney.format(order.totalMinor, currency: order.currency) ?? "").font(.headline.monospacedDigit())
+                Text(ShopMoney.format(order.totalMinor, currency: order.currency) ?? "").font(.wsHeadline.monospacedDigit())
             }
             Text([order.itemCount > 0 ? "\(order.itemCount) item\(order.itemCount == 1 ? "" : "s")" : nil,
                   Formatters.dateTime(order.createdAt)].compactMap { $0 }.joined(separator: " · "))
-                .font(.footnote).foregroundStyle(.secondaryText)
+                .font(.wsFootnote).foregroundStyle(.secondaryText)
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
@@ -98,12 +98,12 @@ struct ShopOrderDetailView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(current.orderNumber).font(.title3.bold().monospacedDigit())
+                    Text(current.orderNumber).font(.wsTitle3.bold().monospacedDigit())
                     current.status.badge
-                    Text(ShopMoney.format(current.totalMinor, currency: current.currency) ?? "").font(.title2.monospacedDigit())
+                    Text(ShopMoney.format(current.totalMinor, currency: current.currency) ?? "").font(.wsTitle2.monospacedDigit())
                     Text(["Placed \(Formatters.dateTime(current.createdAt) ?? "—")",
                           current.paidAt.map { "paid \(Formatters.dateTime($0) ?? "")" }].compactMap { $0 }.joined(separator: ", "))
-                        .font(.footnote).foregroundStyle(.secondaryText)
+                        .font(.wsFootnote).foregroundStyle(.secondaryText)
                 }
                 .padding(.vertical, 4)
                 if let loadError { InlineErrorRow(error: loadError) { Task { await load() } } }
@@ -124,7 +124,7 @@ struct ShopOrderDetailView: View {
                     }
                     if current.status == .pendingPayment {
                         Text("Cancelling releases the stock held for this order.")
-                            .font(.footnote).foregroundStyle(.secondaryText)
+                            .font(.wsFootnote).foregroundStyle(.secondaryText)
                     }
                     if let actionError { InlineErrorRow(error: actionError) }
                 }
@@ -375,25 +375,25 @@ struct ShopLineRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
-                Text(line.productName).font(.headline)
+                Text(line.productName).font(.wsHeadline)
                 Spacer()
                 Text(ShopMoney.format(line.lineSubtotalMinor, currency: currency) ?? "").monospacedDigit()
             }
             Text([line.sku, "\(line.qty) × \(ShopMoney.format(line.unitPriceMinor, currency: currency) ?? "")"]
                 .compactMap { $0 }.joined(separator: " · "))
-                .font(.subheadline).foregroundStyle(.secondaryText)
+                .font(.wsSubheadline).foregroundStyle(.secondaryText)
             if !line.breakdown.isEmpty {
                 Text(line.breakdown.joined(separator: ", "))
-                    .font(.footnote).foregroundStyle(.secondaryText)
+                    .font(.wsFootnote).foregroundStyle(.secondaryText)
             }
             if line.priceOverrideMinor != nil {
                 Label("Price overridden (list \(ShopMoney.format(line.listUnitPriceMinor, currency: currency) ?? "—"))",
                       systemImage: "tag")
-                    .font(.footnote).foregroundStyle(Tone.warning.textColor)
+                    .font(.wsFootnote).foregroundStyle(Tone.warning.textColor)
             }
             if !line.valid {
                 Label("Configuration breaks a rule", systemImage: "exclamationmark.triangle")
-                    .font(.footnote).foregroundStyle(Tone.danger.textColor)
+                    .font(.wsFootnote).foregroundStyle(Tone.danger.textColor)
             }
         }
         .padding(.vertical, 2)

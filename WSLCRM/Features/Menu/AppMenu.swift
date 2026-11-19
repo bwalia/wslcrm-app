@@ -136,6 +136,8 @@ enum MenuDestination: Hashable {
         case "invoices": return .area(.invoices)
         case "purchase_orders": return .purchaseOrders
         case "my_tasks": return .area(.myTasks)
+        // The app has its own projects, boards and sprints: no need for the web page.
+        case AppMenu.projectsKey: return .area(.projects)
         case "timesheets": return .area(.timesheets)
         case "field_service_jobs": return .screen(.fieldService)
         case "field_service_requests": return .area(.requests)

@@ -11,30 +11,30 @@ struct VisitSummaryRow: View {
             HStack(alignment: .firstTextBaseline) {
                 if let start = visit.scheduledStart {
                     Text(timeRange(start: start, end: visit.scheduledEnd))
-                        .font(.headline.monospacedDigit())
+                        .font(.wsHeadline.monospacedDigit())
                 }
                 Spacer()
                 visit.status.badge
             }
             if showsJob {
                 Text("\(visit.jobNumber) · \(visit.jobTitle)")
-                    .font(.body.weight(.semibold))
+                    .font(.wsBody.weight(.semibold))
                     .lineLimit(2)
             } else if let engineer = visit.engineerName {
-                Label(engineer, systemImage: "person.fill").font(.subheadline)
+                Label(engineer, systemImage: "person.fill").font(.wsSubheadline)
             }
             if showsJob, let customer = visit.customerName {
-                Label(customer, systemImage: "person").font(.subheadline)
+                Label(customer, systemImage: "person").font(.wsSubheadline)
             }
             if let address = visit.fullAddress {
                 Label(address, systemImage: "mappin.and.ellipse")
-                    .font(.subheadline)
+                    .font(.wsSubheadline)
                     .foregroundStyle(.secondaryText)
                     .lineLimit(2)
             }
             if let phase = visit.phaseName {
                 Label(phase, systemImage: "list.bullet.clipboard")
-                    .font(.footnote)
+                    .font(.wsFootnote)
                     .foregroundStyle(.secondaryText)
             }
             if pending { PendingSyncBadge(failed: failed) }

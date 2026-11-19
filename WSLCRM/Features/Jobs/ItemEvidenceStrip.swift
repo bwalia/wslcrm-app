@@ -18,7 +18,7 @@ struct ItemEvidenceStrip: View {
             if !photos.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("Evidence", systemImage: "camera.viewfinder")
-                        .font(.caption.weight(.semibold))
+                        .font(.wsCaption.weight(.semibold))
                         .foregroundStyle(.secondaryText)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {

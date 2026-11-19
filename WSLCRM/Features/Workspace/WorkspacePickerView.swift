@@ -19,14 +19,14 @@ struct WorkspacePickerView: View {
                     } label: {
                         HStack(spacing: 14) {
                             Image(systemName: "building.2.fill")
-                                .font(.title3)
+                                .font(.wsTitle3)
                                 .frame(width: 44, height: 44)
                                 .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
                                 .accessibilityHidden(true)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(workspace.name).font(.headline).foregroundStyle(.primary)
+                                Text(workspace.name).font(.wsHeadline).foregroundStyle(.primary)
                                 if workspace.isOwner {
-                                    Text("Owner").font(.subheadline).foregroundStyle(.secondaryText)
+                                    Text("Owner").font(.wsSubheadline).foregroundStyle(.secondaryText)
                                 }
                             }
                             Spacer()
@@ -34,7 +34,7 @@ struct WorkspacePickerView: View {
                                 ProgressView()
                             } else if session.workspace?.uuid == workspace.uuid {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .font(.title3)
+                                    .font(.wsTitle3)
                                     .foregroundStyle(.tint)
                                     .accessibilityLabel("Selected")
                             }

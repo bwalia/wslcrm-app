@@ -123,7 +123,7 @@ private struct PDCompleteSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    Text(request.task.title).font(.headline)
+                    Text(request.task.title).font(.wsHeadline)
                 }
                 Section {
                     TextField(request.needsEvidence ? "What was checked, and where the evidence is" : "Note (optional)",
@@ -179,7 +179,7 @@ private struct PDSnoozeSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section { Text(task.title).font(.headline) }
+                Section { Text(task.title).font(.wsHeadline) }
                 Section("Until") {
                     Picker("Until", selection: $preset) {
                         ForEach(Preset.allCases) { Text($0.title).tag($0) }

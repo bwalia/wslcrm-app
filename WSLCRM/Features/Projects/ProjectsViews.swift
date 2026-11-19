@@ -59,7 +59,7 @@ private struct ProjectFilterBar: View {
     private func chip(_ title: String, isOn: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.subheadline.weight(.medium))
+                .font(.wsSubheadline.weight(.medium))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(isOn ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.1), in: Capsule())
@@ -76,17 +76,17 @@ struct ProjectRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(project.name).font(.headline)
+                Text(project.name).font(.wsHeadline)
                 if project.isStarred {
-                    Image(systemName: "star.fill").font(.caption).foregroundStyle(Tone.warning.color)
+                    Image(systemName: "star.fill").font(.wsCaption).foregroundStyle(Tone.warning.color)
                         .accessibilityLabel("Starred")
                 }
                 Spacer()
                 Text(project.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
-                    .font(.caption).foregroundStyle(.secondaryText)
+                    .font(.wsCaption).foregroundStyle(.secondaryText)
             }
             if let description = project.description, !description.isEmpty {
-                Text(description).font(.subheadline).foregroundStyle(.secondaryText).lineLimit(2)
+                Text(description).font(.wsSubheadline).foregroundStyle(.secondaryText).lineLimit(2)
             }
             ProgressView(value: project.progress)
                 .tint(.accentColor)
@@ -97,7 +97,7 @@ struct ProjectRow: View {
                 Label("\(project.memberCount)", systemImage: "person.2")
                 Label("\(project.boardCount)", systemImage: "rectangle.split.3x1")
             }
-            .font(.caption)
+            .font(.wsCaption)
             .foregroundStyle(.secondaryText)
         }
         .padding(.vertical, 4)
@@ -133,7 +133,7 @@ struct ProjectDetailView: View {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
                     if let description = project.description, !description.isEmpty {
-                        Text(description).font(.subheadline)
+                        Text(description).font(.wsSubheadline)
                     }
                     ProgressView(value: project.progress)
                     HStack(spacing: 10) {
@@ -168,14 +168,14 @@ struct ProjectDetailView: View {
                         NavigationLink(value: SprintRoute(uuid: sprint.uuid, name: sprint.name)) {
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
-                                    Text(sprint.name).font(.subheadline.weight(.semibold))
+                                    Text(sprint.name).font(.wsSubheadline.weight(.semibold))
                                     Spacer()
                                     Text(sprint.status.rawValue.capitalized)
-                                        .font(.caption).foregroundStyle(.secondaryText)
+                                        .font(.wsCaption).foregroundStyle(.secondaryText)
                                 }
                                 ProgressView(value: sprint.progress)
                                 Text("\(sprint.completedTaskCount) of \(sprint.taskCount) done")
-                                    .font(.caption).foregroundStyle(.secondaryText)
+                                    .font(.wsCaption).foregroundStyle(.secondaryText)
                             }
                         }
                         .accessibilityIdentifier("sprint.row.\(sprint.name)")
@@ -189,7 +189,7 @@ struct ProjectDetailView: View {
                         HStack {
                             ActorChip(actor: member.actor, compact: false)
                             Spacer()
-                            Text(member.role.capitalized).font(.caption).foregroundStyle(.secondaryText)
+                            Text(member.role.capitalized).font(.wsCaption).foregroundStyle(.secondaryText)
                         }
                     }
                 }

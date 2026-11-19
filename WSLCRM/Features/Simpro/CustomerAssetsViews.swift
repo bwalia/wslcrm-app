@@ -74,7 +74,7 @@ private struct FilterChip: View {
     var body: some View {
         Button { isOn.toggle() } label: {
             Label(title, systemImage: isOn ? "checkmark.circle.fill" : "circle")
-                .font(.subheadline.weight(.medium))
+                .font(.wsSubheadline.weight(.medium))
                 .padding(.horizontal, 12)
                 .frame(minHeight: 36)
                 .background(isOn ? Color.accentColor.opacity(0.15) : Color(.secondarySystemBackground), in: Capsule())
@@ -90,14 +90,14 @@ struct CustomerAssetRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text(asset.name).font(.headline)
+                Text(asset.name).font(.wsHeadline)
                 Spacer()
                 if let tag = asset.assetTag {
-                    Text(tag).font(.caption.monospaced()).foregroundStyle(.secondaryText)
+                    Text(tag).font(.wsCaption.monospaced()).foregroundStyle(.secondaryText)
                 }
             }
             Text([asset.customerName, asset.siteName].compactMap { $0 }.joined(separator: " — "))
-                .font(.subheadline).foregroundStyle(.secondaryText)
+                .font(.wsSubheadline).foregroundStyle(.secondaryText)
             HStack(spacing: 6) {
                 if let rating = asset.conditionRating {
                     StatusBadge(text: "\(rating) · \(ConditionRating.label(rating))", systemImage: "gauge.with.dots.needle.33percent",
@@ -172,7 +172,7 @@ struct CustomerAssetDetailView: View {
     private func content(_ asset: CustomerAsset) -> some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
-                Text(asset.name).font(.title2.bold())
+                Text(asset.name).font(.wsTitle2.bold())
                 Text([asset.customerName, asset.siteName].compactMap { $0 }.joined(separator: " — "))
                     .foregroundStyle(.secondaryText)
                 HStack(spacing: 6) {
@@ -223,11 +223,11 @@ struct CustomerAssetDetailView: View {
             ForEach(asset.serviceLevels) { level in
                 let overdue = (SimproDates.day(level.nextServiceDate) ?? .distantFuture) < Calendar.current.startOfDay(for: Date())
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(level.name).font(.headline)
+                    Text(level.name).font(.wsHeadline)
                     Text("Every \(level.frequencyMonths) months · last \(SimproDates.display(level.lastServiceDate))")
-                        .font(.subheadline).foregroundStyle(.secondaryText)
+                        .font(.wsSubheadline).foregroundStyle(.secondaryText)
                     Text("Next due \(SimproDates.display(level.nextServiceDate))")
-                        .font(.subheadline.weight(overdue ? .semibold : .regular))
+                        .font(.wsSubheadline.weight(overdue ? .semibold : .regular))
                         .foregroundStyle(overdue ? Tone.danger.textColor : .primary)
                 }
                 .accessibilityElement(children: .combine)
@@ -285,25 +285,25 @@ private struct SurveyRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(SimproDates.display(test.testedAt)).font(.headline)
+                Text(SimproDates.display(test.testedAt)).font(.wsHeadline)
                 Spacer()
                 StatusBadge(text: test.result.capitalized, systemImage: tone == .success ? "checkmark" : "exclamationmark",
                             tone: tone)
             }
             Text([test.serviceLevel, test.technicianName, test.conditionRating.map { "Condition \($0)" }]
                 .compactMap { $0 }.joined(separator: " · "))
-                .font(.subheadline).foregroundStyle(.secondaryText)
+                .font(.wsSubheadline).foregroundStyle(.secondaryText)
             let readings = test.readings.filter { $0.key != "condition" && $0.value != nil && $0.value != .null }
             if !readings.isEmpty {
                 Text(readings.map { "\($0.label): \($0.displayValue)" }.joined(separator: " · "))
-                    .font(.footnote).foregroundStyle(.secondaryText)
+                    .font(.wsFootnote).foregroundStyle(.secondaryText)
             }
             if !test.failurePoints.isEmpty {
                 Label(test.failurePoints.map(\.label).joined(separator: ", "), systemImage: "xmark.octagon")
-                    .font(.footnote).foregroundStyle(Tone.danger.textColor)
+                    .font(.wsFootnote).foregroundStyle(Tone.danger.textColor)
             }
             if let notes = test.notes, !notes.isEmpty {
-                Text(notes).font(.footnote)
+                Text(notes).font(.wsFootnote)
             }
         }
         .padding(.vertical, 4)

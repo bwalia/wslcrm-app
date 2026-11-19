@@ -81,7 +81,7 @@ struct PhotosSection: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label("Photos", systemImage: "camera")
-                    .font(.headline)
+                    .font(.wsHeadline)
                 if !model.photos.isEmpty {
                     Text("\(model.photos.count)").foregroundStyle(.secondaryText)
                 }
@@ -104,7 +104,7 @@ struct PhotosSection: View {
                     PhotosPicker(selection: $pickerItems, maxSelectionCount: 10, matching: .images) {
                         Label(cameraAvailable ? "Library" : "Add photos",
                               systemImage: "photo.on.rectangle")
-                            .font(.headline)
+                            .font(.wsHeadline)
                             .frame(maxWidth: .infinity, minHeight: 56)
                             .background(Tone.info.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
                             .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Tone.info.textColor, lineWidth: 2))
@@ -122,7 +122,7 @@ struct PhotosSection: View {
             default:
                 if model.photos.isEmpty {
                     Text(canEdit ? "No photos yet. Add fault and site photos for the quote sheet." : "No photos.")
-                        .font(.subheadline).foregroundStyle(.secondaryText)
+                        .font(.wsSubheadline).foregroundStyle(.secondaryText)
                 } else {
                     LazyVGrid(columns: columns, spacing: 8) {
                         ForEach(model.photos) { photo in

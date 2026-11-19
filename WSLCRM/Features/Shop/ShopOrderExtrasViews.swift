@@ -67,7 +67,7 @@ struct ShopOrderPaperworkSection: View {
                 .disabled(busy)
                 .accessibilityIdentifier("shopOrder.markPaid")
             }
-            if let notice { Text(notice).font(.footnote).foregroundStyle(.secondaryText) }
+            if let notice { Text(notice).font(.wsFootnote).foregroundStyle(.secondaryText) }
             if let error { InlineErrorRow(error: error) }
         } header: {
             Text("Payment and paperwork")
@@ -312,7 +312,7 @@ private struct ShopSignatureCaptureView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("\(order.orderNumber) · \(order.itemCount) item\(order.itemCount == 1 ? "" : "s")")
-                .font(.subheadline).foregroundStyle(.secondaryText)
+                .font(.wsSubheadline).foregroundStyle(.secondaryText)
             TextField("Name of the person signing", text: $name)
                 .textContentType(.name)
                 .textFieldStyle(.roundedBorder)
@@ -324,7 +324,7 @@ private struct ShopSignatureCaptureView: View {
                     .accessibilityIdentifier("signature.pad")
                 if !hasSignature {
                     Text("Sign here")
-                        .font(.title3)
+                        .font(.wsTitle3)
                         .foregroundStyle(.gray)
                         .padding(14)
                         .allowsHitTesting(false)
@@ -340,7 +340,7 @@ private struct ShopSignatureCaptureView: View {
             TextField("Note (optional), e.g. left with reception", text: $note, axis: .vertical)
                 .lineLimit(1...3)
                 .textFieldStyle(.roundedBorder)
-            if let problem { Text(problem).font(.footnote).foregroundStyle(Tone.danger.textColor) }
+            if let problem { Text(problem).font(.wsFootnote).foregroundStyle(Tone.danger.textColor) }
             if let error { InlineErrorRow(error: error) }
             Spacer(minLength: 0)
             Button {
@@ -446,14 +446,14 @@ struct ShopOrderCustomerUpdatesSection: View {
             ForEach(updates.prefix(15)) { update in
                 VStack(alignment: .leading, spacing: 3) {
                     HStack {
-                        Text(update.headline).font(.subheadline.weight(.semibold))
+                        Text(update.headline).font(.wsSubheadline.weight(.semibold))
                         Spacer()
-                        Text(Formatters.dateTime(update.at) ?? "").font(.footnote).foregroundStyle(.secondaryText)
+                        Text(Formatters.dateTime(update.at) ?? "").font(.wsFootnote).foregroundStyle(.secondaryText)
                     }
                     if let message = update.message?.trimmedOrNil {
-                        Text(message).font(.subheadline).lineLimit(6)
+                        Text(message).font(.wsSubheadline).lineLimit(6)
                     }
-                    if let author = update.author { Text(author).font(.footnote).foregroundStyle(.secondaryText) }
+                    if let author = update.author { Text(author).font(.wsFootnote).foregroundStyle(.secondaryText) }
                 }
                 .padding(.vertical, 2)
                 .accessibilityElement(children: .combine)
@@ -570,18 +570,18 @@ struct ShopOrderDeliveryChangesSection: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text(request.isPending ? "Waiting for you" : Formatters.humanize(request.status))
-                            .font(.subheadline.weight(.semibold))
+                            .font(.wsSubheadline.weight(.semibold))
                             .foregroundStyle(request.isPending ? Tone.warning.textColor : .primary)
                         Spacer()
-                        Text(Formatters.dateTime(request.createdAt) ?? "").font(.footnote).foregroundStyle(.secondaryText)
+                        Text(Formatters.dateTime(request.createdAt) ?? "").font(.wsFootnote).foregroundStyle(.secondaryText)
                     }
                     if let address = ShopAnyAddress.format(request.requestedAddress) {
-                        Text("Deliver to: \(address)").font(.subheadline)
+                        Text("Deliver to: \(address)").font(.wsSubheadline)
                     }
                     let when = [request.requestedDate, request.windowLabel].compactMap { $0 }
-                    if !when.isEmpty { Text("When: \(when.joined(separator: ", "))").font(.subheadline) }
-                    if let note = request.customerNote { Text("“\(note)”").font(.subheadline).foregroundStyle(.secondaryText) }
-                    if let staffNote = request.staffNote { Text("Our note: \(staffNote)").font(.footnote).foregroundStyle(.secondaryText) }
+                    if !when.isEmpty { Text("When: \(when.joined(separator: ", "))").font(.wsSubheadline) }
+                    if let note = request.customerNote { Text("“\(note)”").font(.wsSubheadline).foregroundStyle(.secondaryText) }
+                    if let staffNote = request.staffNote { Text("Our note: \(staffNote)").font(.wsFootnote).foregroundStyle(.secondaryText) }
                     if request.isPending && session.shopPolicy.canUpdate {
                         HStack {
                             Button("Approve") { Task { await decide(request, approve: true, note: nil) } }

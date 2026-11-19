@@ -100,19 +100,19 @@ struct PDDealRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text(deal.name).font(.headline)
+                Text(deal.name).font(.wsHeadline)
                 Spacer()
                 deal.health.badge
             }
             Text([Formatters.humanize(deal.stageKey), deal.postcode].compactMap { $0 }.joined(separator: " · "))
-                .font(.subheadline).foregroundStyle(.secondaryText)
+                .font(.wsSubheadline).foregroundStyle(.secondaryText)
             if let money = deal.moneyAtRisk, money > 0 {
                 Text("\(Formatters.money(money, currency: deal.currency ?? fallbackCurrency) ?? "") at risk")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.wsSubheadline.weight(.semibold))
                     .foregroundStyle(Tone.danger.textColor)
             }
             if let target = PDDates.day(deal.targetCompletionDate) {
-                Text("Completion target \(target)").font(.footnote).foregroundStyle(.secondaryText)
+                Text("Completion target \(target)").font(.wsFootnote).foregroundStyle(.secondaryText)
             }
         }
         .padding(.vertical, 4)
@@ -178,18 +178,18 @@ struct PDDealView: View {
         return Section {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text(overview.deal.name).font(.title3.weight(.semibold)).accessibilityAddTraits(.isHeader)
+                    Text(overview.deal.name).font(.wsTitle3.weight(.semibold)).accessibilityAddTraits(.isHeader)
                     Spacer()
                     health.health.badge.accessibilityIdentifier("pd.deal.health")
                 }
                 if let money = health.moneyAtRisk, money > 0 {
                     Text("\(Formatters.money(money, currency: currency) ?? "") at risk")
-                        .font(.title2.weight(.bold))
+                        .font(.wsTitle2.weight(.bold))
                         .foregroundStyle(Tone.danger.textColor)
                         .accessibilityIdentifier("pd.deal.moneyAtRisk")
                 }
                 ForEach(health.reasons, id: \.self) { reason in
-                    Label(reason, systemImage: "info.circle").font(.subheadline)
+                    Label(reason, systemImage: "info.circle").font(.wsSubheadline)
                 }
             }
             .padding(.vertical, 4)
@@ -255,7 +255,7 @@ struct PDDealView: View {
                         Text([enquiry.ownerParty.map { "Waiting on \(Formatters.humanize($0).lowercased())" },
                               enquiry.raisedAt.flatMap(Formatters.relative).map { "raised \($0)" }]
                             .compactMap { $0 }.joined(separator: " · "))
-                            .font(.caption).foregroundStyle(.secondaryText)
+                            .font(.wsCaption).foregroundStyle(.secondaryText)
                     }
                     .accessibilityElement(children: .combine)
                 }
@@ -314,8 +314,8 @@ struct PDDealView: View {
             Section("People") {
                 ForEach(parties) { party in
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(party.name ?? "—").font(.headline)
-                        Text(Formatters.humanize(party.role)).font(.subheadline).foregroundStyle(.secondaryText)
+                        Text(party.name ?? "—").font(.wsHeadline)
+                        Text(Formatters.humanize(party.role)).font(.wsSubheadline).foregroundStyle(.secondaryText)
                         if let phone = party.phone?.trimmedOrNil {
                             PhoneLinkRow(name: "Call", phone: phone)
                         }
@@ -336,7 +336,7 @@ struct PDDealView: View {
                               chase.sentAt.flatMap(Formatters.relative),
                               chase.replyAt == nil ? "no reply yet" : "replied"]
                             .compactMap { $0 }.joined(separator: " · "))
-                            .font(.caption).foregroundStyle(.secondaryText)
+                            .font(.wsCaption).foregroundStyle(.secondaryText)
                     }
                     .accessibilityElement(children: .combine)
                 }
@@ -382,7 +382,7 @@ private struct PDStageChip: View {
         default: (.neutral, stage.hasGate == true ? "lock" : "circle")
         }
         Label(stage.name ?? Formatters.humanize(stage.key), systemImage: symbol)
-            .font(.caption.weight(stage.state == "current" ? .bold : .regular))
+            .font(.wsCaption.weight(stage.state == "current" ? .bold : .regular))
             .padding(.horizontal, 8).padding(.vertical, 4)
             .foregroundStyle(tone.textColor)
             .background(tone.color.opacity(stage.state == "current" ? 0.2 : 0.08), in: Capsule())

@@ -59,12 +59,12 @@ struct QuoteLineSheet: View {
                         SheetSectionTitle("Time")
                         Stepper(value: $hours, in: 0...24, step: 0.5) {
                             LabeledContent("Hours", value: hours.formatted())
-                                .font(.title3.monospacedDigit())
+                                .font(.wsTitle3.monospacedDigit())
                         }
                         .accessibilityIdentifier("quote.hours")
                         Stepper(value: $days, in: 0...60, step: 1) {
                             LabeledContent("Days", value: days.formatted())
-                                .font(.title3.monospacedDigit())
+                                .font(.wsTitle3.monospacedDigit())
                         }
                     }
                 case .material:
@@ -84,7 +84,7 @@ struct QuoteLineSheet: View {
                         TextField("Supplier, e.g. Daikin / Stock", text: $supplier)
                         Stepper(value: $quantity, in: 1...10_000, step: 1) {
                             LabeledContent("Quantity", value: quantity.formatted())
-                                .font(.title3.monospacedDigit())
+                                .font(.wsTitle3.monospacedDigit())
                         }
                     }
                     if showsPrices {
@@ -103,7 +103,7 @@ struct QuoteLineSheet: View {
                             .textInputAutocapitalization(.characters)
                         Stepper(value: $days, in: 1...365, step: 1) {
                             LabeledContent("Days", value: days.formatted())
-                                .font(.title3.monospacedDigit())
+                                .font(.wsTitle3.monospacedDigit())
                         }
                     }
                     if showsPrices {
@@ -188,21 +188,21 @@ struct QuoteSheetSummary: View {
         ForEach(groups.filter { !$0.2.isEmpty }, id: \.0) { title, icon, lines in
             VStack(alignment: .leading, spacing: 6) {
                 Label(title, systemImage: icon)
-                    .font(.caption.weight(.bold))
+                    .font(.wsCaption.weight(.bold))
                     .foregroundStyle(.secondaryText)
                     .textCase(.uppercase)
                 ForEach(lines) { item in
                     HStack(alignment: .firstTextBaseline) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(item.quoteSummary).font(.body)
+                            Text(item.quoteSummary).font(.wsBody)
                             if let part = item.partNumber {
-                                Text("Part no. \(part)").font(.caption).foregroundStyle(.secondaryText)
+                                Text("Part no. \(part)").font(.wsCaption).foregroundStyle(.secondaryText)
                             }
                         }
                         Spacer()
                         if showsPrices {
                             Text(Formatters.money(item.lineTotal, currency: currency) ?? "")
-                                .font(.subheadline.monospacedDigit())
+                                .font(.wsSubheadline.monospacedDigit())
                         }
                     }
                     .accessibilityElement(children: .combine)
@@ -256,17 +256,17 @@ private struct PartRow: View {
                 .foregroundStyle(Tone.neutral.textColor)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(part.name).font(.headline).foregroundStyle(.primary)
+                Text(part.name).font(.wsHeadline).foregroundStyle(.primary)
                 if let subtitle = part.subtitle {
-                    Text(subtitle).font(.subheadline).foregroundStyle(.secondaryText)
+                    Text(subtitle).font(.wsSubheadline).foregroundStyle(.secondaryText)
                 }
             }
             Spacer()
             if let stock = part.stockQuantity {
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(stock.formatted()) in stock").font(.caption).foregroundStyle(.secondaryText)
+                    Text("\(stock.formatted()) in stock").font(.wsCaption).foregroundStyle(.secondaryText)
                     if part.isLowStock {
-                        Text("Low stock").font(.caption.weight(.semibold)).foregroundStyle(Tone.warning.textColor)
+                        Text("Low stock").font(.wsCaption.weight(.semibold)).foregroundStyle(Tone.warning.textColor)
                     }
                 }
             }

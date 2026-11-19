@@ -24,6 +24,7 @@ final class PropertyDealsBackOfficeUITests: XCTestCase {
         XCTAssertTrue(code.waitForExistence(timeout: 15))
         code.tap()
         code.typeText("123456")
+        app.enterFirstHub()
         XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 20), "managers land on Today")
     }
 
@@ -151,8 +152,7 @@ final class PropertyDealsBackOfficeUITests: XCTestCase {
 
     func testPurchaseOrderAcknowledgeReceiveAndBill() {
         launch()
-        app.tabBars.buttons["Menu"].tap()
-        element("more.purchaseOrders").tap()
+        app.openApp("purchase_orders")
         element("po.row.PO-000002")
         screenshot("po-01-list")
 

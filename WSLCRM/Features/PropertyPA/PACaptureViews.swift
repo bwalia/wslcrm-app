@@ -123,10 +123,10 @@ struct PACaptureSheet: View {
                 }
                 Section {
                     Label(where_, systemImage: "lock.shield")
-                        .font(.footnote).foregroundStyle(.secondaryText)
+                        .font(.wsFootnote).foregroundStyle(.secondaryText)
                     if !connectivity.isOnline {
                         Label("No signal: it's kept on this phone and sent when you're back online.", systemImage: "wifi.slash")
-                            .font(.footnote).foregroundStyle(.secondaryText)
+                            .font(.wsFootnote).foregroundStyle(.secondaryText)
                     }
                 }
             }
@@ -179,7 +179,7 @@ struct PACaptureSheet: View {
                     Button("Record again", role: .destructive) { recorder.discard() }
                 }
                 if case .failed(let message) = recorder.state {
-                    Text(message).font(.footnote).foregroundStyle(Tone.warning.textColor)
+                    Text(message).font(.wsFootnote).foregroundStyle(Tone.warning.textColor)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -291,7 +291,7 @@ struct PACaptureView: View {
             }
             if let transcript = capture.transcript {
                 Section("What you said") {
-                    Text(transcript).font(.callout).foregroundStyle(.secondaryText)
+                    Text(transcript).font(.wsCallout).foregroundStyle(.secondaryText)
                 }
             }
             Section {
@@ -309,10 +309,10 @@ struct PACaptureView: View {
             if let next = capture.nextAction {
                 Section("Next action") {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(next.title).font(.headline)
-                        if let due = next.dueAt { Text(Formatters.dateTime(due) ?? "").font(.subheadline) }
-                        if let owner = next.owner { Text("Owner: \(owner.name)").font(.subheadline).foregroundStyle(.secondaryText) }
-                        if let reason = next.reason { Text("Why: \(reason)").font(.subheadline).foregroundStyle(.secondaryText) }
+                        Text(next.title).font(.wsHeadline)
+                        if let due = next.dueAt { Text(Formatters.dateTime(due) ?? "").font(.wsSubheadline) }
+                        if let owner = next.owner { Text("Owner: \(owner.name)").font(.wsSubheadline).foregroundStyle(.secondaryText) }
+                        if let reason = next.reason { Text("Why: \(reason)").font(.wsSubheadline).foregroundStyle(.secondaryText) }
                     }
                     .accessibilityElement(children: .combine)
                     .accessibilityIdentifier("pa.confirm.next")
@@ -342,7 +342,7 @@ struct PACaptureView: View {
                 Label("Saved. The CRM is up to date.", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(Tone.success.textColor)
                     .accessibilityIdentifier("pa.confirm.done")
-                if let summary = capture.summary { Text(summary).font(.subheadline) }
+                if let summary = capture.summary { Text(summary).font(.wsSubheadline) }
             }
             Section {
                 Button("Back to your PA") { dismiss() }
@@ -465,7 +465,7 @@ struct PAUpdateRow: View {
         HStack(alignment: .top, spacing: 12) {
             Button(action: onTick) {
                 Image(systemName: ticked ? "checkmark.square.fill" : (rejected ? "xmark.square" : "square"))
-                    .font(.title2)
+                    .font(.wsTitle2)
                     .foregroundStyle(ticked ? Tone.success.color : (rejected ? Tone.danger.color : .secondaryText))
             }
             .buttonStyle(.plain)
@@ -474,33 +474,33 @@ struct PAUpdateRow: View {
             .accessibilityIdentifier("pa.update.tick.\(update.uuid)")
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(update.label).font(.subheadline).foregroundStyle(.secondaryText)
+                    Text(update.label).font(.wsSubheadline).foregroundStyle(.secondaryText)
                         .accessibilityIdentifier("pa.confirm.update.\(update.uuid)")
                     if update.isMaterial {
-                        Text("MUST CHECK").font(.caption2.weight(.bold)).foregroundStyle(Tone.danger.textColor)
+                        Text("MUST CHECK").font(.wsCaption2.weight(.bold)).foregroundStyle(Tone.danger.textColor)
                     }
                 }
                 if let correction {
-                    Text(correction).font(.headline)
-                    Text("was \(update.shownValue)").font(.caption).strikethrough().foregroundStyle(.secondaryText)
+                    Text(correction).font(.wsHeadline)
+                    Text("was \(update.shownValue)").font(.wsCaption).strikethrough().foregroundStyle(.secondaryText)
                 } else {
-                    Text(update.shownValue).font(.headline).strikethrough(rejected).italic(update.isInferred)
+                    Text(update.shownValue).font(.wsHeadline).strikethrough(rejected).italic(update.isInferred)
                 }
                 if let quote = update.quote, !quote.isEmpty {
-                    Text("“\(quote)”").font(.caption).foregroundStyle(.secondaryText).lineLimit(3)
+                    Text("“\(quote)”").font(.wsCaption).foregroundStyle(.secondaryText).lineLimit(3)
                 }
                 HStack(spacing: 6) {
                     if update.isInferred { PAUnconfirmedBadge(by: update.by) }
                     else if let kind = update.kind, kind != .unknown {
-                        Text(kind.rawValue.uppercased()).font(.caption2.weight(.semibold)).foregroundStyle(.secondaryText)
+                        Text(kind.rawValue.uppercased()).font(.wsCaption2.weight(.semibold)).foregroundStyle(.secondaryText)
                     }
                     if let confidence = update.confidence {
-                        Text("\(Int((confidence * 100).rounded()))% sure").font(.caption2).foregroundStyle(.secondaryText)
+                        Text("\(Int((confidence * 100).rounded()))% sure").font(.wsCaption2).foregroundStyle(.secondaryText)
                     }
                 }
                 HStack(spacing: 16) {
-                    Button("Change", action: onChange).font(.footnote).accessibilityIdentifier("pa.update.change.\(update.uuid)")
-                    Button("Remove", role: .destructive, action: onReject).font(.footnote)
+                    Button("Change", action: onChange).font(.wsFootnote).accessibilityIdentifier("pa.update.change.\(update.uuid)")
+                    Button("Remove", role: .destructive, action: onReject).font(.wsFootnote)
                 }
                 .buttonStyle(.borderless)
             }

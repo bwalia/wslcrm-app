@@ -35,11 +35,11 @@ struct PDHotLeadRow: View {
             NavigationLink(value: PDLeadRoute(uuid: lead.leadUuid)) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text(lead.name).font(.headline)
+                        Text(lead.name).font(.wsHeadline)
                         Spacer()
                         if let score = lead.hotScore {
                             Text("\(score)")
-                                .font(.caption.weight(.bold).monospacedDigit())
+                                .font(.wsCaption.weight(.bold).monospacedDigit())
                                 .padding(.horizontal, 8).padding(.vertical, 3)
                                 .foregroundStyle(Tone.danger.textColor)
                                 .background(Tone.danger.color.opacity(0.14), in: Capsule())
@@ -47,7 +47,7 @@ struct PDHotLeadRow: View {
                         }
                     }
                     if let reason = lead.hotReason {
-                        Text(reason).font(.subheadline).foregroundStyle(.secondaryText).lineLimit(3)
+                        Text(reason).font(.wsSubheadline).foregroundStyle(.secondaryText).lineLimit(3)
                     }
                     HStack(spacing: 8) {
                         if let replied = lead.lastReplyAt { Label("Replied \(Formatters.relative(replied) ?? "")", systemImage: "arrowshape.turn.up.left") }
@@ -57,7 +57,7 @@ struct PDHotLeadRow: View {
                                 .foregroundStyle(due < Date() ? Tone.danger.textColor : .secondaryText)
                         }
                     }
-                    .font(.caption).foregroundStyle(.secondaryText).labelStyle(.titleAndIcon)
+                    .font(.wsCaption).foregroundStyle(.secondaryText).labelStyle(.titleAndIcon)
                 }
             }
             .accessibilityIdentifier("pd.today.hot.\(lead.leadUuid)")
@@ -74,7 +74,7 @@ struct PDHotLeadRow: View {
                         .accessibilityIdentifier("pd.hot.called")
                 }
             }
-            .font(.subheadline.weight(.semibold))
+            .font(.wsSubheadline.weight(.semibold))
         }
         .padding(.vertical, 4)
     }
@@ -173,14 +173,14 @@ struct PDLeadView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(lead.name).font(.title2.bold())
+                    Text(lead.name).font(.wsTitle2.bold())
                     if let company = lead.companyName, company != lead.name { Text(company).foregroundStyle(.secondaryText) }
                     HStack(spacing: 8) {
                         if let kind = lead.details?.leadKind { Text(Formatters.humanize(kind)) }
                         if let situation = lead.details?.situation { Text("· \(Formatters.humanize(situation))") }
                         if let status = lead.status { Text("· \(Formatters.humanize(status))") }
                     }
-                    .font(.subheadline).foregroundStyle(.secondaryText)
+                    .font(.wsSubheadline).foregroundStyle(.secondaryText)
                     if let temperature = lead.details?.temperature, temperature != .unknown {
                         temperature.badge
                     }
@@ -204,7 +204,7 @@ struct PDLeadView: View {
             Section {
                 if replies.isEmpty {
                     Text("No replies yet. Emails from them are matched automatically; log a WhatsApp, text or call here.")
-                        .font(.footnote).foregroundStyle(.secondaryText)
+                        .font(.wsFootnote).foregroundStyle(.secondaryText)
                 }
                 ForEach(replies) { PDReplyRow(reply: $0) }
                 if canUpdate {
@@ -218,7 +218,7 @@ struct PDLeadView: View {
             Section {
                 if signals.isEmpty {
                     Text("No news yet. Companies House is checked daily for companies they form, filings and new charges.")
-                        .font(.footnote).foregroundStyle(.secondaryText)
+                        .font(.wsFootnote).foregroundStyle(.secondaryText)
                 }
                 ForEach(signals) { PDSignalRow(signal: $0) }
                 if canUpdate {
@@ -241,11 +241,11 @@ struct PDLeadView: View {
         Section {
             VStack(alignment: .leading, spacing: 6) {
                 (reply.replyTemperature ?? .unknown).badge
-                if let reason = reply.replyReason { Text(reason).font(.subheadline) }
+                if let reason = reply.replyReason { Text(reason).font(.wsSubheadline) }
                 if reply.replyTemperature == .hot {
                     Text(reply.alerted.map { "A \"call now\" task was raised and \($0) \($0 == 1 ? "person was" : "people were") alerted." }
                          ?? "A \"call now\" task was raised.")
-                        .font(.footnote).foregroundStyle(.secondaryText)
+                        .font(.wsFootnote).foregroundStyle(.secondaryText)
                 }
             }
             .accessibilityElement(children: .combine)
@@ -293,18 +293,18 @@ struct PDReplyRow: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Label(Formatters.humanize(reply.channel), systemImage: Self.icon(reply.channel))
-                    .font(.subheadline.weight(.semibold))
+                    .font(.wsSubheadline.weight(.semibold))
                 Spacer()
                 if let temperature = reply.replyTemperature { temperature.badge }
             }
             if let text = reply.bodyText ?? reply.subject {
-                Text(text).font(.body).lineLimit(4)
+                Text(text).font(.wsBody).lineLimit(4)
             }
             HStack(spacing: 6) {
                 if let at = reply.receivedAt { Text(Formatters.relative(at) ?? "") }
                 if let reason = reply.replyReason { Text("· \(reason)").lineLimit(2) }
             }
-            .font(.caption).foregroundStyle(.secondaryText)
+            .font(.wsCaption).foregroundStyle(.secondaryText)
         }
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
@@ -328,15 +328,15 @@ struct PDSignalRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Label(signal.title ?? Self.label(signal.kind), systemImage: Self.icon(signal.kind))
-                .font(.subheadline.weight(.semibold))
-            if let summary = signal.summary { Text(summary).font(.body).lineLimit(4) }
+                .font(.wsSubheadline.weight(.semibold))
+            if let summary = signal.summary { Text(summary).font(.wsBody).lineLimit(4) }
             HStack(spacing: 6) {
                 Text(signal.fromCompaniesHouse ? "Companies House" : Self.label(signal.kind))
                 if let at = signal.occurredAt ?? signal.createdAt { Text("· \(Formatters.relative(at) ?? "")") }
             }
-            .font(.caption).foregroundStyle(.secondaryText)
+            .font(.wsCaption).foregroundStyle(.secondaryText)
             if let raw = signal.url, let url = URL(string: raw), ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
-                Link("Open link", destination: url).font(.caption)
+                Link("Open link", destination: url).font(.wsCaption)
             }
         }
         .padding(.vertical, 2)

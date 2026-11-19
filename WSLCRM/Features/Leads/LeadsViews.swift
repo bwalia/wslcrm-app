@@ -75,9 +75,9 @@ struct LeadsHomeView: View {
                     NavigationLink(value: LeadRoute(uuid: meeting.leadUuid)) {
                         Label {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(meeting.subject ?? "Meeting").font(.headline)
+                                Text(meeting.subject ?? "Meeting").font(.wsHeadline)
                                 Text("\(meeting.name) · \(Formatters.time(meeting.startsAt) ?? "")")
-                                    .font(.subheadline).foregroundStyle(.secondaryText)
+                                    .font(.wsSubheadline).foregroundStyle(.secondaryText)
                             }
                         } icon: { Image(systemName: "calendar").foregroundStyle(Tone.brand.color) }
                     }
@@ -266,11 +266,11 @@ struct LeadRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
-                Text(card.name).font(.headline)
+                Text(card.name).font(.wsHeadline)
                 Spacer()
                 if let score = card.aiScore {
                     Text("\(score)")
-                        .font(.caption.weight(.bold).monospacedDigit())
+                        .font(.wsCaption.weight(.bold).monospacedDigit())
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .foregroundStyle(scoreTone(score).textColor)
                         .background(scoreTone(score).color.opacity(0.14), in: Capsule())
@@ -278,7 +278,7 @@ struct LeadRow: View {
                 }
             }
             if let company = card.companyName, company != card.name {
-                Text(company).font(.subheadline).foregroundStyle(.secondaryText)
+                Text(company).font(.wsSubheadline).foregroundStyle(.secondaryText)
             }
             HStack(spacing: 8) {
                 if showsStage {
@@ -295,7 +295,7 @@ struct LeadRow: View {
                     Text(text).monospacedDigit().foregroundStyle(.secondaryText)
                 }
             }
-            .font(.caption)
+            .font(.wsCaption)
             .labelStyle(.titleAndIcon)
         }
         .padding(.vertical, 2)

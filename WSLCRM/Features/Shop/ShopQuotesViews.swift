@@ -6,19 +6,19 @@ struct ShopQuoteRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(quote.quoteNumber).font(.subheadline.monospacedDigit().weight(.semibold))
+                Text(quote.quoteNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
                 Spacer()
                 quote.status.badge
             }
             HStack {
-                Text(quote.customer.displayName).font(.headline).lineLimit(1)
+                Text(quote.customer.displayName).font(.wsHeadline).lineLimit(1)
                 Spacer()
-                Text(ShopMoney.format(quote.totalMinor, currency: quote.currency) ?? "").font(.headline.monospacedDigit())
+                Text(ShopMoney.format(quote.totalMinor, currency: quote.currency) ?? "").font(.wsHeadline.monospacedDigit())
             }
             Text([quote.source.map { "From \(Formatters.humanize($0).lowercased())" },
                   quote.validUntil.map { (quote.isExpired ? "Expired " : "Valid until ") + (Formatters.day($0) ?? "") }]
                 .compactMap { $0 }.joined(separator: " · "))
-                .font(.footnote)
+                .font(.wsFootnote)
                 .foregroundStyle(quote.isExpired ? Tone.warning.textColor : .secondaryText)
         }
         .padding(.vertical, 4)
@@ -83,25 +83,25 @@ struct ShopQuoteDetailView: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     if current.isOrderAuthorisation {
-                        Text("Order Authorisation").font(.caption.weight(.semibold)).foregroundStyle(.secondaryText)
+                        Text("Order Authorisation").font(.wsCaption.weight(.semibold)).foregroundStyle(.secondaryText)
                     }
-                    Text(current.quoteNumber).font(.title3.bold().monospacedDigit())
+                    Text(current.quoteNumber).font(.wsTitle3.bold().monospacedDigit())
                     current.status.badge
-                    Text(ShopMoney.format(current.totalMinor, currency: current.currency) ?? "").font(.title2.monospacedDigit())
+                    Text(ShopMoney.format(current.totalMinor, currency: current.currency) ?? "").font(.wsTitle2.monospacedDigit())
                     if let validUntil = current.validUntil {
                         Text((current.isExpired ? "Expired " : "Valid until ") + (Formatters.day(validUntil) ?? ""))
-                            .font(.footnote)
+                            .font(.wsFootnote)
                             .foregroundStyle(current.isExpired ? Tone.warning.textColor : .secondaryText)
                     }
                     Text(current.viewedAt.map { "Customer opened it \(Formatters.relative($0) ?? "")" } ?? "Customer hasn't opened it yet")
-                        .font(.footnote).foregroundStyle(.secondaryText)
+                        .font(.wsFootnote).foregroundStyle(.secondaryText)
                     if let sentAt = current.sentAt {
-                        Text("Sent \(Formatters.relative(sentAt) ?? "")").font(.footnote).foregroundStyle(.secondaryText)
+                        Text("Sent \(Formatters.relative(sentAt) ?? "")").font(.wsFootnote).foregroundStyle(.secondaryText)
                     }
                     if let authorisedAt = current.authorisedAt {
                         Label("Confirmed by \(current.authorisedByName ?? "the customer") \(Formatters.relative(authorisedAt) ?? "")",
                               systemImage: "checkmark.seal.fill")
-                            .font(.footnote.weight(.semibold)).foregroundStyle(Tone.success.textColor)
+                            .font(.wsFootnote.weight(.semibold)).foregroundStyle(Tone.success.textColor)
                     }
                 }
                 .padding(.vertical, 4)
@@ -145,7 +145,7 @@ struct ShopQuoteDetailView: View {
                         .disabled(busy || current.customer.email == nil)
                         .accessibilityIdentifier("shopQuote.send")
                     }
-                    if let notice { Text(notice).font(.footnote).foregroundStyle(.secondaryText) }
+                    if let notice { Text(notice).font(.wsFootnote).foregroundStyle(.secondaryText) }
                 } header: {
                     Text(current.isOrderAuthorisation ? "Order Authorisation" : "Order")
                 } footer: {
@@ -192,7 +192,7 @@ struct ShopQuoteDetailView: View {
                     .accessibilityIdentifier("shopQuote.introduce")
                     if let supplierNotice {
                         Label(supplierNotice, systemImage: "checkmark.circle")
-                            .font(.footnote).foregroundStyle(Tone.success.textColor)
+                            .font(.wsFootnote).foregroundStyle(Tone.success.textColor)
                     }
                     if let code = current.dealCode {
                         NavigationLink {
@@ -470,9 +470,9 @@ private struct ShopQuoteLineForm: View {
     var body: some View {
         Form {
             Section {
-                Text(line.productName).font(.headline)
+                Text(line.productName).font(.wsHeadline)
                 if !line.breakdown.isEmpty {
-                    Text(line.breakdown.joined(separator: ", ")).font(.footnote).foregroundStyle(.secondaryText)
+                    Text(line.breakdown.joined(separator: ", ")).font(.wsFootnote).foregroundStyle(.secondaryText)
                 }
                 Stepper("Quantity: \(qty)", value: $qty, in: 1...999)
             }

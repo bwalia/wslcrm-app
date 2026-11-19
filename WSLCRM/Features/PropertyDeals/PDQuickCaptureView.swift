@@ -164,7 +164,7 @@ struct PDQuickCaptureView: View {
             .disabled(isLocating)
             .accessibilityIdentifier("pd.capture.useLocation")
             if let locationMessage {
-                Text(locationMessage).font(.footnote).foregroundStyle(.secondaryText)
+                Text(locationMessage).font(.wsFootnote).foregroundStyle(.secondaryText)
             }
             TextField("Address", text: $draft.addressLine1)
                 .textContentType(.streetAddressLine1)
@@ -248,7 +248,7 @@ struct PDQuickCaptureView: View {
             }
             .accessibilityIdentifier("pd.capture.dictate")
             if case .unavailable(let reason) = dictation.state {
-                Text(reason).font(.footnote).foregroundStyle(.secondaryText)
+                Text(reason).font(.wsFootnote).foregroundStyle(.secondaryText)
             }
         } header: {
             Text("Notes")

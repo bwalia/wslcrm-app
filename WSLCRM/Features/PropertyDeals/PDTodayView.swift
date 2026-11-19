@@ -145,7 +145,7 @@ struct PDTodayView: View {
             if let money = today.moneyAtRisk, money > 0 {
                 Label {
                     Text("\(Formatters.money(money, currency: currency) ?? "") at risk on late deals")
-                        .font(.headline)
+                        .font(.wsHeadline)
                 } icon: {
                     Image(systemName: "banknote.fill").foregroundStyle(Tone.danger.color)
                 }
@@ -320,17 +320,17 @@ struct PDTaskRow: View {
         let urgency = task.urgency
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: urgency.systemImage)
-                .font(.title3)
+                .font(.wsTitle3)
                 .foregroundStyle(urgency.tone.color)
                 .frame(width: 28)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text(task.title).font(.headline)
+                Text(task.title).font(.wsHeadline)
                 if let deal = task.dealName {
-                    Text(deal).font(.subheadline).foregroundStyle(.secondaryText)
+                    Text(deal).font(.wsSubheadline).foregroundStyle(.secondaryText)
                 }
                 if let why = task.shortWhy {
-                    Text(why).font(.footnote).foregroundStyle(urgency.tone.textColor)
+                    Text(why).font(.wsFootnote).foregroundStyle(urgency.tone.textColor)
                 }
                 HStack(spacing: 8) {
                     if let due = task.dueAt {
@@ -340,14 +340,14 @@ struct PDTaskRow: View {
                     if task.compliance == true { Label("Compliance", systemImage: "checkmark.shield") }
                     if task.pdStatus.isWaitingOnOthers { Label(task.pdStatus.label, systemImage: task.pdStatus.systemImage) }
                 }
-                .font(.caption)
+                .font(.wsCaption)
                 .foregroundStyle(.secondaryText)
                 .labelStyle(.titleAndIcon)
             }
             Spacer(minLength: 0)
             if let score = task.urgencyScore {
                 Text(score.formatted(.number.precision(.fractionLength(0))))
-                    .font(.caption.weight(.bold).monospacedDigit())
+                    .font(.wsCaption.weight(.bold).monospacedDigit())
                     .padding(.horizontal, 8).padding(.vertical, 4)
                     .foregroundStyle(urgency.tone.textColor)
                     .background(urgency.tone.color.opacity(0.14), in: Capsule())
@@ -376,21 +376,21 @@ struct PDDealCardRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(deal.name ?? "Deal").font(.headline)
+                Text(deal.name ?? "Deal").font(.wsHeadline)
                 Spacer()
                 (deal.health ?? .unknown).badge
             }
             if let money = deal.moneyAtRisk, money > 0 {
                 Text("\(Formatters.money(money, currency: currency) ?? "") at risk")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.wsSubheadline.weight(.semibold))
                     .foregroundStyle(Tone.danger.textColor)
             }
             if let target = PDDates.day(deal.targetCompletionDate) {
                 Text("Completion target \(target)" + (PDDates.day(deal.predictedCompletionDate).map { " · forecast \($0)" } ?? ""))
-                    .font(.footnote).foregroundStyle(.secondaryText)
+                    .font(.wsFootnote).foregroundStyle(.secondaryText)
             }
             if let reason = deal.healthReasons.first {
-                Text(reason).font(.footnote).foregroundStyle(.secondaryText)
+                Text(reason).font(.wsFootnote).foregroundStyle(.secondaryText)
             }
         }
         .padding(.vertical, 4)
@@ -403,13 +403,13 @@ struct PDApprovalCardRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(approval.title ?? "Approval").font(.headline)
+            Text(approval.title ?? "Approval").font(.wsHeadline)
             HStack(spacing: 8) {
                 if let deal = approval.dealName { Text(deal) }
                 if let agent = approval.agentKey { Label(Formatters.humanize(agent), systemImage: "sparkles") }
                 if approval.fromJobshout == true { Text("via JobShout") }
             }
-            .font(.footnote)
+            .font(.wsFootnote)
             .foregroundStyle(.secondaryText)
         }
         .padding(.vertical, 2)
@@ -426,8 +426,8 @@ private struct PDCountTile: View {
     var body: some View {
         VStack(spacing: 4) {
             Image(systemName: systemImage).foregroundStyle(tone.color).accessibilityHidden(true)
-            Text("\(value)").font(.title2.weight(.bold).monospacedDigit())
-            Text(title).font(.caption).foregroundStyle(.secondaryText).multilineTextAlignment(.center)
+            Text("\(value)").font(.wsTitle2.weight(.bold).monospacedDigit())
+            Text(title).font(.wsCaption).foregroundStyle(.secondaryText).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, minHeight: 72)
         .padding(.vertical, 6)

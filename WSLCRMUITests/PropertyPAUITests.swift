@@ -24,6 +24,8 @@ final class PropertyPAUITests: XCTestCase {
         XCTAssertTrue(code.waitForExistence(timeout: 15))
         code.tap()
         code.typeText("123456")
+        // Everyone lands on Home; these flows start in the person's own hub.
+        app.enterFirstHub()
     }
 
     private func element(_ identifier: String, timeout: TimeInterval = 15,
@@ -249,6 +251,7 @@ final class PropertyPAUITests: XCTestCase {
         launch(role: "pamanager", extra: ["-UITestBiometric", "pass"])
         element("pa.teach", timeout: 20).tap()
         type("An agent's valuation is not the seller's minimum price. Treat it as their anchor.", into: "pa.teach.text")
+        _ = scrollTo("pa.teach.scope")
         app.buttons["The company"].firstMatch.tap()
         element("pa.teach.next").tap()
         XCTAssertTrue(element("pa.teach.rule", timeout: 15).label.contains("anchor"))

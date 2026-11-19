@@ -98,12 +98,11 @@ final class PropertyDealsIntTourUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Shop"].waitForExistence(timeout: 30))
         snapshot("int-05-shop")
 
-        app.tabBars.buttons["Menu"].tap()
-        element("more.invoices").tap()
+        app.openApp("invoices")
         XCTAssertTrue(app.navigationBars["Invoices"].waitForExistence(timeout: 30))
         snapshot("int-06-invoices")
         app.navigationBars.buttons.firstMatch.tap()
-        element("more.purchaseOrders").tap()
+        app.openApp("purchase_orders")
         XCTAssertTrue(text(containing: "York Kitchens Ltd").waitForExistence(timeout: 30), "the seeded kitchen order")
         snapshot("int-07-purchase-orders")
     }

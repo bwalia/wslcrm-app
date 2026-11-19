@@ -77,7 +77,7 @@ struct PartProposalSheet: View {
                     Section {
                         Label("You're offline. A part proposal travels with its photo, so this one needs a connection.",
                               systemImage: "wifi.slash")
-                            .font(.subheadline)
+                            .font(.wsSubheadline)
                             .accessibilityIdentifier("partProposal.offline")
                     }
                 }
@@ -134,13 +134,13 @@ struct PartProposalSheet: View {
 
             if let part = model.selected {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(part.name).font(.headline)
+                    Text(part.name).font(.wsHeadline)
                     if let subtitle = part.subtitle {
-                        Text(subtitle).font(.footnote).foregroundStyle(.secondaryText)
+                        Text(subtitle).font(.wsFootnote).foregroundStyle(.secondaryText)
                     }
                     if let price = Formatters.money(part.unitPrice, currency: currency) {
                         Text("\(price) each, from the catalogue")
-                            .font(.subheadline).foregroundStyle(.secondaryText)
+                            .font(.wsSubheadline).foregroundStyle(.secondaryText)
                     }
                     if part.isLowStock {
                         StatusBadge(text: "Low stock", systemImage: "exclamationmark.triangle", tone: .warning)

@@ -1,124 +1,198 @@
 import SwiftUI
 import UIKit
 
-/// The Menu tab: the web dashboard's sidebar on the phone. Same groups, same order, same items
-/// for the same person and workspace — the server applies the workspace's modules and the
-/// person's permissions. Items the app has a screen for open it; the rest open the web page,
-/// signed in, inside the app.
-struct MenuView: View {
+/// The Apps tab: everything in the workspace, from the server's menu (the same items, modules and
+/// permissions as the web's sidebar), as an app launcher. Each group is a card; the app's own
+/// screens come first, and the web dashboard's pages are marked "Web" so nobody is surprised.
+struct AppsView: View {
+    @Binding var assistant: WebPageRoute?
     @Environment(SessionStore.self) private var session
-    @Environment(SyncCenter.self) private var sync
-    @State private var confirmingSignOut = false
     @State private var search = ""
 
     var body: some View {
-        List {
-            if search.isEmpty { accountSection }
-
-            if session.menu.isEmpty {
-                // No menu yet (offline on first launch): the modules the app knows, by permission.
-                Section("Modules") { LegacyModuleLinks() }
-            } else {
-                let sections = session.menu.filtered(search)
-                let settings = search.isEmpty ? [] : session.menu.secondary.filter {
-                    MenuItemLink.title(for: $0).localizedCaseInsensitiveContains(search)
-                }
-                if sections.isEmpty && settings.isEmpty {
-                    Text("Nothing in your menu matches “\(search)”.")
-                        .foregroundStyle(.secondaryText)
-                }
-                ForEach(sections) { section in
-                    Section {
-                        ForEach(section.items) { MenuItemLink(item: $0) }
-                    } header: {
-                        if let title = section.title { Text(title) }
+        let catalog = AppCatalog(menu: session.menu)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 22) {
+                if session.menu.isEmpty {
+                    // No menu yet (offline on first launch): the modules the app knows, by permission.
+                    VStack(alignment: .leading, spacing: 10) {
+                        DashboardSectionHeader("Modules")
+                        VStack(spacing: 0) { LegacyModuleLinks() }
+                            .buttonStyle(.pressableCard)
+                            .brandCard(padding: 8)
+                    }
+                } else {
+                    let groups = catalog.filtered(search)
+                    if groups.isEmpty {
+                        ContentUnavailableView.search(text: search)
+                    }
+                    ForEach(groups) { group in
+                        VStack(alignment: .leading, spacing: 10) {
+                            DashboardSectionHeader(group.title)
+                            VStack(spacing: 0) {
+                                ForEach(Array(group.entries.enumerated()), id: \.element.id) { index, entry in
+                                    AppEntryLink(entry: entry, assistant: $assistant) { AppRow(entry: entry) }
+                                    if index < group.entries.count - 1 {
+                                        Divider().padding(.leading, 60)
+                                    }
+                                }
+                            }
+                            .brandCard(padding: 6, radius: 18)
+                        }
                     }
                 }
-                if !settings.isEmpty {
-                    Section { ForEach(settings) { MenuItemLink(item: $0) } }
-                }
             }
-
-            if search.isEmpty { appSection }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
         }
-        .navigationTitle("Menu")
-        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search the menu")
+        .brandCanvas()
+        .navigationTitle("Apps")
+        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search apps")
         .refreshable { await session.reloadPermissions() }
-        .confirmationDialog(signOutTitle, isPresented: $confirmingSignOut, titleVisibility: .visible) {
-            Button("Sign out", role: .destructive) {
-                Task { await session.signOut() }
-            }
-        } message: {
-            if hasUnsynced {
-                Text("You have \(sync.mutations.count) change(s) that haven't reached the server. They stay on this device and sync the next time you sign in.")
-            }
-        }
+        .accessibilityIdentifier("apps.list")
     }
+}
 
-    @ViewBuilder
-    private var accountSection: some View {
-        if let user = session.user {
-            Section {
-                HStack(spacing: 14) {
-                    Text(user.initials)
-                        .font(.headline)
-                        .frame(width: 48, height: 48)
-                        .background(Color.accentColor.opacity(0.15), in: Circle())
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading) {
-                        Text(user.displayName).font(.headline)
-                        Text(user.email).font(.subheadline).foregroundStyle(.secondaryText)
+/// One app in a group card: its coloured icon, its name, and "Web" where it is a web page.
+private struct AppRow: View {
+    let entry: AppCatalog.Entry
+
+    var body: some View {
+        HStack(spacing: 14) {
+            AppIconTile(systemImage: entry.systemImage, color: entry.color, size: 36)
+            Text(entry.name)
+                .font(.brandCallout)
+                .foregroundStyle(Color(.label))
+                .multilineTextAlignment(.leading)
+            Spacer(minLength: 8)
+            if entry.isWeb {
+                Pill(text: "Web", systemImage: "globe")
+                    .accessibilityLabel("Opens the web page")
+            } else if entry.isAssistant {
+                Pill(text: "AI", systemImage: "sparkles", foreground: Tone.brand.textColor,
+                     background: Color.accentColor.opacity(0.12))
+            }
+            Image(systemName: "chevron.right")
+                .font(.wsFootnote.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
+        .frame(minHeight: 52)
+        .contentShape(Rectangle())
+    }
+}
+
+/// The person, their workspace, and the app: behind the avatar on Home.
+struct ProfileSheet: View {
+    @Environment(SessionStore.self) private var session
+    @Environment(SyncCenter.self) private var sync
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmingSignOut = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let user = session.user {
+                    Section {
+                        VStack(spacing: 10) {
+                            Text(user.initials)
+                                .font(.brandDisplay)
+                                .foregroundStyle(.white)
+                                .frame(width: 84, height: 84)
+                                .background(
+                                    LinearGradient(colors: [Color.accentColor, Palette.indigo2],
+                                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                                    in: Circle())
+                                .accessibilityHidden(true)
+                            Text(user.displayName).font(.brandTitle)
+                            Text(user.email).font(.brandSubheadline).foregroundStyle(.secondaryText)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .listRowBackground(Color.clear)
+                        .accessibilityElement(children: .combine)
+                    }
+                    Section("Workspace") {
+                        NavigationLink {
+                            WorkspacePickerView(isInitialChoice: false)
+                        } label: {
+                            LabeledContent {
+                                Text(session.workspace?.name ?? "None")
+                            } label: {
+                                Label(session.workspaces.count > 1 ? "Switch workspace" : "Workspace",
+                                      systemImage: "building.2")
+                            }
+                        }
+                        .accessibilityIdentifier("more.workspace")
+                        ForEach(session.menu.secondary) { item in
+                            if case .web(let route)? = MenuDestination.of(item) {
+                                NavigationLink {
+                                    WebPageView(route: route)
+                                } label: {
+                                    LabeledContent {
+                                        Pill(text: "Web", systemImage: "globe")
+                                    } label: {
+                                        Label(item.key == "settings" ? "Workspace settings" : item.name,
+                                              systemImage: "slider.horizontal.3")
+                                    }
+                                }
+                                .accessibilityIdentifier("menu.item.\(item.key)")
+                            }
+                        }
                     }
                 }
-                .accessibilityElement(children: .combine)
-                NavigationLink {
-                    WorkspacePickerView(isInitialChoice: false)
-                } label: {
-                    LabeledContent {
-                        Text(session.workspace?.name ?? "None")
+                Section("This device") {
+                    if session.permissions.shows(.projects) || session.permissions.can(.read, .projects) {
+                        // A value link: the queue pushes value routes, and a destination link in
+                        // the same stack makes SwiftUI rebuild it (see `withAppDestinations`).
+                        NavigationLink(value: FieldServiceArea.reviewQueue) {
+                            Label("Waiting for me", systemImage: "person.crop.circle.badge.questionmark")
+                        }
+                        .accessibilityIdentifier("more.reviewQueue")
+                    }
+                    NavigationLink {
+                        PendingChangesView()
                     } label: {
-                        Label(session.workspaces.count > 1 ? "Workspace · switch" : "Workspace",
-                              systemImage: "building.2")
+                        LabeledContent {
+                            Text(sync.mutations.isEmpty ? "All synced" : "\(sync.mutations.count)")
+                        } label: {
+                            Label("Unsynced changes", systemImage: "arrow.triangle.2.circlepath")
+                        }
                     }
+                    .accessibilityIdentifier("more.pendingChanges")
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Label("App settings", systemImage: "gearshape")
+                    }
+                    .accessibilityIdentifier("more.settings")
                 }
-                .accessibilityIdentifier("more.workspace")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var appSection: some View {
-        Section {
-            ForEach(session.menu.secondary) { MenuItemLink(item: $0) }
-            // The app's own queue of agent work to review (no web page): next to Projects.
-            if session.permissions.shows(.projects) || session.permissions.can(.read, .projects) {
-                NavigationLink(value: FieldServiceArea.reviewQueue) {
-                    Label("Waiting for me", systemImage: "person.crop.circle.badge.questionmark")
-                }
-                .accessibilityIdentifier("more.reviewQueue")
-            }
-            NavigationLink {
-                PendingChangesView()
-            } label: {
-                LabeledContent {
-                    Text(sync.mutations.isEmpty ? "All synced" : "\(sync.mutations.count)")
-                } label: {
-                    Label("Unsynced changes", systemImage: "arrow.triangle.2.circlepath")
+                Section {
+                    Button("Sign out", role: .destructive) { confirmingSignOut = true }
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .accessibilityIdentifier("more.signOut")
                 }
             }
-            .accessibilityIdentifier("more.pendingChanges")
-            NavigationLink {
-                SettingsView()
-            } label: {
-                Label("App settings", systemImage: "gearshape")
+            .navigationTitle("Profile")
+            .navigationBarTitleDisplayMode(.inline)
+            // The review queue opens tasks, projects and the rest from here.
+            .withAppDestinations()
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }.accessibilityIdentifier("profile.done")
+                }
             }
-            .accessibilityIdentifier("more.settings")
-        }
-
-        Section {
-            Button("Sign out", role: .destructive) { confirmingSignOut = true }
-                .frame(minHeight: 44)
-                .accessibilityIdentifier("more.signOut")
+            .confirmationDialog(signOutTitle, isPresented: $confirmingSignOut, titleVisibility: .visible) {
+                Button("Sign out", role: .destructive) {
+                    Task { await session.signOut() }
+                }
+            } message: {
+                if hasUnsynced {
+                    Text("You have \(sync.mutations.count) change(s) that haven't reached the server. They stay on this device and sync the next time you sign in.")
+                }
+            }
         }
     }
 
@@ -129,43 +203,6 @@ struct MenuView: View {
 
     private var signOutTitle: String {
         hasUnsynced ? "Sign out with unsynced changes?" : "Sign out of \(Brand.current.name)?"
-    }
-}
-
-/// One menu row. Value links only: the screens behind them push further value routes, and a
-/// destination link in the same list makes SwiftUI rebuild it (see `withAppDestinations`).
-private struct MenuItemLink: View {
-    let item: AppMenu.Item
-
-    /// The web calls the workspace's settings just "Settings"; next to the app's own settings that
-    /// needs saying.
-    static func title(for item: AppMenu.Item) -> String {
-        item.key == "settings" ? "Workspace settings" : item.name
-    }
-
-    var body: some View {
-        switch MenuDestination.of(item) {
-        case .screen(let screen): NavigationLink(value: screen) { label }.accessibilityIdentifier(identifier)
-        case .area(let area): NavigationLink(value: area) { label }.accessibilityIdentifier(identifier)
-        case .purchaseOrders: NavigationLink(value: PurchaseOrdersRoute()) { label }.accessibilityIdentifier(identifier)
-        case .propertyDealsApprovals: NavigationLink(value: PDApprovalsRoute()) { label }.accessibilityIdentifier(identifier)
-        case .propertyDealsRenovations: NavigationLink(value: PDRenovationsRoute()) { label }.accessibilityIdentifier(identifier)
-        case .propertyPA(let manager): NavigationLink(value: PATodayRoute(manager: manager)) { label }.accessibilityIdentifier(identifier)
-        case .web(let route): NavigationLink(value: route) { label }.accessibilityIdentifier(identifier)
-        case nil: label.foregroundStyle(.secondaryText).accessibilityIdentifier(identifier)
-        }
-    }
-
-    private var label: some View {
-        Label(Self.title(for: item), systemImage: Self.symbol(item.icon))
-    }
-
-    private var identifier: String { "menu.item.\(item.key)" }
-
-    /// The SF Symbol for the item's icon, checked so a name this iOS lacks never draws a blank.
-    private static func symbol(_ lucide: String?) -> String {
-        let name = MenuIcon.systemName(for: lucide)
-        return UIImage(systemName: name) == nil ? MenuIcon.fallback : name
     }
 }
 
@@ -187,7 +224,7 @@ extension NativeScreen {
 }
 
 /// The modules the app knows, by permission — only used before the menu has ever loaded.
-private struct LegacyModuleLinks: View {
+struct LegacyModuleLinks: View {
     @Environment(SessionStore.self) private var session
 
     var body: some View {

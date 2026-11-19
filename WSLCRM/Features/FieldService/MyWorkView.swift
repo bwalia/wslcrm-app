@@ -237,7 +237,7 @@ private struct MyWorkContent: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
                 Text(Date().formatted(.dateTime.weekday(.wide).day().month(.wide)))
-                    .font(.subheadline)
+                    .font(.wsSubheadline)
                     .foregroundStyle(.secondaryText)
 
                 if let banner = model.newJobBanner {
@@ -245,7 +245,7 @@ private struct MyWorkContent: View {
                         model.newJobBanner = nil
                     } label: {
                         Label(banner, systemImage: "bell.badge.fill")
-                            .font(.headline)
+                            .font(.wsHeadline)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(14)
                             .background(Tone.progress.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 14))
@@ -282,7 +282,7 @@ private struct MyWorkContent: View {
                     ForEach(layout.buckets) { bucket in
                         VStack(alignment: .leading, spacing: 8) {
                             Text("\(bucket.title) (\(bucket.visits.count))")
-                                .font(.caption.weight(.bold))
+                                .font(.wsCaption.weight(.bold))
                                 .textCase(.uppercase)
                                 .foregroundStyle(bucket.isOverdue ? Tone.danger.textColor : .secondaryText)
                                 .accessibilityAddTraits(.isHeader)
@@ -342,7 +342,7 @@ private struct HeroCard: View {
         let active = visit.status == .enRoute || visit.status == .onSite
         VStack(alignment: .leading, spacing: 12) {
             let heading = Text(active ? "Current job" : "Next up")
-                .font(.caption.weight(.bold))
+                .font(.wsCaption.weight(.bold))
                 .textCase(.uppercase)
                 .foregroundStyle(.secondaryText)
             let badges = Group {
@@ -358,20 +358,20 @@ private struct HeroCard: View {
                 HStack(spacing: 8) { heading; badges }
             }
             Text(visit.jobTitle.isEmpty ? "Service visit" : visit.jobTitle)
-                .font(.title.bold())
+                .font(.wsTitle.bold())
                 .foregroundStyle(.primary)
                 .multilineTextAlignment(.leading)
             Text(visit.customerName ?? "No customer")
-                .font(.title3)
+                .font(.wsTitle3)
                 .foregroundStyle(.secondaryText)
             if let place = visit.siteName ?? visit.fullAddress {
                 Label(place, systemImage: "mappin.and.ellipse")
-                    .font(.body)
+                    .font(.wsBody)
                     .foregroundStyle(.secondaryText)
             }
             if pending { PendingSyncBadge() }
             Label(active ? "Continue job" : visit.status == .noAccess ? "Revisit" : "Start job", systemImage: "arrow.right.circle.fill")
-                .font(.headline)
+                .font(.wsHeadline)
                 .frame(maxWidth: .infinity, minHeight: 56)
                 .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 14))
                 .foregroundStyle(.white)
@@ -404,7 +404,7 @@ private struct SummaryCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Today at a glance")
-                .font(.caption.weight(.bold))
+                .font(.wsCaption.weight(.bold))
                 .textCase(.uppercase)
                 .foregroundStyle(.secondaryText)
             HStack(spacing: 10) {
@@ -424,8 +424,8 @@ private struct SummaryTile: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            Text("\(value)").font(.largeTitle.bold().monospacedDigit()).foregroundStyle(tone == .neutral ? .primary : tone.textColor)
-            Text(label).font(.footnote).foregroundStyle(.secondaryText).multilineTextAlignment(.center)
+            Text("\(value)").font(.wsLargeTitle.bold().monospacedDigit()).foregroundStyle(tone == .neutral ? .primary : tone.textColor)
+            Text(label).font(.wsFootnote).foregroundStyle(.secondaryText).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, minHeight: 86)
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
@@ -445,9 +445,9 @@ private struct WorkRow: View {
                     WorkStatusBadge(visit: visit)
                     if visit.isUrgent { StatusBadge(text: "Urgent", systemImage: "exclamationmark.2", tone: .danger) }
                 }
-                Text(visit.jobTitle.isEmpty ? "Service visit" : visit.jobTitle).font(.headline).foregroundStyle(.primary)
+                Text(visit.jobTitle.isEmpty ? "Service visit" : visit.jobTitle).font(.wsHeadline).foregroundStyle(.primary)
                 Text([visit.customerName ?? "No customer", visit.siteName ?? visit.fullAddress].compactMap { $0 }.joined(separator: " · "))
-                    .font(.subheadline).foregroundStyle(.secondaryText).lineLimit(2)
+                    .font(.wsSubheadline).foregroundStyle(.secondaryText).lineLimit(2)
                 if pending { PendingSyncBadge() }
             }
             Spacer(minLength: 0)
@@ -471,7 +471,7 @@ private struct TodayTasksBlock: View {
             let today = model.todayTasks
             VStack(alignment: .leading, spacing: 8) {
                 Text("Tasks for today (\(today.count))")
-                    .font(.caption.weight(.bold))
+                    .font(.wsCaption.weight(.bold))
                     .textCase(.uppercase)
                     .foregroundStyle(.secondaryText)
                     .accessibilityAddTraits(.isHeader)
@@ -481,7 +481,7 @@ private struct TodayTasksBlock: View {
                 } else if today.isEmpty {
                     Text(model.tasks.isEmpty ? "No project tasks assigned to you."
                                              : "Nothing overdue, due today or in progress.")
-                        .font(.subheadline)
+                        .font(.wsSubheadline)
                         .foregroundStyle(.secondaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(14)
@@ -493,7 +493,7 @@ private struct TodayTasksBlock: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 TaskCard(task: task)
                                 if let project = task.projectName {
-                                    Text(project).font(.caption).foregroundStyle(.secondaryText)
+                                    Text(project).font(.wsCaption).foregroundStyle(.secondaryText)
                                 }
                             }
                             .foregroundStyle(.primary)
@@ -510,7 +510,7 @@ private struct TodayTasksBlock: View {
                     NavigationLink(value: FieldServiceArea.myTasks) {
                         Label(today.count > limit ? "All \(today.count) for today, and the rest" : "All my tasks",
                               systemImage: "checklist")
-                            .font(.subheadline.weight(.semibold))
+                            .font(.wsSubheadline.weight(.semibold))
                             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     }
                     .accessibilityIdentifier("mywork.allTasks")
@@ -527,7 +527,7 @@ private struct AllClearCard: View {
         VStack(spacing: 12) {
             Image(systemName: "checkmark.circle.fill").font(.system(size: 56)).foregroundStyle(Tone.success.color)
                 .accessibilityHidden(true)
-            Text("All clear").font(.title2.bold())
+            Text("All clear").font(.wsTitle2.bold())
             Text(doneToday > 0 ? "No jobs waiting for you right now — \(doneToday) done today." : "No jobs waiting for you right now.")
                 .foregroundStyle(.secondaryText).multilineTextAlignment(.center)
         }
@@ -557,9 +557,9 @@ private struct NotificationsSheet: View {
                                 .accessibilityHidden(true)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(notification.title).font(notification.isRead ? .body : .headline).foregroundStyle(.primary)
-                                if let message = notification.message { Text(message).font(.subheadline).foregroundStyle(.secondaryText) }
+                                if let message = notification.message { Text(message).font(.wsSubheadline).foregroundStyle(.secondaryText) }
                                 if let date = notification.createdAt {
-                                    Text(Formatters.relative(date) ?? "").font(.caption).foregroundStyle(.tertiary)
+                                    Text(Formatters.relative(date) ?? "").font(.wsCaption).foregroundStyle(.tertiary)
                                 }
                             }
                         }

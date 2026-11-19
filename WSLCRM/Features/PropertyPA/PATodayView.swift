@@ -83,7 +83,7 @@ struct PATodayView: View {
             if let brief = today.brief {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(brief.text).font(.body)
+                        Text(brief.text).font(.wsBody)
                         if !brief.sources.isEmpty {
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack { ForEach(brief.sources, id: \.self) { PASourceChip(source: $0) } }
@@ -160,9 +160,9 @@ struct PATodayView: View {
                 ForEach(captures) { capture in
                     NavigationLink(value: PACaptureRoute(uuid: capture.uuid)) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(capture.resolved?.person?.name ?? capture.summary ?? "Voice note").font(.headline)
+                            Text(capture.resolved?.person?.name ?? capture.summary ?? "Voice note").font(.wsHeadline)
                             Text(capture.status == .ready ? "Ready to confirm" : capture.status.isWorking ? "The PA is listening…" : Formatters.humanize(capture.status.rawValue))
-                                .font(.footnote)
+                                .font(.wsFootnote)
                                 .foregroundStyle(capture.status == .ready ? Tone.info.textColor : .secondaryText)
                         }
                     }
@@ -175,7 +175,7 @@ struct PATodayView: View {
     private func afterCallBanner(_ card: PACard) -> some View {
         Section {
             VStack(alignment: .leading, spacing: 10) {
-                Text("How did it go with \(card.person?.name ?? "them")?").font(.headline)
+                Text("How did it go with \(card.person?.name ?? "them")?").font(.wsHeadline)
                 HStack {
                     Button {
                         captureContext = context(for: card)
@@ -195,7 +195,7 @@ struct PATodayView: View {
             ErrorStateView(error: error) { Task { await load() } }
             if session.propertyDeals != nil {
                 Text("Your deals, tasks and leads still work in the Deals tab.")
-                    .font(.footnote).foregroundStyle(.secondaryText)
+                    .font(.wsFootnote).foregroundStyle(.secondaryText)
                     .accessibilityIdentifier("pa.fallback")
             }
         }
@@ -229,7 +229,7 @@ struct PATodayView: View {
             showingCapture = true
         } label: {
             Image(systemName: "mic.fill")
-                .font(.title2.weight(.semibold))
+                .font(.wsTitle2.weight(.semibold))
                 .foregroundStyle(.white)
                 .frame(width: 60, height: 60)
                 .background(Tone.brand.solidColor, in: Circle())
@@ -289,20 +289,20 @@ struct PACardView: View {
             HStack(alignment: .firstTextBaseline) {
                 if let rank = card.rank {
                     Text("#\(rank)")
-                        .font(.caption.weight(.bold).monospacedDigit())
+                        .font(.wsCaption.weight(.bold).monospacedDigit())
                         .padding(.horizontal, 7).padding(.vertical, 3)
                         .foregroundStyle(Tone.brand.textColor)
                         .background(Tone.brand.color.opacity(0.14), in: Capsule())
                         .accessibilityLabel("Number \(rank)")
                 }
-                Text(card.title.isEmpty ? PAMapping.groupLabel(card.kind ?? .unknown) : card.title).font(.headline)
+                Text(card.title.isEmpty ? PAMapping.groupLabel(card.kind ?? .unknown) : card.title).font(.wsHeadline)
                     .accessibilityIdentifier("pa.card.\(card.uuid)")
                 Spacer()
                 if let minutes = card.estimatedMinutes {
-                    Label("\(minutes) min", systemImage: "clock").font(.caption).foregroundStyle(.secondaryText)
+                    Label("\(minutes) min", systemImage: "clock").font(.wsCaption).foregroundStyle(.secondaryText)
                 }
             }
-            Text(card.action).font(.title3.weight(.semibold))
+            Text(card.action).font(.wsTitle3.weight(.semibold))
             if let why = card.whyNow { labelled("Why now", why) }
             if let objective = card.objective { labelled("Objective", objective) }
             if let view = card.paView { labelled("PA's view", view) }
@@ -313,8 +313,8 @@ struct PACardView: View {
 
     private func labelled(_ title: String, _ text: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title.uppercased()).font(.caption2.weight(.semibold)).foregroundStyle(.secondaryText)
-            Text(text).font(.subheadline)
+            Text(title.uppercased()).font(.wsCaption2.weight(.semibold)).foregroundStyle(.secondaryText)
+            Text(text).font(.wsSubheadline)
         }
         .accessibilityElement(children: .combine)
     }
@@ -366,12 +366,12 @@ struct PACardView: View {
                             .accessibilityIdentifier("pa.card.done")
                     }
                 }
-                .font(.subheadline.weight(.semibold))
+                .font(.wsSubheadline.weight(.semibold))
             }
         }
         if isTop, !manager, card.score != nil {
             Button("Why is this #1?", systemImage: "questionmark.circle") { onWhy() }
-                .font(.footnote)
+                .font(.wsFootnote)
                 .buttonStyle(.borderless)
                 .accessibilityIdentifier("pa.card.why")
         }
@@ -404,7 +404,7 @@ struct PAWhySheet: View {
                                     Spacer()
                                     if let points = signal.points {
                                         Text("+\(points.formatted(.number.precision(.fractionLength(0))))")
-                                            .font(.headline.monospacedDigit())
+                                            .font(.wsHeadline.monospacedDigit())
                                     }
                                 }
                                 .accessibilityElement(children: .combine)

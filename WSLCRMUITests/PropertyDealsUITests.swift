@@ -34,6 +34,8 @@ final class PropertyDealsUITests: XCTestCase {
         XCTAssertTrue(code.waitForExistence(timeout: 15))
         code.tap()
         code.typeText("123456")
+        // Everyone lands on Home; these flows start in the person's own hub.
+        app.enterFirstHub()
     }
 
     private func element(_ identifier: String, timeout: TimeInterval = 15,
@@ -94,7 +96,7 @@ final class PropertyDealsUITests: XCTestCase {
 
     func testWorkspaceWithoutPluginHasNoDealsTab() {
         launch(role: "engineer")
-        XCTAssertTrue(app.tabBars.buttons["Menu"].firstMatch.waitForExistence(timeout: 20))
+        XCTAssertTrue(app.tabBars.buttons["Apps"].firstMatch.waitForExistence(timeout: 20))
         XCTAssertFalse(app.tabBars.buttons["Deals"].exists, "PLUGIN_DISABLED hides the module")
     }
 
@@ -326,7 +328,7 @@ final class PropertyDealsUITests: XCTestCase {
     func testNotificationPreferencesInSettings() {
         launch()
         element("pd.today.section.overdue")
-        app.tabBars.buttons["Menu"].tap()
+        app.openProfile()
         element("more.settings").tap()
         let overdue = scrollTo("settings.push.overdue")
         XCTAssertEqual(overdue.value as? String, "1")
@@ -407,7 +409,7 @@ final class PropertyDealsUITests: XCTestCase {
 
         XCTAssertTrue(element("pd.today.captureMessage").label.contains("Captured Pat Probate · 7 Mill Lane"))
         screenshot("pd-21-captured")
-        app.tabBars.buttons["Menu"].tap()
+        app.openProfile()
         let pending = element("more.pendingChanges")
         expectation(for: NSPredicate(format: "label CONTAINS %@", "All synced"), evaluatedWith: pending)
         waitForExpectations(timeout: 20)
@@ -424,7 +426,7 @@ final class PropertyDealsUITests: XCTestCase {
         hideKeyboard()
         app.buttons["pd.capture.save"].tap()
         XCTAssertTrue(element("pd.today.captureMessage").label.contains("Saved on this phone"))
-        app.tabBars.buttons["Menu"].tap()
+        app.openProfile()
         element("more.pendingChanges").tap()
         XCTAssertTrue(text(containing: "Capture · 22 Station Road").waitForExistence(timeout: 10), "queued, not lost")
         screenshot("pd-22-capture-queued")

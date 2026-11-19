@@ -199,9 +199,9 @@ private struct JobDetailContent: View {
                 Section("Activity") {
                     ForEach(detail.activity.prefix(15)) { entry in
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(entry.message ?? Formatters.humanize(entry.action)).font(.subheadline)
+                            Text(entry.message ?? Formatters.humanize(entry.action)).font(.wsSubheadline)
                             Text([entry.actorName, Formatters.dateTime(entry.createdAt)].compactMap { $0 }.joined(separator: " · "))
-                                .font(.caption).foregroundStyle(.secondaryText)
+                                .font(.wsCaption).foregroundStyle(.secondaryText)
                         }
                         .accessibilityElement(children: .combine)
                     }
@@ -247,15 +247,15 @@ private struct JobDetailContent: View {
                 NavigationLink(value: InvoiceRoute(uuid: invoiceUuid)) {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(job.invoiceNumber ?? "Invoice").font(.headline)
+                            Text(job.invoiceNumber ?? "Invoice").font(.wsHeadline)
                             if let invoicedAt = job.invoicedAt {
-                                Text("Raised \(Formatters.dateTime(invoicedAt) ?? "")").font(.caption).foregroundStyle(.secondaryText)
+                                Text("Raised \(Formatters.dateTime(invoicedAt) ?? "")").font(.wsCaption).foregroundStyle(.secondaryText)
                             }
                         }
                         Spacer()
                         VStack(alignment: .trailing, spacing: 4) {
                             InvoiceStatus(api: job.invoiceStatus).badge
-                            Text(Formatters.money(job.invoiceTotal, currency: job.currency) ?? "").font(.subheadline.monospacedDigit())
+                            Text(Formatters.money(job.invoiceTotal, currency: job.currency) ?? "").font(.wsSubheadline.monospacedDigit())
                         }
                     }
                 }
@@ -286,7 +286,7 @@ private struct JobDetailContent: View {
     private func header(_ detail: JobDetail) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(detail.job.title)
-                .font(.title2.bold())
+                .font(.wsTitle2.bold())
                 .accessibilityAddTraits(.isHeader)
             HStack(spacing: 8) {
                 detail.job.status.badge
@@ -298,16 +298,16 @@ private struct JobDetailContent: View {
             if detail.job.isOverdue, let due = detail.job.dueDate {
                 Label("Overdue — due \(Formatters.day(due.date()) ?? "")", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(Tone.danger.color)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.wsSubheadline.weight(.semibold))
             } else if let due = detail.job.dueDate {
                 Label("Due \(Formatters.day(due.date()) ?? "")", systemImage: "calendar.badge.clock")
-                    .font(.subheadline)
+                    .font(.wsSubheadline)
             }
             if let description = detail.job.description, !description.isEmpty {
-                Text(description).font(.body).foregroundStyle(.secondaryText)
+                Text(description).font(.wsBody).foregroundStyle(.secondaryText)
             }
             if let type = detail.job.jobTypeName {
-                Label(type, systemImage: "tag").font(.subheadline)
+                Label(type, systemImage: "tag").font(.wsSubheadline)
             }
         }
         .padding(.vertical, 4)
@@ -321,7 +321,7 @@ private struct JobDetailContent: View {
                 DetailRow(label: "Site", value: job.siteName, systemImage: "building.2")
                 if let notes = job.siteAccessNotes, !notes.isEmpty {
                     Label(notes, systemImage: "key.fill")
-                        .font(.subheadline)
+                        .font(.wsSubheadline)
                         .foregroundStyle(Tone.warning.color)
                         .accessibilityLabel("Access notes: \(notes)")
                 }
@@ -364,7 +364,7 @@ private struct JobDetailContent: View {
                     Button(editMode.isEditing ? "Done" : "Reorder") {
                         withAnimation { editMode = editMode.isEditing ? .inactive : .active }
                     }
-                    .font(.subheadline.weight(.semibold))
+                    .font(.wsSubheadline.weight(.semibold))
                     .textCase(nil)
                     .accessibilityHint("Drag phases to change their order")
                 }
@@ -377,15 +377,15 @@ private struct JobDetailContent: View {
             ForEach(detail.items) { item in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text(item.isLabour || item.isHire ? item.quoteSummary : item.description).font(.headline)
+                        Text(item.isLabour || item.isHire ? item.quoteSummary : item.description).font(.wsHeadline)
                         Spacer()
                         Text(Formatters.money(item.lineTotal, currency: detail.job.currency) ?? "")
-                            .font(.subheadline.monospacedDigit())
+                            .font(.wsSubheadline.monospacedDigit())
                     }
                     Text(["\(item.quantity.formatted()) × \(Formatters.money(item.unitPrice, currency: detail.job.currency) ?? "")",
                           Formatters.humanize(item.itemType), item.supplier, item.partNumber.map { "Part \($0)" }]
                         .compactMap { $0 }.joined(separator: " · "))
-                        .font(.subheadline).foregroundStyle(.secondaryText)
+                        .font(.wsSubheadline).foregroundStyle(.secondaryText)
                     HStack {
                         item.approvalStatus.badge
                         if item.invoiced {
@@ -393,7 +393,7 @@ private struct JobDetailContent: View {
                         }
                     }
                     if let reason = item.rejectionReason {
-                        Text(reason).font(.footnote).foregroundStyle(Tone.danger.color)
+                        Text(reason).font(.wsFootnote).foregroundStyle(Tone.danger.color)
                     }
                     // What the engineer photographed on site. Approving a part on the strength of
                     // its evidence is the point of the proposal flow (opsapi #619), so the
@@ -490,9 +490,9 @@ struct PhaseRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text("\(phase.sortOrder).")
-                    .font(.headline.monospacedDigit())
+                    .font(.wsHeadline.monospacedDigit())
                     .foregroundStyle(.secondaryText)
-                Text(phase.name).font(.headline)
+                Text(phase.name).font(.wsHeadline)
                 Spacer()
                 phase.status.badge
             }
@@ -505,7 +505,7 @@ struct PhaseRow: View {
                     Label(phase.signedOffAt == nil ? "Sign-off needed" : "Signed off", systemImage: "signature")
                 }
             }
-            .font(.footnote)
+            .font(.wsFootnote)
             .foregroundStyle(.secondaryText)
             if display.hasPendingWrites {
                 PendingSyncBadge(failed: display.hasFailedWrites)
@@ -573,9 +573,9 @@ struct SignoffSheet: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 20) {
                 Text("“\(phaseName)” needs the customer's sign-off before it can be completed.")
-                    .font(.body)
+                    .font(.wsBody)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Customer name").font(.subheadline.weight(.semibold))
+                    Text("Customer name").font(.wsSubheadline.weight(.semibold))
                     TextField("Full name", text: $name)
                         .textContentType(.name)
                         .textInputAutocapitalization(.words)

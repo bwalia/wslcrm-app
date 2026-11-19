@@ -17,17 +17,17 @@ struct ShopChatsListView: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Text(chat.email ?? "Anonymous visitor").font(.headline).lineLimit(1)
+                            Text(chat.email ?? "Anonymous visitor").font(.wsHeadline).lineLimit(1)
                             Spacer()
-                            Text(Formatters.relative(chat.updatedAt ?? chat.createdAt) ?? "").font(.caption).foregroundStyle(.secondaryText)
+                            Text(Formatters.relative(chat.updatedAt ?? chat.createdAt) ?? "").font(.wsCaption).foregroundStyle(.secondaryText)
                         }
                         if let first = chat.summary?.trimmedOrNil ?? chat.firstUserMessage?.trimmedOrNil {
-                            Text(first).font(.subheadline).lineLimit(2)
+                            Text(first).font(.wsSubheadline).lineLimit(2)
                         }
                         Text(["\(chat.messageCount) message\(chat.messageCount == 1 ? "" : "s")",
                               chat.quoteNumber.map { "quote \($0)" }, chat.orderNumber.map { "order \($0)" }]
                             .compactMap { $0 }.joined(separator: " · "))
-                            .font(.footnote).foregroundStyle(.secondaryText)
+                            .font(.wsFootnote).foregroundStyle(.secondaryText)
                     }
                     .padding(.vertical, 2)
                     .accessibilityElement(children: .combine)
@@ -49,7 +49,7 @@ struct ShopChatDetailView: View {
                 if let chat = state.value {
                     if let summaryText = chat.summary?.trimmedOrNil {
                         Label(summaryText, systemImage: "text.alignleft")
-                            .font(.subheadline)
+                            .font(.wsSubheadline)
                             .padding(12)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
@@ -96,7 +96,7 @@ private struct ShopChatBubble: View {
                                 in: RoundedRectangle(cornerRadius: 16))
                     .textSelection(.enabled)
                 Text([message.isCustomer ? "Customer" : "Assistant", Formatters.time(message.at)].compactMap { $0 }.joined(separator: " · "))
-                    .font(.caption2).foregroundStyle(.secondaryText)
+                    .font(.wsCaption2).foregroundStyle(.secondaryText)
             }
             if !message.isCustomer { Spacer(minLength: 40) }
         }
@@ -124,15 +124,15 @@ struct ShopKnowledgeView: View {
                       emptyDescription: "Re-index to give the shop assistant your products and blog posts.") { doc in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text(doc.title).font(.headline).lineLimit(2)
+                        Text(doc.title).font(.wsHeadline).lineLimit(2)
                         Spacer()
-                        Text(Formatters.humanize(doc.sourceType)).font(.caption.weight(.semibold)).foregroundStyle(.secondaryText)
+                        Text(Formatters.humanize(doc.sourceType)).font(.wsCaption.weight(.semibold)).foregroundStyle(.secondaryText)
                     }
                     if let preview = doc.preview?.trimmedOrNil {
-                        Text(preview).font(.footnote).foregroundStyle(.secondaryText).lineLimit(3)
+                        Text(preview).font(.wsFootnote).foregroundStyle(.secondaryText).lineLimit(3)
                     }
                     Text("\(doc.chunks) chunk\(doc.chunks == 1 ? "" : "s") · \(doc.embeddedChunks == doc.chunks && doc.chunks > 0 ? "embedded" : "text search only")")
-                        .font(.caption).foregroundStyle(.secondaryText)
+                        .font(.wsCaption).foregroundStyle(.secondaryText)
                 }
                 .padding(.vertical, 2)
                 .accessibilityElement(children: .combine)
@@ -337,13 +337,13 @@ private struct ShopMarketRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(row.name).font(.headline).lineLimit(2)
+            Text(row.name).font(.wsHeadline).lineLimit(2)
             HStack {
                 Text("Ours \(ShopMoney.format(row.ourPriceExVatMinor) ?? "—")").monospacedDigit()
                 Spacer()
                 Text("Median \(ShopMoney.format(row.marketMedianExVatMinor) ?? "—")").monospacedDigit()
             }
-            .font(.subheadline)
+            .font(.wsSubheadline)
             HStack(spacing: 8) {
                 if let diff = row.diffPct {
                     ShopDiffBadge(diffPct: diff)
@@ -359,7 +359,7 @@ private struct ShopMarketRowView: View {
                 }
             }
             Text("\(row.sku) · \(row.freshSources)/\(row.totalSources) sources fresh")
-                .font(.caption).foregroundStyle(.secondaryText)
+                .font(.wsCaption).foregroundStyle(.secondaryText)
         }
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
@@ -469,18 +469,18 @@ struct ShopMarketDetailView: View {
                 ForEach(detail.sources) { source in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Text(source.name).font(.headline)
+                            Text(source.name).font(.wsHeadline)
                             Spacer()
                             Text(ShopMoney.format(source.latestObservation?.priceExVatMinor) ?? "—").monospacedDigit()
                         }
                         Text([source.lastStatus.map(Formatters.humanize), source.latestObservation.map { Formatters.humanize($0.availability) },
                               Formatters.relative(source.lastCheckedAt)].compactMap { $0 }.joined(separator: " · "))
-                            .font(.footnote).foregroundStyle(.secondaryText)
+                            .font(.wsFootnote).foregroundStyle(.secondaryText)
                         if let error = source.lastError?.trimmedOrNil {
-                            Text(error).font(.caption).foregroundStyle(Tone.danger.textColor).lineLimit(2)
+                            Text(error).font(.wsCaption).foregroundStyle(Tone.danger.textColor).lineLimit(2)
                         }
                         if let link = source.url.flatMap(URL.init(string:)) {
-                            Link("Open page", destination: link).font(.footnote)
+                            Link("Open page", destination: link).font(.wsFootnote)
                         }
                     }
                     .padding(.vertical, 2)
@@ -492,14 +492,14 @@ struct ShopMarketDetailView: View {
                 ForEach(detail.observations.prefix(30)) { observation in
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(observation.sourceName ?? "Source").font(.subheadline)
+                            Text(observation.sourceName ?? "Source").font(.wsSubheadline)
                             Text([Formatters.dateTime(observation.fetchedAt), observation.method?.uppercased(),
                                   observation.confidence.map { "\(Int(($0 * 100).rounded()))% sure" }].compactMap { $0 }.joined(separator: " · "))
-                                .font(.caption).foregroundStyle(.secondaryText)
+                                .font(.wsCaption).foregroundStyle(.secondaryText)
                             if !observation.accepted {
                                 Label("Held: \(observation.changePct.map { "\($0.formatted(.number.precision(.fractionLength(0...1))))% change" } ?? "large change")",
                                       systemImage: "exclamationmark.triangle")
-                                    .font(.caption).foregroundStyle(Tone.warning.textColor)
+                                    .font(.wsCaption).foregroundStyle(Tone.warning.textColor)
                             }
                         }
                         Spacer()

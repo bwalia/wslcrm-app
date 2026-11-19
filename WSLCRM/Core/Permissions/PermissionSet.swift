@@ -252,13 +252,12 @@ struct NavigationPolicy: Sendable, Equatable {
     /// person's menu has it.
     var showsProjects: Bool { permissions.menuKeys.contains(AppMenu.projectsKey) }
 
-    /// The tabs in front of Menu, at most four: an iPhone tab bar holds five, and a sixth would hide
-    /// the rest behind the system's own "More". The person's home comes first, then the AI chat and
-    /// projects; everything stays reachable from Menu.
+    /// The work hubs that get a tab between Home and Apps, at most three: an iPhone tab bar holds
+    /// five, and a sixth would hide the rest behind the system's own "More". The person's own hub
+    /// comes first; everything stays reachable from Home and Apps. The AI chat opens over the app
+    /// and projects are a native screen in Apps, so neither takes a tab.
     var tabs: [Home] {
         var all: [Home] = []
-        if showsAIChat { all.append(.ai) }
-        if showsProjects { all.append(.projects) }
         if showsPropertyPA { all.append(.propertyPA) }
         if showsMyWork { all.append(.myWork) }
         if showsFieldService { all.append(.fieldService) }
@@ -266,11 +265,11 @@ struct NavigationPolicy: Sendable, Equatable {
         if showsLeadsTab { all.append(.leads) }
         if showsTasks { all.append(.tasks) }
         if showsShop { all.append(.shop) }
-        // The home tab comes first and always makes the cut.
+        // The home hub comes first and always makes the cut.
         if let index = all.firstIndex(of: home) {
             all.insert(all.remove(at: index), at: 0)
         }
-        return Array(all.prefix(4))
+        return Array(all.prefix(3))
     }
 }
 

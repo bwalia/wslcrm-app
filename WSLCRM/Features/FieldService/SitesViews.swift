@@ -20,7 +20,7 @@ struct SitePickerRow: View {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(selection.name).foregroundStyle(.primary)
                         if let address = selection.displayAddress {
-                            Text(address).font(.caption).foregroundStyle(.secondaryText)
+                            Text(address).font(.wsCaption).foregroundStyle(.secondaryText)
                         }
                     }
                 } else {
@@ -125,11 +125,11 @@ struct SiteRow: View {
                 .foregroundStyle(Tone.info.color)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(site.name).font(.headline).foregroundStyle(.primary)
-                if let address = site.displayAddress { Text(address).font(.subheadline).foregroundStyle(.secondaryText) }
+                Text(site.name).font(.wsHeadline).foregroundStyle(.primary)
+                if let address = site.displayAddress { Text(address).font(.wsSubheadline).foregroundStyle(.secondaryText) }
                 Text([site.customerName, site.jobCount > 0 ? "\(site.jobCount) job\(site.jobCount == 1 ? "" : "s")" : nil]
                     .compactMap { $0 }.joined(separator: " · "))
-                    .font(.caption).foregroundStyle(.secondaryText)
+                    .font(.wsCaption).foregroundStyle(.secondaryText)
             }
             Spacer()
             if selected {
@@ -243,7 +243,7 @@ struct SiteDetailView: View {
     var body: some View {
         List {
             Section {
-                Text(site.name).font(.title2.bold())
+                Text(site.name).font(.wsTitle2.bold())
                 if let customer = site.customerName { Label(customer, systemImage: "person") }
                 if let address = site.displayAddress { MapsLinkRow(address: address) }
             }

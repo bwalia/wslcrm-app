@@ -276,8 +276,8 @@ private struct CustomerPickerList: View {
                     dismiss()
                 } label: {
                     VStack(alignment: .leading) {
-                        Text(customer.displayName).font(.headline).foregroundStyle(.primary)
-                        Text(customer.email).font(.subheadline).foregroundStyle(.secondaryText)
+                        Text(customer.displayName).font(.wsHeadline).foregroundStyle(.primary)
+                        Text(customer.email).font(.wsSubheadline).foregroundStyle(.secondaryText)
                     }
                     .frame(minHeight: 44)
                 }

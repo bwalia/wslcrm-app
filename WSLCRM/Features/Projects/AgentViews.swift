@@ -35,43 +35,43 @@ struct AgentContractCard: View {
         VStack(alignment: .leading, spacing: 10) {
             SheetSectionTitle("The brief")
             if let goal = contract.goal {
-                Text(goal).font(.body)
+                Text(goal).font(.wsBody)
             }
             if !contract.acceptance.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Accepted when").font(.caption.weight(.bold)).textCase(.uppercase)
+                    Text("Accepted when").font(.wsCaption.weight(.bold)).textCase(.uppercase)
                         .foregroundStyle(.secondaryText)
                     ForEach(Array(contract.acceptance.enumerated()), id: \.offset) { _, line in
                         Label(line, systemImage: "checkmark.circle")
-                            .font(.subheadline)
+                            .font(.wsSubheadline)
                             .labelStyle(.titleAndIcon)
                     }
                 }
             }
             if let done = contract.definitionOfDone {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Done means").font(.caption.weight(.bold)).textCase(.uppercase)
+                    Text("Done means").font(.wsCaption.weight(.bold)).textCase(.uppercase)
                         .foregroundStyle(.secondaryText)
-                    Text(done).font(.subheadline)
+                    Text(done).font(.wsSubheadline)
                 }
             }
             if !contract.constraints.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Constraints").font(.caption.weight(.bold)).textCase(.uppercase)
+                    Text("Constraints").font(.wsCaption.weight(.bold)).textCase(.uppercase)
                         .foregroundStyle(.secondaryText)
                     ForEach(Array(contract.constraints.enumerated()), id: \.offset) { _, line in
-                        Label(line, systemImage: "hand.raised").font(.subheadline)
+                        Label(line, systemImage: "hand.raised").font(.wsSubheadline)
                     }
                 }
             }
             HStack(spacing: 12) {
                 if let minutes = contract.budgetMinutes {
-                    Label("\(minutes) min budget", systemImage: "hourglass").font(.caption)
+                    Label("\(minutes) min budget", systemImage: "hourglass").font(.wsCaption)
                 }
                 Label("\(contract.maxAttempts) attempt\(contract.maxAttempts == 1 ? "" : "s")",
-                      systemImage: "arrow.clockwise").font(.caption)
+                      systemImage: "arrow.clockwise").font(.wsCaption)
                 if contract.reviewRequired {
-                    Label("Review required", systemImage: "person.crop.circle.badge.checkmark").font(.caption)
+                    Label("Review required", systemImage: "person.crop.circle.badge.checkmark").font(.wsCaption)
                 }
             }
             .foregroundStyle(.secondaryText)
@@ -99,19 +99,19 @@ struct AgentRunCard: View {
 
             switch contract.claimState(now: now) {
             case .unclaimed:
-                Label("Not claimed", systemImage: "tray").font(.subheadline).foregroundStyle(.secondaryText)
+                Label("Not claimed", systemImage: "tray").font(.wsSubheadline).foregroundStyle(.secondaryText)
             case .live(let claim):
                 HStack(spacing: 8) {
                     ActorChip(actor: WorkActor(uuid: claim.by, name: claim.name ?? "Claimed", kind: claim.kind))
                     if let expires = claim.expiresAt {
                         Text("lease until \(Formatters.time(expires) ?? "")")
-                            .font(.caption).foregroundStyle(.secondaryText)
+                            .font(.wsCaption).foregroundStyle(.secondaryText)
                     }
                 }
             case .stale(let claim):
                 Label("Claim expired — \(claim.name ?? "whoever held it") stopped without saying so",
                       systemImage: "exclamationmark.triangle")
-                    .font(.subheadline)
+                    .font(.wsSubheadline)
                     .foregroundStyle(Tone.warning.textColor)
                     .accessibilityIdentifier("task.claim.stale")
             }
@@ -122,27 +122,27 @@ struct AgentRunCard: View {
             case .running(let run):
                 Label("Working — attempt \(run.attempt) of \(contract.maxAttempts)",
                       systemImage: "gearshape.2")
-                    .font(.subheadline)
+                    .font(.wsSubheadline)
                     .accessibilityIdentifier("task.run.running")
             case .stalled(let run, let silence):
                 Label("Stalled — nothing heard for \(Int(silence / 60)) min (attempt \(run.attempt))",
                       systemImage: "zzz")
-                    .font(.subheadline)
+                    .font(.wsSubheadline)
                     .foregroundStyle(Tone.danger.textColor)
                     .accessibilityIdentifier("task.run.stalled")
             case .finished(let run):
                 Label("Finished attempt \(run.attempt)", systemImage: "flag.checkered")
-                    .font(.subheadline)
+                    .font(.wsSubheadline)
             }
 
             if let spent = contract.run?.costMinutes {
                 let budget = contract.budgetMinutes
                 HStack {
                     Label("\(spent) min used\(budget.map { " of \($0)" } ?? "")", systemImage: "clock")
-                        .font(.caption)
+                        .font(.wsCaption)
                     if contract.isOverBudget {
                         Text("over budget")
-                            .font(.caption.weight(.bold))
+                            .font(.wsCaption.weight(.bold))
                             .foregroundStyle(Tone.danger.textColor)
                             .accessibilityIdentifier("task.run.overBudget")
                     }
@@ -152,7 +152,7 @@ struct AgentRunCard: View {
 
             if contract.isStopRequested {
                 Label("Stop requested", systemImage: "hand.raised.fill")
-                    .font(.subheadline)
+                    .font(.wsSubheadline)
                     .foregroundStyle(Tone.warning.textColor)
                     .accessibilityIdentifier("task.stopRequested")
             }
@@ -170,17 +170,17 @@ struct AgentResultCard: View {
         VStack(alignment: .leading, spacing: 8) {
             SheetSectionTitle("What came back")
             if let summary = result.summary {
-                Text(summary).font(.body)
+                Text(summary).font(.wsBody)
             }
             if let notes = result.notes, !notes.isEmpty {
-                Text(notes).font(.subheadline).foregroundStyle(.secondaryText)
+                Text(notes).font(.wsSubheadline).foregroundStyle(.secondaryText)
             }
             if let reason = result.reviewReason, !reason.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(result.status == .rejected ? "Sent back because" : "Reviewer said")
-                        .font(.caption.weight(.bold)).textCase(.uppercase)
+                        .font(.wsCaption.weight(.bold)).textCase(.uppercase)
                         .foregroundStyle(.secondaryText)
-                    Text(reason).font(.subheadline)
+                    Text(reason).font(.wsSubheadline)
                 }
                 .accessibilityIdentifier("task.reviewReason")
             }
@@ -191,7 +191,7 @@ struct AgentResultCard: View {
                     }
                     .frame(minHeight: 44)
                 } else {
-                    Label(artifact.name, systemImage: "doc").font(.subheadline)
+                    Label(artifact.name, systemImage: "doc").font(.wsSubheadline)
                 }
             }
         }
@@ -207,19 +207,19 @@ struct ReviewQueueRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(task.reference).font(.caption.weight(.bold)).foregroundStyle(.secondaryText)
+                Text(task.reference).font(.wsCaption.weight(.bold)).foregroundStyle(.secondaryText)
                 Spacer()
                 if let status = task.contract?.result?.status {
                     StatusBadge(text: status.label, systemImage: status.systemImage, tone: status.tone)
                 }
             }
-            Text(task.title).font(.headline)
+            Text(task.title).font(.wsHeadline)
             HStack(spacing: 8) {
                 if let claim = task.contract?.claimState().claim {
                     ActorChip(actor: WorkActor(uuid: claim.by, name: claim.name ?? "Agent", kind: claim.kind))
                 }
                 if let finished = task.contract?.result?.finishedAt ?? task.updatedAt {
-                    Text(Formatters.relative(finished) ?? "").font(.caption).foregroundStyle(.secondaryText)
+                    Text(Formatters.relative(finished) ?? "").font(.wsCaption).foregroundStyle(.secondaryText)
                 }
             }
         }
@@ -345,11 +345,11 @@ struct ConflictBanner: View {
             Image(systemName: "arrow.triangle.branch").foregroundStyle(Tone.warning.textColor)
             VStack(alignment: .leading, spacing: 4) {
                 Text("This changed while you were looking at it")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.wsSubheadline.weight(.semibold))
                 Text("Somebody — or something — else wrote to this card. Reload before you make changes.")
-                    .font(.caption).foregroundStyle(.secondaryText)
+                    .font(.wsCaption).foregroundStyle(.secondaryText)
                 Button("Reload") { Task { await reload() } }
-                    .font(.subheadline.weight(.semibold))
+                    .font(.wsSubheadline.weight(.semibold))
                     .frame(minHeight: 44)
             }
             Spacer(minLength: 0)

@@ -57,19 +57,19 @@ struct PDApprovalRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(approval.title).font(.headline)
+            Text(approval.title).font(.wsHeadline)
             HStack(spacing: 8) {
                 if let deal = approval.dealName { Text(deal) }
                 if let agent = approval.agentKey { Label(Formatters.humanize(agent), systemImage: "sparkles") }
                 if approval.fromJobshout == true { Text("via JobShout") }
             }
-            .font(.footnote)
+            .font(.wsFootnote)
             .foregroundStyle(.secondaryText)
             HStack(spacing: 8) {
                 StatusBadge(text: approval.rule.label, systemImage: approval.rule.symbol, tone: .neutral)
                 if let created = approval.createdAt {
                     Text(created, format: .relative(presentation: .named))
-                        .font(.footnote)
+                        .font(.wsFootnote)
                         .foregroundStyle(.secondaryText)
                 }
             }
@@ -150,7 +150,7 @@ struct PDApprovalDetailView: View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
                 Text(approval.title)
-                    .font(.title3.weight(.semibold))
+                    .font(.wsTitle3.weight(.semibold))
                     .accessibilityIdentifier("pd.approval.title")
                 HStack(spacing: 8) {
                     StatusBadge(text: approval.rule.label, systemImage: approval.rule.symbol, tone: .neutral)
@@ -189,13 +189,13 @@ struct PDApprovalDetailView: View {
         Section {
             if draft.fields.isEmpty {
                 Text(approval.payload.map(PDApprovalDraft.text(of:)) ?? "No details were attached.")
-                    .font(.body.monospaced())
+                    .font(.wsBody.monospaced())
                     .textSelection(.enabled)
             }
             ForEach($draft.fields) { $field in
                 VStack(alignment: .leading, spacing: 6) {
                     Text(field.label)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.wsSubheadline.weight(.semibold))
                         .foregroundStyle(.secondaryText)
                     if isEditing {
                         TextField(field.label, text: $field.value, axis: .vertical)
@@ -210,7 +210,7 @@ struct PDApprovalDetailView: View {
                     if let agentDraft = draft.agentValue(field.key, original: approval.originalPayload)
                         ?? (field.value != field.original ? field.original : nil), agentDraft != field.value {
                         Text("Agent's draft: \(agentDraft)")
-                            .font(.footnote)
+                            .font(.wsFootnote)
                             .foregroundStyle(.secondaryText)
                             .strikethrough()
                     }
@@ -343,7 +343,7 @@ struct PDApprovalDetailView: View {
                         .foregroundStyle(Tone.success.color)
                         .accessibilityHidden(true)
                     Text(waitingFor == nil ? "Approved" : "Approved. It needs one more person.")
-                        .font(.title3.weight(.semibold))
+                        .font(.wsTitle3.weight(.semibold))
                     Text(waitingFor == nil
                          ? (edited ? "Your edited version of “\(approval.title)” is approved." : "“\(approval.title)” is approved.")
                          : "Two people must approve “\(approval.title)”. It's waiting for \(waitingFor ?? "a second person").")
@@ -361,7 +361,7 @@ struct PDApprovalDetailView: View {
                         .font(.system(size: 48))
                         .foregroundStyle(Tone.danger.color)
                         .accessibilityHidden(true)
-                    Text("Rejected").font(.title3.weight(.semibold))
+                    Text("Rejected").font(.wsTitle3.weight(.semibold))
                     Text("Nothing was sent. Your reason goes back to the agent so it can try again.")
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondaryText)

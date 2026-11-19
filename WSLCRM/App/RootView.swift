@@ -19,7 +19,7 @@ struct RootView: View {
                     .overlay(alignment: .top) {
                         if let reason = session.signedOutReason {
                             Label(reason, systemImage: "info.circle.fill")
-                                .font(.subheadline.weight(.semibold))
+                                .font(.wsSubheadline.weight(.semibold))
                                 .padding(12)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(.thinMaterial)
@@ -78,7 +78,7 @@ struct LockedView: View {
                 .foregroundStyle(.tint)
                 .accessibilityHidden(true)
             Text("\(Brand.current.name) is locked")
-                .font(.title.bold())
+                .font(.wsTitle.bold())
             Button("Unlock with \(session.biometrics.displayName)") {
                 Task { await session.unlock() }
             }

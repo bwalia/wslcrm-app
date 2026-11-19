@@ -139,7 +139,7 @@ struct PurchaseOrderRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(po.poNumber).font(.subheadline.monospacedDigit().weight(.semibold))
+                Text(po.poNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
                 Spacer()
                 if po.isOverdue {
                     StatusBadge(text: "Overdue", systemImage: "exclamationmark.triangle.fill", tone: .danger)
@@ -148,15 +148,15 @@ struct PurchaseOrderRow: View {
                 }
             }
             HStack(alignment: .firstTextBaseline) {
-                Text(po.supplierName ?? "No supplier").font(.headline).lineLimit(1)
+                Text(po.supplierName ?? "No supplier").font(.wsHeadline).lineLimit(1)
                 Spacer()
-                Text(Formatters.money(po.total, currency: po.currency) ?? "").font(.headline.monospacedDigit())
+                Text(Formatters.money(po.total, currency: po.currency) ?? "").font(.wsHeadline.monospacedDigit())
             }
             HStack(spacing: 6) {
                 if let expected = po.expectedDate { Text("Expected \(Formatters.day(expected.date()) ?? "")") }
                 if let reference = po.reference { Text("· \(reference)") }
             }
-            .font(.footnote)
+            .font(.wsFootnote)
             .foregroundStyle(po.isOverdue ? Tone.danger.textColor : .secondaryText)
         }
         .padding(.vertical, 4)
@@ -259,12 +259,12 @@ struct PurchaseOrderDetailView: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     po.status.badge
-                    Text(po.supplierName ?? "No supplier").font(.title2.bold())
+                    Text(po.supplierName ?? "No supplier").font(.wsTitle2.bold())
                     if let email = po.supplierEmail { Text(email).foregroundStyle(.secondaryText) }
-                    Text(Formatters.money(po.total, currency: po.currency) ?? "").font(.title.monospacedDigit().bold())
+                    Text(Formatters.money(po.total, currency: po.currency) ?? "").font(.wsTitle.monospacedDigit().bold())
                     Text([po.issueDate.map { "Raised \(Formatters.day($0.date()) ?? "")" },
                           po.expectedDate.map { "Expected \(Formatters.day($0.date()) ?? "")" }].compactMap { $0 }.joined(separator: " · "))
-                        .font(.subheadline)
+                        .font(.wsSubheadline)
                         .foregroundStyle(po.isOverdue ? Tone.danger.textColor : .secondaryText)
                 }
                 .padding(.vertical, 4)
@@ -333,11 +333,11 @@ struct PurchaseOrderDetailView: View {
                                 Text(line.description).foregroundStyle(.primary)
                                 Text("\(line.quantity.formatted()) × \(Formatters.money(line.unitPrice, currency: po.currency) ?? "")"
                                      + (line.taxRate > 0 ? " · VAT \(line.taxRate.formatted())%" : ""))
-                                    .font(.caption).foregroundStyle(.secondaryText)
+                                    .font(.wsCaption).foregroundStyle(.secondaryText)
                                 if po.status != .draft {
                                     Text(line.outstanding == 0 ? "All \(line.quantity.formatted()) received"
                                          : "\(line.receivedQuantity.formatted()) of \(line.quantity.formatted()) received")
-                                        .font(.caption)
+                                        .font(.wsCaption)
                                         .foregroundStyle(line.outstanding == 0 ? Tone.success.textColor : .secondaryText)
                                 }
                             }
