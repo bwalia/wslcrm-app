@@ -125,7 +125,7 @@ struct ShopOrderPaperworkSection: View {
     }
 }
 
-private struct ShopMarkPaidForm: View {
+struct ShopMarkPaidForm: View {
     let order: ShopOrder
     let save: (ShopMarkPaidBody) async -> APIError?
     @Environment(\.dismiss) private var dismiss
@@ -159,8 +159,8 @@ private struct ShopMarkPaidForm: View {
                 Button("Mark paid") {
                     saving = true
                     Task {
-                        let day = paidOn.formatted(Date.ISO8601FormatStyle(timeZone: .current).year().month().day())
-                        error = await save(ShopMarkPaidBody(method: method, reference: reference.trimmedOrNil, paidAt: day))
+                        error = await save(ShopMarkPaidBody(method: method, reference: reference.trimmedOrNil,
+                                                            paidAt: Self.paidAt(paidOn)))
                         saving = false
                         if error == nil { dismiss() }
                     }
@@ -170,6 +170,13 @@ private struct ShopMarkPaidForm: View {
             }
         }
         .interactiveDismissDisabled(saving)
+    }
+
+    /// Today: nothing, so the server records the time it was marked (a date alone is midnight UTC, which
+    /// showed "paid at 5:30 AM", before the order was placed). An earlier day: that date.
+    static func paidAt(_ day: Date, now: Date = Date(), calendar: Calendar = .current) -> String? {
+        if calendar.isDate(day, inSameDayAs: now) { return nil }
+        return day.formatted(Date.ISO8601FormatStyle(timeZone: calendar.timeZone).year().month().day())
     }
 }
 

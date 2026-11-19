@@ -222,6 +222,16 @@ final class ShopSuppliersTests: XCTestCase {
         XCTAssertNil(json["reference"])
     }
 
+    func testMarkPaidTodaySendsNoDate() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Kolkata")!
+        let now = ISO8601DateFormatter().date(from: "2026-11-19T16:06:00Z")!
+        XCTAssertNil(ShopMarkPaidForm.paidAt(now, now: now, calendar: calendar),
+                     "today: the server records the time it was marked")
+        let earlier = calendar.date(byAdding: .day, value: -2, to: now)!
+        XCTAssertEqual(ShopMarkPaidForm.paidAt(earlier, now: now, calendar: calendar), "2026-11-17")
+    }
+
     // MARK: Permissions
 
     func testMarkPaidNeedsManageAndAnalyticsItsOwnModule() {
