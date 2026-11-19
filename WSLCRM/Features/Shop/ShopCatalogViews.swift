@@ -121,6 +121,9 @@ struct ShopProductDetailView: View {
     @State private var editing = false
     @State private var adjusting: ShopStockTarget?
     @State private var notice: String?
+    @State private var enquiries: [ShopStockEnquiry] = []
+    @State private var askingSupplier = false
+    @State private var supplierNotice: String?
 
     var body: some View {
         Group {
@@ -132,7 +135,25 @@ struct ShopProductDetailView: View {
         }
         .navigationTitle("Product")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                NavigationLink {
+                    WebPageView(route: WebPageRoute(title: state.value?.summary.name ?? "Product", path: "/dashboard/shop/products/\(uuid)"))
+                } label: {
+                    Label("Open on the web", systemImage: "globe")
+                }
+                .accessibilityIdentifier("shopProduct.web")
+            }
+        }
         .task { await load() }
+        .sheet(isPresented: $askingSupplier) {
+            NavigationStack {
+                ShopSupplierMessageSheet(kind: .stockEnquiry(productUuid: uuid)) { line in
+                    supplierNotice = line
+                    Task { await loadEnquiries() }
+                }
+            }
+        }
     }
 
     private func content(_ product: ShopProduct) -> some View {
@@ -194,6 +215,29 @@ struct ShopProductDetailView: View {
                 }
             } header: {
                 Text("Stock")
+            }
+
+            if policy.canCreate || !enquiries.isEmpty {
+                Section {
+                    if policy.canCreate {
+                        Button {
+                            askingSupplier = true
+                        } label: {
+                            Label("Ask a supplier about stock", systemImage: "shippingbox.and.arrow.backward")
+                        }
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("shopProduct.askSupplier")
+                    }
+                    if let supplierNotice {
+                        Label(supplierNotice, systemImage: "checkmark.circle")
+                            .font(.footnote).foregroundStyle(Tone.success.textColor)
+                    }
+                    ForEach(enquiries.prefix(5)) { ShopStockEnquiryRow(enquiry: $0, currency: s.currency) }
+                } header: {
+                    Text("Suppliers")
+                } footer: {
+                    Text("Ask by email from here, or WhatsApp or a text from this phone. Their answers are recorded on the web.")
+                }
             }
 
             let tracked = product.trackedOptions
@@ -315,6 +359,11 @@ struct ShopProductDetailView: View {
             if state.value == nil { state = .failed(apiError) } else { actionError = apiError }
         }
         movements = (try? await movementsTask) ?? movements
+        await loadEnquiries()
+    }
+
+    private func loadEnquiries() async {
+        enquiries = (try? await services.shop.stockEnquiries(productUuid: uuid)) ?? enquiries
     }
 
     private func patch(_ body: ShopProductBody) async {

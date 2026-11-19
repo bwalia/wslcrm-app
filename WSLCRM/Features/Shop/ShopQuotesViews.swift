@@ -70,6 +70,8 @@ struct ShopQuoteDetailView: View {
     @State private var confirmingSend = false
     @State private var createdOrder: ShopQuote?
     @State private var notice: String?
+    @State private var messaging: ShopSupplierMessageKind?
+    @State private var supplierNotice: String?
 
     private var current: ShopQuote { quote ?? summary }
     private var canUpdate: Bool { session.shopPolicy.canUpdate }
@@ -172,6 +174,41 @@ struct ShopQuoteDetailView: View {
                 Section { InlineErrorRow(error: actionError) }
             }
 
+            if session.shopPolicy.canCreate && current.status != .cancelled {
+                Section {
+                    Button {
+                        messaging = .priceRequest(quoteUuid: current.uuid)
+                    } label: {
+                        Label("Ask a supplier for a price", systemImage: "shippingbox.and.arrow.backward")
+                    }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("shopQuote.askSupplier")
+                    Button {
+                        messaging = .introduction(quoteUuid: current.uuid)
+                    } label: {
+                        Label("Introduce the customer to a supplier", systemImage: "person.2")
+                    }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("shopQuote.introduce")
+                    if let supplierNotice {
+                        Label(supplierNotice, systemImage: "checkmark.circle")
+                            .font(.footnote).foregroundStyle(Tone.success.textColor)
+                    }
+                    if let code = current.dealCode {
+                        NavigationLink {
+                            ShopDealDetailView(code: code)
+                        } label: {
+                            LabeledContent("Deal", value: code)
+                        }
+                        .accessibilityIdentifier("shopQuote.deal")
+                    }
+                } header: {
+                    Text("Suppliers")
+                } footer: {
+                    Text("By email from here, or WhatsApp or a text from this phone. A price request never names the customer; an introduction shares their details, so only with their agreement.")
+                }
+            }
+
             Section("Customer") {
                 DetailRow(label: "Name", value: current.customer.name)
                 DetailRow(label: "Company", value: current.customer.company)
@@ -254,6 +291,24 @@ struct ShopQuoteDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .refreshable { await load() }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                NavigationLink {
+                    WebPageView(route: WebPageRoute(title: "\(title) \(current.quoteNumber)", path: "/dashboard/shop/quotes/\(current.uuid)"))
+                } label: {
+                    Label("Open on the web", systemImage: "globe")
+                }
+                .accessibilityIdentifier("shopQuote.web")
+            }
+        }
+        .sheet(item: $messaging) { kind in
+            NavigationStack {
+                ShopSupplierMessageSheet(kind: kind) { line in
+                    supplierNotice = line
+                    Task { await load() }
+                }
+            }
+        }
         .confirmationDialog(pendingStatus?.actionTitle ?? "", isPresented: .init(get: { pendingStatus != nil }, set: { if !$0 { pendingStatus = nil } }),
                             titleVisibility: .visible, presenting: pendingStatus) { status in
             Button(status.actionTitle, role: status == .cancelled ? .destructive : nil) {

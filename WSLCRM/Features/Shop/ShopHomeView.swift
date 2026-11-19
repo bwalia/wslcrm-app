@@ -7,6 +7,10 @@ struct ShopPolicy: Sendable {
     var canCreate: Bool { permissions.can(.create, .shop) }
     var canUpdate: Bool { permissions.can(.update, .shop) }
     var canDelete: Bool { permissions.can(.delete, .shop) }
+    /// Saying money arrived (mark paid) releases the goods: shop.manage only, as on the server.
+    var canManage: Bool { permissions.can(.manage, .shop) }
+    /// Revenue figures are their own module.
+    var canSeeAnalytics: Bool { permissions.can(.read, .shopAnalytics) }
     /// Saving a quote's customer to the CRM creates an account and a contact.
     var canSaveToCRM: Bool { permissions.can(.update, .shop) && permissions.can(.create, .crmAccounts) && permissions.can(.create, .crmContacts) }
 }
@@ -249,12 +253,24 @@ struct ShopHomeView: View {
         }
     }
 
+    /// Every part of the web's shop: the app's own screens where it has them, else the web page inside
+    /// the app (already signed in), so nothing in the shop is out of reach from the phone.
+    @ViewBuilder
     private var manageSection: some View {
-        Section("Manage") {
+        Section("Sell") {
             NavigationLink { ShopOrdersListView() } label: { Label("Orders", systemImage: "cart") }
                 .accessibilityIdentifier("shop.orders")
             NavigationLink { ShopQuotesListView() } label: { Label("Quotes", systemImage: "doc.text") }
                 .accessibilityIdentifier("shop.quotes")
+            if session.shopPolicy.canCreate {
+                webLink("New quote", "/dashboard/shop/quotes/new", systemImage: "doc.badge.plus", id: "shop.newQuote")
+            }
+            NavigationLink { ShopDealsListView() } label: { Label("Deals", systemImage: "lock.doc") }
+                .accessibilityIdentifier("shop.deals")
+            webLink("Point of Sale", "/dashboard/pos", systemImage: "storefront", id: "shop.pos")
+            webLink("All sales orders", "/dashboard/orders", systemImage: "list.bullet.rectangle", id: "shop.salesOrders")
+        }
+        Section("Catalogue") {
             NavigationLink { ShopProductsListView() } label: { Label("Products", systemImage: "shippingbox") }
                 .accessibilityIdentifier("shop.products")
             NavigationLink { ShopCategoriesView() } label: { Label("Categories", systemImage: "folder") }
@@ -263,11 +279,51 @@ struct ShopHomeView: View {
                 .accessibilityIdentifier("shop.stock")
             NavigationLink { ShopMarketView() } label: { Label("Market prices", systemImage: "chart.line.uptrend.xyaxis") }
                 .accessibilityIdentifier("shop.market")
+            webLink("Price changes", "/dashboard/shop/price-changes", systemImage: "scalemass", id: "shop.priceChanges")
+            webLink("Below cost", "/dashboard/shop/below-cost", systemImage: "chart.line.downtrend.xyaxis", id: "shop.belowCost")
+        }
+        Section("Buying") {
+            NavigationLink { ShopSuppliersListView() } label: { Label("Suppliers", systemImage: "truck.box") }
+                .accessibilityIdentifier("shop.suppliers")
+            if session.permissions.can(.read, .purchaseOrders) {
+                NavigationLink { PurchaseOrdersListView() } label: { Label("Purchase orders", systemImage: "doc.plaintext") }
+                    .accessibilityIdentifier("shop.purchaseOrders")
+                webLink("Purchase invoices", "/dashboard/purchase-invoices", systemImage: "doc.text.below.ecg", id: "shop.purchaseInvoices")
+            }
+            webLink("Message templates", "/dashboard/shop/templates", systemImage: "envelope.badge", id: "shop.templates")
+        }
+        Section("Customers") {
+            webLink("VIP members", "/dashboard/shop/members", systemImage: "crown", id: "shop.members")
+            webLink("Credits", "/dashboard/shop/credits", systemImage: "gift", id: "shop.credits")
             NavigationLink { ShopChatsListView() } label: { Label("Assistant chats", systemImage: "bubble.left.and.bubble.right") }
                 .accessibilityIdentifier("shop.chats")
             NavigationLink { ShopKnowledgeView() } label: { Label("Assistant knowledge", systemImage: "books.vertical") }
                 .accessibilityIdentifier("shop.knowledge")
+            webLink("Legal record", "/dashboard/shop/legal", systemImage: "scroll", id: "shop.legal")
         }
+        Section {
+            if session.shopPolicy.canSeeAnalytics {
+                webLink("Analytics", "/dashboard/shop/analytics", systemImage: "chart.bar", id: "shop.analytics")
+            }
+            webLink("Shop settings", "/dashboard/shop/settings", systemImage: "gearshape", id: "shop.settings")
+        } header: {
+            Text("Reports and settings")
+        } footer: {
+            Text("Items with a globe open the web page inside the app.")
+        }
+    }
+
+    private func webLink(_ title: String, _ path: String, systemImage: String, id: String) -> some View {
+        NavigationLink {
+            WebPageView(route: WebPageRoute(title: title, path: path))
+        } label: {
+            HStack {
+                Label(title, systemImage: systemImage)
+                Spacer()
+                Image(systemName: "globe").font(.footnote).foregroundStyle(.secondaryText).accessibilityHidden(true)
+            }
+        }
+        .accessibilityIdentifier(id)
     }
 
     private func alerts(for kpis: ShopKPIs) -> [String] {

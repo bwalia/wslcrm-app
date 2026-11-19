@@ -33,6 +33,8 @@ enum Module: String, Sendable {
     case timesheetApprovals = "timesheet_approvals"
     /// The online shop's back office: catalogue, stock, carts' quotes and orders, chats, market prices.
     case shop
+    /// Shop revenue figures (Shop → Analytics), separate from running the shop.
+    case shopAnalytics = "shop_analytics"
 
     var displayName: String {
         switch self {
@@ -60,6 +62,7 @@ enum Module: String, Sendable {
         case .timesheets: "timesheets"
         case .timesheetApprovals: "timesheet approvals"
         case .shop: "shop"
+        case .shopAnalytics: "shop analytics"
         }
     }
 }

@@ -90,6 +90,7 @@ struct ShopOrderDetailView: View {
     @State private var busy = false
     @State private var pendingStatus: ShopOrderStatus?
     @State private var editingFulfilment = false
+    @State private var extras = ShopOrderExtras()
 
     private var current: ShopOrder { order ?? summary }
 
@@ -129,6 +130,10 @@ struct ShopOrderDetailView: View {
                 }
             }
 
+            if !extras.deliveryChangeRequests.isEmpty {
+                ShopOrderDeliveryChangesSection(order: current, requests: extras.deliveryChangeRequests) { await load() }
+            }
+
             Section("Customer") {
                 DetailRow(label: "Name", value: current.customer?.name)
                 DetailRow(label: "Company", value: current.customer?.company)
@@ -138,6 +143,9 @@ struct ShopOrderDetailView: View {
                     MapsLinkRow(address: address)
                 }
                 DetailRow(label: "VAT number", value: current.customer?.vatNumber)
+                if let day = extras.deliveryDate {
+                    DetailRow(label: "Agreed delivery", value: [day, extras.deliveryWindow.map(Self.windowLabel)].compactMap { $0 }.joined(separator: ", "))
+                }
             }
 
             ShopLinesSection(lines: current.lines, currency: current.currency)
@@ -169,6 +177,12 @@ struct ShopOrderDetailView: View {
                 Text("Fulfilment")
             }
 
+            ShopOrderSignatureSection(order: current) { await load() }
+
+            ShopOrderCustomerUpdatesSection(order: current, updates: extras.customerUpdates) { await load() }
+
+            ShopOrderPaperworkSection(order: current, extras: extras) { await load() }
+
             Section("Payment") {
                 DetailRow(label: "Stripe mode", value: current.stripeMode.map(Formatters.humanize))
                 if let intent = current.stripePaymentIntentId { CopyableRow(label: "Payment intent", value: intent) }
@@ -188,6 +202,16 @@ struct ShopOrderDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .refreshable { await load() }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                NavigationLink {
+                    WebPageView(route: WebPageRoute(title: "Order \(current.orderNumber)", path: "/dashboard/shop/orders/\(current.uuid)"))
+                } label: {
+                    Label("Open on the web", systemImage: "globe")
+                }
+                .accessibilityIdentifier("shopOrder.web")
+            }
+        }
         .confirmationDialog(pendingStatus?.actionTitle ?? "", isPresented: .init(get: { pendingStatus != nil }, set: { if !$0 { pendingStatus = nil } }),
                             titleVisibility: .visible, presenting: pendingStatus) { status in
             Button(status.actionTitle, role: [.cancelled, .refunded].contains(status) ? .destructive : nil) {
@@ -209,7 +233,9 @@ struct ShopOrderDetailView: View {
 
     private func load() async {
         do {
-            order = try await services.shop.order(summary.uuid)
+            let (loaded, more) = try await services.shop.orderDetail(summary.uuid)
+            order = loaded
+            extras = more
             loadError = nil
         } catch {
             let apiError = error.asAPIError
@@ -236,6 +262,15 @@ struct ShopOrderDetailView: View {
 }
 
 extension ShopOrderDetailView {
+    static func windowLabel(_ raw: String) -> String {
+        switch raw {
+        case "all_day": "any time"
+        case "am": "morning"
+        case "pm": "afternoon"
+        default: Formatters.humanize(raw)
+        }
+    }
+
     /// Opened from a link that only carries the uuid (a quote's order).
     init(uuid: String) {
         self.init(summary: ShopOrder.placeholder(uuid: uuid))

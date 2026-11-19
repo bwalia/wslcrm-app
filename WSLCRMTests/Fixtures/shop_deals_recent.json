@@ -1,0 +1,4 @@
+{ "success": true, "data": { "results": [
+  { "deal_code": "WS-UEEG-XBD6", "created_at": "2026-11-18 10:00:00", "customer": "Ben Ode, Ode Labs", "quotes": 1, "orders": 1, "purchase_orders": 1 },
+  { "deal_code": "WS-AAAA-BBBB", "created_at": "2026-11-17 10:00:00", "customer": null, "quotes": 0, "orders": 0, "purchase_orders": 0 }
+] } }

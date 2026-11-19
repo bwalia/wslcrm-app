@@ -1,0 +1,21 @@
+{
+  "success": true,
+  "data": {
+    "uuid": "6c6c6c6c-0000-4000-8000-000000000001", "order_number": "WSO-2026-00012", "status": "pending_payment",
+    "email": "ben@example.com", "customer": { "name": "Ben Ode", "company": "Ode Labs", "email": "ben@example.com" },
+    "lines": {}, "subtotal_minor": 8000000, "vat_minor": 1600000, "shipping_minor": 0, "total_minor": 9600000, "currency": "GBP",
+    "paid_at": null, "created_at": "2026-11-18 11:00:00", "tracking": null, "url_path": "/order/6c6c",
+    "payment_method": "bank_transfer", "payment_methods": [], "payment_reference": "WSO-2026-00012", "customer_po_number": "PO-ODE-9",
+    "delivery_date": "2026-11-25", "delivery_window": "am",
+    "deal_code": "WS-UEEG-XBD6", "refunded_minor": 0, "internal_notes": null, "invoice_uuid": null,
+    "bank_transfer_due": true, "days_waiting": 1, "delivery_change_pending": true, "paid_reference": null,
+    "reservations": {}, "purchase_orders": {},
+    "delivery_change_requests": [
+      { "uuid": "dc000000-0000-4000-8000-000000000001", "status": "pending", "requested_address": { "line1": "2 Low St", "city": "Leeds", "postcode": "LS2 2BB", "country": "GB" }, "requested_date": "2026-11-26", "requested_window": "pm", "customer_note": "Back gate please", "previous_delivery_address": null, "previous_delivery_date": null, "previous_delivery_window": null, "staff_note": null, "decided_at": null, "cancelled_at": null, "created_at": "2026-11-19 08:00:00", "requested_by_email": "ben@example.com", "decided_by": null, "customer_notified_at": null, "updated_at": "2026-11-19 08:00:00" }
+    ],
+    "customer_updates": [
+      { "uuid": "ev000000-0000-4000-8000-000000000001", "kind": "comment", "at": "2026-11-19T09:00:00+00:00", "status": null, "message": "Your server is being built", "author": "Alex Example", "removable": true },
+      { "uuid": "em000000-0000-4000-8000-000000000001", "kind": "email", "at": "2026-11-18T12:00:00+00:00", "title": "We've got your order", "message": "Thanks for your order", "status": null }
+    ]
+  }
+}

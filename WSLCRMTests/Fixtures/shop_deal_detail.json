@@ -1,0 +1,26 @@
+{
+  "success": true,
+  "data": {
+    "deal_code": "WS-UEEG-XBD6",
+    "customer": { "name": "Ben Ode", "email": "ben@example.com", "phone": null, "company": "Ode Labs" },
+    "leads": {},
+    "quotes": [
+      { "uuid": "5b5b5b5b-0000-4000-8000-000000000001", "quote_number": "WSQ-2026-00027", "revision_no": 1, "kind": "quote", "status": "sent", "total_minor": 9600000, "subtotal_minor": 8000000, "currency": "GBP", "created_at": "2026-11-18 10:00:00", "superseded": false, "order_uuid": null, "order_number": null }
+    ],
+    "orders": [
+      { "uuid": "6c6c6c6c-0000-4000-8000-000000000001", "order_number": "WSO-2026-00012", "status": "pending_payment", "total_minor": 9600000, "subtotal_minor": 8000000, "currency": "GBP", "paid_at": null, "created_at": "2026-11-18 11:00:00", "quote_number": "WSQ-2026-00027" }
+    ],
+    "purchase_orders": [
+      { "uuid": "7d7d7d7d-0000-4000-8000-000000000001", "po_number": "PO-0042", "status": "sent", "supplier_name": "Test Supplier Ltd", "total": "7200.00", "currency": "GBP", "reference": null, "created_at": "2026-11-18 12:00:00", "sent_at": null, "drop_ship": true, "drop_ship_confirmed": true, "legacy_drop_ship": false }
+    ],
+    "supplier_requests": [
+      { "uuid": "4e4e4e4e-0000-4000-8000-000000000001", "deal_code": "WS-UEEG-XBD6", "supplier_uuid": "5a5a5a5a-0000-4000-8000-0000000000aa", "supplier_name": "Test Supplier Ltd", "contact_name": "Sam", "contact_email": "price-test@example.com", "sent_at": "2026-11-18", "spec": null, "lines": [ { "line_uuid": "l1", "description": "HGX B300 server", "qty": 2, "note": "8 x B300 GPU", "unit_price_minor": 3600000 } ], "supplier_quote_ref": "BQ-77", "lead_time": "2 weeks", "valid_until": "2026-12-01", "notes": null, "created_at": "2026-11-18 16:00:00", "updated_at": "2026-11-18 16:30:00", "channel": "whatsapp", "kind": "price" },
+      { "uuid": "4e4e4e4e-0000-4000-8000-000000000002", "deal_code": "WS-UEEG-XBD6", "supplier_uuid": null, "supplier_name": "No Phone Supplies", "contact_name": null, "contact_email": "orders@example.com", "sent_at": "2026-11-19", "spec": null, "lines": {}, "supplier_quote_ref": null, "lead_time": null, "valid_until": null, "notes": null, "created_at": "2026-11-19 09:00:00", "updated_at": "2026-11-19 09:00:00", "channel": null, "kind": "intro" }
+    ],
+    "notes": {},
+    "lines": {},
+    "lines_from": "Quote WSQ-2026-00027",
+    "compare": { "rows": {}, "below_cost_count": 0 },
+    "audit": {}
+  }
+}
