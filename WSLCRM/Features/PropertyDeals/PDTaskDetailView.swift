@@ -82,7 +82,7 @@ struct PDTaskDetailView: View {
     private func headerSection(_ task: PDTask) -> some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
-                Text(task.title).font(.title3.weight(.semibold))
+                Text(task.title).font(.wsTitle3.weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("pd.task.title")
                 HStack(spacing: 8) {
@@ -132,7 +132,7 @@ struct PDTaskDetailView: View {
                         Spacer()
                         if let points = factor.points {
                             Text("+\(points.formatted(.number.precision(.fractionLength(0))))")
-                                .font(.footnote.monospacedDigit())
+                                .font(.wsFootnote.monospacedDigit())
                                 .foregroundStyle(.secondaryText)
                         }
                     }
@@ -217,8 +217,8 @@ struct PDTaskDetailView: View {
             Section {
                 ForEach(reachable) { party in
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(party.name ?? Formatters.humanize(party.role)).font(.headline)
-                        Text(Formatters.humanize(party.role)).font(.subheadline).foregroundStyle(.secondaryText)
+                        Text(party.name ?? Formatters.humanize(party.role)).font(.wsHeadline)
+                        Text(Formatters.humanize(party.role)).font(.wsSubheadline).foregroundStyle(.secondaryText)
                         HStack(spacing: 10) {
                             if let phone = party.phone?.trimmedOrNil {
                                 contactButton("Call", systemImage: "phone.fill", tone: .success,
@@ -258,7 +258,7 @@ struct PDTaskDetailView: View {
             }
         } label: {
             Label(title, systemImage: systemImage)
-                .font(.subheadline.weight(.semibold))
+                .font(.wsSubheadline.weight(.semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .frame(maxWidth: .infinity, minHeight: 44)
@@ -275,7 +275,7 @@ struct PDTaskDetailView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(comment.visibleContent)
                     Text([comment.actor.name, Formatters.relative(comment.createdAt)].compactMap { $0 }.joined(separator: " · "))
-                        .font(.caption).foregroundStyle(.secondaryText)
+                        .font(.wsCaption).foregroundStyle(.secondaryText)
                 }
                 .accessibilityElement(children: .combine)
             }
@@ -284,7 +284,7 @@ struct PDTaskDetailView: View {
                     Text(pending.hints["text"] ?? "")
                     Label(pending.isFailed ? "Not sent — see Unsynced changes" : "Not synced yet",
                           systemImage: pending.isFailed ? "exclamationmark.triangle" : "arrow.triangle.2.circlepath")
-                        .font(.caption).foregroundStyle(Tone.warning.textColor)
+                        .font(.wsCaption).foregroundStyle(Tone.warning.textColor)
                 }
                 .accessibilityElement(children: .combine)
             }
@@ -312,7 +312,7 @@ struct PDTaskDetailView: View {
                         Label {
                             VStack(alignment: .leading) {
                                 Text(document.filename).foregroundStyle(.primary)
-                                Text(PDLabels.key(document.category)).font(.caption).foregroundStyle(.secondaryText)
+                                Text(PDLabels.key(document.category)).font(.wsCaption).foregroundStyle(.secondaryText)
                             }
                         } icon: {
                             Image(systemName: document.mimeType?.hasPrefix("image/") == true ? "photo" : "doc")

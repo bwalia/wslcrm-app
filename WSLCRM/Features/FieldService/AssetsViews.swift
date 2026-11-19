@@ -101,9 +101,9 @@ struct AssetRow: View {
                 .foregroundStyle(Tone.progress.color)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(product.name).font(.headline).foregroundStyle(.primary)
+                Text(product.name).font(.wsHeadline).foregroundStyle(.primary)
                 Text([product.sku, product.categoryName, product.storeName].compactMap { $0 }.joined(separator: " · "))
-                    .font(.subheadline).foregroundStyle(.secondaryText)
+                    .font(.wsSubheadline).foregroundStyle(.secondaryText)
             }
             Spacer()
         }
@@ -126,11 +126,11 @@ struct AssetDetailView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(product.name).font(.title2.bold())
+                    Text(product.name).font(.wsTitle2.bold())
                     Text([product.sku.map { "SKU \($0)" }, product.categoryName, product.storeName].compactMap { $0 }.joined(separator: " · "))
                         .foregroundStyle(.secondaryText)
                     if let description = product.description, !description.isEmpty {
-                        Text(description).font(.subheadline)
+                        Text(description).font(.wsSubheadline)
                     }
                 }
                 .padding(.vertical, 4)

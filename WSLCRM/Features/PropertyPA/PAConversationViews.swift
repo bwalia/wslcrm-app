@@ -38,7 +38,7 @@ struct PAPrepareView: View {
         List {
             if let objective = brief.objective {
                 Section("Objective for the call") {
-                    Text(objective).font(.headline).accessibilityIdentifier("pa.prepare.objective")
+                    Text(objective).font(.wsHeadline).accessibilityIdentifier("pa.prepare.objective")
                 }
             }
             ForEach(brief.sections) { section in
@@ -97,7 +97,7 @@ struct PAAskView: View {
             }
             ForEach(turns) { turn in
                 Section {
-                    Text(turn.question).font(.headline)
+                    Text(turn.question).font(.wsHeadline)
                     if let answer = turn.answer {
                         Text(answer.answer).accessibilityIdentifier("pa.ask.answer")
                         ForEach(answer.facts) { PAFactRow(fact: $0) }
@@ -145,7 +145,7 @@ struct PAAskView: View {
                 .submitLabel(.send)
                 .onSubmit { send() }
                 .accessibilityIdentifier("pa.ask.field")
-            Button { send() } label: { Image(systemName: "arrow.up.circle.fill").font(.title) }
+            Button { send() } label: { Image(systemName: "arrow.up.circle.fill").font(.wsTitle) }
                 .disabled(question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .accessibilityLabel("Send")
                 .accessibilityIdentifier("pa.ask.send")
@@ -306,8 +306,8 @@ struct PAHandoffView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
-                    if let from = handoff.from { Text("From \(from.name)").font(.subheadline).foregroundStyle(.secondaryText) }
-                    Text(handoff.question).font(.title3.weight(.semibold)).accessibilityIdentifier("pa.handoff.question.text")
+                    if let from = handoff.from { Text("From \(from.name)").font(.wsSubheadline).foregroundStyle(.secondaryText) }
+                    Text(handoff.question).font(.wsTitle3.weight(.semibold)).accessibilityIdentifier("pa.handoff.question.text")
                 }
                 if let dealUuid = handoff.dealUuid {
                     NavigationLink(value: PDDealRoute(uuid: dealUuid)) { Label("Open deal", systemImage: "house") }
@@ -455,8 +455,8 @@ struct PATeachSheet: View {
     private func proposedSection(_ rule: PAKnowledgeRule) -> some View {
         Group {
             Section("Rule") {
-                Text(rule.rule).font(.headline).accessibilityIdentifier("pa.teach.rule")
-                if let rationale = rule.rationale { Text(rationale).font(.subheadline).foregroundStyle(.secondaryText) }
+                Text(rule.rule).font(.wsHeadline).accessibilityIdentifier("pa.teach.rule")
+                if let rationale = rule.rationale { Text(rationale).font(.wsSubheadline).foregroundStyle(.secondaryText) }
             }
             if !rule.triggers.isEmpty {
                 Section("When it applies") {

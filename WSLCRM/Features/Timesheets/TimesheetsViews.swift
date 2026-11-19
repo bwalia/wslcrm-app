@@ -120,7 +120,7 @@ private struct StatusFilterBar: View {
                         selection = status
                     } label: {
                         Text(status?.label ?? "All")
-                            .font(.subheadline.weight(.medium))
+                            .font(.wsSubheadline.weight(.medium))
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
                             .background(selection == status ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.1),
@@ -160,8 +160,8 @@ struct WorkSummaryTile: View {
 
     var body: some View {
         VStack(spacing: 2) {
-            Text(value).font(.title3.weight(.bold))
-            Text(title).font(.caption).foregroundStyle(.secondaryText)
+            Text(value).font(.wsTitle3.weight(.bold))
+            Text(title).font(.wsCaption).foregroundStyle(.secondaryText)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
@@ -178,20 +178,20 @@ struct TimesheetRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(Formatters.day(timesheet.workDate ?? timesheet.periodStart) ?? "No date")
-                    .font(.headline)
+                    .font(.wsHeadline)
                 Spacer()
                 StatusBadge(text: timesheet.status.label,
                             systemImage: timesheet.status.systemImage,
                             tone: timesheet.status.tone)
             }
             if !timesheet.subtitle.isEmpty {
-                Text(timesheet.subtitle).font(.subheadline).foregroundStyle(.secondaryText)
+                Text(timesheet.subtitle).font(.wsSubheadline).foregroundStyle(.secondaryText)
             }
             HStack(spacing: 10) {
                 Label(Formatters.hours(Decimal(timesheet.totalHours)) ?? "0", systemImage: "clock")
-                    .font(.subheadline)
+                    .font(.wsSubheadline)
                 if timesheet.isBillable {
-                    Label("Billable", systemImage: "sterlingsign.circle").font(.subheadline)
+                    Label("Billable", systemImage: "sterlingsign.circle").font(.wsSubheadline)
                 }
                 if showsActor || timesheet.isMachineTime {
                     ActorChip(actor: timesheet.actor)
@@ -286,12 +286,12 @@ struct TimesheetDetailView: View {
                     ForEach(entries) { entry in
                         VStack(alignment: .leading, spacing: 2) {
                             HStack {
-                                Text(Formatters.day(entry.date) ?? "—").font(.subheadline.weight(.semibold))
+                                Text(Formatters.day(entry.date) ?? "—").font(.wsSubheadline.weight(.semibold))
                                 Spacer()
-                                Text(Formatters.hours(Decimal(entry.hours)) ?? "0").font(.subheadline)
+                                Text(Formatters.hours(Decimal(entry.hours)) ?? "0").font(.wsSubheadline)
                             }
                             if let description = entry.description, !description.isEmpty {
-                                Text(description).font(.footnote).foregroundStyle(.secondaryText)
+                                Text(description).font(.wsFootnote).foregroundStyle(.secondaryText)
                             }
                         }
                     }
@@ -327,7 +327,7 @@ struct TimesheetDetailView: View {
                 .accessibilityIdentifier("timesheet.reject")
         } else if sheet.status.canDecide, isMine {
             Text("Somebody else approves your time.")
-                .font(.footnote).foregroundStyle(.secondaryText)
+                .font(.wsFootnote).foregroundStyle(.secondaryText)
         }
     }
 

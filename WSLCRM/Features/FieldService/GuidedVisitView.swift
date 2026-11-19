@@ -97,9 +97,9 @@ private struct GuidedVisitContent: View {
                     WorkStatusBadge(visit: visit)
                         .accessibilityIdentifier("guided.status")
                     Text(visit.jobTitle.isEmpty ? "Service visit" : visit.jobTitle)
-                        .font(.title.bold())
+                        .font(.wsTitle.bold())
                     Text([visit.customerName ?? "No customer", visit.phaseName].compactMap { $0 }.joined(separator: " · "))
-                        .font(.title3)
+                        .font(.wsTitle3)
                         .foregroundStyle(.secondaryText)
                     if !model.pendingWrites.isEmpty {
                         PendingSyncBadge(failed: model.pendingWrites.contains(where: \.isFailed))
@@ -112,13 +112,13 @@ private struct GuidedVisitContent: View {
                     if let place = visit.fullAddress ?? visit.siteName {
                         Link(destination: MapsLink.url(for: [visit.siteName, visit.fullAddress].compactMap { $0 }.joined(separator: ", ")) ?? URL(string: "https://maps.apple.com")!) {
                             HStack(spacing: 12) {
-                                Image(systemName: "location.fill").font(.title3).foregroundStyle(Tone.info.color)
+                                Image(systemName: "location.fill").font(.wsTitle3).foregroundStyle(Tone.info.color)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(visit.siteName != nil ? "Site · tap for directions" : "Directions")
-                                        .font(.caption).foregroundStyle(.secondaryText)
-                                    Text(visit.siteName ?? place).font(.headline).foregroundStyle(.primary).lineLimit(2)
+                                        .font(.wsCaption).foregroundStyle(.secondaryText)
+                                    Text(visit.siteName ?? place).font(.wsHeadline).foregroundStyle(.primary).lineLimit(2)
                                     if visit.siteName != nil, let address = visit.fullAddress {
-                                        Text(address).font(.caption).foregroundStyle(.secondaryText).lineLimit(2)
+                                        Text(address).font(.wsCaption).foregroundStyle(.secondaryText).lineLimit(2)
                                     }
                                 }
                                 Spacer(minLength: 0)
@@ -132,7 +132,7 @@ private struct GuidedVisitContent: View {
                     if let phone = visit.customerPhone, let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") {
                         Link(destination: url) {
                             Image(systemName: "phone.fill")
-                                .font(.title2)
+                                .font(.wsTitle2)
                                 .frame(width: 64, height: 64)
                                 .background(Tone.success.color.opacity(0.15), in: RoundedRectangle(cornerRadius: 16))
                                 .foregroundStyle(Tone.success.color)
@@ -143,7 +143,7 @@ private struct GuidedVisitContent: View {
 
                 if let notes = visit.siteAccessNotes, !notes.isEmpty {
                     Label(notes, systemImage: "key.fill")
-                        .font(.subheadline)
+                        .font(.wsSubheadline)
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Tone.warning.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 14))
@@ -153,7 +153,7 @@ private struct GuidedVisitContent: View {
                 // What to fix
                 card {
                     Label("What to fix", systemImage: "list.clipboard")
-                        .font(.caption.weight(.bold)).textCase(.uppercase).foregroundStyle(.secondaryText)
+                        .font(.wsCaption.weight(.bold)).textCase(.uppercase).foregroundStyle(.secondaryText)
                     if let product = visit.productName {
                         Text("Unit: ").foregroundStyle(.secondaryText) + Text(product).bold()
                             + Text(visit.productRef.map { " · \($0)" } ?? "")
@@ -172,7 +172,7 @@ private struct GuidedVisitContent: View {
                 if let phase = detail.phase, !phase.checklist.isEmpty {
                     card {
                         Text("Checklist · \(phase.checklist.count - phase.uncheckedCount) of \(phase.checklist.count)")
-                            .font(.caption.weight(.bold)).textCase(.uppercase).foregroundStyle(.secondaryText)
+                            .font(.wsCaption.weight(.bold)).textCase(.uppercase).foregroundStyle(.secondaryText)
                         ForEach(Array(phase.checklist.enumerated()), id: \.offset) { index, item in
                             ChecklistRow(item: item, isPending: !model.pendingWrites.filter { $0.entityId == phase.uuid }.isEmpty,
                                          isEnabled: onSite) {
@@ -181,7 +181,7 @@ private struct GuidedVisitContent: View {
                             .accessibilityIdentifier("guided.checklist.\(index)")
                         }
                         if !onSite {
-                            Text("Check in to tick the checklist.").font(.footnote).foregroundStyle(.secondaryText)
+                            Text("Check in to tick the checklist.").font(.wsFootnote).foregroundStyle(.secondaryText)
                         }
                     }
                 }
@@ -207,7 +207,7 @@ private struct GuidedVisitContent: View {
                 if !detail.items.isEmpty || !model.pendingItemSummaries.isEmpty {
                     card {
                         Text("On this sheet")
-                            .font(.caption.weight(.bold)).textCase(.uppercase).foregroundStyle(.secondaryText)
+                            .font(.wsCaption.weight(.bold)).textCase(.uppercase).foregroundStyle(.secondaryText)
                         QuoteSheetSummary(items: detail.items, showsPrices: model.showsPrices,
                                           currency: visit.jobCurrency ?? Formatters.fallbackCurrency)
                         ForEach(model.pendingItemSummaries) { pending in
@@ -234,9 +234,9 @@ private struct GuidedVisitContent: View {
                     VStack(spacing: 8) {
                         Image(systemName: "checkmark.circle.fill").font(.system(size: 48)).foregroundStyle(Tone.success.color)
                             .accessibilityHidden(true)
-                        Text("Job complete").font(.title3.bold())
+                        Text("Job complete").font(.wsTitle3.bold())
                         if let summary = visit.workSummary { Text(summary).multilineTextAlignment(.center) }
-                        if let hours = visit.labourHours { Text("\(hours.formatted()) h on site").font(.footnote).foregroundStyle(.secondaryText) }
+                        if let hours = visit.labourHours { Text("\(hours.formatted()) h on site").font(.wsFootnote).foregroundStyle(.secondaryText) }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(20)
@@ -263,7 +263,7 @@ private struct GuidedVisitContent: View {
                     Task { await model.markEnRoute() }
                 }
                 Button("I'm already here — check in") { Task { await model.checkIn() } }
-                    .font(.subheadline.weight(.semibold))
+                    .font(.wsSubheadline.weight(.semibold))
                     .frame(minHeight: 44)
                     .disabled(model.busy)
                     .accessibilityIdentifier("guided.action.checkInDirect")
@@ -276,13 +276,13 @@ private struct GuidedVisitContent: View {
                     showingFinish = true
                 }
             case .noAccess:
-                Text("Marked no access — the office will rebook.").font(.subheadline).foregroundStyle(.secondaryText)
+                Text("Marked no access — the office will rebook.").font(.wsSubheadline).foregroundStyle(.secondaryText)
             default:
                 EmptyView()
             }
             if visit.status.isOpen {
                 Button("Can't get in? Record no access") { showingNoAccess = true }
-                    .font(.subheadline)
+                    .font(.wsSubheadline)
                     .foregroundStyle(Tone.info.textColor)
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .contentShape(.rect)
@@ -329,8 +329,8 @@ private struct CaptureTile: View {
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 4) {
-                Label(title, systemImage: systemImage).font(.headline).foregroundStyle(.primary)
-                Text(hint).font(.caption).foregroundStyle(.secondaryText)
+                Label(title, systemImage: systemImage).font(.wsHeadline).foregroundStyle(.primary)
+                Text(hint).font(.wsCaption).foregroundStyle(.secondaryText)
             }
             .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
             .padding(.horizontal, 14)

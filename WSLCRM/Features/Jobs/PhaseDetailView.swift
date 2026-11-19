@@ -48,12 +48,12 @@ struct PhaseDetailView: View {
                     if let completedBy = phase.completedByName, let at = phase.completedAt {
                         Label("\(phase.status == .skipped ? "Skipped" : "Completed") by \(completedBy), \(Formatters.dateTime(at) ?? "")",
                               systemImage: "person.fill.checkmark")
-                            .font(.subheadline)
+                            .font(.wsSubheadline)
                     }
                     if !detail.job.status.isOpen {
                         Label("This job is \(detail.job.status.label.lowercased()). Reopen it to make changes.",
                               systemImage: "lock.fill")
-                            .font(.subheadline)
+                            .font(.wsSubheadline)
                             .foregroundStyle(.secondaryText)
                     }
                 }
@@ -113,7 +113,7 @@ struct PhaseDetailView: View {
                 DetailRow(label: "Started", value: Formatters.dateTime(phase.startedAt))
                 if let existing = phase.notes, !existing.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Notes").font(.caption).foregroundStyle(.secondaryText)
+                        Text("Notes").font(.wsCaption).foregroundStyle(.secondaryText)
                         Text(existing)
                     }
                 }
@@ -144,17 +144,17 @@ struct ChecklistRow: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.label)
-                        .font(.body)
+                        .font(.wsBody)
                         .foregroundStyle(.primary)
                         .strikethrough(item.done, color: .secondary)
                         .multilineTextAlignment(.leading)
                     if isPending {
                         Label("Waiting to sync", systemImage: "icloud.and.arrow.up")
-                            .font(.caption.weight(.semibold))
+                            .font(.wsCaption.weight(.semibold))
                             .foregroundStyle(Tone.progress.color)
                     } else if item.done, let at = item.doneAt {
                         Text("Done \(Formatters.dateTime(at) ?? "")")
-                            .font(.caption)
+                            .font(.wsCaption)
                             .foregroundStyle(.secondaryText)
                     }
                 }

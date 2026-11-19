@@ -254,7 +254,7 @@ struct CachedDataNotice: View {
 
     var body: some View {
         Label("Offline copy from \(savedAt.formatted(.relative(presentation: .named)))", systemImage: "externaldrive.badge.icloud")
-            .font(.subheadline.weight(.semibold))
+            .font(.wsSubheadline.weight(.semibold))
             .foregroundStyle(Tone.warning.textColor)
             .accessibilityIdentifier("cachedDataNotice")
     }

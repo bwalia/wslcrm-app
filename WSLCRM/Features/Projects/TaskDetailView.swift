@@ -66,7 +66,7 @@ struct TaskDetailView: View {
 
             Section {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(task.title).font(.title3.weight(.semibold))
+                    Text(task.title).font(.wsTitle3.weight(.semibold))
                     HStack(spacing: 8) {
                         StatusBadge(text: task.status.label, systemImage: task.status.systemImage,
                                     tone: task.status.tone)
@@ -76,7 +76,7 @@ struct TaskDetailView: View {
                         }
                     }
                     if let description = task.description, !description.isEmpty {
-                        Text(description).font(.subheadline)
+                        Text(description).font(.wsSubheadline)
                     }
                     CopyableRow(label: "Reference", value: task.reference)
                 }
@@ -114,7 +114,7 @@ struct TaskDetailView: View {
                     LabeledContent("Labels") {
                         HStack {
                             ForEach(labels) { label in
-                                Text(label.name).font(.caption)
+                                Text(label.name).font(.wsCaption)
                                     .padding(.horizontal, 8).padding(.vertical, 3)
                                     .background(Color.secondary.opacity(0.15), in: Capsule())
                             }
@@ -154,10 +154,10 @@ struct TaskDetailView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 6) {
                                 ActorChip(actor: row.actor)
-                                Text(row.summary).font(.subheadline)
+                                Text(row.summary).font(.wsSubheadline)
                             }
                             if let at = row.createdAt {
-                                Text(Formatters.relative(at) ?? "").font(.caption)
+                                Text(Formatters.relative(at) ?? "").font(.wsCaption)
                                     .foregroundStyle(.secondaryText)
                             }
                         }
@@ -192,7 +192,7 @@ struct TaskDetailView: View {
             .disabled(columns.isEmpty)
             .accessibilityIdentifier("task.move")
         if columns.isEmpty {
-            Text("Loading the board's columns…").font(.footnote).foregroundStyle(.secondaryText)
+            Text("Loading the board's columns…").font(.wsFootnote).foregroundStyle(.secondaryText)
         }
 
         switch claim {
@@ -218,12 +218,12 @@ struct TaskDetailView: View {
             }
             .accessibilityIdentifier("task.claim")
         case .live:
-            Text("You hold this card.").font(.footnote).foregroundStyle(.secondaryText)
+            Text("You hold this card.").font(.wsFootnote).foregroundStyle(.secondaryText)
         }
 
         if let gaps = contract?.eligibilityGaps, !gaps.isEmpty, contract?.goal != nil {
             Text("An agent will not pick this up: it needs \(gaps.joined(separator: ", ")).")
-                .font(.footnote).foregroundStyle(Tone.warning.textColor)
+                .font(.wsFootnote).foregroundStyle(Tone.warning.textColor)
                 .accessibilityIdentifier("task.notEligible")
         }
     }
@@ -238,7 +238,7 @@ struct TaskDetailView: View {
                 .buttonStyle(LargeButtonStyle(tone: .danger))
                 .accessibilityIdentifier("task.timer.stop")
                 Text("Running since \(Formatters.time(running.startedAt) ?? "")")
-                    .font(.caption).foregroundStyle(.secondaryText)
+                    .font(.wsCaption).foregroundStyle(.secondaryText)
             } else {
                 Button("Start a timer") {
                     Task { await perform { try await services.kanban.startTimer(taskUuid: task.uuid, description: nil) } }
@@ -246,22 +246,22 @@ struct TaskDetailView: View {
                 .accessibilityIdentifier("task.timer.start")
                 if let running = runningTimer, running.taskUuid != nil {
                     Text("A timer is already running on \(running.taskTitle ?? "another task") — starting here stops it.")
-                        .font(.caption).foregroundStyle(.secondaryText)
+                        .font(.wsCaption).foregroundStyle(.secondaryText)
                 }
             }
             ForEach(timeEntries) { entry in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(entry.description ?? "Time").font(.subheadline)
+                        Text(entry.description ?? "Time").font(.wsSubheadline)
                         HStack(spacing: 6) {
                             ActorChip(actor: entry.actor)
                             if entry.isMachineTime {
-                                Text("machine time").font(.caption2).foregroundStyle(.secondaryText)
+                                Text("machine time").font(.wsCaption2).foregroundStyle(.secondaryText)
                             }
                         }
                     }
                     Spacer()
-                    Text("\(entry.durationMinutes) min").font(.subheadline.monospacedDigit())
+                    Text("\(entry.durationMinutes) min").font(.wsSubheadline.monospacedDigit())
                 }
                 .accessibilityIdentifier("task.timeEntry.\(entry.uuid)")
             }
@@ -277,10 +277,10 @@ struct TaskDetailView: View {
                         ActorChip(actor: comment.actor)
                         Spacer()
                         if let at = comment.createdAt {
-                            Text(Formatters.relative(at) ?? "").font(.caption).foregroundStyle(.secondaryText)
+                            Text(Formatters.relative(at) ?? "").font(.wsCaption).foregroundStyle(.secondaryText)
                         }
                     }
-                    Text(comment.visibleContent).font(.subheadline)
+                    Text(comment.visibleContent).font(.wsSubheadline)
                 }
                 .accessibilityIdentifier("task.comment.\(comment.uuid)")
             }
@@ -473,7 +473,7 @@ struct MyTasksView: View {
                 TaskCard(task: task)
                 if let place = task.projectName {
                     Text([place, task.columnName].compactMap { $0 }.joined(separator: " · "))
-                        .font(.caption)
+                        .font(.wsCaption)
                         .foregroundStyle(.secondaryText)
                 }
             }
@@ -506,7 +506,7 @@ private struct SprintHeader: View {
                     Text("Ends \(Formatters.day(end) ?? "")")
                 }
             }
-            .font(.caption)
+            .font(.wsCaption)
             .textCase(nil)
         }
         .accessibilityElement(children: .combine)

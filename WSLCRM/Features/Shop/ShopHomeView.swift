@@ -190,7 +190,7 @@ struct ShopHomeView: View {
             Section {
                 ForEach(alerts, id: \.self) { text in
                     Label(text, systemImage: "exclamationmark.triangle.fill")
-                        .font(.subheadline)
+                        .font(.wsSubheadline)
                         .foregroundStyle(Tone.warning.textColor)
                 }
             }
@@ -320,7 +320,7 @@ struct ShopHomeView: View {
             HStack {
                 Label(title, systemImage: systemImage)
                 Spacer()
-                Image(systemName: "globe").font(.footnote).foregroundStyle(.secondaryText).accessibilityHidden(true)
+                Image(systemName: "globe").font(.wsFootnote).foregroundStyle(.secondaryText).accessibilityHidden(true)
             }
         }
         .accessibilityIdentifier(id)

@@ -9,19 +9,19 @@ struct ShopProductRow: View {
         HStack(spacing: 12) {
             ShopThumbnail(url: product.imageURL)
             VStack(alignment: .leading, spacing: 4) {
-                Text(product.name).font(.headline).lineLimit(2)
+                Text(product.name).font(.wsHeadline).lineLimit(2)
                 Text([product.sku, product.brand, product.category?.name].compactMap { $0?.trimmedOrNil }.joined(separator: " · "))
-                    .font(.footnote).foregroundStyle(.secondaryText).lineLimit(1)
+                    .font(.wsFootnote).foregroundStyle(.secondaryText).lineLimit(1)
                 HStack(spacing: 8) {
                     Text(ShopMoney.format(product.basePriceMinor, currency: product.currency) ?? "")
-                        .font(.subheadline.monospacedDigit().weight(.semibold))
+                        .font(.wsSubheadline.monospacedDigit().weight(.semibold))
                     if !product.priceVerified {
                         Image(systemName: "questionmark.diamond").foregroundStyle(Tone.warning.textColor)
                             .accessibilityLabel("Price not verified")
                     }
                     Spacer()
                     Text("\(product.available) available")
-                        .font(.footnote.monospacedDigit())
+                        .font(.wsFootnote.monospacedDigit())
                         .foregroundStyle(product.lowStock ? Tone.danger.textColor : .secondaryText)
                 }
             }
@@ -164,15 +164,15 @@ struct ShopProductDetailView: View {
                 HStack(alignment: .top, spacing: 14) {
                     ShopThumbnail(url: s.imageURL)
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(s.name).font(.title3.bold())
+                        Text(s.name).font(.wsTitle3.bold())
                         Text([s.sku, s.brand].compactMap { $0?.trimmedOrNil }.joined(separator: " · "))
-                            .font(.subheadline).foregroundStyle(.secondaryText)
+                            .font(.wsSubheadline).foregroundStyle(.secondaryText)
                         ShopProductStatusPresentation.badge(s.status)
                     }
                 }
                 .padding(.vertical, 4)
                 if let shortDescription = product.shortDescription?.trimmedOrNil {
-                    Text(shortDescription).font(.subheadline)
+                    Text(shortDescription).font(.wsSubheadline)
                 }
             }
             if let actionError { Section { InlineErrorRow(error: actionError) } }
@@ -230,7 +230,7 @@ struct ShopProductDetailView: View {
                     }
                     if let supplierNotice {
                         Label(supplierNotice, systemImage: "checkmark.circle")
-                            .font(.footnote).foregroundStyle(Tone.success.textColor)
+                            .font(.wsFootnote).foregroundStyle(Tone.success.textColor)
                     }
                     ForEach(enquiries.prefix(5)) { ShopStockEnquiryRow(enquiry: $0, currency: s.currency) }
                 } header: {
@@ -255,7 +255,7 @@ struct ShopProductDetailView: View {
                                 VStack(alignment: .leading) {
                                     Text(option.name)
                                     Text([group.name, option.componentName.map { "uses \($0)" }].compactMap { $0 }.joined(separator: " · "))
-                                        .font(.footnote).foregroundStyle(.secondaryText)
+                                        .font(.wsFootnote).foregroundStyle(.secondaryText)
                                 }
                                 Spacer()
                                 Text("\(option.available ?? option.stockQty ?? 0)").monospacedDigit()
@@ -271,9 +271,9 @@ struct ShopProductDetailView: View {
                 Section {
                     ForEach(product.optionGroups) { group in
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(group.name).font(.headline)
+                            Text(group.name).font(.wsHeadline)
                             Text("\(group.options.filter(\.isActive).count) options · \(group.selection == "multi" ? "pick several" : "pick one")\(group.required ? " · required" : "")")
-                                .font(.footnote).foregroundStyle(.secondaryText)
+                                .font(.wsFootnote).foregroundStyle(.secondaryText)
                         }
                     }
                     if !product.rules.isEmpty {
@@ -555,9 +555,9 @@ struct ShopCategoriesView: View {
                 } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(category.name).font(.headline)
+                            Text(category.name).font(.wsHeadline)
                             Text(["/\(category.slug)", category.isActive ? nil : "hidden"].compactMap { $0 }.joined(separator: " · "))
-                                .font(.footnote).foregroundStyle(.secondaryText)
+                                .font(.wsFootnote).foregroundStyle(.secondaryText)
                         }
                         Spacer()
                         if let count = category.productCount {
@@ -712,14 +712,14 @@ struct ShopStockFigures: View {
         .padding(.vertical, 4)
         if isLow {
             Label("At or below the low-stock alert (\(threshold))", systemImage: "exclamationmark.triangle.fill")
-                .font(.footnote).foregroundStyle(Tone.danger.textColor)
+                .font(.wsFootnote).foregroundStyle(Tone.danger.textColor)
         }
     }
 
     private func figure(_ title: String, _ value: Int, tone: Tone? = nil) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondaryText)
-            Text("\(value)").font(.title3.bold().monospacedDigit()).foregroundStyle(tone?.textColor ?? Color(.label))
+            Text(title).font(.wsCaption.weight(.semibold)).foregroundStyle(.secondaryText)
+            Text("\(value)").font(.wsTitle3.bold().monospacedDigit()).foregroundStyle(tone?.textColor ?? Color(.label))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
@@ -732,17 +732,17 @@ struct ShopStockRowView: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(row.title).font(.subheadline.weight(.semibold)).lineLimit(2)
+                Text(row.title).font(.wsSubheadline.weight(.semibold)).lineLimit(2)
                 Text([row.sku, row.groupName, row.held > 0 ? "\(row.held) held" : nil].compactMap { $0 }.joined(separator: " · "))
-                    .font(.footnote).foregroundStyle(.secondaryText)
+                    .font(.wsFootnote).foregroundStyle(.secondaryText)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text("\(row.available)").font(.headline.monospacedDigit())
+                Text("\(row.available)").font(.wsHeadline.monospacedDigit())
                     .foregroundStyle(row.isLow ? Tone.danger.textColor : Color(.label))
                 // A negative threshold means "never alert" (services, built-to-order).
                 Text(row.lowStockThreshold < 0 ? "no stock alert" : "alert at \(row.lowStockThreshold)")
-                    .font(.caption).foregroundStyle(.secondaryText)
+                    .font(.wsCaption).foregroundStyle(.secondaryText)
             }
         }
         .accessibilityElement(children: .combine)
@@ -756,14 +756,14 @@ struct ShopMovementRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(Formatters.humanize(movement.reason)).font(.subheadline)
+                Text(Formatters.humanize(movement.reason)).font(.wsSubheadline)
                 Text([movement.optionName ?? movement.productName, movement.note, Formatters.dateTime(movement.createdAt)]
                     .compactMap { $0?.trimmedOrNil }.joined(separator: " · "))
-                    .font(.caption).foregroundStyle(.secondaryText)
+                    .font(.wsCaption).foregroundStyle(.secondaryText)
             }
             Spacer()
             Text(movement.delta > 0 ? "+\(movement.delta)" : "\(movement.delta)")
-                .font(.headline.monospacedDigit())
+                .font(.wsHeadline.monospacedDigit())
                 .foregroundStyle(movement.delta > 0 ? Tone.success.textColor : Tone.danger.textColor)
         }
         .accessibilityElement(children: .combine)
@@ -916,7 +916,7 @@ struct ShopStockAdjustForm: View {
     var body: some View {
         Form {
             Section {
-                Text(target.name).font(.headline)
+                Text(target.name).font(.wsHeadline)
                 LabeledContent("On hand now", value: "\(target.current)")
             }
             Section {

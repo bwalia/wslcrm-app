@@ -57,7 +57,7 @@ struct SettingsView: View {
                 } else {
                     ForEach(session.permissions.grants.keys.sorted(), id: \.self) { module in
                         LabeledContent(module, value: session.permissions.grants[module, default: []].sorted().joined(separator: ", "))
-                            .font(.subheadline)
+                            .font(.wsSubheadline)
                     }
                 }
                 Button("Reload permissions") {
@@ -86,7 +86,7 @@ struct PendingChangesView: View {
                     ForEach(sync.mutations) { mutation in
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text(mutation.summary).font(.headline)
+                                Text(mutation.summary).font(.wsHeadline)
                                 Spacer()
                                 if mutation.isFailed {
                                     StatusBadge(text: "Failed", systemImage: "exclamationmark.triangle.fill", tone: .danger)
@@ -95,11 +95,11 @@ struct PendingChangesView: View {
                                 }
                             }
                             Text("Recorded \(mutation.createdAt.formatted(date: .abbreviated, time: .shortened))")
-                                .font(.subheadline).foregroundStyle(.secondaryText)
+                                .font(.wsSubheadline).foregroundStyle(.secondaryText)
                             if case .failed(let message, _) = mutation.state {
-                                Text(message).font(.subheadline).foregroundStyle(Tone.danger.textColor)
+                                Text(message).font(.wsSubheadline).foregroundStyle(Tone.danger.textColor)
                             } else if let lastError = mutation.lastError {
-                                Text("Last attempt: \(lastError)").font(.footnote).foregroundStyle(.secondaryText)
+                                Text("Last attempt: \(lastError)").font(.wsFootnote).foregroundStyle(.secondaryText)
                             }
                             if mutation.isFailed {
                                 HStack {

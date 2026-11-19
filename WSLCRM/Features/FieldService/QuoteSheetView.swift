@@ -43,20 +43,20 @@ struct JobQuoteSheet: View {
                     ForEach(items) { item in
                         HStack(alignment: .firstTextBaseline) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(item.quoteSummary).font(.subheadline)
+                                Text(item.quoteSummary).font(.wsSubheadline)
                                 if item.approvalStatus == .pending {
-                                    Text("Not approved yet").font(.caption).foregroundStyle(.secondaryText)
+                                    Text("Not approved yet").font(.wsCaption).foregroundStyle(.secondaryText)
                                 }
                             }
                             Spacer()
                             Text(Formatters.money(item.lineTotal, currency: detail.job.currency) ?? "")
-                                .font(.subheadline.monospacedDigit())
+                                .font(.wsSubheadline.monospacedDigit())
                         }
                         .accessibilityElement(children: .combine)
                     }
                     LabeledContent("Total") {
                         Text(Formatters.money(totals.total, currency: detail.job.currency) ?? "")
-                            .font(.headline.monospacedDigit())
+                            .font(.wsHeadline.monospacedDigit())
                     }
                 }
 

@@ -146,7 +146,7 @@ struct ServiceRequestRow: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text(request.requestNumber)
-                    .font(.subheadline.monospacedDigit().weight(.semibold))
+                    .font(.wsSubheadline.monospacedDigit().weight(.semibold))
                     .foregroundStyle(.secondaryText)
                 if request.priority == .urgent || request.priority == .high {
                     request.priority.badge
@@ -154,9 +154,9 @@ struct ServiceRequestRow: View {
                 Spacer()
                 request.status.badge
             }
-            Text(request.title).font(.headline).lineLimit(2)
+            Text(request.title).font(.wsHeadline).lineLimit(2)
             if let customer = request.customerName {
-                Label(customer, systemImage: "person").font(.subheadline)
+                Label(customer, systemImage: "person").font(.wsSubheadline)
             }
             HStack(spacing: 12) {
                 Label(Formatters.humanize(request.channel), systemImage: "phone.arrow.down.left")
@@ -168,7 +168,7 @@ struct ServiceRequestRow: View {
                     Text(Formatters.relative(created) ?? "")
                 }
             }
-            .font(.footnote)
+            .font(.wsFootnote)
             .foregroundStyle(.secondaryText)
         }
         .padding(.vertical, 6)
@@ -326,7 +326,7 @@ private struct ServiceRequestDetailContent: View {
         return List {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(request.title).font(.title2.bold())
+                    Text(request.title).font(.wsTitle2.bold())
                     HStack {
                         request.status.badge
                         if request.priority != .normal { request.priority.badge }
@@ -410,9 +410,9 @@ private struct ServiceRequestDetailContent: View {
                         NavigationLink(value: JobRoute(uuid: job.uuid)) {
                             HStack {
                                 VStack(alignment: .leading) {
-                                    Text(job.jobNumber ?? "Job").font(.headline)
+                                    Text(job.jobNumber ?? "Job").font(.wsHeadline)
                                         .accessibilityIdentifier("request.job")
-                                    Text(job.title ?? "").font(.subheadline).foregroundStyle(.secondaryText)
+                                    Text(job.title ?? "").font(.wsSubheadline).foregroundStyle(.secondaryText)
                                 }
                                 Spacer()
                                 JobStatus(api: job.status).badge
@@ -451,8 +451,8 @@ struct EngineerPickerSheet: View {
                             dismiss()
                         } label: {
                             VStack(alignment: .leading) {
-                                Text(engineer.displayName).font(.headline).foregroundStyle(.primary)
-                                if let email = engineer.email { Text(email).font(.subheadline).foregroundStyle(.secondaryText) }
+                                Text(engineer.displayName).font(.wsHeadline).foregroundStyle(.primary)
+                                if let email = engineer.email { Text(email).font(.wsSubheadline).foregroundStyle(.secondaryText) }
                             }
                             .frame(minHeight: 44)
                         }

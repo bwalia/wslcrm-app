@@ -88,7 +88,7 @@ struct LeadDetailView: View {
     private func header(_ lead: Lead) -> some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
-                Text(lead.displayName).font(.title2.bold())
+                Text(lead.displayName).font(.wsTitle2.bold())
                 if let line = [lead.jobTitle, lead.companyName].compactMap({ $0 }).joined(separator: " · ").nilIfEmpty {
                     Text(line).foregroundStyle(.secondaryText)
                 }
@@ -99,10 +99,10 @@ struct LeadDetailView: View {
                     }
                 }
                 if let value = lead.estimatedValue, value > 0, let text = Formatters.money(value, currency: lead.currency ?? LeadsAPI.defaultCurrency) {
-                    Text(text).font(.title3.monospacedDigit())
+                    Text(text).font(.wsTitle3.monospacedDigit())
                 }
                 Text(lead.ownerName.map { "Owner: \($0)" } ?? "Not assigned yet")
-                    .font(.subheadline).foregroundStyle(.secondaryText)
+                    .font(.wsSubheadline).foregroundStyle(.secondaryText)
             }
             .padding(.vertical, 4)
             if lead.stage == .converted, let deal = lead.convertedDealUuid {
@@ -120,9 +120,9 @@ struct LeadDetailView: View {
             if let due = lead.nextActionAt {
                 Label {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(lead.nextActionNote ?? LeadStepType.label(for: lead.nextActionType)).font(.headline)
+                        Text(lead.nextActionNote ?? LeadStepType.label(for: lead.nextActionType)).font(.wsHeadline)
                         Text("\(Formatters.day(due) ?? "") \(Formatters.time(due) ?? "")")
-                            .font(.subheadline)
+                            .font(.wsSubheadline)
                             .foregroundStyle(lead.isOverdue ? Tone.danger.textColor : Color.secondaryText)
                     }
                 } icon: {
@@ -131,7 +131,7 @@ struct LeadDetailView: View {
                 }
             } else {
                 Text("Nothing planned. Plan the next step so this lead doesn't go cold.")
-                    .font(.subheadline).foregroundStyle(.secondaryText)
+                    .font(.wsSubheadline).foregroundStyle(.secondaryText)
             }
             Button { sheet = .call } label: { Label("Log a call", systemImage: "phone.badge.checkmark") }
                 .buttonStyle(.large(.brand))
@@ -145,7 +145,7 @@ struct LeadDetailView: View {
             .buttonStyle(.borderless)
             .frame(minHeight: 44)
             Text("\(lead.contactAttempts) call\(lead.contactAttempts == 1 ? "" : "s") so far")
-                .font(.caption).foregroundStyle(.secondaryText)
+                .font(.wsCaption).foregroundStyle(.secondaryText)
         }
     }
 
@@ -160,8 +160,8 @@ struct LeadDetailView: View {
                 if let wants = result.wants { DetailRow(label: "They want", value: wants) }
                 if let action = result.nextBestAction, let label = action.label {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Suggested: \(label)").font(.headline)
-                        if let reason = action.reason { Text(reason).font(.subheadline).foregroundStyle(.secondaryText) }
+                        Text("Suggested: \(label)").font(.wsHeadline)
+                        if let reason = action.reason { Text(reason).font(.wsSubheadline).foregroundStyle(.secondaryText) }
                     }
                 }
                 if let low = result.valueLow, let high = result.valueHigh,
@@ -170,13 +170,13 @@ struct LeadDetailView: View {
                 }
                 if !result.questions.isEmpty {
                     DisclosureGroup("Questions to ask (\(result.questions.count))") {
-                        ForEach(result.questions, id: \.self) { Text("• \($0)").font(.subheadline) }
+                        ForEach(result.questions, id: \.self) { Text("• \($0)").font(.wsSubheadline) }
                     }
                 }
             } else if let error = analysis?.error {
-                Text("The AI couldn't read this lead: \(error)").font(.subheadline).foregroundStyle(.secondaryText)
+                Text("The AI couldn't read this lead: \(error)").font(.wsSubheadline).foregroundStyle(.secondaryText)
             } else {
-                Text("No AI analysis yet.").font(.subheadline).foregroundStyle(.secondaryText)
+                Text("No AI analysis yet.").font(.wsSubheadline).foregroundStyle(.secondaryText)
             }
             if canWork(lead) {
                 Button {
@@ -198,15 +198,15 @@ struct LeadDetailView: View {
             Section("Meetings") {
                 ForEach(lead.meetings) { meeting in
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(meeting.subject).font(.headline)
+                        Text(meeting.subject).font(.wsHeadline)
                         Text([Formatters.day(meeting.startsAt), Formatters.time(meeting.startsAt), "\(meeting.durationMinutes) min",
                               meeting.typeLabel].compactMap { $0 }.joined(separator: " · "))
-                            .font(.subheadline).foregroundStyle(.secondaryText)
-                        if let place = meeting.location { Text(place).font(.subheadline) }
+                            .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                        if let place = meeting.location { Text(place).font(.wsSubheadline) }
                         if let link = meeting.meetingUrl, let url = URL(string: link) {
                             Link(destination: url) { Label("Join", systemImage: "video.fill") }.frame(minHeight: 44)
                         }
-                        Text(meetingStatus(meeting)).font(.caption).foregroundStyle(.secondaryText)
+                        Text(meetingStatus(meeting)).font(.wsCaption).foregroundStyle(.secondaryText)
                         if meeting.isPlanned, canWork(lead) {
                             HStack {
                                 if (meeting.startsAt ?? .distantFuture) < Date().addingTimeInterval(15 * 60) {
@@ -284,7 +284,7 @@ struct LeadDetailView: View {
             }
             if let notes = lead.notes {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Their message").font(.caption).foregroundStyle(.secondaryText)
+                    Text("Their message").font(.wsCaption).foregroundStyle(.secondaryText)
                     Text(notes).textSelection(.enabled)
                 }
             }
@@ -296,12 +296,12 @@ struct LeadDetailView: View {
             ForEach(timeline.prefix(30)) { item in
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
-                        Text(item.title).font(.subheadline.weight(.semibold))
-                        if let outcome = item.outcomeLabel { Text(outcome).font(.caption).foregroundStyle(.secondaryText) }
+                        Text(item.title).font(.wsSubheadline.weight(.semibold))
+                        if let outcome = item.outcomeLabel { Text(outcome).font(.wsCaption).foregroundStyle(.secondaryText) }
                     }
                     Text([Formatters.relative(item.at), item.by].compactMap { $0 }.joined(separator: " · "))
-                        .font(.caption).foregroundStyle(.secondaryText)
-                    if let detail = item.detail { Text(detail).font(.subheadline) }
+                        .font(.wsCaption).foregroundStyle(.secondaryText)
+                    if let detail = item.detail { Text(detail).font(.wsSubheadline) }
                 }
             }
         }

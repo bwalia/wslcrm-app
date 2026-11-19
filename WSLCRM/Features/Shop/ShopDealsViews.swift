@@ -6,16 +6,16 @@ struct ShopDealRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(deal.dealCode).font(.subheadline.monospaced().weight(.semibold))
+                Text(deal.dealCode).font(.wsSubheadline.monospaced().weight(.semibold))
                 Spacer()
-                if let created = deal.createdAt { Text(Formatters.day(created) ?? "").font(.footnote).foregroundStyle(.secondaryText) }
+                if let created = deal.createdAt { Text(Formatters.day(created) ?? "").font(.wsFootnote).foregroundStyle(.secondaryText) }
             }
-            Text(deal.customer ?? "No customer yet").font(.headline).lineLimit(1)
+            Text(deal.customer ?? "No customer yet").font(.wsHeadline).lineLimit(1)
             let counts = [count(deal.quotes, "quote"), count(deal.orders, "order"), count(deal.purchaseOrders, "PO")].compactMap { $0 }
             if let matched = deal.match, let by = deal.matchedBy, by != "deal_code" {
-                Text("\(Formatters.humanize(by)): \(matched)").font(.footnote).foregroundStyle(.secondaryText)
+                Text("\(Formatters.humanize(by)): \(matched)").font(.wsFootnote).foregroundStyle(.secondaryText)
             } else if !counts.isEmpty {
-                Text(counts.joined(separator: " · ")).font(.footnote).foregroundStyle(.secondaryText)
+                Text(counts.joined(separator: " · ")).font(.wsFootnote).foregroundStyle(.secondaryText)
             }
         }
         .padding(.vertical, 2)
@@ -174,15 +174,15 @@ struct ShopDealDetailView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(q.quoteNumber + (q.revisionNo > 0 ? " (rev \(q.revisionNo))" : ""))
-                                        .font(.subheadline.monospacedDigit().weight(.semibold))
+                                        .font(.wsSubheadline.monospacedDigit().weight(.semibold))
                                     Text([q.kind == "order" ? "Order Authorisation" : nil, q.superseded ? "Replaced by a newer revision" : nil,
                                           q.orderNumber.map { "Order \($0)" }].compactMap { $0 }.joined(separator: " · "))
-                                        .font(.footnote).foregroundStyle(.secondaryText)
+                                        .font(.wsFootnote).foregroundStyle(.secondaryText)
                                 }
                                 Spacer()
                                 VStack(alignment: .trailing, spacing: 4) {
                                     q.status.badge
-                                    Text(ShopMoney.format(q.totalMinor, currency: q.currency) ?? "").font(.footnote.monospacedDigit())
+                                    Text(ShopMoney.format(q.totalMinor, currency: q.currency) ?? "").font(.wsFootnote.monospacedDigit())
                                 }
                             }
                         }
@@ -197,11 +197,11 @@ struct ShopDealDetailView: View {
                             ShopOrderDetailView(uuid: o.uuid)
                         } label: {
                             HStack {
-                                Text(o.orderNumber).font(.subheadline.monospacedDigit().weight(.semibold))
+                                Text(o.orderNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
                                 Spacer()
                                 VStack(alignment: .trailing, spacing: 4) {
                                     o.status.badge
-                                    Text(ShopMoney.format(o.totalMinor, currency: o.currency) ?? "").font(.footnote.monospacedDigit())
+                                    Text(ShopMoney.format(o.totalMinor, currency: o.currency) ?? "").font(.wsFootnote.monospacedDigit())
                                 }
                             }
                         }
@@ -230,12 +230,12 @@ struct ShopDealDetailView: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack {
-                                    Text(po.poNumber).font(.subheadline.monospacedDigit().weight(.semibold))
+                                    Text(po.poNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
                                     Spacer()
-                                    if let status = po.status { Text(Formatters.humanize(status)).font(.footnote).foregroundStyle(.secondaryText) }
+                                    if let status = po.status { Text(Formatters.humanize(status)).font(.wsFootnote).foregroundStyle(.secondaryText) }
                                 }
                                 Text([po.supplierName, po.dropShip ? "Delivered to the customer" : nil].compactMap { $0 }.joined(separator: " · "))
-                                    .font(.footnote).foregroundStyle(.secondaryText)
+                                    .font(.wsFootnote).foregroundStyle(.secondaryText)
                             }
                         }
                     }
@@ -263,7 +263,7 @@ struct ShopSupplierRequestRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(request.supplierName ?? "Supplier").font(.headline)
+                Text(request.supplierName ?? "Supplier").font(.wsHeadline)
                 Spacer()
                 StatusBadge(text: request.kind == "intro" ? "Introduction" : (request.isAnswered ? "Answered" : "Asked"),
                             systemImage: request.kind == "intro" ? "person.2" : (request.isAnswered ? "checkmark.circle" : "paperplane"),
@@ -272,21 +272,21 @@ struct ShopSupplierRequestRow: View {
             let sent = [request.contactName, request.contactEmail, request.sentAt.map { "sent \($0)" },
                         request.channelLabel.map { "by \($0)" }].compactMap { $0 }
             if !sent.isEmpty {
-                Text(sent.joined(separator: " · ")).font(.footnote).foregroundStyle(.secondaryText)
+                Text(sent.joined(separator: " · ")).font(.wsFootnote).foregroundStyle(.secondaryText)
             }
             ForEach(Array(request.lines.enumerated()), id: \.offset) { _, line in
                 HStack(alignment: .firstTextBaseline) {
-                    Text("\(line.qty ?? 1) × \(line.description ?? "Item")").font(.subheadline).lineLimit(2)
+                    Text("\(line.qty ?? 1) × \(line.description ?? "Item")").font(.wsSubheadline).lineLimit(2)
                     Spacer()
                     if let price = line.unitPriceMinor {
-                        Text(ShopMoney.format(price, currency: "GBP") ?? "").font(.subheadline.monospacedDigit())
+                        Text(ShopMoney.format(price, currency: "GBP") ?? "").font(.wsSubheadline.monospacedDigit())
                     }
                 }
             }
             let answer = [request.leadTime.map { "Lead time \($0)" }, request.validUntil.map { "valid until \($0)" },
                           request.supplierQuoteRef.map { "their ref \($0)" }].compactMap { $0 }
             if !answer.isEmpty {
-                Text(answer.joined(separator: " · ")).font(.footnote).foregroundStyle(.secondaryText)
+                Text(answer.joined(separator: " · ")).font(.wsFootnote).foregroundStyle(.secondaryText)
             }
         }
         .padding(.vertical, 2)
@@ -301,19 +301,19 @@ struct ShopStockEnquiryRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack {
-                Text(enquiry.supplierName ?? "Supplier").font(.subheadline.weight(.semibold))
+                Text(enquiry.supplierName ?? "Supplier").font(.wsSubheadline.weight(.semibold))
                 Spacer()
-                Text(enquiry.answered ? "Answered" : "Asked").font(.footnote)
+                Text(enquiry.answered ? "Answered" : "Asked").font(.wsFootnote)
                     .foregroundStyle(enquiry.answered ? Tone.success.textColor : .secondaryText)
             }
             Text(["\(enquiry.qty) wanted", enquiry.sentAt.map { "sent \($0)" }, enquiry.channelLabel.map { "by \($0)" }]
                 .compactMap { $0 }.joined(separator: " · "))
-                .font(.footnote).foregroundStyle(.secondaryText)
+                .font(.wsFootnote).foregroundStyle(.secondaryText)
             if enquiry.answered {
                 Text([enquiry.stockQty.map { "\($0) in stock" }, enquiry.leadTime.map { "lead time \($0)" },
                       enquiry.unitPriceMinor.flatMap { ShopMoney.format($0, currency: currency) }.map { "\($0) ex VAT" },
                       enquiry.validUntil.map { "valid until \($0)" }].compactMap { $0 }.joined(separator: " · "))
-                    .font(.footnote)
+                    .font(.wsFootnote)
             }
         }
         .padding(.vertical, 2)

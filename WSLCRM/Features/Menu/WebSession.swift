@@ -107,3 +107,7 @@ enum WebNavigation: Equatable {
         url.path == "/login" || url.path.hasPrefix("/login/")
     }
 }
+
+extension WebPageRoute: Identifiable {
+    var id: String { path }
+}

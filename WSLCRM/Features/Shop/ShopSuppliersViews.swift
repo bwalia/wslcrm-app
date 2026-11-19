@@ -6,7 +6,7 @@ struct ShopSupplierRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(supplier.name).font(.headline).lineLimit(1)
+                Text(supplier.name).font(.wsHeadline).lineLimit(1)
                 Spacer()
                 if !supplier.isActive {
                     StatusBadge(text: "Inactive", systemImage: "pause.circle", tone: .neutral)
@@ -14,7 +14,7 @@ struct ShopSupplierRow: View {
             }
             let contact = [supplier.contactName?.trimmedOrNil, supplier.email, supplier.phone].compactMap { $0 }
             Text(contact.isEmpty ? "No contact details yet" : contact.joined(separator: " · "))
-                .font(.subheadline)
+                .font(.wsSubheadline)
                 .foregroundStyle(.secondaryText)
                 .lineLimit(2)
         }
@@ -111,7 +111,7 @@ struct ShopSupplierDetailView: View {
             if let loadError { Section { InlineErrorRow(error: loadError) { Task { await load() } } } }
 
             Section {
-                Text(current.name).font(.title3.bold())
+                Text(current.name).font(.wsTitle3.bold())
                 if let contact = current.contactName?.trimmedOrNil {
                     LabeledContent("Contact", value: contact)
                 }

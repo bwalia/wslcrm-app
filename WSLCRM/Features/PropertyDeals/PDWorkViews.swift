@@ -52,7 +52,7 @@ struct PDDueView: View {
         return List {
             Section {
                 Text(list.everyone == true ? "Everyone's tasks and jobs, next \(days) days." : "Your tasks and jobs, next \(days) days.")
-                    .font(.footnote).foregroundStyle(.secondaryText)
+                    .font(.wsFootnote).foregroundStyle(.secondaryText)
                     .accessibilityIdentifier("pd.due.scope")
             }
             if let cachedAt { CachedDataNotice(savedAt: cachedAt) }
@@ -106,19 +106,19 @@ struct PDDueRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: item.kind == .renovationJob ? "hammer.fill" : "checklist")
-                .font(.title3)
+                .font(.wsTitle3)
                 .foregroundStyle(item.isOverdue ? Tone.danger.color : Tone.info.color)
                 .frame(width: 28)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.title).font(.headline)
+                Text(item.title).font(.wsHeadline)
                 Text([item.dealName ?? item.projectName, item.columnName].compactMap { $0 }.joined(separator: " · "))
-                    .font(.subheadline).foregroundStyle(.secondaryText)
+                    .font(.wsSubheadline).foregroundStyle(.secondaryText)
                 HStack(spacing: 8) {
                     if let due = item.dueAt { Label(Formatters.relative(due) ?? "", systemImage: "clock") }
                     if let who = item.assignee { Label(who, systemImage: "person") }
                 }
-                .font(.caption).foregroundStyle(item.isOverdue ? Tone.danger.textColor : .secondaryText)
+                .font(.wsCaption).foregroundStyle(item.isOverdue ? Tone.danger.textColor : .secondaryText)
                 .labelStyle(.titleAndIcon)
             }
         }
@@ -203,7 +203,7 @@ struct PDRenovationRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(renovation.title).font(.headline)
+                Text(renovation.title).font(.wsHeadline)
                 Spacer()
                 if (renovation.jobsOverdue ?? 0) > 0 {
                     StatusBadge(text: "\(renovation.jobsOverdue ?? 0) late", systemImage: "exclamationmark.triangle.fill", tone: .danger)
@@ -214,7 +214,7 @@ struct PDRenovationRow: View {
                     .tint(Tone.success.solidColor)
                     .accessibilityHidden(true)
                 Text("\(renovation.jobsDone ?? 0) of \(renovation.jobsTotal ?? 0) jobs done")
-                    .font(.footnote).foregroundStyle(.secondaryText)
+                    .font(.wsFootnote).foregroundStyle(.secondaryText)
             }
             HStack(spacing: 8) {
                 if let due = PDDates.day(renovation.dueDate) { Label("Finish \(due)", systemImage: "flag.checkered") }
@@ -224,7 +224,7 @@ struct PDRenovationRow: View {
                           systemImage: "sterlingsign.circle")
                 }
             }
-            .font(.caption).foregroundStyle(.secondaryText).labelStyle(.titleAndIcon)
+            .font(.wsCaption).foregroundStyle(.secondaryText).labelStyle(.titleAndIcon)
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)

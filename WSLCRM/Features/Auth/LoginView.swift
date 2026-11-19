@@ -14,12 +14,15 @@ struct LoginView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 0) {
                 header
 
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Sign in")
+                        .font(.brandTitle)
+                        .accessibilityAddTraits(.isHeader)
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Email or username").font(.subheadline.weight(.semibold))
+                        Text("Email or username").font(.brandCaption).foregroundStyle(.secondaryText)
                         TextField(text: $identifier, prompt: Text(verbatim: "name@company.co.uk")) { Text("Email or username") }
                             .textContentType(.username)
                             .keyboardType(.emailAddress)
@@ -33,7 +36,7 @@ struct LoginView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Password").font(.subheadline.weight(.semibold))
+                        Text("Password").font(.brandCaption).foregroundStyle(.secondaryText)
                         SecureField("Password", text: $password)
                             .textContentType(.password)
                             .submitLabel(.go)
@@ -42,34 +45,37 @@ struct LoginView: View {
                             .fieldStyle()
                             .accessibilityIdentifier("login.password")
                     }
-                }
 
-                if let error {
-                    InlineErrorRow(error: error)
-                        .accessibilityIdentifier("login.error")
-                }
-
-                Button(action: submit) {
-                    if isSubmitting {
-                        ProgressView().tint(.white)
-                    } else {
-                        Text("Sign in")
+                    if let error {
+                        InlineErrorRow(error: error)
+                            .accessibilityIdentifier("login.error")
                     }
-                }
-                .buttonStyle(.large())
-                .disabled(!canSubmit)
-                .accessibilityIdentifier("login.submit")
 
-                Button("Forgot password?") { showingForgotPassword = true }
-                    .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity, minHeight: 44)
+                    Button(action: submit) {
+                        if isSubmitting {
+                            ProgressView().tint(.white)
+                        } else {
+                            Text("Sign in")
+                        }
+                    }
+                    .buttonStyle(.large())
+                    .disabled(!canSubmit)
+                    .accessibilityIdentifier("login.submit")
+
+                    Button("Forgot password?") { showingForgotPassword = true }
+                        .font(.brandCallout)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .brandCard(padding: 22, radius: 26)
+                .padding(.horizontal, 16)
+                // Overlaps the hero's foot through layout (not .offset), so taps land on the fields.
+                .padding(.top, -28)
             }
-            .padding(24)
             .frame(maxWidth: 520)
             .frame(maxWidth: .infinity)
         }
         .scrollDismissesKeyboard(.interactively)
-        .background(Color(.systemGroupedBackground))
+        .brandCanvas()
         .sheet(isPresented: $showingForgotPassword) {
             ForgotPasswordView(prefill: identifier.contains("@") ? identifier : "")
         }
@@ -79,34 +85,57 @@ struct LoginView: View {
         .onAppear { focused = identifier.isEmpty ? .identifier : .password }
     }
 
+    /// The brand moment: the website's dark navy with an accent glow, the mark and the name in
+    /// the display face. The form sits on a card that overlaps its foot.
     private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 8) {
-                BrandMark(size: 88)
-                Text(Brand.current.name)
-                    .font(.largeTitle.bold())
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("login.brandName")
-                Text("Sign in to your \(Brand.current.name) account")
-                    .font(.title3)
-                    .foregroundStyle(.secondaryText)
-                if session.environmentName != "Production" {
-                    StatusBadge(text: "\(session.environmentName) environment", systemImage: "hammer", tone: .warning)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                BrandMark(size: 48)
+                    .padding(8)
+                    .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                Spacer(minLength: 12)
+                Button {
+                    showingEndpoint = true
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.wsTitle3)
+                        .foregroundStyle(Palette.onDarkInk)
+                        .frame(width: 44, height: 44)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Environment settings")
+                .accessibilityIdentifier("login.environmentSettings")
             }
-            Spacer(minLength: 12)
-            Button {
-                showingEndpoint = true
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.title3)
-                    .frame(width: 44, height: 44)
+            Text(Brand.current.name)
+                .font(.brandDisplay)
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("login.brandName")
+            Text("Your whole business, in your pocket.")
+                .font(.brandCallout)
+                .foregroundStyle(Palette.onDarkMuted)
+            if session.environmentName != "Production" {
+                Pill(text: "\(session.environmentName) environment", systemImage: "hammer",
+                     foreground: Palette.onDarkInk, background: .white.opacity(0.14))
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Environment settings")
-            .accessibilityIdentifier("login.environmentSettings")
         }
-        .padding(.top, 32)
+        .padding(.horizontal, 22)
+        .padding(.top, 20)
+        .padding(.bottom, 52)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            ZStack {
+                Palette.heroGradient
+                RadialGradient(colors: [Color.accentColor.opacity(0.6), .clear], center: .topTrailing,
+                               startRadius: 10, endRadius: 320)
+                RadialGradient(colors: [Palette.tileColors[1].opacity(0.35), .clear], center: .bottomLeading,
+                               startRadius: 10, endRadius: 260)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .environment(\.colorScheme, .dark)
     }
 
     private var canSubmit: Bool {
@@ -148,9 +177,9 @@ struct TwoFactorView: View {
                         .foregroundStyle(.tint)
                         .accessibilityHidden(true)
                     Text("Check your email")
-                        .font(.largeTitle.bold())
+                        .font(.brandDisplay)
                     Text("Enter the 6-digit code we sent to \(challenge.email ?? "your email address").")
-                        .font(.title3)
+                        .font(.brandBody)
                         .foregroundStyle(.secondaryText)
                 }
                 .padding(.top, 32)
@@ -158,7 +187,8 @@ struct TwoFactorView: View {
                 TextField("123456", text: $code)
                     .textContentType(.oneTimeCode)
                     .keyboardType(.numberPad)
-                    .font(.system(size: 34, weight: .semibold, design: .monospaced))
+                    .font(BrandFont.font(.monoMedium, size: 34, relativeTo: .largeTitle))
+                    .tracking(8)
                     .multilineTextAlignment(.center)
                     .focused($codeFocused)
                     .fieldStyle()
@@ -190,7 +220,7 @@ struct TwoFactorView: View {
                     Button(remaining > 0 ? "Resend code in \(remaining)s" : "Resend code") {
                         resend()
                     }
-                    .font(.body.weight(.semibold))
+                    .font(.wsBody.weight(.semibold))
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .disabled(remaining > 0)
                 }
@@ -204,7 +234,7 @@ struct TwoFactorView: View {
             .frame(maxWidth: 520)
             .frame(maxWidth: .infinity)
         }
-        .background(Color(.systemGroupedBackground))
+        .brandCanvas()
         .onAppear { codeFocused = true }
     }
 
@@ -305,11 +335,11 @@ struct ForgotPasswordView: View {
 private struct FieldStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .font(.title3)
-            .padding(.horizontal, 14)
+            .font(BrandFont.font(.regular, size: 17, relativeTo: .body))
+            .padding(.horizontal, 16)
             .frame(minHeight: 56)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color(.separator)))
+            .background(Palette.canvas, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Palette.hairline))
     }
 }
 

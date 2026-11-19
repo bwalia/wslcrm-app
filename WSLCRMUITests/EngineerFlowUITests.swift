@@ -28,6 +28,7 @@ final class EngineerFlowUITests: XCTestCase {
         XCTAssertTrue(code.waitForExistence(timeout: 10))
         code.tap()
         code.typeText("123456")
+        app.enterFirstHub()
         XCTAssertTrue(app.buttons["mywork.hero"].waitForExistence(timeout: 10))
     }
 
@@ -79,7 +80,13 @@ final class EngineerFlowUITests: XCTestCase {
         let keyboard = app.keyboards.firstMatch
         if keyboard.exists, keyboard.frame.height > 0 { return keyboard.frame.minY }
         let tabBar = app.tabBars.firstMatch
-        return (tabBar.exists ? tabBar.frame.minY : app.windows.firstMatch.frame.maxY) - 60
+        var bottom = (tabBar.exists ? tabBar.frame.minY : app.windows.firstMatch.frame.maxY) - 60
+        // A screen's own pinned action bar (the guided visit's Finish job) covers content the same way.
+        let actions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'guided.action.'"))
+        for action in actions.allElementsBoundByIndex where action.exists && action.frame.height > 0 {
+            bottom = min(bottom, action.frame.minY - 24)
+        }
+        return bottom
     }
 
     private func audit(_ screen: String, file: StaticString = #filePath, line: UInt = #line) {

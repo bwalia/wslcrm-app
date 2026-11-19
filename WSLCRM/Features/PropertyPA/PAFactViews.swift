@@ -14,7 +14,7 @@ struct PAUnconfirmedBadge: View {
 
     var body: some View {
         Text(by.map { "\($0.uppercased())'S JUDGEMENT · UNCONFIRMED" } ?? "JUDGEMENT · UNCONFIRMED")
-            .font(.caption2.weight(.bold))
+            .font(.wsCaption2.weight(.bold))
             .padding(.horizontal, 6).padding(.vertical, 3)
             .foregroundStyle(Tone.warning.textColor)
             .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Tone.warning.color, style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
@@ -44,7 +44,7 @@ struct PASourceChip: View {
 
     private func chip(linked: Bool) -> some View {
         Label(source.label ?? Formatters.humanize(source.type), systemImage: Self.icon(source.type))
-            .font(.caption)
+            .font(.wsCaption)
             .lineLimit(1)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .foregroundStyle(linked ? Tone.info.textColor : .secondaryText)
@@ -78,7 +78,7 @@ struct PAFactRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(fact.text)
-                .font(.body)
+                .font(.wsBody)
                 .italic(fact.isUnconfirmedJudgement)
             HStack(spacing: 6) {
                 if fact.isUnconfirmedJudgement { PAUnconfirmedBadge(by: fact.by) }
@@ -116,8 +116,8 @@ struct PAWorkingView: View {
     var body: some View {
         VStack(spacing: 12) {
             ProgressView()
-            Text(title).font(.headline)
-            if let detail { Text(detail).font(.footnote).foregroundStyle(.secondaryText).multilineTextAlignment(.center) }
+            Text(title).font(.wsHeadline)
+            if let detail { Text(detail).font(.wsFootnote).foregroundStyle(.secondaryText).multilineTextAlignment(.center) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()

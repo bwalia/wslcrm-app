@@ -148,7 +148,7 @@ struct ShopSupplierMessageSheet: View {
                     editingSupplier = supplier
                 } label: {
                     Label(missingHint(s), systemImage: "square.and.pencil")
-                        .font(.subheadline)
+                        .font(.wsSubheadline)
                 }
                 .accessibilityIdentifier("supplierMessage.editSupplier")
             }
@@ -172,7 +172,7 @@ struct ShopSupplierMessageSheet: View {
             Section {
                 Label("The message shows the customer's \(draft.customerDetails.map { $0.replacingOccurrences(of: "_", with: " ") }.joined(separator: ", ")). Remove it before sending: suppliers must not see who the customer is.",
                       systemImage: "exclamationmark.triangle.fill")
-                    .font(.subheadline)
+                    .font(.wsSubheadline)
                     .foregroundStyle(Tone.warning.textColor)
             }
         }

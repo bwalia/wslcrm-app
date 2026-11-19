@@ -334,14 +334,14 @@ private struct VisitDetailContent: View {
                             PendingSyncBadge(failed: model.pendingWrites.contains(where: \.isFailed))
                         }
                     }
-                    Text(visit.jobTitle).font(.title2.bold())
+                    Text(visit.jobTitle).font(.wsTitle2.bold())
                     if let start = visit.scheduledStart {
                         Label(scheduleText(start: start, end: visit.scheduledEnd), systemImage: "clock")
-                            .font(.subheadline)
+                            .font(.wsSubheadline)
                     }
                     if let checkedIn = visit.checkedInAt {
                         Label("Checked in \(Formatters.time(checkedIn) ?? "")", systemImage: "arrow.down.to.line")
-                            .font(.subheadline)
+                            .font(.wsSubheadline)
                     }
                 }
                 .padding(.vertical, 4)
@@ -370,7 +370,7 @@ private struct VisitDetailContent: View {
                           systemImage: "shippingbox")
                 if let instructions = visit.instructions, !instructions.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
-                        Label("Instructions", systemImage: "text.bubble").font(.caption).foregroundStyle(.secondaryText)
+                        Label("Instructions", systemImage: "text.bubble").font(.wsCaption).foregroundStyle(.secondaryText)
                         Text(instructions)
                     }
                 }
@@ -379,18 +379,18 @@ private struct VisitDetailContent: View {
             if let phase = detail.phase {
                 Section("Phase") {
                     HStack {
-                        Text(phase.name).font(.headline)
+                        Text(phase.name).font(.wsHeadline)
                         Spacer()
                         phase.status.badge
                     }
                     if !phase.checklist.isEmpty {
                         Label("\(phase.checklist.count - phase.uncheckedCount) of \(phase.checklist.count) checklist items done",
                               systemImage: "checklist")
-                            .font(.subheadline)
+                            .font(.wsSubheadline)
                     }
                     if phase.needsSignoff {
                         Label("Needs customer sign-off", systemImage: "signature")
-                            .font(.subheadline)
+                            .font(.wsSubheadline)
                             .foregroundStyle(Tone.warning.textColor)
                     }
                     NavigationLink(value: JobRoute(uuid: visit.jobUuid)) {
@@ -403,7 +403,7 @@ private struct VisitDetailContent: View {
                 Section("Report") {
                     if let summary = visit.workSummary {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Work summary").font(.caption).foregroundStyle(.secondaryText)
+                            Text("Work summary").font(.wsCaption).foregroundStyle(.secondaryText)
                             Text(summary)
                         }
                     }
@@ -423,7 +423,7 @@ private struct VisitDetailContent: View {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(item.description)
-                                Text("Qty \(item.quantity.formatted())").font(.caption).foregroundStyle(.secondaryText)
+                                Text("Qty \(item.quantity.formatted())").font(.wsCaption).foregroundStyle(.secondaryText)
                             }
                             Spacer()
                             item.approvalStatus.badge
@@ -532,7 +532,7 @@ struct CheckOutSheet: View {
                 Section {
                     Stepper(value: $form.labourHours, in: 0...24, step: 0.25) {
                         LabeledContent("Labour", value: Formatters.hours(Decimal(form.labourHours)) ?? "")
-                            .font(.title3.monospacedDigit())
+                            .font(.wsTitle3.monospacedDigit())
                     }
                     .accessibilityIdentifier("checkout.labourHours")
                 } footer: {

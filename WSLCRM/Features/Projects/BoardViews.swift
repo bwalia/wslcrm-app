@@ -83,9 +83,9 @@ private struct ColumnPicker: View {
                             withAnimation { selection = column.uuid }
                         } label: {
                             HStack(spacing: 6) {
-                                Text(column.name).font(.subheadline.weight(.semibold))
+                                Text(column.name).font(.wsSubheadline.weight(.semibold))
                                 Text("\(column.taskCount)")
-                                    .font(.caption.weight(.bold))
+                                    .font(.wsCaption.weight(.bold))
                                     .padding(.horizontal, 6).padding(.vertical, 2)
                                     .background(Color.secondary.opacity(0.18), in: Capsule())
                             }
@@ -167,11 +167,11 @@ struct TaskCard: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Text(task.reference)
-                    .font(.caption.weight(.bold))
+                    .font(.wsCaption.weight(.bold))
                     .foregroundStyle(.secondaryText)
                 if task.priority != .none, task.priority != .unknown {
                     Label(task.priority.rawValue.capitalized, systemImage: task.priority.systemImage)
-                        .font(.caption2.weight(.semibold))
+                        .font(.wsCaption2.weight(.semibold))
                         .foregroundStyle(task.priority.tone.textColor)
                 }
                 Spacer()
@@ -181,7 +181,7 @@ struct TaskCard: View {
                         .accessibilityLabel(status.label)
                 }
             }
-            Text(task.title).font(.subheadline.weight(.semibold)).lineLimit(compact ? 1 : 3)
+            Text(task.title).font(.wsSubheadline.weight(.semibold)).lineLimit(compact ? 1 : 3)
             if !compact {
                 HStack(spacing: 8) {
                     if let claim = task.contract?.claimState().claim {
@@ -194,12 +194,12 @@ struct TaskCard: View {
                     Spacer()
                     if let due = task.dueDate {
                         Label(Formatters.day(due) ?? "", systemImage: "calendar")
-                            .font(.caption)
+                            .font(.wsCaption)
                             .foregroundStyle(task.isOverdue ? Tone.danger.textColor : Color.secondaryText)
                     }
                     if task.commentCount > 0 {
                         Label("\(task.commentCount)", systemImage: "text.bubble")
-                            .font(.caption).foregroundStyle(.secondaryText)
+                            .font(.wsCaption).foregroundStyle(.secondaryText)
                     }
                 }
             }
@@ -288,7 +288,7 @@ struct MoveTaskSheet: View {
                         Label(column.name, systemImage: column.isDoneColumn ? "checkmark.circle" : "rectangle")
                         Spacer()
                         if column.columnId == task.columnId {
-                            Text("Here now").font(.caption).foregroundStyle(.secondaryText)
+                            Text("Here now").font(.wsCaption).foregroundStyle(.secondaryText)
                         }
                     }
                 }

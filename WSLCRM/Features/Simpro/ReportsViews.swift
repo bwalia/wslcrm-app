@@ -109,7 +109,7 @@ struct ReportDetailView: View {
                 InlineErrorRow(error: error) { Task { await load() } }
             case .loaded(let report):
                 Section {
-                    Text(report.description).font(.subheadline).foregroundStyle(.secondaryText)
+                    Text(report.description).font(.wsSubheadline).foregroundStyle(.secondaryText)
                     if !report.summaryItems.isEmpty {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 10)], spacing: 10) {
                             ForEach(report.summaryItems, id: \.label) { item in
@@ -126,7 +126,7 @@ struct ReportDetailView: View {
                     }
                     if report.rows.count > 200 {
                         Text("Showing 200 of \(report.rows.count). The PDF and CSV include every row.")
-                            .font(.footnote).foregroundStyle(.secondaryText)
+                            .font(.wsFootnote).foregroundStyle(.secondaryText)
                     }
                 }
             }
@@ -191,15 +191,15 @@ private struct ReportRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             if let first = columns.first {
-                Text(ReportFormat.cell(row[first.key], type: first.type)).font(.headline)
+                Text(ReportFormat.cell(row[first.key], type: first.type)).font(.wsHeadline)
             }
             ForEach(columns.dropFirst().prefix(8), id: \.key) { column in
                 let text = ReportFormat.cell(row[column.key], type: column.type)
                 if text != "—" {
                     HStack(alignment: .firstTextBaseline) {
-                        Text(column.label).font(.footnote).foregroundStyle(.secondaryText)
+                        Text(column.label).font(.wsFootnote).foregroundStyle(.secondaryText)
                         Spacer(minLength: 12)
-                        Text(text).font(.footnote.weight(column.isNumeric ? .semibold : .regular))
+                        Text(text).font(.wsFootnote.weight(column.isNumeric ? .semibold : .regular))
                             .multilineTextAlignment(.trailing)
                     }
                 }
@@ -242,9 +242,9 @@ struct SimproSyncStatusView: View {
                     ForEach(Self.labels, id: \.key) { entry in
                         if let counts = status.counts[entry.key] {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(entry.label).font(.headline)
+                                Text(entry.label).font(.wsHeadline)
                                 Text("\(counts.synced) in Simpro · \(counts.pending) to push · \(counts.errored) errors · \(counts.localOnly) local only")
-                                    .font(.subheadline).foregroundStyle(.secondaryText)
+                                    .font(.wsSubheadline).foregroundStyle(.secondaryText)
                             }
                             .accessibilityElement(children: .combine)
                         }

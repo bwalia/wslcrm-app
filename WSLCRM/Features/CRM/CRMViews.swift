@@ -81,11 +81,11 @@ struct StatTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Label(title, systemImage: systemImage)
-                .font(.caption.weight(.semibold))
+                .font(.wsCaption.weight(.semibold))
                 // `.secondary` is 60% of label colour: it fails the contrast audit on this card.
                 .foregroundStyle(Color(.label))
             Text(value)
-                .font(.title2.bold().monospacedDigit())
+                .font(.wsTitle2.bold().monospacedDigit())
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
         }
@@ -121,9 +121,9 @@ struct CRMAccountsListView: View {
                     }
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(account.name).font(.headline)
+                        Text(account.name).font(.wsHeadline)
                         Text([account.industry, account.city].compactMap { $0 }.joined(separator: " · "))
-                            .font(.subheadline).foregroundStyle(.secondaryText)
+                            .font(.wsSubheadline).foregroundStyle(.secondaryText)
                     }
                     .padding(.vertical, 4)
                 }
@@ -217,8 +217,8 @@ struct CRMAccountDetailView: View {
                     ForEach(contacts) { contact in
                         NavigationLink { CRMContactDetailView(contactUuid: contact.uuid) } label: {
                             VStack(alignment: .leading) {
-                                Text(contact.fullName).font(.headline)
-                                if let title = contact.jobTitle { Text(title).font(.subheadline).foregroundStyle(.secondaryText) }
+                                Text(contact.fullName).font(.wsHeadline)
+                                if let title = contact.jobTitle { Text(title).font(.wsSubheadline).foregroundStyle(.secondaryText) }
                             }
                         }
                     }
@@ -366,9 +366,9 @@ struct CRMContactsListView: View {
                     CRMContactDetailView(contactUuid: contact.uuid)
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(contact.fullName).font(.headline)
+                        Text(contact.fullName).font(.wsHeadline)
                         Text([contact.jobTitle, contact.accountName].compactMap { $0 }.joined(separator: " · "))
-                            .font(.subheadline).foregroundStyle(.secondaryText)
+                            .font(.wsSubheadline).foregroundStyle(.secondaryText)
                     }
                     .padding(.vertical, 4)
                 }
@@ -411,7 +411,7 @@ struct CRMContactDetailView: View {
                 List {
                     Section {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(contact.fullName).font(.title2.bold())
+                            Text(contact.fullName).font(.wsTitle2.bold())
                             Text([contact.jobTitle, contact.department].compactMap { $0 }.joined(separator: " · "))
                                 .foregroundStyle(.secondaryText)
                         }
@@ -555,20 +555,20 @@ struct DealRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text(deal.name).font(.headline).lineLimit(2)
+                Text(deal.name).font(.wsHeadline).lineLimit(2)
                 Spacer()
                 Text(Formatters.money(deal.value, currency: deal.currency) ?? "")
-                    .font(.subheadline.monospacedDigit().weight(.semibold))
+                    .font(.wsSubheadline.monospacedDigit().weight(.semibold))
             }
             HStack(spacing: 8) {
                 deal.statusBadge
-                Text(Formatters.humanize(deal.stage)).font(.subheadline).foregroundStyle(.secondaryText)
+                Text(Formatters.humanize(deal.stage)).font(.wsSubheadline).foregroundStyle(.secondaryText)
                 if deal.probability > 0 {
-                    Text("\(deal.probability)%").font(.subheadline.monospacedDigit()).foregroundStyle(.secondaryText)
+                    Text("\(deal.probability)%").font(.wsSubheadline.monospacedDigit()).foregroundStyle(.secondaryText)
                 }
             }
             if let account = deal.accountName ?? deal.contactName {
-                Label(account, systemImage: "building.2").font(.footnote).foregroundStyle(.secondaryText)
+                Label(account, systemImage: "building.2").font(.wsFootnote).foregroundStyle(.secondaryText)
             }
         }
         .padding(.vertical, 4)
@@ -700,7 +700,7 @@ private struct DealPipelineContent: View {
                                 model.selectedStage = stage
                             } label: {
                                 Text("\(Formatters.humanize(stage)) · \(model.deals(in: stage).count)")
-                                    .font(.subheadline.weight(.semibold))
+                                    .font(.wsSubheadline.weight(.semibold))
                                     .padding(.horizontal, 14)
                                     .frame(minHeight: 44)
                                     .background(selected ? Color.accentColor : Color(.secondarySystemBackground), in: Capsule())
@@ -839,9 +839,9 @@ struct CRMDealDetailView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(deal.name).font(.title2.bold())
+                    Text(deal.name).font(.wsTitle2.bold())
                     Text(Formatters.money(deal.value, currency: deal.currency) ?? "")
-                        .font(.title3.monospacedDigit())
+                        .font(.wsTitle3.monospacedDigit())
                     HStack {
                         deal.statusBadge
                         StatusBadge(text: Formatters.humanize(deal.stage), systemImage: "flag", tone: .progress)

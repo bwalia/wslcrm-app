@@ -185,7 +185,7 @@ struct JobRow: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text(job.jobNumber)
-                    .font(.subheadline.monospacedDigit().weight(.semibold))
+                    .font(.wsSubheadline.monospacedDigit().weight(.semibold))
                     .foregroundStyle(.secondaryText)
                 if job.priority == .urgent || job.priority == .high {
                     job.priority.badge
@@ -194,15 +194,15 @@ struct JobRow: View {
                 job.status.badge
             }
             Text(job.title)
-                .font(.headline)
+                .font(.wsHeadline)
                 .lineLimit(2)
             if let customer = job.customerName {
                 Label(customer, systemImage: "person")
-                    .font(.subheadline)
+                    .font(.wsSubheadline)
             }
             if let address = job.fullAddress {
                 Label(address, systemImage: "mappin.and.ellipse")
-                    .font(.subheadline)
+                    .font(.wsSubheadline)
                     .foregroundStyle(.secondaryText)
                     .lineLimit(1)
             }
@@ -218,7 +218,7 @@ struct JobRow: View {
                         .foregroundStyle(Tone.danger.color)
                 }
             }
-            .font(.footnote)
+            .font(.wsFootnote)
             .foregroundStyle(.secondaryText)
         }
         .padding(.vertical, 6)

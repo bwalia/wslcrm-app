@@ -222,10 +222,10 @@ struct JobInvoiceSheet: View {
                                 VStack(alignment: .leading) {
                                     Text(line.description)
                                     Text("\(line.quantity.formatted()) × \(Formatters.money(line.unitPrice, currency: preview.currency) ?? "")")
-                                        .font(.caption).foregroundStyle(.secondaryText)
+                                        .font(.wsCaption).foregroundStyle(.secondaryText)
                                     if line.missingRate {
                                         Label("No hourly rate", systemImage: "exclamationmark.triangle.fill")
-                                            .font(.caption).foregroundStyle(Tone.warning.color)
+                                            .font(.wsCaption).foregroundStyle(Tone.warning.color)
                                     }
                                 }
                                 Spacer()

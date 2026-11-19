@@ -25,6 +25,8 @@ final class RoleAccessUITests: XCTestCase {
         XCTAssertTrue(code.waitForExistence(timeout: 10))
         code.tap()
         code.typeText("123456")
+        // Everyone lands on Home; these flows start in the person's own hub.
+        app.enterFirstHub()
     }
 
     private func tab(_ label: String) -> XCUIElement { app.tabBars.buttons[label].firstMatch }

@@ -14,7 +14,7 @@ struct FGasCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label("F-Gas / refrigerant", systemImage: "snowflake")
-                    .font(.headline)
+                    .font(.wsHeadline)
                 Spacer()
                 if canEdit {
                     Button(visit.hasFGasRecord ? "Edit" : "Log F-Gas") { editing = true }
@@ -38,10 +38,10 @@ struct FGasCard: View {
                     LeakCheckBadge(result: result)
                 }
                 if let notes = visit.leakCheckNotes, !notes.isEmpty {
-                    Text(notes).font(.subheadline)
+                    Text(notes).font(.wsSubheadline)
                 }
             } else {
-                Text("No refrigerant handled on this visit.").font(.subheadline).foregroundStyle(.secondaryText)
+                Text("No refrigerant handled on this visit.").font(.wsSubheadline).foregroundStyle(.secondaryText)
             }
         }
         .sheet(isPresented: $editing) {
@@ -70,8 +70,8 @@ private struct LabeledValue: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(label).font(.caption).foregroundStyle(.secondaryText)
-            Text(value ?? "—").font(.body)
+            Text(label).font(.wsCaption).foregroundStyle(.secondaryText)
+            Text(value ?? "—").font(.wsBody)
         }
         .accessibilityElement(children: .combine)
     }

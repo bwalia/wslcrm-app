@@ -1,0 +1,9 @@
+Brand fonts, the same files the web dashboard and www.workstation.co.uk self-host
+(opsapi-dashboard/app/fonts, @fontsource latin subsets), converted from WOFF2 to TTF.
+Unbounded is the variable font instanced at wght 600 and 700.
+
+Poppins          Copyright 2020 The Poppins Project Authors     SIL Open Font License 1.1
+Unbounded        Copyright 2022 The Unbounded Project Authors   SIL Open Font License 1.1
+JetBrains Mono   Copyright 2020 The JetBrains Mono Project Authors  SIL Open Font License 1.1
+
+https://openfontlicense.org

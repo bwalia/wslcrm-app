@@ -91,7 +91,7 @@ struct SheetSectionTitle: View {
 
     var body: some View {
         Text(title)
-            .font(.subheadline.weight(.semibold))
+            .font(.wsSubheadline.weight(.semibold))
             .foregroundStyle(.secondaryText)
             .listRowSeparator(.hidden)
             .accessibilityAddTraits(.isHeader)
@@ -110,7 +110,7 @@ struct StatusBadge: View {
     var body: some View {
         Label {
             Text(text)
-                .font(.subheadline.weight(.semibold))
+                .font(.wsSubheadline.weight(.semibold))
                 // At accessibility sizes the pill wraps rather than truncating to "On…".
                 .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
                 .minimumScaleFactor(0.75)
@@ -149,7 +149,7 @@ struct LargeButtonStyle: ButtonStyle {
 
         var body: some View {
             configuration.label
-                .font(.headline)
+                .font(.wsHeadline)
                 .frame(maxWidth: .infinity, minHeight: 56)
                 .padding(.horizontal, 16)
                 .foregroundStyle(prominent ? Color.white : tone.textColor)
@@ -224,7 +224,7 @@ struct InlineErrorRow: View {
         VStack(alignment: .leading, spacing: 12) {
             Label {
                 Text(error.localizedDescription)
-                    .font(.body)
+                    .font(.wsBody)
                     .fixedSize(horizontal: false, vertical: true)
             } icon: {
                 Image(systemName: error.isConnectivityProblem ? "wifi.slash" : "exclamationmark.triangle.fill")
@@ -300,7 +300,7 @@ struct ErrorDetailsView: View {
                     }
                     if !server.rawBody.isEmpty {
                         Section("Response") {
-                            Text(server.rawBody).font(.caption.monospaced()).textSelection(.enabled)
+                            Text(server.rawBody).font(.wsCaption.monospaced()).textSelection(.enabled)
                         }
                     }
                 }
@@ -308,7 +308,7 @@ struct ErrorDetailsView: View {
                     CopyableRow(label: "Endpoint", value: endpoint)
                     CopyableRow(label: "Problem", value: description)
                     Section("Response") {
-                        Text(body).font(.caption.monospaced()).textSelection(.enabled)
+                        Text(body).font(.wsCaption.monospaced()).textSelection(.enabled)
                     }
                 }
             }
@@ -354,9 +354,9 @@ struct CopyableRow: View {
             copied = true
         } label: {
             VStack(alignment: .leading, spacing: 4) {
-                Text(label).font(.caption).foregroundStyle(.secondaryText)
+                Text(label).font(.wsCaption).foregroundStyle(.secondaryText)
                 HStack {
-                    Text(value).font(.body.monospaced()).foregroundStyle(.primary).textSelection(.enabled)
+                    Text(value).font(.wsBody.monospaced()).foregroundStyle(.primary).textSelection(.enabled)
                     Spacer()
                     Image(systemName: copied ? "checkmark" : "doc.on.doc")
                         .foregroundStyle(.secondaryText)
@@ -403,13 +403,13 @@ struct PhoneLinkRow: View {
             Link(destination: url) {
                 HStack(spacing: 14) {
                     Image(systemName: "phone.fill")
-                        .font(.title3)
+                        .font(.wsTitle3)
                         .frame(width: 44, height: 44)
                         .background(Tone.success.color.opacity(0.15), in: Circle())
                         .foregroundStyle(Tone.success.color)
                     VStack(alignment: .leading) {
-                        Text(name ?? "Call").font(.headline).foregroundStyle(.primary)
-                        Text(phone).font(.subheadline).foregroundStyle(.secondaryText)
+                        Text(name ?? "Call").font(.wsHeadline).foregroundStyle(.primary)
+                        Text(phone).font(.wsSubheadline).foregroundStyle(.secondaryText)
                     }
                     Spacer()
                 }
@@ -429,13 +429,13 @@ struct MapsLinkRow: View {
             Link(destination: url) {
                 HStack(spacing: 14) {
                     Image(systemName: "map.fill")
-                        .font(.title3)
+                        .font(.wsTitle3)
                         .frame(width: 44, height: 44)
                         .background(Tone.info.color.opacity(0.15), in: Circle())
                         .foregroundStyle(Tone.info.color)
                     VStack(alignment: .leading) {
-                        Text("Directions").font(.headline).foregroundStyle(.primary)
-                        Text(address).font(.subheadline).foregroundStyle(.secondaryText).multilineTextAlignment(.leading)
+                        Text("Directions").font(.wsHeadline).foregroundStyle(.primary)
+                        Text(address).font(.wsSubheadline).foregroundStyle(.secondaryText).multilineTextAlignment(.leading)
                     }
                     Spacer()
                 }
@@ -466,7 +466,7 @@ struct SyncStatusBanner: View {
                 Image(systemName: icon)
                     .accessibilityHidden(true)
                 Text(message)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.wsSubheadline.weight(.semibold))
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 16)

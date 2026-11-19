@@ -28,6 +28,8 @@ final class WorkManagementUITests: XCTestCase {
         XCTAssertTrue(code.waitForExistence(timeout: 15))
         code.tap()
         code.typeText("123456")
+        // Everyone lands on Home; these flows start in the person's own hub.
+        app.enterFirstHub()
     }
 
     private func element(_ identifier: String, timeout: TimeInterval = 15,
@@ -53,18 +55,18 @@ final class WorkManagementUITests: XCTestCase {
             .matching(NSPredicate(format: "label CONTAINS[c] %@", substring)).firstMatch
     }
 
-    /// The More tab's list is lazy, so a row below the fold does not exist until it is scrolled
-    /// to — waiting for it without scrolling waits for ever.
+    /// Opens one of the old "More" destinations in the redesigned shell: the review queue is behind
+    /// the profile avatar on Home; the rest are apps in the Apps tab (`menu.item.<key>`).
     private func openMore(_ identifier: String, file: StaticString = #filePath, line: UInt = #line) {
-        XCTAssertTrue(app.tabBars.buttons["Menu"].firstMatch.waitForExistence(timeout: 20),
-                      "signed in and on the tab bar", file: file, line: line)
-        app.tabBars.buttons["Menu"].firstMatch.tap()
-        let link = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
-        for _ in 0..<8 where !(link.waitForExistence(timeout: 2) && link.isHittable) {
-            app.swipeUp()
+        switch identifier {
+        case "more.reviewQueue":
+            app.openProfile(file: file, line: line)
+            let link = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+            XCTAssertTrue(link.waitForExistence(timeout: 10), "missing \(identifier)", file: file, line: line)
+            link.tap()
+        default:
+            app.openApp(String(identifier.dropFirst("more.".count)), file: file, line: line)
         }
-        XCTAssertTrue(link.exists && link.isHittable, "missing \(identifier)", file: file, line: line)
-        link.tap()
     }
 
     /// My tasks has its own tab. "By due date" lists every card, whatever today's date is.
