@@ -497,7 +497,7 @@ struct VATView: View {
                     HStack {
                         VStack(alignment: .leading) {
                             Text([a.string("first_name"), a.string("last_name")].compactMap { $0 }.joined(separator: " ")
-                                .nonEmpty ?? a.string("email") ?? "An accountant")
+                                .trimmedOrNil ?? a.string("email") ?? "An accountant")
                             Text("agent \(a.string("arn") ?? "") · \(a.string("status") == "active" ? "confirmed by HMRC" : "waiting for you to accept at HMRC")")
                                 .font(.wsFootnote).foregroundStyle(.secondaryText)
                         }
@@ -738,9 +738,7 @@ struct VATView: View {
     }
 }
 
-extension String {
-    var nonEmpty: String? { trimmingCharacters(in: .whitespaces).isEmpty ? nil : self }
-}
+
 
 /// Adding or changing the VAT registration (`PUT /api/v2/vat/registration`).
 struct VATRegistrationForm: View {

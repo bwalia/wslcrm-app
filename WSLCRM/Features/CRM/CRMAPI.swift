@@ -7,11 +7,12 @@ struct CRMAPI: Sendable {
 
     // MARK: Accounts
 
-    func accounts(search: String, page: Int, perPage: Int = 25) async throws -> Page<CRMAccount> {
+    func accounts(search: String, status: String? = nil, page: Int, perPage: Int = 25) async throws -> Page<CRMAccount> {
         var q = QueryBuilder()
         q.add("page", page)
         q.add("per_page", perPage)
         q.add("search", search.trimmingCharacters(in: .whitespaces))
+        q.add("status", status)
         return try await list(.get("\(Self.base)/accounts", query: q.items), page: page, perPage: perPage)
     }
 
@@ -35,11 +36,13 @@ struct CRMAPI: Sendable {
 
     // MARK: Contacts
 
-    func contacts(search: String, accountId: Int? = nil, page: Int, perPage: Int = 25) async throws -> Page<CRMContact> {
+    func contacts(search: String, accountId: Int? = nil, status: String? = nil, page: Int,
+                  perPage: Int = 25) async throws -> Page<CRMContact> {
         var q = QueryBuilder()
         q.add("page", page)
         q.add("per_page", perPage)
         q.add("search", search.trimmingCharacters(in: .whitespaces))
+        q.add("status", status)
         q.add("account_id", accountId)
         return try await list(.get("\(Self.base)/contacts", query: q.items), page: page, perPage: perPage)
     }
@@ -64,12 +67,13 @@ struct CRMAPI: Sendable {
     // MARK: Deals
 
     /// No `search` on this endpoint (the server ignores it).
-    func deals(status: DealStatus? = nil, accountId: Int? = nil, pipelineId: Int? = nil,
+    func deals(status: DealStatus? = nil, stage: String? = nil, accountId: Int? = nil, pipelineId: Int? = nil,
                page: Int, perPage: Int = 50) async throws -> Page<CRMDeal> {
         var q = QueryBuilder()
         q.add("page", page)
         q.add("per_page", perPage)
         if let status, status != .unknown { q.add("status", status.rawValue) }
+        q.add("stage", stage)
         q.add("account_id", accountId)
         q.add("pipeline_id", pipelineId)
         return try await list(.get("\(Self.base)/deals", query: q.items), page: page, perPage: perPage)
@@ -118,6 +122,68 @@ struct CRMAPI: Sendable {
     func dashboardStats() async throws -> CRMDashboardStats {
         let envelope: Envelope.Standard<CRMDashboardStats> = try await client.send(.get("\(Self.base)/dashboard/stats"))
         return envelope.data
+    }
+
+    // MARK: Pipelines (RBAC crm_pipelines)
+
+    func createPipeline(_ body: PipelineBody) async throws {
+        try await client.sendDiscardingBody(.post("\(Self.base)/pipelines", json: body))
+    }
+
+    func updatePipeline(_ uuid: String, _ body: PipelineBody) async throws {
+        try await client.sendDiscardingBody(.put("\(Self.base)/pipelines/\(uuid)", json: body))
+    }
+
+    func deletePipeline(_ uuid: String) async throws {
+        try await client.sendDiscardingBody(.delete("\(Self.base)/pipelines/\(uuid)"))
+    }
+
+    // MARK: Activities (RBAC crm_activities; listed and edited through the module kit)
+
+    func createActivity(_ body: CRMActivityBody) async throws {
+        try await client.sendDiscardingBody(.post("\(Self.base)/activities", json: body))
+    }
+
+    func completeActivity(_ uuid: String) async throws {
+        try await client.sendDiscardingBody(Endpoint(.put, "\(Self.base)/activities/\(uuid)/complete").withJSON(EmptyBody()))
+    }
+
+    // MARK: Partners (crm_accounts) and referrals (crm_deals)
+
+    func partners(search: String = "", includeInactive: Bool = false) async throws -> [Partner] {
+        var q = QueryBuilder()
+        q.add("search", search.trimmingCharacters(in: .whitespaces))
+        q.add("active", includeInactive ? "all" : nil)
+        let envelope: Envelope.Standard<LossyArray<Partner>> = try await client.send(.get("\(Self.base)/partners", query: q.items))
+        return envelope.data.elements
+    }
+
+    func referrals(status: String? = nil, partnerUuid: String? = nil) async throws -> [Referral] {
+        var q = QueryBuilder()
+        q.add("status", status)
+        q.add("partner_uuid", partnerUuid)
+        let envelope: Envelope.Standard<LossyArray<Referral>> = try await client.send(.get("\(Self.base)/referrals", query: q.items))
+        return envelope.data.elements
+    }
+
+    func refer(_ body: ReferBody) async throws -> Referral {
+        try await single(.post("\(Self.base)/referrals", json: body))
+    }
+
+    func moveReferral(_ uuid: String, _ body: ReferralStatusBody) async throws -> Referral {
+        try await single(.post("\(Self.base)/referrals/\(uuid)/status", json: body))
+    }
+
+    func resendReferral(_ uuid: String) async throws -> Referral {
+        try await single(Endpoint(.post, "\(Self.base)/referrals/\(uuid)/send").withJSON(EmptyBody()))
+    }
+
+    /// Bills the partner for the commission: a draft invoice. Needs `invoices.create` too.
+    func invoiceReferral(_ uuid: String, taxRate: Decimal) async throws -> String? {
+        struct Body: Encodable, Sendable { let taxRate: Decimal }
+        struct Result: Decodable, Sendable { let invoiceUuid: String? }
+        let result: Result = try await single(.post("\(Self.base)/referrals/\(uuid)/invoice", json: Body(taxRate: taxRate)))
+        return result.invoiceUuid
     }
 
     // MARK: Helpers

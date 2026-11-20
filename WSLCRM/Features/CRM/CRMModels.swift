@@ -306,9 +306,13 @@ struct AccountBody: Encodable, Sendable, Equatable {
     var phone: String?
     var email: String?
     var addressLine1: String?
+    var addressLine2: String?
     var city: String?
+    var state: String?
     var postalCode: String?
     var country: String?
+    var annualRevenue: Decimal?
+    var employeeCount: Int?
     var status: String?
 }
 
@@ -319,6 +323,8 @@ struct ContactBody: Encodable, Sendable, Equatable {
     var phone: String?
     var mobile: String?
     var jobTitle: String?
+    var department: String?
+    var status: String?
     /// Numeric — the only form accepted on update.
     var accountId: Int?
 }

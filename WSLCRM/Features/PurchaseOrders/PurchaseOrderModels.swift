@@ -29,13 +29,20 @@ struct PurchaseOrderItem: Identifiable, Hashable, Sendable {
     /// Running total received (not a delta).
     var receivedQuantity: Decimal
     var sortOrder: Int
+    /// What bills already cover.
+    var billedQuantity: Decimal = 0
+    var billedNet: Decimal = 0
+    var billedTax: Decimal = 0
 
     var outstanding: Decimal { max(0, quantity - receivedQuantity) }
+    /// Received but not billed yet.
+    var toBill: Decimal { max(0, receivedQuantity - billedQuantity) }
 }
 
 extension PurchaseOrderItem: Decodable {
     enum CodingKeys: String, CodingKey {
         case id, uuid, description, quantity, unitPrice, taxRate, taxAmount, lineTotal, receivedQuantity, sortOrder
+        case billedQuantity, billedNet, billedTax
     }
 
     init(from decoder: Decoder) throws {
@@ -52,6 +59,9 @@ extension PurchaseOrderItem: Decodable {
         lineTotal = c.decodeFlexibleDecimal(forKey: .lineTotal) ?? 0
         receivedQuantity = c.decodeFlexibleDecimal(forKey: .receivedQuantity) ?? 0
         sortOrder = c.decodeFlexibleInt(forKey: .sortOrder) ?? 0
+        billedQuantity = c.decodeFlexibleDecimal(forKey: .billedQuantity) ?? 0
+        billedNet = c.decodeFlexibleDecimal(forKey: .billedNet) ?? 0
+        billedTax = c.decodeFlexibleDecimal(forKey: .billedTax) ?? 0
     }
 }
 
@@ -83,6 +93,16 @@ struct PurchaseOrder: Identifiable, Hashable, Sendable {
     var createdAt: Date?
     /// Detail only.
     var items: [PurchaseOrderItem]
+    var terms: String?
+    var supplierCompanyUuid: String?
+    var acknowledgedAt: Date?
+    var cancelledAt: Date?
+    /// What the server recorded on the order: deliveries, bills, closing short, the cancellation reason.
+    var receipts: [PurchaseOrderReceipt] = []
+    var bills: [PurchaseOrderBill] = []
+    var closedReason: String?
+    var closedAt: Date?
+    var cancelledReason: String?
 
     var isOverdue: Bool {
         guard [.sent, .acknowledged, .partiallyReceived].contains(status), let expectedDate else { return false }
@@ -98,13 +118,29 @@ struct PurchaseOrder: Identifiable, Hashable, Sendable {
     var canBill: Bool { [.received, .partiallyReceived].contains(status) && items.contains { $0.receivedQuantity > 0 } }
     var canCancel: Bool { [.draft, .sent, .acknowledged].contains(status) }
     var canDelete: Bool { status == .draft }
+    /// Header fields can change while draft, sent or acknowledged (the currency only while a draft).
+    var canEditHeader: Bool { [.draft, .sent, .acknowledged].contains(status) }
+    /// A part-delivered order can be closed short: what's missing won't come.
+    var canCloseShort: Bool { status == .partiallyReceived }
+    /// Anything received and not billed yet.
+    var hasSomethingToBill: Bool { items.contains { $0.toBill > 0 } }
 }
 
 extension PurchaseOrder: Decodable {
     enum CodingKeys: String, CodingKey {
         case id, uuid, poNumber, status, supplierName, supplierEmail, supplierPhone, supplierAddress, reference
         case issueDate, expectedDate, deliveryAddress, currency, notes, subtotal, taxTotal, total, projectUuid
-        case project, itemCount, sentAt, receivedAt, billedAt, createdAt, items
+        case project, itemCount, sentAt, receivedAt, billedAt, createdAt, items, terms, supplierCompanyUuid
+        case acknowledgedAt, cancelledAt, metadata
+    }
+
+    private struct Metadata: Decodable {
+        var receipts: LossyArray<PurchaseOrderReceipt>?
+        var bills: LossyArray<PurchaseOrderBill>?
+        var closed: Closed?
+        var cancelledReason: String?
+
+        struct Closed: Decodable { var at: String?; var reason: String? }
     }
 
     private struct Project: Decodable { let name: String? }
@@ -138,7 +174,135 @@ extension PurchaseOrder: Decodable {
         billedAt = c.decodeDate(forKey: .billedAt)
         createdAt = c.decodeDate(forKey: .createdAt)
         items = c.decodeLossyArray(PurchaseOrderItem.self, forKey: .items).sorted { $0.sortOrder < $1.sortOrder }
+        terms = (try? c.decodeIfPresent(String.self, forKey: .terms))?.trimmedOrNil
+        supplierCompanyUuid = (try? c.decodeIfPresent(String.self, forKey: .supplierCompanyUuid))?.trimmedOrNil
+        acknowledgedAt = c.decodeDate(forKey: .acknowledgedAt)
+        cancelledAt = c.decodeDate(forKey: .cancelledAt)
+        if let metadata = try? c.decodeIfPresent(Metadata.self, forKey: .metadata) {
+            receipts = metadata.receipts?.elements ?? []
+            bills = metadata.bills?.elements ?? []
+            closedReason = metadata.closed?.reason?.trimmedOrNil
+            closedAt = metadata.closed?.at.flatMap(APIDate.parse)
+            cancelledReason = metadata.cancelledReason?.trimmedOrNil
+        }
     }
+
+    /// A line's description by its uuid (bills and deliveries name lines by uuid).
+    func itemName(_ uuid: String?) -> String {
+        items.first { $0.id == uuid }?.description ?? "A removed line"
+    }
+}
+
+/// A delivery recorded on the order (`metadata.receipts`).
+struct PurchaseOrderReceipt: Decodable, Sendable, Hashable {
+    var at: Date?
+    var note: String?
+    var lines: [Line]
+
+    struct Line: Decodable, Sendable, Hashable {
+        var itemUuid: String?
+        /// What arrived in this delivery; older deliveries carry the running total instead.
+        var quantity: Decimal?
+        var receivedQuantity: Decimal?
+
+        enum CodingKeys: String, CodingKey { case itemUuid, quantity, receivedQuantity }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            itemUuid = try? c.decodeIfPresent(String.self, forKey: .itemUuid)
+            quantity = c.decodeFlexibleDecimal(forKey: .quantity)
+            receivedQuantity = c.decodeFlexibleDecimal(forKey: .receivedQuantity)
+        }
+    }
+
+    enum CodingKeys: String, CodingKey { case at, note, lines }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        at = c.decodeDate(forKey: .at)
+        note = (try? c.decodeIfPresent(String.self, forKey: .note))?.trimmedOrNil
+        lines = c.decodeLossyArray(Line.self, forKey: .lines)
+    }
+}
+
+/// A bill for goods received (`metadata.bills`): net, tax, gross, and whether it reached the purchase ledger.
+struct PurchaseOrderBill: Decodable, Sendable, Hashable, Identifiable {
+    var id: String { uuid ?? "\(billDate ?? "")-\(gross)" }
+    var uuid: String?
+    var net: Decimal
+    var tax: Decimal
+    var gross: Decimal
+    var currency: String?
+    var billDate: String?
+    var category: String?
+    var notes: String?
+    var expenseUuid: String?
+    var ledgerNote: String?
+    var voidedAt: Date?
+    var voidReason: String?
+    var lines: [Line]
+
+    struct Line: Decodable, Sendable, Hashable {
+        var itemUuid: String?
+        var quantity: Decimal
+
+        enum CodingKeys: String, CodingKey { case itemUuid, quantity }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            itemUuid = try? c.decodeIfPresent(String.self, forKey: .itemUuid)
+            quantity = c.decodeFlexibleDecimal(forKey: .quantity) ?? 0
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case uuid, net, tax, gross, currency, billDate, category, notes, expenseUuid, ledgerNote, voidedAt, voidReason, lines
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        uuid = try? c.decodeIfPresent(String.self, forKey: .uuid)
+        net = c.decodeFlexibleDecimal(forKey: .net) ?? 0
+        tax = c.decodeFlexibleDecimal(forKey: .tax) ?? 0
+        gross = c.decodeFlexibleDecimal(forKey: .gross) ?? (net + tax)
+        currency = try? c.decodeIfPresent(String.self, forKey: .currency)
+        billDate = try? c.decodeIfPresent(String.self, forKey: .billDate)
+        category = try? c.decodeIfPresent(String.self, forKey: .category)
+        notes = (try? c.decodeIfPresent(String.self, forKey: .notes))?.trimmedOrNil
+        expenseUuid = (try? c.decodeIfPresent(String.self, forKey: .expenseUuid))?.trimmedOrNil
+        ledgerNote = (try? c.decodeIfPresent(String.self, forKey: .ledgerNote))?.trimmedOrNil
+        voidedAt = c.decodeDate(forKey: .voidedAt)
+        voidReason = (try? c.decodeIfPresent(String.self, forKey: .voidReason))?.trimmedOrNil
+        lines = c.decodeLossyArray(Line.self, forKey: .lines)
+    }
+
+    var isVoided: Bool { voidedAt != nil }
+}
+
+/// `POST /purchase-orders/{uuid}/receive`: what arrived in this delivery, per line (added to what came before).
+struct PurchaseOrderDeliveryBody: Encodable, Sendable, Equatable {
+    struct Line: Encodable, Sendable, Equatable {
+        var itemUuid: String
+        /// Arrived now; the server adds it to the line and never goes above the ordered quantity.
+        var quantity: Decimal
+    }
+
+    var items: [Line]?
+    var receiveAll: Bool?
+    var note: String?
+}
+
+/// `POST /purchase-orders/{uuid}/convert-to-bill`.
+struct PurchaseOrderBillBody: Encodable, Sendable, Equatable {
+    /// YYYY-MM-DD.
+    var billDate: String
+    var category: String
+    var notes: String?
+
+    static let categories = [
+        Choice("purchases", "Purchases"), Choice("materials", "Materials"), Choice("subcontractors", "Subcontractors"),
+        Choice("professional_fees", "Professional fees"), Choice("other", "Other"),
+    ]
 }
 
 /// `GET /purchase-orders/stats`.
@@ -176,6 +340,9 @@ struct PurchaseOrderBody: Encodable, Sendable, Equatable {
     var notes: String?
     var projectUuid: String?
     var items: [PurchaseOrderLineBody]?
+    var supplierAddress: String?
+    var terms: String?
+    var issueDate: CalendarDay?
 }
 
 struct PurchaseOrderLineBody: Encodable, Sendable, Equatable, Hashable {
