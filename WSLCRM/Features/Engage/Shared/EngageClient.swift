@@ -135,8 +135,6 @@ extension JSONValue {
 }
 
 extension Record {
-    /// The record's fields as a JSON object (to send back, or to keep editing).
-    var json: JSONValue { .object(fields) }
 
     /// A number at a path however it was sent.
     func double(_ path: String) -> Double? { self[path]?.numberValue }

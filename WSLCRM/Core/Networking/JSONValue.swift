@@ -239,3 +239,11 @@ extension JSONValue {
         return inner
     }
 }
+
+extension JSONValue {
+    /// The keys and values of an object (empty for anything else).
+    var objectFields: [String: JSONValue] {
+        if case .object(let o) = self { return o }
+        return [:]
+    }
+}

@@ -59,6 +59,7 @@ a `ResourceDescriptor` instead of writing screens; the shared `ResourceListView`
 | `singleton` | one record at a fixed path (settings): open with `ResourceRoute(descriptorID:, recordID: "settings")` |
 | `writableWhen` | which records can be edited/deleted (built-in rows can't) |
 | `ReportSpec` | a read-only report: headline numbers and sections of rows |
+| `ModuleCatalog.scoped(_:_:)` | a descriptor for one parent record (`/api/v2/billing/apps/{app}/features`): fills the parent's placeholders, registers it at run time, and the kit's list/detail/form screens find it by id |
 
 The response parser accepts every OpsAPI envelope (`{data, meta}`, `{success, data: {data, meta}}`,
 `{results}`, bare arrays, a single list under any key, lua-cjson's `{}` for an empty list, paging

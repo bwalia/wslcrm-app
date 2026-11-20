@@ -122,7 +122,7 @@ struct ProfileSheet: View {
                         ForEach(session.menu.secondary) { item in
                             if let destination = MenuDestination.of(item) {
                                 MenuDestinationLink(destination: destination) {
-                                    Label(item.key == "settings" ? "Workspace settings" : item.name,
+                                    Label(item.key == "settings" ? "Account settings" : item.name,
                                           systemImage: "slider.horizontal.3")
                                 }
                                 .accessibilityIdentifier("menu.item.\(item.key)")

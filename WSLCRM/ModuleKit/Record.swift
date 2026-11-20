@@ -91,6 +91,9 @@ struct Record: Identifiable, Hashable, Sendable {
         return nil
     }
 
+    /// The record's fields as a JSON object (to send part of it back).
+    var json: JSONValue { .object(fields) }
+
     /// A copy with one top-level field replaced (nil removes it): optimistic updates.
     func setting(_ key: String, _ value: JSONValue?) -> Record {
         var copy = fields

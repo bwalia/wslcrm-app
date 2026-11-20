@@ -158,11 +158,6 @@ struct TaxAPI: Sendable {
 }
 
 extension JSONValue {
-    var objectFields: [String: JSONValue] {
-        if case .object(let o) = self { return o }
-        return [:]
-    }
-
     var record: Record { Record(objectFields) }
 
     /// A list, treating lua-cjson's `{}` (an empty list sent as an object) and absence as empty.

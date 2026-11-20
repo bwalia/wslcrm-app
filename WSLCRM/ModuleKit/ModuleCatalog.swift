@@ -26,7 +26,7 @@ struct NativeScreenRoute: Hashable, Sendable {
 /// Every module the app shows natively, gathered from the groups.
 enum ModuleCatalog {
     /// Add a new area here (one line), and its file under `Catalog/`.
-    static let groups: [ModuleGroup] = [.shop, .chat, .tax, .work, .crm, .engage]
+    static let groups: [ModuleGroup] = [.shop, .chat, .tax, .work, .crm, .engage, .workspace]
 
     static let all: [ResourceDescriptor] = groups.flatMap(\.descriptors)
 
@@ -39,7 +39,8 @@ enum ModuleCatalog {
         return table
     }()
 
-    static func descriptor(_ id: String) -> ResourceDescriptor? { byID[id] }
+    /// A catalogue descriptor, or one made at run time for a parent record (`scoped(_:_:)`).
+    static func descriptor(_ id: String) -> ResourceDescriptor? { byID[id] ?? scopedDescriptor(id) }
 
     /// Read-only reports (`ResourceReportView`).
     static let reports: [ReportSpec] = groups.flatMap(\.reports)
