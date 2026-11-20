@@ -81,3 +81,21 @@ field name; test a descriptor's parsing with a real response shape (`ModuleKitTe
 - Swift 6 strict concurrency; run `xcodegen generate` after adding files.
 - Every group ships with unit tests: descriptor shapes parse real responses, actions and forms
   encode the bodies the server expects.
+
+## One record on a hand-built screen, and plugin pages
+
+- **A screen for one record** is still pushed by value: `NativeScreenRoute("pd.buyer", uuid)` makes the
+  id `pd.buyer:<uuid>`; the group's `screen:` closure splits it with `NativeScreenRoute.parts(id)`.
+  No new `navigationDestination` is needed (`ModuleGroup+Industry.swift`).
+- **Several groups as one**: `ModuleGroup.joining(id:_:)` merges parts (the industry area is field
+  service, Property Deals, Property PA, health, the AI runner and plugins) behind one line in
+  `ModuleCatalog.groups`; `IndustryModuleTests` checks no two parts claim a key.
+- **Descriptors built at run time**: `RuntimeDescriptors.register(_:)` makes a descriptor the server
+  described (or one per parent record, as health does for a patient's care records) resolvable by id,
+  so `ResourceRoute` / `ResourceListRoute` open it with the kit's own screens.
+- **Plugin pages** (`/dashboard/plugins/<code>/<key>`): `GET /api/v2/plugins/:code/resources/:key`
+  describes a plugin's generated list (`sdk.crud`: fields, columns, filters, search, sort, rights), and
+  `PluginPageScreen` draws it natively from that description — helpdesk tickets, bank holidays, and any
+  plugin installed later (`MenuDestination.of` falls back to it for an unmapped plugin path). A plugin's
+  own HTML page (manifest `pages`) has no description, so it needs a hand-built screen registered in
+  `PluginPages.nativePages` (helpdesk overview, Portfolio Lab).

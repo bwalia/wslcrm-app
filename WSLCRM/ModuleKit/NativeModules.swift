@@ -20,7 +20,8 @@ enum MenuDestination: Hashable {
 
     /// nil when the app has no screen for the item yet: it isn't offered (never a web page).
     static func of(_ item: AppMenu.Item) -> MenuDestination? {
-        NativeModules.destination(forKey: item.key)
+        // A plugin's generated page the app has no screen of its own for still opens natively.
+        NativeModules.destination(forKey: item.key) ?? PluginPages.destination(forPath: item.path)
     }
 }
 
