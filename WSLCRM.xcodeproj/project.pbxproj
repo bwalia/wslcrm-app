@@ -164,6 +164,7 @@
 		A25BAEE927A0A08AEFD0593E /* ShopHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDFF4BCDC24F3314D5662B9C /* ShopHomeView.swift */; };
 		A4F5B14424F8FE8B50D35182 /* FONTS-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 6FB4568937EDEB261B05702E /* FONTS-LICENSE.txt */; };
 		A5BF0A26271A098ADFE4DA5F /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06582C99109E8286013A294C /* SessionStore.swift */; };
+		A79D4F1BA7844D5377DB7DD9 /* HomeDigest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 028FA3DC9649F548FD2F1FFB /* HomeDigest.swift */; };
 		A8FA4301A40190FD1F8E04AB /* ItemEvidenceStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 098A8C03260A50D5DF019BEB /* ItemEvidenceStrip.swift */; };
 		A9288AEFA19FC736CE1CF1B6 /* PurchaseOrdersAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EBAA382FC20A3B61A89ABCC /* PurchaseOrdersAPI.swift */; };
 		A9DB40A0CB8C270C2E33D009 /* PDTodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E12F6742FB1E43617EB89AAC /* PDTodayView.swift */; };
@@ -285,6 +286,7 @@
 		0076134B5E492D152B6AE883 /* invoice_detail.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = invoice_detail.json; sourceTree = "<group>"; };
 		0220080C6463F48157301313 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		022EDAAF325FA736E728E9C9 /* APIDateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIDateTests.swift; sourceTree = "<group>"; };
+		028FA3DC9649F548FD2F1FFB /* HomeDigest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeDigest.swift; sourceTree = "<group>"; };
 		02A6E03FDF1CB0B042DF571D /* ReportsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportsViews.swift; sourceTree = "<group>"; };
 		03839F50097EBD42F240A6E1 /* InvoiceViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoiceViews.swift; sourceTree = "<group>"; };
 		041232C972DC2FCAB0DD361D /* MenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuView.swift; sourceTree = "<group>"; };
@@ -915,6 +917,7 @@
 			isa = PBXGroup;
 			children = (
 				FD52216B93C02D02E6794642 /* AppCatalog.swift */,
+				028FA3DC9649F548FD2F1FFB /* HomeDigest.swift */,
 				DF7945EDFC0FE4D29C8F274C /* HomeView.swift */,
 				A13265EC09EE4BC8624DCC48 /* MainTabView.swift */,
 				AA47B5A76CAD8F15F7541D1B /* WorkHub.swift */,
@@ -1393,6 +1396,7 @@
 				08E90870A64C3570EE296ED3 /* FieldSpec.swift in Sources */,
 				9448EB1FD319349ADDF221A1 /* Formatters.swift in Sources */,
 				909B0AF6307612C35937883D /* GuidedVisitView.swift in Sources */,
+				A79D4F1BA7844D5377DB7DD9 /* HomeDigest.swift in Sources */,
 				11979E8AF6A9470C873694B6 /* HomeView.swift in Sources */,
 				1DF121B642C62AC0500A3152 /* InvoiceModels.swift in Sources */,
 				06D6C8D9654F667A7A8705CF /* InvoiceViews.swift in Sources */,

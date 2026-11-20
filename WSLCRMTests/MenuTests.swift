@@ -122,7 +122,26 @@ final class MenuTests: XCTestCase {
         let navigation = NavigationPolicy(permissions: root, isEngineerRole: false, hasPropertyDeals: true, hasPropertyPA: true)
         XCTAssertEqual(navigation.home, .more, "root has no hub of its own: Home and Apps")
         XCTAssertLessThanOrEqual(navigation.tabs.count, 3, "Home + three hubs + Apps: nothing hides behind iOS's More")
-        XCTAssertEqual(navigation.tabs, [.propertyPA, .myWork, .fieldService])
+        XCTAssertEqual(navigation.tabs, [.fieldService, .propertyDeals, .myWork],
+                       "the PA isn't put first just because it's switched on")
+    }
+
+    func testWorkAreasFollowWhatIsWaitingAndThePersonsOwnOrder() {
+        let owner = PermissionSet(isAdmin: false, isOwner: true, grants: [:],
+                                  menuKeys: ["field_service_jobs", "projects", "shop", "my_tasks"])
+        let waiting = NavigationPolicy(permissions: owner, isEngineerRole: false, hasPropertyPA: true,
+                                       activity: [.shop: 7, .tasks: 2])
+        XCTAssertEqual(waiting.tabs, [.shop, .tasks, .fieldService], "most waiting first, then the usual order")
+        XCTAssertEqual(waiting.home, .shop)
+
+        let chosen = NavigationPolicy(permissions: owner, isEngineerRole: false, hasPropertyPA: true,
+                                      activity: [.shop: 7], preferredOrder: [.tasks, .propertyPA], hiddenHubs: [.fieldService])
+        XCTAssertEqual(chosen.ordered, [.tasks, .propertyPA, .myWork, .shop], "Edit Home: their order first, hidden ones gone")
+
+        let engineer = NavigationPolicy(permissions: PermissionSet(isAdmin: false, isOwner: false, grants: ["fs_visits": ["read"]],
+                                                                   menuKeys: ["field_service_visits", "shop"]),
+                                        isEngineerRole: true, activity: [.shop: 9])
+        XCTAssertEqual(engineer.home, .myWork, "engineers always start on their visits")
     }
 
     func testTheAIChatAndProjectsNeverTakeATab() {

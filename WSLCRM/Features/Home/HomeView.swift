@@ -10,7 +10,8 @@ struct HomeView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SyncCenter.self) private var sync
     @Environment(\.dynamicTypeSize) private var typeSize
-    @State private var stats: LoadState<FieldServiceStats> = .idle
+    @State private var digest = HomeDigest()
+    @State private var editingHome = false
     @State private var showingProfile = false
     @State private var showingCapture = false
     @State private var creatingRequest = false
@@ -31,8 +32,8 @@ struct HomeView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
+                if !HomeDigest.sources(session: session).isEmpty { todaySection }
                 if !hubs.isEmpty { workSection }
-                if session.permissions.can(.read, .fsJobs) { todaySection }
                 quickActions(catalog: catalog)
                 if !catalog.nativeEntries.isEmpty { appsSection(catalog: catalog) }
                 // The AI Navigator, once its native screen is in this person's menu.
@@ -50,9 +51,13 @@ struct HomeView: View {
         .navigationTitle("Home")
         .refreshable {
             await session.reloadPermissions()
-            await loadStats()
+            await digest.load(session: session, services: services)
         }
-        .task { await loadStats() }
+        .task(id: session.workspace?.uuid) { await digest.load(session: session, services: services) }
+        .sheet(isPresented: $editingHome) {
+            let policy = NavigationPolicy(session: session)
+            EditHomeSheet(available: policy.available, current: policy.ordered)
+        }
         .sheet(isPresented: $showingProfile) { ProfileSheet() }
         .sheet(isPresented: $showingCapture) {
             PDQuickCaptureView { message in withAnimation { toast = message } }
@@ -70,7 +75,10 @@ struct HomeView: View {
 
     private var workSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            DashboardSectionHeader("Your work")
+            DashboardSectionHeader("Your work") {
+                Button("Edit") { editingHome = true }
+                    .accessibilityIdentifier("home.editWork")
+            }
             if let first = hubs.first {
                 Button { open(.hub(first)) } label: { PrimaryHubCard(hub: first) }
                     .buttonStyle(.pressableCard)
@@ -91,34 +99,49 @@ struct HomeView: View {
 
     // MARK: Today
 
+    /// What needs the person today, from their own modules: each count opens where to deal with it.
     @ViewBuilder
     private var todaySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            DashboardSectionHeader("Today") {
-                if hubs.contains(.fieldService) {
-                    Button("Field Service") { open(.hub(.fieldService)) }
-                }
-            }
-            switch stats {
-            case .idle, .loading:
+            DashboardSectionHeader("Needs you today")
+            if !digest.hasLoaded {
                 LazyVGrid(columns: columns(min: 150), spacing: 10) {
                     ForEach(0..<4, id: \.self) { _ in
                         MetricCard(title: "Loading", value: "00", systemImage: "circle").redacted(reason: .placeholder)
                     }
                 }
-            case .failed(let error):
-                InlineErrorRow(error: error) { Task { await loadStats() } }
-                    .brandCard(padding: 12, radius: 16)
-            case .loaded(let stats):
+            } else if digest.signals.isEmpty {
+                Label("Nothing is waiting for you. Nice work.", systemImage: "checkmark.circle.fill")
+                    .font(.brandCallout)
+                    .foregroundStyle(Tone.success.textColor)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .brandCard(padding: 14, radius: 16)
+                    .accessibilityIdentifier("home.allClear")
+            } else {
                 LazyVGrid(columns: columns(min: 150), spacing: 10) {
-                    MetricCard(title: "Visits today", value: "\(stats.visitsToday)", systemImage: "calendar", tone: .info)
-                    MetricCard(title: "On site now", value: "\(stats.engineersOnSite)", systemImage: "mappin.and.ellipse", tone: .success)
-                    MetricCard(title: "Open jobs", value: "\(stats.openJobs)", systemImage: "wrench.and.screwdriver", tone: .progress)
-                    MetricCard(title: "Overdue", value: "\(stats.overdueJobs)", systemImage: "exclamationmark.triangle",
-                               tone: stats.overdueJobs > 0 ? .danger : .neutral)
+                    ForEach(digest.signals) { signal in
+                        signalLink(signal)
+                    }
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func signalLink(_ signal: HomeSignal) -> some View {
+        let card = MetricCard(title: signal.title, value: signal.count.formatted(), systemImage: signal.systemImage,
+                              tone: signal.tone)
+        Group {
+            if let hub = signal.hub, hubs.contains(hub) {
+                Button { open(.hub(hub)) } label: { card }
+            } else if let destination = NativeModules.destination(forKey: signal.menuKey) {
+                MenuDestinationLink(destination: destination) { card }
+            } else {
+                card
+            }
+        }
+        .buttonStyle(.pressableCard)
+        .accessibilityIdentifier("home.signal.\(signal.id)")
     }
 
     // MARK: Quick actions
@@ -217,15 +240,6 @@ struct HomeView: View {
         [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 280 : min), spacing: 10)]
     }
 
-    private func loadStats() async {
-        guard session.permissions.can(.read, .fsJobs) else { return }
-        if stats.value == nil { stats = .loading }
-        do {
-            stats = .loaded(try await services.fieldService.stats())
-        } catch {
-            if stats.value == nil { stats = .failed(error.asAPIError) }
-        }
-    }
 }
 
 // MARK: - Hero

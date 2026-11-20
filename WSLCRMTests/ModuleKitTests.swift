@@ -280,3 +280,33 @@ final class NativeSVGTests: XCTestCase {
         XCTAssertNil(NativeSVG.render(Data("<html></html>".utf8)), "not an SVG")
     }
 }
+
+/// Home's "Needs you today": counts from the person's own modules, and the hub each belongs to.
+final class HomeDigestTests: XCTestCase {
+    func testSignalsCountRealWorkAndSkipZeroes() throws {
+        let shop = try JSONDecoder.opsAPI().decode(ShopKPIs.self, from: Data("""
+        {"orders_today":1,"orders_7d":3,"orders_30d":9,"paid_orders_30d":8,"revenue_paid_30d_minor":120000,
+         "pending_payment":2,"awaiting_fulfilment":0,"open_quotes":5,"open_quotes_value_minor":50000,"quotes_30d":6,
+         "quote_conversion_rate":0.5,"low_stock_count":0,"low_stock":[],"chats_7d":0,"active_products":10,
+         "unverified_prices":0,"currency":"GBP","payments_enabled":true,"webhook_configured":true,
+         "latest_orders":[],"latest_quotes":[]}
+        """.utf8))
+        let now = Date()
+        let past = Calendar.current.date(byAdding: .day, value: -5, to: now)!
+        let due = past.formatted(.iso8601.year().month().day())
+        func task(_ uuid: String, _ status: String) throws -> KanbanTask {
+            try JSONDecoder.opsAPI().decode(KanbanTask.self, from: Data("""
+            {"uuid":"\(uuid)","title":"\(uuid)","status":"\(status)","priority":"none","project_uuid":"p1","due_date":"\(due)"}
+            """.utf8))
+        }
+        let overdue = try task("t1", "open")
+        let done = try task("t2", "completed")
+        let digest = HomeDigest.signals(shop: shop, steps: nil, tasks: [overdue, done], overdueInvoices: 3,
+                                        fieldService: nil, deals: nil, pa: nil, isEngineer: false, now: now)
+        XCTAssertEqual(digest.signals.map(\.id), ["shop.payment", "shop.quotes", "tasks.overdue", "invoices.overdue"],
+                       "zero counts and finished tasks are left out")
+        XCTAssertEqual(digest.activity[.shop], 7)
+        XCTAssertEqual(digest.activity[.tasks], 1)
+        XCTAssertNil(digest.activity[.propertyPA], "nothing from the PA unless it has something for them")
+    }
+}

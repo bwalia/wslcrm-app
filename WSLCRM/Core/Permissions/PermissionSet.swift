@@ -188,18 +188,29 @@ struct NavigationPolicy: Sendable, Equatable {
     let hasPropertyDeals: Bool
     /// The Property PA is on for this workspace and person (`GET /property-pa/me`).
     let hasPropertyPA: Bool
+    /// What was waiting for the person in each hub last time Home looked (`HomeDigest`): the work
+    /// areas are ordered by it, so Home leads with the person's real work, not whichever module is on.
+    let activity: [Home: Int]
+    /// The person's own order from "Edit Home" (nil: automatic), and the hubs they hid.
+    let preferredOrder: [Home]?
+    let hiddenHubs: Set<Home>
 
-    init(permissions: PermissionSet, isEngineerRole: Bool, hasPropertyDeals: Bool = false, hasPropertyPA: Bool = false) {
+    init(permissions: PermissionSet, isEngineerRole: Bool, hasPropertyDeals: Bool = false, hasPropertyPA: Bool = false,
+         activity: [Home: Int] = [:], preferredOrder: [Home]? = nil, hiddenHubs: Set<Home> = []) {
         self.permissions = permissions
         self.isEngineerRole = isEngineerRole
         self.hasPropertyDeals = hasPropertyDeals
         self.hasPropertyPA = hasPropertyPA
+        self.activity = activity
+        self.preferredOrder = preferredOrder
+        self.hiddenHubs = hiddenHubs
     }
 
     @MainActor
-    init(session: SessionStore) {
+    init(session: SessionStore, preferences: HomePreferences = .shared) {
         self.init(permissions: session.permissions, isEngineerRole: session.policy.isEngineerRole,
-                  hasPropertyDeals: session.propertyDeals != nil, hasPropertyPA: session.propertyPA != nil)
+                  hasPropertyDeals: session.propertyDeals != nil, hasPropertyPA: session.propertyPA != nil,
+                  activity: preferences.activity, preferredOrder: preferences.order, hiddenHubs: preferences.hidden)
     }
 
     var showsMyWork: Bool {
@@ -233,23 +244,49 @@ struct NavigationPolicy: Sendable, Equatable {
     /// would otherwise put an empty tab in front of them, as with the shop.
     var showsPropertyDeals: Bool { hasPropertyDeals }
 
-    /// The PA is the home wherever it's on: the system of work, with the CRM underneath.
+    /// The PA appears where it's on, ordered like every other hub: by what is waiting for the person.
     var showsPropertyPA: Bool { hasPropertyPA }
 
-    /// Platform admins (root) land on the Menu, which is the web's full menu; engineers on My Work
-    /// (opsapi #610); managers and telecallers on Field Service; property operators on Today; people
-    /// who only work projects on their tasks.
+    /// Every work hub this person has, in the default order: the most hands-on work first. No hub
+    /// leads just because its module is switched on for the workspace.
+    var available: [Home] {
+        // Managers and telecallers run Field Service; engineers start on My Work (pinned in `ordered`).
+        var all: [Home] = []
+        if showsFieldService { all.append(.fieldService) }
+        if showsPropertyDeals { all.append(.propertyDeals) }
+        if showsMyWork { all.append(.myWork) }
+        if showsLeadsTab { all.append(.leads) }
+        if showsTasks { all.append(.tasks) }
+        if showsShop { all.append(.shop) }
+        if showsPropertyPA { all.append(.propertyPA) }
+        return all
+    }
+
+    /// The person's work hubs in order: their own order when they chose one; otherwise the hubs with
+    /// the most waiting first (engineers always start on My Work), then the default order.
+    var ordered: [Home] {
+        let visible = available.filter { !hiddenHubs.contains($0) }
+        if let preferredOrder {
+            let chosen = preferredOrder.filter(visible.contains)
+            return chosen + visible.filter { !chosen.contains($0) }
+        }
+        let rank = Dictionary(uniqueKeysWithValues: visible.enumerated().map { ($1, $0) })
+        var sorted = visible.sorted { a, b in
+            let workA = activity[a] ?? 0, workB = activity[b] ?? 0
+            if workA != workB { return workA > workB }
+            return (rank[a] ?? 0) < (rank[b] ?? 0)
+        }
+        if isEngineerRole, let index = sorted.firstIndex(of: .myWork) {
+            sorted.insert(sorted.remove(at: index), at: 0)
+        }
+        return sorted
+    }
+
+    /// Platform admins (root) land on Home and Apps; everyone else's first hub is their busiest one
+    /// (engineers: My Work).
     var home: Home {
         if permissions.isAdmin { return .more }
-        if showsPropertyPA { return .propertyPA }
-        if isEngineerRole, showsMyWork { return .myWork }
-        if showsFieldService { return .fieldService }
-        if showsPropertyDeals { return .propertyDeals }
-        if showsMyWork { return .myWork }
-        if showsLeadsTab { return .leads }
-        if showsTasks { return .tasks }
-        if showsShop { return .shop }
-        return .more
+        return ordered.first ?? .more
     }
 
     /// The AI chat (the web's AI Navigator) gets a tab wherever this person's menu has it.
@@ -260,24 +297,9 @@ struct NavigationPolicy: Sendable, Equatable {
     var showsProjects: Bool { permissions.menuKeys.contains(AppMenu.projectsKey) }
 
     /// The work hubs that get a tab between Home and Apps, at most three: an iPhone tab bar holds
-    /// five, and a sixth would hide the rest behind the system's own "More". The person's own hub
-    /// comes first; everything stays reachable from Home and Apps. The AI chat opens over the app
-    /// and projects are a native screen in Apps, so neither takes a tab.
-    var tabs: [Home] {
-        var all: [Home] = []
-        if showsPropertyPA { all.append(.propertyPA) }
-        if showsMyWork { all.append(.myWork) }
-        if showsFieldService { all.append(.fieldService) }
-        if showsPropertyDeals { all.append(.propertyDeals) }
-        if showsLeadsTab { all.append(.leads) }
-        if showsTasks { all.append(.tasks) }
-        if showsShop { all.append(.shop) }
-        // The home hub comes first and always makes the cut.
-        if let index = all.firstIndex(of: home) {
-            all.insert(all.remove(at: index), at: 0)
-        }
-        return Array(all.prefix(3))
-    }
+    /// five, and a sixth would hide the rest behind the system's own "More". Everything stays
+    /// reachable from Home and Apps. The AI chat and projects are native screens in Apps.
+    var tabs: [Home] { Array(ordered.prefix(3)) }
 }
 
 // MARK: - Field-service rules

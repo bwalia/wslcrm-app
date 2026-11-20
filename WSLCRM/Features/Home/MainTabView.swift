@@ -52,8 +52,18 @@ struct MainTabView: View {
         .sheet(isPresented: $showingPendingChanges) {
             NavigationStack { PendingChangesView() }
         }
-        .onAppear { openPendingLink() }
+        .onAppear {
+            activatePreferences()
+            openPendingLink()
+        }
+        .onChange(of: session.workspace?.uuid) { activatePreferences() }
         .onChange(of: router.pending) { openPendingLink() }
+    }
+
+    /// This person's work-area order for this workspace (Edit Home, and what was waiting last time).
+    private func activatePreferences() {
+        guard let user = session.user?.uuid, let workspace = session.workspace?.uuid else { return }
+        HomePreferences.shared.activate(user: user, workspace: workspace)
     }
 
     private func hubPath(_ hub: NavigationPolicy.Home) -> Binding<NavigationPath> {

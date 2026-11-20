@@ -9,6 +9,29 @@ enum AppTab: Hashable {
 
 /// How a work hub presents itself: on its tab, and on Home's "Your work" cards.
 extension NavigationPolicy.Home {
+    /// Stable name for storing the person's order.
+    var key: String {
+        switch self {
+        case .propertyPA: "propertyPA"
+        case .myWork: "myWork"
+        case .fieldService: "fieldService"
+        case .propertyDeals: "propertyDeals"
+        case .leads: "leads"
+        case .tasks: "tasks"
+        case .shop: "shop"
+        case .ai: "ai"
+        case .projects: "projects"
+        case .more: "more"
+        }
+    }
+
+    init?(key: String) {
+        let all: [NavigationPolicy.Home] = [.propertyPA, .myWork, .fieldService, .propertyDeals, .leads, .tasks, .shop,
+                                            .ai, .projects, .more]
+        guard let match = all.first(where: { $0.key == key }) else { return nil }
+        self = match
+    }
+
     var title: String {
         switch self {
         case .propertyPA: "PA"
