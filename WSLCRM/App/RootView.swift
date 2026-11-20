@@ -77,7 +77,7 @@ struct LockedView: View {
                 .font(.system(size: 64))
                 .foregroundStyle(.tint)
                 .accessibilityHidden(true)
-            Text("\(Brand.current.name) is locked")
+            Text("\(BrandStore.shared.brand.name) is locked")
                 .font(.wsTitle.bold())
             Button("Unlock with \(session.biometrics.displayName)") {
                 Task { await session.unlock() }

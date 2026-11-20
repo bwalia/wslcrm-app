@@ -47,7 +47,6 @@ on:
         default: Int
         options:
           - Int
-          - DBS-Int
       version:
         description: "Marketing version override (blank = project.yml)"
         required: false

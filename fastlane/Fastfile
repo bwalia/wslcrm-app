@@ -14,7 +14,7 @@ PROJECT = "WSLCRM.xcodeproj".freeze
 TARGET = "WSLCRM".freeze
 
 # Testers get the house-branded Workstation CRM build against int by default.
-# RELEASE_SCHEME / RELEASE_CONFIGURATION pick another (e.g. WSLCRM-DBS-Int for the DBS Ltd demo).
+# RELEASE_SCHEME / RELEASE_CONFIGURATION pick another.
 DEFAULT_SCHEME = "WSLCRM-Int".freeze
 DEFAULT_CONFIGURATION = "Release-Int".freeze
 

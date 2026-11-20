@@ -106,7 +106,7 @@ struct LoginView: View {
                 .accessibilityLabel("Environment settings")
                 .accessibilityIdentifier("login.environmentSettings")
             }
-            Text(Brand.current.name)
+            Text(BrandStore.shared.brand.name)
                 .font(.brandDisplay)
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)

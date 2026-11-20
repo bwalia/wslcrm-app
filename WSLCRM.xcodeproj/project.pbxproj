@@ -20,6 +20,7 @@
 		0CF3B221C5E9B2E1788D5664 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AE0A69337FD39449398BB99 /* Theme.swift */; };
 		0EB71B15142685A515AFB50B /* DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747719D9ACB09568F99B053A /* DeepLink.swift */; };
 		11979E8AF6A9470C873694B6 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF7945EDFC0FE4D29C8F274C /* HomeView.swift */; };
+		134B763A07BAC2DCCD666E44 /* WorkspaceBrandUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9956C93340F4A9EABD13699 /* WorkspaceBrandUITests.swift */; };
 		16C3D35E60E3292EA75E4E63 /* shop_stock_enquiries.json in Resources */ = {isa = PBXBuildFile; fileRef = 937282A0D278A34FD30E2D42 /* shop_stock_enquiries.json */; };
 		17620C837873ADC68CBEC201 /* OfflineSimulator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE017ABC89BCE314B9876D3C /* OfflineSimulator.swift */; };
 		17F8F78F01565C056FAC5BD9 /* CommerceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84B1EE8D1F1385E6DEAA7186 /* CommerceModels.swift */; };
@@ -110,6 +111,7 @@
 		7665AFBF3CC4ED288162A576 /* BiometricGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6430DC80300B085DD17D6677 /* BiometricGate.swift */; };
 		772571C704DA7B33D010D22A /* shop_order_signature.json in Resources */ = {isa = PBXBuildFile; fileRef = 88194111B978F070ED4A1E08 /* shop_order_signature.json */; };
 		7A42CF1BF2615A02C02B0519 /* AgentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 465090F1C7F6C1367E90674B /* AgentViews.swift */; };
+		7BC12C436E678640C7BD13D1 /* WorkspaceBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95B6DD0ACCB159B819218573 /* WorkspaceBrand.swift */; };
 		7C4133C6F28DDD45F7E8E02E /* ShopDealsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F29CE2C08AC3A094F8AF607 /* ShopDealsViews.swift */; };
 		7CC0498D6498640900F404CA /* PAConversationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ABF3C23382C09AD407446D3 /* PAConversationViews.swift */; };
 		7DE1215A663430ACCD13E623 /* ShopQuotesViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAA469C77B9E5F1B1B8DC266 /* ShopQuotesViews.swift */; };
@@ -216,6 +218,7 @@
 		D942CA72977B50C576C637AD /* DBSLimitedTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E094D72D0C8B74C3994DDA2 /* DBSLimitedTourUITests.swift */; };
 		D9D5569B5065E31DA07744F0 /* MenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 041232C972DC2FCAB0DD361D /* MenuView.swift */; };
 		DC2E796C453858BDC6739193 /* crm_deals_by_stage.json in Resources */ = {isa = PBXBuildFile; fileRef = D4C6C8B56FD73F1E6F7998AB /* crm_deals_by_stage.json */; };
+		DC9E2D22B0301D95BD775790 /* WorkspaceBrandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF95B0FBF2F0929CDABFF356 /* WorkspaceBrandTests.swift */; };
 		DD2364F7D626B8E8E046D031 /* Poppins-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 887B837E0EE8238B7B720334 /* Poppins-Bold.ttf */; };
 		DE2CAE67A7861BA3A2C05238 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17E0356F831946AE13AF4665 /* KeychainStore.swift */; };
 		E0A7ACB630C82E3E4DCB8220 /* PhotosSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FF0C3F7211BAA712C7F76E9 /* PhotosSection.swift */; };
@@ -320,7 +323,6 @@
 		3366D7E2675A109A5EA16870 /* user_menu_engineer.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = user_menu_engineer.json; sourceTree = "<group>"; };
 		33B03C39B2E17362F550750C /* GuidedVisitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidedVisitView.swift; sourceTree = "<group>"; };
 		353BC3242BDBC94D0082BCAE /* PDLeadViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDLeadViews.swift; sourceTree = "<group>"; };
-		37161C5DAAEE6A466712226A /* DBS-Int.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "DBS-Int.xcconfig"; sourceTree = "<group>"; };
 		3762EFCA144C5B2F18FA349B /* StatusPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusPresentation.swift; sourceTree = "<group>"; };
 		3A25F324A4233132A8A50BF1 /* APIEndpointSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEndpointSheet.swift; sourceTree = "<group>"; };
 		3A5DAF199349C1E869AF39DB /* ServiceRequestForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceRequestForm.swift; sourceTree = "<group>"; };
@@ -418,6 +420,7 @@
 		9102D0D093B77CBEED719CD1 /* MenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuTests.swift; sourceTree = "<group>"; };
 		937282A0D278A34FD30E2D42 /* shop_stock_enquiries.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = shop_stock_enquiries.json; sourceTree = "<group>"; };
 		9431CF6C7709341A754DC2E7 /* PartProposalSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartProposalSheet.swift; sourceTree = "<group>"; };
+		95B6DD0ACCB159B819218573 /* WorkspaceBrand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceBrand.swift; sourceTree = "<group>"; };
 		95CF1D52F684EAA3550AF156 /* ShopAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopAPI.swift; sourceTree = "<group>"; };
 		97B3A14D82B9AAD7E01385C4 /* auth_login.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = auth_login.json; sourceTree = "<group>"; };
 		97F0C848246EA2F955B0B3AC /* ShopSupplierModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopSupplierModels.swift; sourceTree = "<group>"; };
@@ -441,6 +444,7 @@
 		A6D10A792A90751951AC30B0 /* SitesViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SitesViews.swift; sourceTree = "<group>"; };
 		A7DAAFADA09DCB60C8F0A774 /* Poppins-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Poppins-SemiBold.ttf"; sourceTree = "<group>"; };
 		A95F6B363BF270799B5831F6 /* customers_list.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = customers_list.json; sourceTree = "<group>"; };
+		A9956C93340F4A9EABD13699 /* WorkspaceBrandUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceBrandUITests.swift; sourceTree = "<group>"; };
 		A9E457F7FE442C96BEBEF047 /* APIEndpointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEndpointTests.swift; sourceTree = "<group>"; };
 		AA47B5A76CAD8F15F7541D1B /* WorkHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkHub.swift; sourceTree = "<group>"; };
 		AC9C8D40ED99B6577CBF31B0 /* PropertyDealsCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropertyDealsCaptureTests.swift; sourceTree = "<group>"; };
@@ -514,6 +518,7 @@
 		FCFF93B9A681FDC4D34BE5A6 /* shop_deal_detail.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = shop_deal_detail.json; sourceTree = "<group>"; };
 		FD52216B93C02D02E6794642 /* AppCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCatalog.swift; sourceTree = "<group>"; };
 		FDFF4BCDC24F3314D5662B9C /* ShopHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopHomeView.swift; sourceTree = "<group>"; };
+		FF95B0FBF2F0929CDABFF356 /* WorkspaceBrandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceBrandTests.swift; sourceTree = "<group>"; };
 		FF987B5B360B60622C1643F3 /* ConnectivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityMonitor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -620,6 +625,7 @@
 				A63A69BBADAFD24F37A56667 /* RoleAccessUITests.swift */,
 				500EBFF4A369D510024D085B /* UITestNavigation.swift */,
 				7DA3F1AEC543935D65747205 /* WorkManagementUITests.swift */,
+				A9956C93340F4A9EABD13699 /* WorkspaceBrandUITests.swift */,
 			);
 			path = WSLCRMUITests;
 			sourceTree = "<group>";
@@ -704,6 +710,7 @@
 				0220080C6463F48157301313 /* AppEnvironment.swift */,
 				483E885911A5AB21B7084AA1 /* Brand.swift */,
 				549B70CE068D1B9FAC34B586 /* RootView.swift */,
+				95B6DD0ACCB159B819218573 /* WorkspaceBrand.swift */,
 				6FFB2994A13CDDED9F44A8AE /* WSLCRMApp.swift */,
 			);
 			path = App;
@@ -736,6 +743,7 @@
 				0F24B350E0571DC46AF2AFC8 /* TaskAgendaTests.swift */,
 				67BEB155AA348823859334A1 /* TokenRefreshTests.swift */,
 				79E8CCBFD3C16167C05552EC /* WorkManagementTests.swift */,
+				FF95B0FBF2F0929CDABFF356 /* WorkspaceBrandTests.swift */,
 			);
 			path = WSLCRMTests;
 			sourceTree = "<group>";
@@ -1084,7 +1092,6 @@
 		EA9B9F6F5F346895502735AF /* Config */ = {
 			isa = PBXGroup;
 			children = (
-				37161C5DAAEE6A466712226A /* DBS-Int.xcconfig */,
 				089A0D6D6565FAC61A24E600 /* Int.xcconfig */,
 				3AEF0679A80FE8C1D2D8EB9D /* Local-API.xcconfig */,
 				E11BE34221ABF9835D7D0BC8 /* Prod.xcconfig */,
@@ -1441,6 +1448,7 @@
 				2738CB19198DBB7C44E1E69D /* WebPageView.swift in Sources */,
 				6F47350A9F46B0C4987A75AC /* WebSession.swift in Sources */,
 				B36620B1704C7AC33F1DC5A7 /* WorkHub.swift in Sources */,
+				7BC12C436E678640C7BD13D1 /* WorkspaceBrand.swift in Sources */,
 				9D27D838B7C845286B672BBD /* WorkspacePickerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1472,6 +1480,7 @@
 				75BB3785FC797D9084AE4933 /* TaskAgendaTests.swift in Sources */,
 				1DD94564B018DC8FE615F634 /* TokenRefreshTests.swift in Sources */,
 				E973B73A229FAAF94FC69A78 /* WorkManagementTests.swift in Sources */,
+				DC9E2D22B0301D95BD775790 /* WorkspaceBrandTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1495,6 +1504,7 @@
 				8EAB66965D1FDCC5D1CB64A6 /* RoleAccessUITests.swift in Sources */,
 				BEE03CD5FA8A485A80997803 /* UITestNavigation.swift in Sources */,
 				30ECD74C0586974267975B40 /* WorkManagementUITests.swift in Sources */,
+				134B763A07BAC2DCCD666E44 /* WorkspaceBrandUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1565,95 +1575,6 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = "Debug-Int";
-		};
-		1DC9B3EE5755C2D3B4FBBD3A /* Debug-DBS-Int */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = 37161C5DAAEE6A466712226A /* DBS-Int.xcconfig */;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
-				CLANG_CXX_LIBRARY = "libc++";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
-				DEBUG_INFORMATION_FORMAT = dwarf;
-				ENABLE_MODULE_VERIFIER = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GCC_DYNAMIC_NO_PIC = NO;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_OPTIMIZATION_LEVEL = 0;
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"$(inherited)",
-					"DEBUG=1",
-				);
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MARKETING_VERSION = 1.0.0;
-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				MTL_FAST_MATH = YES;
-				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_VERSION = 6.0;
-			};
-			name = "Debug-DBS-Int";
-		};
-		2CA78D67917328AAC1B34055 /* Debug-DBS-Int */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm.tests;
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WSLCRM.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/WSLCRM";
-			};
-			name = "Debug-DBS-Int";
 		};
 		44829E3EE0E945FED59F7926 /* Debug-Local */ = {
 			isa = XCBuildConfiguration;
@@ -1779,23 +1700,6 @@
 			};
 			name = "Release-Int";
 		};
-		4CF71D67943EDF7ED1628A5D /* Release-DBS-Int */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm.tests;
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WSLCRM.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/WSLCRM";
-			};
-			name = "Release-DBS-Int";
-		};
 		5560A8A59FD05F70F5DFCBC2 /* Release-Int */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 089A0D6D6565FAC61A24E600 /* Int.xcconfig */;
@@ -1860,41 +1764,6 @@
 				SWIFT_VERSION = 6.0;
 			};
 			name = "Release-Int";
-		};
-		5FB8DFB1CB97EA18B4ACFAA0 /* Debug-DBS-Int */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				APS_ENVIRONMENT = development;
-				ASSETCATALOG_COMPILER_APPICON_NAME = "$(BRAND_APP_ICON)";
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "$(BRAND_ACCENT_COLOR)";
-				CODE_SIGN_ENTITLEMENTS = WSLCRM/Resources/WSLCRM.entitlements;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CODE_SIGN_STYLE = Automatic;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
-				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record a voice note for your PA, or dictate a note about a lead or property. PA voice notes go to Workstation's private speech service, never a public AI; dictated notes stay on this device.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach existing photos to a job or a property.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn a dictated note into text on this device. That audio isn't uploaded.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm;
-				PRODUCT_NAME = WSLCRM;
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = "Debug-DBS-Int";
 		};
 		63BC64F90AB9FD717ED8825F /* Debug-Prod */ = {
 			isa = XCBuildConfiguration;
@@ -2046,23 +1915,6 @@
 			};
 			name = "Release-Prod";
 		};
-		91BD592C025FE1F1882BA5E0 /* Release-DBS-Int */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm.uitests;
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = WSLCRM;
-			};
-			name = "Release-DBS-Int";
-		};
 		93F19DF2A844078104800A12 /* Debug-Local */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2114,23 +1966,6 @@
 				TEST_TARGET_NAME = WSLCRM;
 			};
 			name = "Release-Int";
-		};
-		9E3A025D7C2151D5121EDA00 /* Debug-DBS-Int */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm.uitests;
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = WSLCRM;
-			};
-			name = "Debug-DBS-Int";
 		};
 		A5E92B6A8E536D9EC45CC95C /* Debug-Int */ = {
 			isa = XCBuildConfiguration;
@@ -2203,41 +2038,6 @@
 				SWIFT_VERSION = 6.0;
 			};
 			name = "Debug-Int";
-		};
-		B0C7168DF6E92439043B6F42 /* Release-DBS-Int */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				APS_ENVIRONMENT = production;
-				ASSETCATALOG_COMPILER_APPICON_NAME = "$(BRAND_APP_ICON)";
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "$(BRAND_ACCENT_COLOR)";
-				CODE_SIGN_ENTITLEMENTS = WSLCRM/Resources/WSLCRM.entitlements;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CODE_SIGN_STYLE = Automatic;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
-				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record a voice note for your PA, or dictate a note about a lead or property. PA voice notes go to Workstation's private speech service, never a public AI; dictated notes stay on this device.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach existing photos to a job or a property.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn a dictated note into text on this device. That audio isn't uploaded.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm;
-				PRODUCT_NAME = WSLCRM;
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = "Release-DBS-Int";
 		};
 		B8516C4063918A1FC5CD0559 /* Debug-Local */ = {
 			isa = XCBuildConfiguration;
@@ -2363,71 +2163,6 @@
 			};
 			name = "Release-Prod";
 		};
-		DF35664B68BEF6DFBD747534 /* Release-DBS-Int */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = 37161C5DAAEE6A466712226A /* DBS-Int.xcconfig */;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
-				CLANG_CXX_LIBRARY = "libc++";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				ENABLE_MODULE_VERIFIER = NO;
-				ENABLE_NS_ASSERTIONS = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MARKETING_VERSION = 1.0.0;
-				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SWIFT_COMPILATION_MODE = wholemodule;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_VERSION = 6.0;
-			};
-			name = "Release-DBS-Int";
-		};
 		F3CE72E2B290A4F7F13CAF84 /* Debug-Prod */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2486,58 +2221,50 @@
 		052F1BFF436110B8939E4945 /* Build configuration list for PBXNativeTarget "WSLCRMUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				9E3A025D7C2151D5121EDA00 /* Debug-DBS-Int */,
 				1AB6A86F90444E0CBCB9C950 /* Debug-Int */,
 				653DF35D0AAD0AFB3FF570B9 /* Debug-Local */,
 				63BC64F90AB9FD717ED8825F /* Debug-Prod */,
-				91BD592C025FE1F1882BA5E0 /* Release-DBS-Int */,
 				97215642D752A203E34158CD /* Release-Int */,
 				6E8BEF6DA919CAC51EB9768E /* Release-Prod */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = "Debug-DBS-Int";
+			defaultConfigurationName = "Debug-Int";
 		};
 		79CDE3EA1C79CE2B5E5746F1 /* Build configuration list for PBXProject "WSLCRM" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				1DC9B3EE5755C2D3B4FBBD3A /* Debug-DBS-Int */,
 				A5E92B6A8E536D9EC45CC95C /* Debug-Int */,
 				44829E3EE0E945FED59F7926 /* Debug-Local */,
 				CADC7A6F0F7DF2811E948EB5 /* Debug-Prod */,
-				DF35664B68BEF6DFBD747534 /* Release-DBS-Int */,
 				5560A8A59FD05F70F5DFCBC2 /* Release-Int */,
 				7A321395D78EE3895D286A63 /* Release-Prod */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = "Debug-DBS-Int";
+			defaultConfigurationName = "Debug-Int";
 		};
 		ED6CCAC6A8F2B68B6E9B32ED /* Build configuration list for PBXNativeTarget "WSLCRMTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				2CA78D67917328AAC1B34055 /* Debug-DBS-Int */,
 				47C2D538F2C05354358BDFC3 /* Debug-Int */,
 				B8516C4063918A1FC5CD0559 /* Debug-Local */,
 				FA4AA8CBEF1CC4D1612F5B60 /* Debug-Prod */,
-				4CF71D67943EDF7ED1628A5D /* Release-DBS-Int */,
 				8A163063A6DBB6DD4E4834B6 /* Release-Int */,
 				8B97A8517C7FBD2512A0EFAB /* Release-Prod */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = "Debug-DBS-Int";
+			defaultConfigurationName = "Debug-Int";
 		};
 		F966BBC8BB1468E649226448 /* Build configuration list for PBXNativeTarget "WSLCRM" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				5FB8DFB1CB97EA18B4ACFAA0 /* Debug-DBS-Int */,
 				1C9F3133DCEE9637B8AD316E /* Debug-Int */,
 				93F19DF2A844078104800A12 /* Debug-Local */,
 				F3CE72E2B290A4F7F13CAF84 /* Debug-Prod */,
-				B0C7168DF6E92439043B6F42 /* Release-DBS-Int */,
 				483B9B2765D13CFC4CD84CC4 /* Release-Int */,
 				D30C3D4E97303B85AB6BED04 /* Release-Prod */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = "Debug-DBS-Int";
+			defaultConfigurationName = "Debug-Int";
 		};
 /* End XCConfigurationList section */
 	};

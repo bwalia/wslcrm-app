@@ -45,6 +45,9 @@ final class SessionStore {
     @ObservationIgnored private let cache: ResponseCache
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var eventsTask: Task<Void, Never>?
+    /// Shows the signed-in workspace's own logo and name (nil in tests that don't care).
+    @ObservationIgnored var brand: BrandStore?
+    @ObservationIgnored private var brandTask: Task<Void, Never>?
     /// Runs before the logout call, while the session can still authenticate (push token removal).
     @ObservationIgnored var willSignOut: (() async -> Void)?
 
@@ -245,6 +248,22 @@ final class SessionStore {
         await reloadPermissions()
         if changed { workspaceGeneration += 1 }
         phase = .signedIn
+        refreshBrand(for: workspace)
+    }
+
+    /// Takes the workspace's logo and letterhead from the server, in the background: the brand
+    /// already on screen (remembered from last time, or the house brand) stays until it's ready.
+    private func refreshBrand(for workspace: Workspace) {
+        guard let brand else { return }
+        brandTask?.cancel()
+        brandTask = Task { [auth, client] in
+            let details = try? await auth.workspaceBrands().first { $0.uuid == workspace.uuid }
+            guard !Task.isCancelled, self.workspace?.uuid == workspace.uuid else { return }
+            let dashboard = DashboardURL.forAPI(await client.currentBaseURL)
+            let logo = WorkspaceBrand.logoURL(details?.logoUrl ?? workspace.logoUrl, dashboard: dashboard)
+            await brand.update(workspaceUuid: workspace.uuid, name: details?.name ?? workspace.name,
+                               logoURL: logo, company: details?.company)
+        }
     }
 
     func reloadPermissions() async {
@@ -314,6 +333,8 @@ final class SessionStore {
     func resetForEndpointChange(environmentName newName: String) async {
         environmentName = newName
         await endLocalSession()
+        // The remembered workspace belonged to the old server.
+        brand?.clear()
         signedOutReason = "Now pointing at \(newName). Please sign in again."
     }
 

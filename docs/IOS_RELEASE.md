@@ -8,13 +8,14 @@ Fishers (`bwalia/fishers`, `ios/fastlane`), adapted to this repo.
 | **CI** | `.github/workflows/ios.yml` | Every push and pull request touching the app: unit tests, plus an unsigned build of the tester configuration. Runs on GitHub's macOS runners. |
 | **TestFlight (auto)** | `.github/workflows/ios_release.yml` | Every merge to `main` that touches the app |
 | **TestFlight (tag)** | same | Push a `v1.2.3` tag: ships as version 1.2.3 |
-| **TestFlight (manual)** | same, Run workflow → **testflight** | Any time; pick **Int** or **DBS-Int** |
+| **TestFlight (manual)** | same, Run workflow → **testflight** | Any time |
 | **Re-invite testers** | same, Run workflow → **invite_testers** | Re-send invites for the latest build, no rebuild |
 | **App Store review** | same, Run workflow → **app_store** | After TestFlight sign-off |
 
 Testers get **Workstation CRM** (scheme `WSLCRM-Int`): the house brand (`docs/brand/`),
 pointed at the int server. Every configuration shares the bundle id `uk.co.workstation.wslcrm`,
-so TestFlight holds one app; a manual run with **DBS-Int** ships the DBS Ltd demo build instead.
+so TestFlight holds one app. There are no per-business builds: DBS staff and Workstation staff
+install the same build, and each sees their own workspace's logo once signed in (README, "Branding").
 
 Skip an automatic release with `[skip release]` or `[skip ios]` in the merge commit message.
 

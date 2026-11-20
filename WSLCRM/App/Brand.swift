@@ -1,19 +1,30 @@
 import Foundation
+import os
 
-/// White-label identity for this build, from `BRAND_*` build settings through Info.plist.
-///
-/// Config/Brand-Default.xcconfig gives the house brand ("Workstation AI-native CRM" and its mark). A brand
-/// xcconfig such as Config/Brand-DBS.xcconfig swaps in a customer's name, mark, app icon and the
-/// company details printed on report PDFs, without touching code.
+/// Who the app is presenting itself as: the house brand (Workstation, from `BRAND_*` build
+/// settings in Config/Brand-Default.xcconfig), or the signed-in workspace's own name, logo and
+/// letterhead from the server (`WorkspaceBrand`, kept by `BrandStore`). Every business uses
+/// the same build; a business's look is data, never a release.
 struct Brand: Sendable, Equatable {
     var name: String
     /// Asset catalog image for the brand mark; nil falls back to an SF Symbol.
     var markImageName: String?
+    /// The workspace's own logo, rendered on this phone; wins over `markImageName`.
+    var logoFile: URL?
     var company: ReportCompany
     /// The accent colour set; `<name>-Fill` and `<name>-Text` sit beside it (Tone.brand).
     var accentColorName: String = "AccentColor"
 
-    static let current = Brand.fromBundle()
+    /// The house brand compiled into the app: what everyone sees before signing in for the first time.
+    static let house = Brand.fromBundle()
+
+    private static let storage = OSAllocatedUnfairLock(initialState: Brand.house)
+
+    /// The brand on screen now. Views observe `BrandStore.shared.brand`; this is for code that
+    /// isn't a view (sign-in prompts, report PDFs).
+    static var current: Brand { storage.withLock { $0 } }
+
+    static func setCurrent(_ brand: Brand) { storage.withLock { $0 = brand } }
 
     static func fromBundle(_ bundle: Bundle = .main) -> Brand {
         from(info: { bundle.object(forInfoDictionaryKey: $0) })

@@ -18,7 +18,7 @@
 # The app is built first and the recording starts afterwards, so no compile output is filmed.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SCHEME="${SCHEME:-WSLCRM-DBS-Int}"
+SCHEME="${SCHEME:-WSLCRM-Int}"
 ENV_FILE="${ENV_FILE:-$ROOT/build/dbs-group-demo.env}"
 DEVICE="${DEVICE:-iPhone 17}"
 OUT_DIR="${OUT_DIR:-$ROOT/build/dbs-video}"

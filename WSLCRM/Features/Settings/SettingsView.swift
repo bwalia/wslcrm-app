@@ -30,7 +30,7 @@ struct SettingsView: View {
             } header: {
                 Text("Security")
             } footer: {
-                Text("On after you sign in. \(Brand.current.name) then asks for \(session.biometrics.displayName) when you open it or return after five minutes, instead of the password.")
+                Text("On after you sign in. \(BrandStore.shared.brand.name) then asks for \(session.biometrics.displayName) when you open it or return after five minutes, instead of the password.")
             }
 
             if session.propertyDeals != nil {
@@ -152,7 +152,7 @@ struct PushSettingsSection: View {
                 Button("Turn on alerts") { Task { await push.requestPermission() } }
                     .accessibilityIdentifier("settings.push.enable")
             case .denied:
-                Label("Alerts are off for \(Brand.current.name)", systemImage: "bell.slash")
+                Label("Alerts are off for \(BrandStore.shared.brand.name)", systemImage: "bell.slash")
                 Button("Open iPhone Settings") {
                     if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
                 }

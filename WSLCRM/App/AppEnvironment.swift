@@ -69,6 +69,7 @@ final class AppEnvironment {
         sync = SyncCenter(queue: queue, client: client, connectivity: connectivity)
         session = SessionStore(auth: AuthAPI(client: client), client: client, cache: cache,
                                environmentName: config.environmentName, defaults: defaults)
+        session.brand = BrandStore.shared
         sync.currentUserId = { [weak session] in session?.user?.uuid }
         push = PushCenter(api: DeviceTokensAPI(client: client), defaults: defaults,
                           environment: PushCenter.environment())
