@@ -4,19 +4,31 @@ import SwiftUI
 /// it, how their costs become our prices, and where purchase orders go. Turned into the body the server expects
 /// (`ShopSupplierQueries.validate`), with `null` to clear a field.
 struct ShopSupplierDraft: Equatable, Sendable {
+    struct MappingField: Hashable, Sendable {
+        let key: String
+        let label: String
+        let required: Bool
+
+        init(_ key: String, _ label: String, required: Bool = false) {
+            self.key = key
+            self.label = label
+            self.required = required
+        }
+    }
+
     /// Our fields in their price file, in the order the form shows them. The first three are required.
-    static let mappingFields: [(key: String, label: String, required: Bool)] = [
-        ("supplier_sku", "Their product code (SKU)", true),
-        ("name", "Product name", true),
-        ("cost", "Trade price (cost)", true),
-        ("mpn", "Manufacturer part number", false),
-        ("brand", "Brand", false),
-        ("category", "Category", false),
-        ("stock", "Stock", false),
-        ("lead_time_days", "Lead time (days)", false),
-        ("rrp", "RRP", false),
-        ("url", "Product web address", false),
-        ("ean", "EAN / barcode", false),
+    static let mappingFields: [MappingField] = [
+        MappingField("supplier_sku", "Their product code (SKU)", required: true),
+        MappingField("name", "Product name", required: true),
+        MappingField("cost", "Trade price (cost)", required: true),
+        MappingField("mpn", "Manufacturer part number"),
+        MappingField("brand", "Brand"),
+        MappingField("category", "Category"),
+        MappingField("stock", "Stock"),
+        MappingField("lead_time_days", "Lead time (days)"),
+        MappingField("rrp", "RRP"),
+        MappingField("url", "Product web address"),
+        MappingField("ean", "EAN / barcode"),
     ]
 
     enum Keep: String, CaseIterable, Sendable {

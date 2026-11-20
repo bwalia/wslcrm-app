@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The items in a supplier's price list, and which of our products each one is linked to.
 struct ShopSupplierItemsView: View {

@@ -982,10 +982,18 @@ struct ShopMarketObservation: Identifiable, Hashable, Sendable, Decodable {
     var isAnomaly: Bool
     var changePct: Double?
     var fetchedAt: Date?
+    var sourceUuid: String?
+    var currency: String?
+    var stockQty: Int?
+    /// The product title on their page, and the words the price was read from.
+    var title: String?
+    var evidence: String?
+    var previousPriceMinor: Int?
+    var anomalyAccepted = false
 
     enum CodingKeys: String, CodingKey {
         case uuid, sourceName, url, priceExVatMinor, priceIncVatMinor, availability, method, confidence, accepted
-        case flags, fetchedAt
+        case flags, fetchedAt, sourceUuid, currency, stockQty, title, evidence
     }
 
     init(from decoder: Decoder) throws {
@@ -1003,6 +1011,13 @@ struct ShopMarketObservation: Identifiable, Hashable, Sendable, Decodable {
         isAnomaly = flags?["anomaly"]?.boolValue ?? false
         changePct = flags?["change_pct"]?.stringValue.flatMap(Double.init)
         fetchedAt = c.decodeDate(forKey: .fetchedAt)
+        sourceUuid = c.decodeFlexibleString(forKey: .sourceUuid)
+        currency = c.decodeFlexibleString(forKey: .currency)
+        stockQty = c.decodeFlexibleInt(forKey: .stockQty)
+        title = c.decodeFlexibleString(forKey: .title)
+        evidence = c.decodeFlexibleString(forKey: .evidence)
+        previousPriceMinor = flags?["previous_price_minor"]?.stringValue.flatMap(Double.init).map { Int($0) }
+        anomalyAccepted = flags?["anomaly_accepted"]?.boolValue ?? false
     }
 }
 
@@ -1016,9 +1031,19 @@ struct ShopMarketSource: Identifiable, Hashable, Sendable, Decodable {
     var lastError: String?
     var lastCheckedAt: Date?
     var latestObservation: ShopMarketObservation?
+    var productUuid: String?
+    /// direct or firecrawl.
+    var fetchMode: String
+    var pricesIncludeVat: Bool
+    var currency: String
+    var match: ShopMarketMatch
+    var pendingAnomalies: Int
+    /// The latest observation is recent enough to count.
+    var latestIsFresh: Bool
 
     enum CodingKeys: String, CodingKey {
         case uuid, name, url, isActive, lastStatus, lastError, lastCheckedAt, latestObservation
+        case productUuid, fetchMode, pricesIncludeVat, currency, match, pendingAnomalies
     }
 
     init(from decoder: Decoder) throws {
@@ -1031,6 +1056,14 @@ struct ShopMarketSource: Identifiable, Hashable, Sendable, Decodable {
         lastError = try? c.decodeIfPresent(String.self, forKey: .lastError)
         lastCheckedAt = c.decodeDate(forKey: .lastCheckedAt)
         latestObservation = try? c.decodeIfPresent(ShopMarketObservation.self, forKey: .latestObservation)
+        let latest = try? c.decodeIfPresent(JSONValue.self, forKey: .latestObservation)
+        latestIsFresh = latest?["fresh"]?.boolValue ?? false
+        productUuid = c.decodeFlexibleString(forKey: .productUuid)
+        fetchMode = c.decodeFlexibleString(forKey: .fetchMode) ?? "direct"
+        pricesIncludeVat = c.decodeFlexibleBool(forKey: .pricesIncludeVat) ?? true
+        currency = c.decodeFlexibleString(forKey: .currency) ?? "GBP"
+        match = ShopMarketMatch(try? c.decodeIfPresent(JSONValue.self, forKey: .match))
+        pendingAnomalies = c.decodeFlexibleInt(forKey: .pendingAnomalies) ?? 0
     }
 }
 
@@ -1040,8 +1073,9 @@ struct ShopMarketDetail: Sendable, Decodable {
         var sku: String?
         var name: String?
         var basePriceMinor: Int
+        var priceVerified = false
 
-        enum CodingKeys: String, CodingKey { case uuid, sku, name, basePriceMinor }
+        enum CodingKeys: String, CodingKey { case uuid, sku, name, basePriceMinor, priceVerified }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -1049,6 +1083,7 @@ struct ShopMarketDetail: Sendable, Decodable {
             sku = c.decodeFlexibleString(forKey: .sku)
             name = try? c.decodeIfPresent(String.self, forKey: .name)
             basePriceMinor = c.decodeFlexibleInt(forKey: .basePriceMinor) ?? 0
+            priceVerified = c.decodeFlexibleBool(forKey: .priceVerified) ?? false
         }
     }
 

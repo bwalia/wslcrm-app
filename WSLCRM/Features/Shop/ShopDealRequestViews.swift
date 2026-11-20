@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// A price request recorded on a deal: who was asked, what they were told (the spec, never the customer), and the
 /// prices they gave for each of our lines. Turned into the body `ShopDealQueries` expects; `null` clears a field.
