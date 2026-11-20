@@ -71,7 +71,13 @@ private struct LabeledValue: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(label).font(.wsCaption).foregroundStyle(.secondaryText)
-            Text(value ?? "—").font(.wsBody)
+            // Words, not a lone dash: a dash is a hairline glyph (it fails the contrast audit)
+            // and VoiceOver reads it as nothing at all. An empty string is missing too.
+            if let value, !value.isEmpty {
+                Text(value).font(.wsBody)
+            } else {
+                Text("Not recorded").font(.wsSubheadline)
+            }
         }
         .accessibilityElement(children: .combine)
     }
@@ -129,6 +135,9 @@ struct FGasForm: View {
                         Text("Not applicable").tag("na")
                     }
                     .pickerStyle(.inline)
+                    // Medium, not Regular: an engineer reads these one-word results at arm's length
+                    // on site, and Poppins Regular's thin strokes measure below 4.5:1 at body size.
+                    .font(BrandFont.font(.medium, size: 16, relativeTo: .body))
                     .accessibilityIdentifier("fgas.leakCheck")
                     TextField("Notes", text: $body_.leakCheckNotes, axis: .vertical)
                 }
