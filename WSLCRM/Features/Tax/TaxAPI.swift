@@ -158,15 +158,6 @@ struct TaxAPI: Sendable {
 }
 
 extension JSONValue {
-    /// `data` when the body wraps its payload (`{success, data}`), else the body itself.
-    var payload: JSONValue {
-        if case .object(let o) = self, let inner = o["data"] {
-            if case .null = inner { return self }
-            return inner
-        }
-        return self
-    }
-
     var objectFields: [String: JSONValue] {
         if case .object(let o) = self { return o }
         return [:]
@@ -186,13 +177,6 @@ extension JSONValue {
 }
 
 extension Record {
-    /// A `Record` with one field changed (optimistic updates).
-    func setting(_ key: String, _ value: JSONValue) -> Record {
-        var fields = fields
-        fields[key] = value
-        return Record(fields)
-    }
-
     /// Money that always has a value to show (`£0.00` instead of a dash where the web shows zero).
     func money(_ path: String, currency: String = "GBP") -> String {
         Formatters.money(decimal(path) ?? 0, currency: currency) ?? "£0.00"

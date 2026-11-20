@@ -91,6 +91,13 @@ struct Record: Identifiable, Hashable, Sendable {
         return nil
     }
 
+    /// A copy with one top-level field replaced (nil removes it): optimistic updates.
+    func setting(_ key: String, _ value: JSONValue?) -> Record {
+        var copy = fields
+        copy[key] = value
+        return Record(copy)
+    }
+
     /// Replaces `{key}` placeholders (`/api/v2/orders/{uuid}/invoice`) with this record's values.
     func fill(_ template: String) -> String {
         var result = ""
