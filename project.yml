@@ -72,7 +72,7 @@ targets:
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_NSFaceIDUsageDescription: "Use Face ID to unlock your saved $(BRAND_NAME) session."
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address."
-        INFOPLIST_KEY_NSCameraUsageDescription: "Take fault and site photos for a job, or photos of a property you're capturing."
+        INFOPLIST_KEY_NSCameraUsageDescription: "Take fault and site photos for a job, photos of a property you're capturing, or scan a bank statement for your tax."
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Attach existing photos to a job or a property."
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Record a voice note for your PA, or dictate a note about a lead or property. PA voice notes go to Workstation's private speech service, never a public AI; dictated notes stay on this device."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Turn a dictated note into text on this device. That audio isn't uploaded."
