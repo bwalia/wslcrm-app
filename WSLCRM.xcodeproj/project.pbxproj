@@ -75,6 +75,7 @@
 		4911560B1372EEB17CEE07CF /* PropertyPAIntTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22543553D7ED944337789FF5 /* PropertyPAIntTourUITests.swift */; };
 		4A7A6B03BCAE28A8FD6FBE06 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D58A7EFA82284F56BC642D /* LoginView.swift */; };
 		4AACED68F1059C1FB65B740C /* MutationQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D93FE4A9E20414B58A119C4 /* MutationQueue.swift */; };
+		4E326F1E7E28E6E18EFEF99B /* ModuleGroup+Sales.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDF4869D7B626D71E2703F0E /* ModuleGroup+Sales.swift */; };
 		4E7E1DE01AFAA07E5FF7D977 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = D29DEAEBDB5859AAF34AE22A /* README.md */; };
 		4EDD544333FD22D6A4D156EC /* ShopModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 990D19BD635A7CC782ED4933 /* ShopModels.swift */; };
 		4F6E8EAF95FCBA84A9D44350 /* crm_deals_by_stage_empty.json in Resources */ = {isa = PBXBuildFile; fileRef = 986784934A2A6E02EB7EC689 /* crm_deals_by_stage_empty.json */; };
@@ -142,8 +143,10 @@
 		9448EB1FD319349ADDF221A1 /* Formatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E599FD5D5C8B9F20B34ED2C /* Formatters.swift */; };
 		954C2E4FC774220E1C886D96 /* PDTaskActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCE0D9ED3B6B27352895CF94 /* PDTaskActions.swift */; };
 		9596A455BAD79DD5F0D3B05C /* LocalPhotoUploadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44F9DB4684AA0F2DF07EDDEA /* LocalPhotoUploadTests.swift */; };
+		95B192DD4871DE702AB98FF4 /* ShopQuoteBuilderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95897553839C862B5DFA2E53 /* ShopQuoteBuilderView.swift */; };
 		97C0E4A4F6E1C878CF047F3C /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B7F0676428C6A64D8DD9681 /* Components.swift */; };
 		97E9926AD75DC07DD094ADC3 /* EnvelopeDecodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F14E252DC867CA93491BF471 /* EnvelopeDecodingTests.swift */; };
+		97F4AC316D321F9CA94BD2D6 /* SalesOrdersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C14A59D2D28FF74DDBDC58AF /* SalesOrdersView.swift */; };
 		98807847E3B14175DFCE3397 /* FieldServiceHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87FB7B056A14718797F10881 /* FieldServiceHubView.swift */; };
 		988900197007DBF8E12F70AB /* PropertyDealsBackOfficeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CECE926D83FDD851416D937D /* PropertyDealsBackOfficeUITests.swift */; };
 		98D3991F6875EE073AFA5F03 /* SimproDemoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D66304B8F73DA99211ECE96D /* SimproDemoTests.swift */; };
@@ -177,6 +180,7 @@
 		B009A06FACC985ECB99675DF /* ReliabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FE30866D9334250F27C2B44 /* ReliabilityTests.swift */; };
 		B00C469B1AE616B4740D6D4A /* TaskAgenda.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53E23AD0A5E508C226B2B7D4 /* TaskAgenda.swift */; };
 		B1D1F4F711E4C86DAEF48CB3 /* VisitDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6046749EB8F36C75D72F9D22 /* VisitDetailView.swift */; };
+		B25E881C76AC31D332B23550 /* ShopAnalyticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91DE29638078CD6928CB226D /* ShopAnalyticsView.swift */; };
 		B36620B1704C7AC33F1DC5A7 /* WorkHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA47B5A76CAD8F15F7541D1B /* WorkHub.swift */; };
 		B59154EBAEF62AB40F8B079A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C99DF96FE6AE2F8982ED771E /* PrivacyInfo.xcprivacy */; };
 		B671FCEF207E9228FC026B7B /* SimproModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98EA00C366B2D02AB7CEC8B0 /* SimproModels.swift */; };
@@ -210,6 +214,7 @@
 		CEAD60AD0536E3E95FE19829 /* PhaseDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2984B65D70C547D31D8B1DBB /* PhaseDetailView.swift */; };
 		CEDDBB48E31964356720DC4D /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A13265EC09EE4BC8624DCC48 /* MainTabView.swift */; };
 		CEEF30810127E052C3927515 /* PropertyDealsIntTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5108B9643074CCFA5097A253 /* PropertyDealsIntTourUITests.swift */; };
+		CF77EE18AD6A2A4DED6C8592 /* DeliveryViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBFEC98996BAA762FB159C09 /* DeliveryViews.swift */; };
 		CFA17689C48D6B2321E06662 /* fs_visits_list.json in Resources */ = {isa = PBXBuildFile; fileRef = EC63148111E166F8388B57F9 /* fs_visits_list.json */; };
 		D10E8705FBE4FA50CE5B3C92 /* AssetsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CB35B95A5E25B0869B18B9E /* AssetsViews.swift */; };
 		D18DC34C749C9C616BC3A353 /* Brand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 483E885911A5AB21B7084AA1 /* Brand.swift */; };
@@ -232,6 +237,7 @@
 		DC9E2D22B0301D95BD775790 /* WorkspaceBrandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF95B0FBF2F0929CDABFF356 /* WorkspaceBrandTests.swift */; };
 		DD2364F7D626B8E8E046D031 /* Poppins-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 887B837E0EE8238B7B720334 /* Poppins-Bold.ttf */; };
 		DE2CAE67A7861BA3A2C05238 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17E0356F831946AE13AF4665 /* KeychainStore.swift */; };
+		DE9EC21E74DAD1A956E39B56 /* POSTillView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9271B8F416991044BF4090 /* POSTillView.swift */; };
 		E0A7ACB630C82E3E4DCB8220 /* PhotosSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FF0C3F7211BAA712C7F76E9 /* PhotosSection.swift */; };
 		E0C0543BDCFB54B6C24409E5 /* CustomerAssetsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF73A81049A8AB629B20332D /* CustomerAssetsViews.swift */; };
 		E18CE21402650D68F5BDD5E8 /* shop_supplier_intro_draft.json in Resources */ = {isa = PBXBuildFile; fileRef = BA9589B6A720FCCCE396C74D /* shop_supplier_intro_draft.json */; };
@@ -437,9 +443,11 @@
 		8EFE699D777992A394F2CC69 /* CRMAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CRMAPI.swift; sourceTree = "<group>"; };
 		8FE30866D9334250F27C2B44 /* ReliabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReliabilityTests.swift; sourceTree = "<group>"; };
 		9102D0D093B77CBEED719CD1 /* MenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuTests.swift; sourceTree = "<group>"; };
+		91DE29638078CD6928CB226D /* ShopAnalyticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopAnalyticsView.swift; sourceTree = "<group>"; };
 		9310C93227140BB1C5AE8A33 /* NativeModules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeModules.swift; sourceTree = "<group>"; };
 		937282A0D278A34FD30E2D42 /* shop_stock_enquiries.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = shop_stock_enquiries.json; sourceTree = "<group>"; };
 		9431CF6C7709341A754DC2E7 /* PartProposalSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartProposalSheet.swift; sourceTree = "<group>"; };
+		95897553839C862B5DFA2E53 /* ShopQuoteBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopQuoteBuilderView.swift; sourceTree = "<group>"; };
 		95B6DD0ACCB159B819218573 /* WorkspaceBrand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceBrand.swift; sourceTree = "<group>"; };
 		95CF1D52F684EAA3550AF156 /* ShopAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopAPI.swift; sourceTree = "<group>"; };
 		97B3A14D82B9AAD7E01385C4 /* auth_login.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = auth_login.json; sourceTree = "<group>"; };
@@ -472,6 +480,7 @@
 		ACC8784E2AFD256B8FB66FF9 /* PurchaseOrderViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchaseOrderViews.swift; sourceTree = "<group>"; };
 		AE017ABC89BCE314B9876D3C /* OfflineSimulator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineSimulator.swift; sourceTree = "<group>"; };
 		AE55751F11B7B0A1546531A2 /* shop_deals_search.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = shop_deals_search.json; sourceTree = "<group>"; };
+		AE9271B8F416991044BF4090 /* POSTillView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POSTillView.swift; sourceTree = "<group>"; };
 		AEC4D5ABD72D3BAFFFEB83BD /* ResourceReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceReportView.swift; sourceTree = "<group>"; };
 		B063AC9863667C3892FBEB83 /* CommerceViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommerceViews.swift; sourceTree = "<group>"; };
 		B32A38849D216BB4D0A7CE42 /* CommerceAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommerceAPI.swift; sourceTree = "<group>"; };
@@ -483,10 +492,12 @@
 		BA9589B6A720FCCCE396C74D /* shop_supplier_intro_draft.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = shop_supplier_intro_draft.json; sourceTree = "<group>"; };
 		BAA469C77B9E5F1B1B8DC266 /* ShopQuotesViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopQuotesViews.swift; sourceTree = "<group>"; };
 		BBFD429CA82B67E65258D35C /* DashboardURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardURL.swift; sourceTree = "<group>"; };
+		BBFEC98996BAA762FB159C09 /* DeliveryViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryViews.swift; sourceTree = "<group>"; };
 		BCE0D9ED3B6B27352895CF94 /* PDTaskActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDTaskActions.swift; sourceTree = "<group>"; };
 		BD5050E299FE2C0C10353731 /* PropertyDealsLeadsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropertyDealsLeadsTests.swift; sourceTree = "<group>"; };
 		BDD2E6F3B9CA2DF12CC34480 /* InvoicesAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvoicesAPI.swift; sourceTree = "<group>"; };
 		BDE0974521C9CA816351005C /* VisitSummaryRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitSummaryRow.swift; sourceTree = "<group>"; };
+		C14A59D2D28FF74DDBDC58AF /* SalesOrdersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SalesOrdersView.swift; sourceTree = "<group>"; };
 		C1AD955B0F4D53D6C60BF29A /* ShopCatalogViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopCatalogViews.swift; sourceTree = "<group>"; };
 		C655AFA4C1BA130E26EDFAB3 /* ResourceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceDetailView.swift; sourceTree = "<group>"; };
 		C74233BE4FCC3BBFD965D7CE /* BrandFonts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandFonts.swift; sourceTree = "<group>"; };
@@ -530,6 +541,7 @@
 		EB80730BFBEC2643D2BA2A8E /* PropertyPAUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropertyPAUITests.swift; sourceTree = "<group>"; };
 		EBD18F1F856AE37AF2D3BE26 /* LocationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationProvider.swift; sourceTree = "<group>"; };
 		EC63148111E166F8388B57F9 /* fs_visits_list.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = fs_visits_list.json; sourceTree = "<group>"; };
+		EDF4869D7B626D71E2703F0E /* ModuleGroup+Sales.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ModuleGroup+Sales.swift"; sourceTree = "<group>"; };
 		F0297B7F739CA0ECB799E0DE /* RetryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetryPolicy.swift; sourceTree = "<group>"; };
 		F06C2FCCEC1497E6D10E91D4 /* ShopOrdersViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopOrdersViews.swift; sourceTree = "<group>"; };
 		F0A7439BFB444ADC7AA2A5DD /* TimesheetsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimesheetsAPI.swift; sourceTree = "<group>"; };
@@ -1037,6 +1049,7 @@
 				537F6EF43EA9F64CCFD41F19 /* PropertyDeals */,
 				40B1F0C75769E8709C82A9A1 /* PropertyPA */,
 				A0951069080BDBD2EE0D0CBB /* PurchaseOrders */,
+				E0A1152D877A36AEE7FD9936 /* Sales */,
 				6C14B65D19A1CC9906C10153 /* ServiceRequests */,
 				24D12953DEE95FF119FC0584 /* Settings */,
 				E969BD138089D570D0964F93 /* Shop */,
@@ -1051,6 +1064,7 @@
 		C031C4C7BB434D8C3CF847ED /* Catalog */ = {
 			isa = PBXGroup;
 			children = (
+				EDF4869D7B626D71E2703F0E /* ModuleGroup+Sales.swift */,
 				4BAA59A1ADEF49D4727A01ED /* ModuleGroup+Shop.swift */,
 			);
 			path = Catalog;
@@ -1121,9 +1135,20 @@
 			path = Customers;
 			sourceTree = "<group>";
 		};
+		E0A1152D877A36AEE7FD9936 /* Sales */ = {
+			isa = PBXGroup;
+			children = (
+				BBFEC98996BAA762FB159C09 /* DeliveryViews.swift */,
+				AE9271B8F416991044BF4090 /* POSTillView.swift */,
+				C14A59D2D28FF74DDBDC58AF /* SalesOrdersView.swift */,
+			);
+			path = Sales;
+			sourceTree = "<group>";
+		};
 		E969BD138089D570D0964F93 /* Shop */ = {
 			isa = PBXGroup;
 			children = (
+				91DE29638078CD6928CB226D /* ShopAnalyticsView.swift */,
 				95CF1D52F684EAA3550AF156 /* ShopAPI.swift */,
 				C1AD955B0F4D53D6C60BF29A /* ShopCatalogViews.swift */,
 				9F29CE2C08AC3A094F8AF607 /* ShopDealsViews.swift */,
@@ -1132,6 +1157,7 @@
 				990D19BD635A7CC782ED4933 /* ShopModels.swift */,
 				B4582E005F801697E865E69F /* ShopOrderExtrasViews.swift */,
 				F06C2FCCEC1497E6D10E91D4 /* ShopOrdersViews.swift */,
+				95897553839C862B5DFA2E53 /* ShopQuoteBuilderView.swift */,
 				BAA469C77B9E5F1B1B8DC266 /* ShopQuotesViews.swift */,
 				E7E954479E9498C1FBF6C523 /* ShopSupplierAPI.swift */,
 				530D49A95F1003E7C0340E34 /* ShopSupplierMessageSheet.swift */,
@@ -1383,6 +1409,7 @@
 				E0C0543BDCFB54B6C24409E5 /* CustomerAssetsViews.swift in Sources */,
 				7D3FC4BEFF34A2150639EDFD /* DashboardURL.swift in Sources */,
 				0EB71B15142685A515AFB50B /* DeepLink.swift in Sources */,
+				CF77EE18AD6A2A4DED6C8592 /* DeliveryViews.swift in Sources */,
 				35717AA0D017BFD39F3CFBEB /* DocumentPDF.swift in Sources */,
 				85C099BDE261A14C4EAB2090 /* Endpoint.swift in Sources */,
 				ECA9B94770AB55CE6DB5E1E8 /* Envelopes.swift in Sources */,
@@ -1417,6 +1444,7 @@
 				CEDDBB48E31964356720DC4D /* MainTabView.swift in Sources */,
 				D9D5569B5065E31DA07744F0 /* MenuView.swift in Sources */,
 				8A238FB712BAFF7314ECB834 /* ModuleCatalog.swift in Sources */,
+				4E326F1E7E28E6E18EFEF99B /* ModuleGroup+Sales.swift in Sources */,
 				D3314F5A51818B7BA8FAAB65 /* ModuleGroup+Shop.swift in Sources */,
 				4AACED68F1059C1FB65B740C /* MutationQueue.swift in Sources */,
 				C1FF95AA0ACF7D99887692FA /* MyWorkRefresh.swift in Sources */,
@@ -1445,6 +1473,7 @@
 				2ECA07F2CFE6FCCE9B24F710 /* PDTaskDetailView.swift in Sources */,
 				A9DB40A0CB8C270C2E33D009 /* PDTodayView.swift in Sources */,
 				24CA6BCF20EB7206D16266AC /* PDWorkViews.swift in Sources */,
+				DE9EC21E74DAD1A956E39B56 /* POSTillView.swift in Sources */,
 				9B3C31E45878C3B3A521571A /* PagedList.swift in Sources */,
 				3DBA08CE951C2E6C0E995DCB /* PartProposalSheet.swift in Sources */,
 				9EA84A3D8EFF39F7BE316378 /* PendingMutation.swift in Sources */,
@@ -1474,11 +1503,13 @@
 				C9B011CB2828D3641F9DABAD /* ResponseCache.swift in Sources */,
 				75E3F297611E971448443EDB /* RetryPolicy.swift in Sources */,
 				F0AC2BCB0A2A64AABAEE5A04 /* RootView.swift in Sources */,
+				97F4AC316D321F9CA94BD2D6 /* SalesOrdersView.swift in Sources */,
 				3396B030A8A9AC92271E8E85 /* ServiceRequestForm.swift in Sources */,
 				BFDA826FAF9EFEEB33800384 /* ServiceRequestsViews.swift in Sources */,
 				A5BF0A26271A098ADFE4DA5F /* SessionStore.swift in Sources */,
 				8C27DBC19A1E3ADD1241A10A /* SettingsView.swift in Sources */,
 				2D7740A81CA1D76B916C3068 /* ShopAPI.swift in Sources */,
+				B25E881C76AC31D332B23550 /* ShopAnalyticsView.swift in Sources */,
 				B72466D607DF175AC2440CA3 /* ShopCatalogViews.swift in Sources */,
 				7C4133C6F28DDD45F7E8E02E /* ShopDealsViews.swift in Sources */,
 				A25BAEE927A0A08AEFD0593E /* ShopHomeView.swift in Sources */,
@@ -1486,6 +1517,7 @@
 				4EDD544333FD22D6A4D156EC /* ShopModels.swift in Sources */,
 				D7C92FCCECA605A4BB55C96C /* ShopOrderExtrasViews.swift in Sources */,
 				D6F1495AAF15C57DA740CFB4 /* ShopOrdersViews.swift in Sources */,
+				95B192DD4871DE702AB98FF4 /* ShopQuoteBuilderView.swift in Sources */,
 				7DE1215A663430ACCD13E623 /* ShopQuotesViews.swift in Sources */,
 				61663E81BD1EA06D3704C1CD /* ShopSupplierAPI.swift in Sources */,
 				E1D8B90DFCF0AAACB090D2E6 /* ShopSupplierMessageSheet.swift in Sources */,
@@ -1619,7 +1651,7 @@
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, photos of a property you're capturing, or scan product barcodes at the till.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record a voice note for your PA, or dictate a note about a lead or property. PA voice notes go to Workstation's private speech service, never a public AI; dictated notes stay on this device.";
@@ -1743,7 +1775,7 @@
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, photos of a property you're capturing, or scan product barcodes at the till.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record a voice note for your PA, or dictate a note about a lead or property. PA voice notes go to Workstation's private speech service, never a public AI; dictated notes stay on this device.";
@@ -1993,7 +2025,7 @@
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, photos of a property you're capturing, or scan product barcodes at the till.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record a voice note for your PA, or dictate a note about a lead or property. PA voice notes go to Workstation's private speech service, never a public AI; dictated notes stay on this device.";
@@ -2206,7 +2238,7 @@
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, photos of a property you're capturing, or scan product barcodes at the till.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record a voice note for your PA, or dictate a note about a lead or property. PA voice notes go to Workstation's private speech service, never a public AI; dictated notes stay on this device.";
@@ -2241,7 +2273,7 @@
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, or photos of a property you're capturing.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, photos of a property you're capturing, or scan product barcodes at the till.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record a voice note for your PA, or dictate a note about a lead or property. PA voice notes go to Workstation's private speech service, never a public AI; dictated notes stay on this device.";

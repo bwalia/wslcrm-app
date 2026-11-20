@@ -257,15 +257,33 @@ struct ShopHomeView: View {
     @ViewBuilder
     private var manageSection: some View {
         Section("Sell") {
+            if session.shopPolicy.canCreate {
+                NavigationLink(value: NativeScreenRoute(SalesScreen.newQuote)) {
+                    Label("New quote or order", systemImage: "square.and.pencil")
+                }
+                .accessibilityIdentifier("shop.newQuote")
+            }
             NavigationLink { ShopOrdersListView() } label: { Label("Orders", systemImage: "cart") }
                 .accessibilityIdentifier("shop.orders")
             NavigationLink { ShopQuotesListView() } label: { Label("Quotes", systemImage: "doc.text") }
                 .accessibilityIdentifier("shop.quotes")
             NavigationLink { ShopDealsListView() } label: { Label("Deals", systemImage: "lock.doc") }
                 .accessibilityIdentifier("shop.deals")
-            if session.permissions.shows(.orders) {
+            if session.permissions.shows(.orders) || session.permissions.can(.read, .shop) {
                 NavigationLink(value: NativeScreen.orders) { Label("All sales orders", systemImage: "list.bullet.rectangle") }
                     .accessibilityIdentifier("shop.salesOrders")
+            }
+            if session.permissions.can(.create, .orders) {
+                NavigationLink(value: NativeScreenRoute(SalesScreen.pos)) {
+                    Label("Point of Sale", systemImage: "storefront")
+                }
+                .accessibilityIdentifier("shop.pos")
+            }
+            if session.shopPolicy.canSeeAnalytics {
+                NavigationLink(value: NativeScreenRoute(SalesScreen.shopAnalytics)) {
+                    Label("Analytics", systemImage: "chart.bar.xaxis")
+                }
+                .accessibilityIdentifier("shop.analytics")
             }
         }
         Section("Catalogue") {
