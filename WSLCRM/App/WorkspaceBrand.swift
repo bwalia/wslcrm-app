@@ -202,7 +202,9 @@ final class BrandStore {
 /// Draws an SVG into a bitmap with WebKit (UIKit has no public SVG decoder).
 @MainActor
 enum SVGRasterizer {
-    static func render(_ svg: Data, side: CGFloat = 240) async -> UIImage? {
+    /// `timeout`: WebKit's first page in a process starts its web content process, which can take
+    /// several seconds on a slow device; this runs in the background, so waiting is fine.
+    static func render(_ svg: Data, side: CGFloat = 240, timeout: Duration = .seconds(30)) async -> UIImage? {
         let markup = String(decoding: svg, as: UTF8.self)
         guard markup.lowercased().contains("<svg") else { return nil }
         let configuration = WKWebViewConfiguration()
@@ -218,7 +220,7 @@ enum SVGRasterizer {
         <style>html,body{margin:0;padding:0;background:transparent;width:100%;height:100%;overflow:hidden}
         svg{display:block;width:100%;height:100%}</style></head><body>\(markup)</body></html>
         """
-        let loader = Loader()
+        let loader = Loader(timeout: timeout)
         view.navigationDelegate = loader
         view.loadHTMLString(html, baseURL: nil)
         guard await loader.finished() else { return nil }
@@ -245,13 +247,16 @@ enum SVGRasterizer {
     private final class Loader: NSObject, WKNavigationDelegate {
         private var continuation: CheckedContinuation<Bool, Never>?
         private var result: Bool?
+        private let timeout: Duration
+
+        init(timeout: Duration) { self.timeout = timeout }
 
         func finished() async -> Bool {
             if let result { return result }
             return await withCheckedContinuation { continuation in
                 self.continuation = continuation
                 Task { @MainActor [weak self] in
-                    try? await Task.sleep(for: .seconds(8))
+                    try? await Task.sleep(for: self?.timeout ?? .seconds(30))
                     self?.complete(false)
                 }
             }
