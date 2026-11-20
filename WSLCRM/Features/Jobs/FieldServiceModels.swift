@@ -423,6 +423,8 @@ struct JobItem: Identifiable, Hashable, Sendable {
     var createdByUuid: String?
     var createdByName: String?
     var createdAt: Date?
+    /// The catalogue part the line came from (`part_uuid`), if any.
+    var partUuid: String? = nil
 }
 
 extension JobItem {
@@ -452,7 +454,7 @@ extension JobItem: Decodable {
     enum CodingKeys: String, CodingKey {
         case uuid, itemType, description, quantity, unitPrice, taxRate, lineTotal, isBillable, invoiced
         case approvalStatus, rejectionReason, partName, visitUuid, phaseUuid, phaseName, createdByUuid
-        case createdByName, createdAt, labourCategory, days, supplier, partNumber
+        case createdByName, createdAt, labourCategory, days, supplier, partNumber, partUuid
     }
 
     init(from decoder: Decoder) throws {
@@ -479,6 +481,7 @@ extension JobItem: Decodable {
         createdByUuid = try? c.decodeIfPresent(String.self, forKey: .createdByUuid)
         createdByName = try? c.decodeIfPresent(String.self, forKey: .createdByName)
         createdAt = c.decodeDate(forKey: .createdAt)
+        partUuid = c.decodeFlexibleString(forKey: .partUuid)
     }
 }
 
@@ -528,6 +531,13 @@ struct Visit: Identifiable, Hashable, Sendable {
     var leakCheckResult: String?
     var leakCheckNotes: String?
     var fgasCylinderRef: String?
+    /// Set once the visit's labour is on a timesheet ("Log to timesheet" is then done).
+    var timesheetUuid: String? = nil
+    var customerSignedAt: Date? = nil
+    /// The visit's own labour rate (overrides the job's); nil uses the job's or job type's.
+    var hourlyRate: Decimal? = nil
+    /// Its labour is on an invoice: it can no longer be deleted.
+    var invoiced: Bool = false
 
     var fullAddress: String? {
         let parts = [serviceAddress, servicePostcode].compactMap { $0?.trimmingCharacters(in: .whitespaces) }
@@ -551,6 +561,7 @@ extension Visit: Decodable {
         case phaseName, phaseStatus, customerUuid, customerName, customerPhone, productName, productRef
         case serviceAddress, servicePostcode, siteUuid, siteName, siteAccessNotes
         case refrigerantType, refrigerantAddedKg, refrigerantRecoveredKg, leakCheckResult, leakCheckNotes, fgasCylinderRef
+        case timesheetUuid, customerSignedAt, hourlyRate, invoiced
     }
 
     init(from decoder: Decoder) throws {
@@ -596,6 +607,10 @@ extension Visit: Decodable {
         leakCheckResult = try? c.decodeIfPresent(String.self, forKey: .leakCheckResult)
         leakCheckNotes = try? c.decodeIfPresent(String.self, forKey: .leakCheckNotes)
         fgasCylinderRef = c.decodeFlexibleString(forKey: .fgasCylinderRef)
+        timesheetUuid = c.decodeFlexibleString(forKey: .timesheetUuid)
+        customerSignedAt = c.decodeDate(forKey: .customerSignedAt)
+        hourlyRate = c.decodeFlexibleDecimal(forKey: .hourlyRate)
+        invoiced = c.decodeFlexibleBool(forKey: .invoiced) ?? false
     }
 }
 
@@ -664,6 +679,10 @@ struct ServiceRequest: Identifiable, Hashable, Sendable {
     var slaResolveDueAt: Date?
     var resolutionNotes: String?
     var createdAt: Date?
+    /// The request's timeline.
+    var firstResponseAt: Date? = nil
+    var resolvedAt: Date? = nil
+    var closedAt: Date? = nil
 
     var fullAddress: String? {
         let parts = [serviceAddress, servicePostcode].compactMap { $0?.trimmingCharacters(in: .whitespaces) }
@@ -677,7 +696,7 @@ extension ServiceRequest: Decodable {
         case uuid, requestNumber, title, description, faultCategory, reportedBy, channel, priority, status
         case customerUuid, customerName, customerEmail, customerPhone, productUuid, productName, productRef
         case serviceAddress, servicePostcode, siteUuid, siteName, assignedManagerUuid, assignedManagerName, slaBreached
-        case slaResponseDueAt, slaResolveDueAt, resolutionNotes, createdAt
+        case slaResponseDueAt, slaResolveDueAt, resolutionNotes, createdAt, firstResponseAt, resolvedAt, closedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -709,6 +728,9 @@ extension ServiceRequest: Decodable {
         slaResolveDueAt = c.decodeDate(forKey: .slaResolveDueAt)
         resolutionNotes = try? c.decodeIfPresent(String.self, forKey: .resolutionNotes)
         createdAt = c.decodeDate(forKey: .createdAt)
+        firstResponseAt = c.decodeDate(forKey: .firstResponseAt)
+        resolvedAt = c.decodeDate(forKey: .resolvedAt)
+        closedAt = c.decodeDate(forKey: .closedAt)
     }
 }
 
@@ -794,9 +816,15 @@ struct FieldServiceStats: Sendable, Decodable {
     let visitsToday: Int
     let engineersOnSite: Int
     let followUps: Int
+    var unassignedVisits = 0
+    var awaitingInvoice = 0
+    var draftJobs = 0
+    var onHoldJobs = 0
+    var completedThisMonth = 0
 
     enum CodingKeys: String, CodingKey {
         case openJobs, scheduledJobs, inProgressJobs, overdueJobs, visitsToday, engineersOnSite, followUps
+        case unassignedVisits, awaitingInvoice, draftJobs, onHoldJobs, completedThisMonth
     }
 
     init(from decoder: Decoder) throws {
@@ -808,6 +836,11 @@ struct FieldServiceStats: Sendable, Decodable {
         visitsToday = c.decodeFlexibleInt(forKey: .visitsToday) ?? 0
         engineersOnSite = c.decodeFlexibleInt(forKey: .engineersOnSite) ?? 0
         followUps = c.decodeFlexibleInt(forKey: .followUps) ?? 0
+        unassignedVisits = c.decodeFlexibleInt(forKey: .unassignedVisits) ?? 0
+        awaitingInvoice = c.decodeFlexibleInt(forKey: .awaitingInvoice) ?? 0
+        draftJobs = c.decodeFlexibleInt(forKey: .draftJobs) ?? 0
+        onHoldJobs = c.decodeFlexibleInt(forKey: .onHoldJobs) ?? 0
+        completedThisMonth = c.decodeFlexibleInt(forKey: .completedThisMonth) ?? 0
     }
 }
 

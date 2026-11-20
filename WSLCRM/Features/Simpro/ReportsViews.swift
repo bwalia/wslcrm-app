@@ -23,8 +23,8 @@ struct ReportsListView: View {
             case .failed(let error):
                 InlineErrorRow(error: error) { Task { await load() } }
             case .loaded(let entries):
-                // Asset history needs an asset, so it is run from an asset's screen instead.
-                let runnable = entries.filter { !$0.filters.contains("asset") }
+                // Asset history asks for an asset on its own screen (or opens from an asset).
+                let runnable = entries
                 ForEach(Self.groupOrder, id: \.self) { group in
                     let items = runnable.filter { $0.group == group }
                     if !items.isEmpty {
@@ -76,9 +76,18 @@ struct ReportDetailView: View {
     @State private var csv: ExportedFile?
     @State private var exportError: APIError?
 
+    @State private var contractName: String?
+    @State private var assetName: String?
+    @State private var choosingContract = false
+    @State private var choosingAsset = false
+
     init(route: ReportRoute) {
         self.route = route
         var query = ReportQuery()
+        if route.filters.contains("date_range") {
+            query.dateFrom = CalendarDay(date: Calendar.current.date(byAdding: .day, value: -365, to: Date()) ?? Date()).isoString
+            query.dateTo = CalendarDay(date: Date()).isoString
+        }
         if route.filters.contains("months") { query.months = 6 }
         if route.filters.contains("weeks") { query.weeks = 8 }
         if route.filters.contains("expiring_within_days") { query.expiringWithinDays = 90 }
@@ -99,6 +108,28 @@ struct ReportDetailView: View {
                 Stepper("Expiring within \(query.expiringWithinDays ?? 90) days",
                         value: Binding(get: { query.expiringWithinDays ?? 90 }, set: { query.expiringWithinDays = $0 }),
                         in: 30...365, step: 30)
+            }
+            if route.filters.contains("date_range") {
+                DatePicker("From", selection: dayBinding(\.dateFrom), displayedComponents: .date)
+                    .accessibilityIdentifier("report.from")
+                DatePicker("To", selection: dayBinding(\.dateTo), displayedComponents: .date)
+                    .accessibilityIdentifier("report.to")
+            }
+            if route.filters.contains("contract") {
+                Button { choosingContract = true } label: {
+                    LabeledContent("Contract") { Text(contractName ?? "All contracts") }
+                }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("report.contract")
+            }
+            if route.filters.contains("asset") {
+                Button { choosingAsset = true } label: {
+                    LabeledContent("Asset") {
+                        Text(assetName ?? "Choose an asset").foregroundStyle(assetName == nil ? Color.accentColor : .primary)
+                    }
+                }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("report.asset")
             }
 
             switch report {
@@ -138,6 +169,30 @@ struct ReportDetailView: View {
             csv = nil
             await load()
         }
+        .sheet(isPresented: $choosingContract) {
+            NavigationStack {
+                ReferencePicker(title: "Contract",
+                                spec: ReferenceSpec(list: "\(SimproAPI.base)/contracts", subtitleKeys: ["contract_number",
+                                                                                                    "customer_name"],
+                                                    paging: .pageAndPerPage)) { record in
+                    query.contractUuid = record.string("uuid")
+                    contractName = record.string("name")
+                } clear: {
+                    query.contractUuid = nil
+                    contractName = nil
+                }
+            }
+        }
+        .sheet(isPresented: $choosingAsset) {
+            NavigationStack {
+                ReferencePicker(title: "Asset",
+                                spec: ReferenceSpec(list: "\(SimproAPI.base)/assets", titleKeys: ["asset_tag", "name"],
+                                                    subtitleKeys: ["name", "site_name"], paging: .pageAndPerPage)) { record in
+                    query.assetUuid = record.string("uuid")
+                    assetName = record.string("asset_tag") ?? record.string("name")
+                }
+            }
+        }
         .refreshable { await load() }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -158,7 +213,18 @@ struct ReportDetailView: View {
         }
     }
 
+    /// A date filter as a picker; the server reads plain days (`2026-11-20`).
+    private func dayBinding(_ key: WritableKeyPath<ReportQuery, String?>) -> Binding<Date> {
+        Binding(get: { query[keyPath: key].flatMap { CalendarDay(string: $0)?.date() } ?? Date() },
+                set: { query[keyPath: key] = CalendarDay(date: $0).isoString })
+    }
+
     private func load() async {
+        // Asset history is about one asset: nothing to run until one is chosen.
+        if route.filters.contains("asset"), query.assetUuid == nil {
+            report = .failed(ResourceService.problem(422, "Choose an asset above to see its history."))
+            return
+        }
         if report.value == nil { report = .loading }
         do {
             let loaded = try await services.simpro.report(route.key, query: query)
@@ -210,59 +276,3 @@ private struct ReportRowView: View {
     }
 }
 
-/// Read-only view of the Simpro connection for managers; running a sync is an owner action on the web.
-struct SimproSyncStatusView: View {
-    @Environment(\.services) private var services
-    @State private var status: LoadState<SimproStatus> = .idle
-
-    private static let labels: [(key: String, label: String)] = [
-        ("customers", "Customers"), ("sites", "Sites"), ("assets", "Assets"), ("jobs", "Jobs & projects"),
-        ("quotes", "Quotes"), ("invoices", "Invoices"), ("asset_tests", "Asset surveys"),
-    ]
-
-    var body: some View {
-        List {
-            switch status {
-            case .idle, .loading:
-                SkeletonRow()
-            case .failed(let error):
-                InlineErrorRow(error: error) { Task { await load() } }
-            case .loaded(let status):
-                Section("Connection") {
-                    if let connection = status.connection {
-                        LabeledContent("Build", value: connection.name ?? "Simpro")
-                        LabeledContent("Mode", value: (connection.mode ?? "mock").capitalized)
-                        LabeledContent("Last pull", value: SimproDates.display(connection.lastPullAt, withTime: true))
-                        LabeledContent("Last push", value: SimproDates.display(connection.lastPushAt, withTime: true))
-                    } else {
-                        Text("No Simpro connection is configured").foregroundStyle(.secondaryText)
-                    }
-                }
-                Section {
-                    ForEach(Self.labels, id: \.key) { entry in
-                        if let counts = status.counts[entry.key] {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(entry.label).font(.wsHeadline)
-                                Text("\(counts.synced) in Simpro · \(counts.pending) to push · \(counts.errored) errors · \(counts.localOnly) local only")
-                                    .font(.wsSubheadline).foregroundStyle(.secondaryText)
-                            }
-                            .accessibilityElement(children: .combine)
-                        }
-                    }
-                } header: {
-                    Text("Records")
-                } footer: {
-                    Text("Simpro is the system of record. Pulls and pushes run from the web dashboard.")
-                }
-            }
-        }
-        .navigationTitle("Simpro Sync")
-        .task { await load() }
-        .refreshable { await load() }
-    }
-
-    private func load() async {
-        if status.value == nil { status = .loading }
-        do { status = .loaded(try await services.simpro.simproStatus()) } catch { status = .failed(error.asAPIError) }
-    }
-}

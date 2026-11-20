@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// The Field Service area for managers and telecallers: today's numbers, then requests, jobs,
-/// assets, sites and the invoices raised from jobs, and the Simpro report pack and sync status.
+/// The Field Service area for managers and telecallers: today's numbers, then requests, jobs, site
+/// visits, contracts, parts, assets, sites and the invoices raised from jobs, and the Simpro report
+/// pack and sync.
 struct FieldServiceHubView: View {
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
@@ -24,9 +25,13 @@ struct FieldServiceHubView: View {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 260 : 140),
                                                      spacing: 10)], spacing: 10) {
                             StatTile(title: "Open jobs", value: "\(stats.openJobs)", systemImage: "wrench.and.screwdriver")
+                            StatTile(title: "In progress", value: "\(stats.inProgressJobs)", systemImage: "arrow.triangle.2.circlepath")
                             StatTile(title: "Visits today", value: "\(stats.visitsToday)", systemImage: "calendar")
                             StatTile(title: "On site now", value: "\(stats.engineersOnSite)", systemImage: "mappin.and.ellipse")
+                            StatTile(title: "Visits with no engineer", value: "\(stats.unassignedVisits)",
+                                     systemImage: "person.crop.circle.badge.questionmark")
                             StatTile(title: "Overdue", value: "\(stats.overdueJobs)", systemImage: "exclamationmark.triangle")
+                            StatTile(title: "Done, not invoiced", value: "\(stats.awaitingInvoice)", systemImage: "doc.text")
                         }
                         .padding(.vertical, 4)
                     }
@@ -59,6 +64,24 @@ struct FieldServiceHubView: View {
                     }
                     .accessibilityIdentifier("hub.jobs")
                 }
+                if permissions.can(.read, .fsVisits) {
+                    NavigationLink(value: NativeScreenRoute(FieldServiceScreens.visits)) {
+                        Label("Site visits", systemImage: "calendar")
+                    }
+                    .accessibilityIdentifier("hub.visits")
+                }
+                if permissions.can(.read, .fsContracts) {
+                    NavigationLink(value: NativeScreenRoute(FieldServiceScreens.contracts)) {
+                        Label("Contracts", systemImage: "doc.text.magnifyingglass")
+                    }
+                    .accessibilityIdentifier("hub.contracts")
+                }
+                if permissions.can(.read, .fsParts) {
+                    NavigationLink(value: ResourceListRoute(ModuleCatalog.fsParts.id)) {
+                        Label("Parts", systemImage: "shippingbox")
+                    }
+                    .accessibilityIdentifier("hub.parts")
+                }
                 if permissions.can(.read, .fsAssets) {
                     NavigationLink(value: FieldServiceArea.customerAssets) {
                         Label("Assets", systemImage: "air.conditioner.horizontal")
@@ -74,6 +97,12 @@ struct FieldServiceHubView: View {
                     Label("Sites", systemImage: "building.2")
                 }
                 .accessibilityIdentifier("hub.sites")
+                if permissions.can(.read, .fsJobTypes) || permissions.can(.read, .fsJobs) {
+                    NavigationLink(value: NativeScreenRoute(FieldServiceScreens.jobTypes)) {
+                        Label("Job types", systemImage: "tag")
+                    }
+                    .accessibilityIdentifier("hub.jobTypes")
+                }
                 if permissions.shows(.invoices) {
                     NavigationLink(value: FieldServiceArea.invoices) {
                         Label("Invoices", systemImage: "doc.text")
