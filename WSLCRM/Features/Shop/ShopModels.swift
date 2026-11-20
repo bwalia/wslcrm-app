@@ -275,6 +275,8 @@ struct ShopTracking: Hashable, Sendable, Codable {
     var carrier: String?
     var trackingNumber: String?
     var url: String?
+    /// ISO time it was marked shipped (kept when tracking is edited).
+    var shippedAt: String?
 
     var isEmpty: Bool { carrier?.trimmedOrNil == nil && trackingNumber?.trimmedOrNil == nil && url?.trimmedOrNil == nil }
 }

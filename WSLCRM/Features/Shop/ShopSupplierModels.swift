@@ -745,10 +745,25 @@ struct ShopOrderExtras: Sendable, Decodable {
     var deliveryWindow: String?
     var customerUpdates: [ShopCustomerUpdate]
     var deliveryChangeRequests: [ShopDeliveryChangeRequest]
+    var purchaseOrders: [ShopOrderPurchaseOrderRef] = []
+    var stripeSessionId: String?
+    var paidAmountMinor: Int?
+    var billingAddress: JSONValue?
+    var deliveryMethod: String?
+    /// The delivery address agreed on the order (drop-ship), when there is one.
+    var deliveryAddress: ShopDeliveryAddress?
+    var deliveryChangePending = false
+    var shippedAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case dealCode, paymentMethod, bankTransferDue, daysWaiting, paidReference, invoiceUuid, customerPoNumber
         case deliveryDate, deliveryWindow, customerUpdates, deliveryChangeRequests
+        case purchaseOrders, stripeSessionId, paidAmountMinor, billingAddress, deliveryMethod, deliveryAddress
+        case deliveryChangePending, tracking
+    }
+
+    private struct TrackingTimes: Decodable {
+        var shippedAt: String?
     }
 
     init(from decoder: Decoder) throws {
@@ -764,6 +779,14 @@ struct ShopOrderExtras: Sendable, Decodable {
         deliveryWindow = c.decodeFlexibleString(forKey: .deliveryWindow)
         customerUpdates = c.decodeLossyArray(ShopCustomerUpdate.self, forKey: .customerUpdates)
         deliveryChangeRequests = c.decodeLossyArray(ShopDeliveryChangeRequest.self, forKey: .deliveryChangeRequests)
+        purchaseOrders = c.decodeLossyArray(ShopOrderPurchaseOrderRef.self, forKey: .purchaseOrders)
+        stripeSessionId = c.decodeFlexibleString(forKey: .stripeSessionId)?.trimmedOrNil
+        paidAmountMinor = c.decodeFlexibleInt(forKey: .paidAmountMinor)
+        billingAddress = try? c.decodeIfPresent(JSONValue.self, forKey: .billingAddress)
+        deliveryMethod = c.decodeFlexibleString(forKey: .deliveryMethod)?.trimmedOrNil
+        deliveryAddress = try? c.decodeIfPresent(ShopDeliveryAddress.self, forKey: .deliveryAddress)
+        deliveryChangePending = c.decodeFlexibleBool(forKey: .deliveryChangePending) ?? false
+        shippedAt = ((try? c.decodeIfPresent(TrackingTimes.self, forKey: .tracking))?.shippedAt).flatMap(APIDate.parse)
     }
 
     init() {
