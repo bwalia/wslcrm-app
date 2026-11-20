@@ -37,6 +37,21 @@ struct Customer: Identifiable, Hashable, Sendable {
     var totalSpent: Decimal
     var lastOrderDate: Date?
     var createdAt: Date?
+    var dateOfBirth: CalendarDay?
+    /// Comma-separated words (`vip, wholesale`), or a JSON list from older rows.
+    var tags: String?
+    var marketingOptInLevel: String?
+    var verifiedEmail: Bool
+    var taxExempt: Bool
+    var averageOrderValue: Decimal?
+
+    /// The address marked default, else the first.
+    var primaryAddress: CustomerAddress? { addresses.first { $0.isDefault == true } ?? addresses.first }
+
+    /// Stored defaults sometimes arrive wrapped in literal quotes (`'enabled'`).
+    static func clean(_ value: String?) -> String? {
+        value?.trimmingCharacters(in: CharacterSet(charactersIn: "'")).trimmedOrNil
+    }
 
     var displayName: String {
         let name = [firstName, lastName].compactMap { $0 }.joined(separator: " ").trimmingCharacters(in: .whitespaces)
@@ -47,7 +62,8 @@ struct Customer: Identifiable, Hashable, Sendable {
 extension Customer: Decodable {
     enum CodingKeys: String, CodingKey {
         case uuid, email, firstName, lastName, phone, notes, addresses, acceptsMarketing, state, ordersCount
-        case totalSpent, lastOrderDate, createdAt
+        case totalSpent, lastOrderDate, createdAt, dateOfBirth, tags, marketingOptInLevel, verifiedEmail, taxExempt
+        case averageOrderValue
     }
 
     init(from decoder: Decoder) throws {
@@ -66,6 +82,24 @@ extension Customer: Decodable {
         totalSpent = c.decodeFlexibleDecimal(forKey: .totalSpent) ?? 0
         lastOrderDate = c.decodeDate(forKey: .lastOrderDate)
         createdAt = c.decodeDate(forKey: .createdAt)
+        dateOfBirth = c.decodeDay(forKey: .dateOfBirth)
+        if let list = try? c.decodeIfPresent([String].self, forKey: .tags) {
+            tags = list.joined(separator: ", ").trimmedOrNil
+        } else {
+            let raw = Customer.clean(try? c.decodeIfPresent(String.self, forKey: .tags))
+            // A JSON list kept as text (`["vip"]`) reads as words.
+            if let raw, raw.hasPrefix("["), let data = raw.data(using: .utf8),
+               let list = try? JSONDecoder().decode([String].self, from: data) {
+                tags = list.joined(separator: ", ").trimmedOrNil
+            } else {
+                tags = raw
+            }
+        }
+        marketingOptInLevel = Customer.clean(try? c.decodeIfPresent(String.self, forKey: .marketingOptInLevel))
+        verifiedEmail = c.decodeFlexibleBool(forKey: .verifiedEmail) ?? false
+        taxExempt = c.decodeFlexibleBool(forKey: .taxExempt) ?? false
+        averageOrderValue = c.decodeFlexibleDecimal(forKey: .averageOrderValue)
+        state = Customer.clean(state)
     }
 }
 
@@ -75,6 +109,51 @@ struct CustomerBody: Encodable, Sendable, Equatable {
     var lastName: String?
     var phone: String?
     var notes: String?
+    /// YYYY-MM-DD.
+    var dateOfBirth: String?
+    /// The primary address first (`is_default`), then the others kept as they were.
+    var addresses: [AddressBody]?
+    var tags: String?
+    var acceptsMarketing: Bool?
+    var verifiedEmail: Bool?
+    var taxExempt: Bool?
+    var marketingOptInLevel: String?
+    var state: String?
+
+    struct AddressBody: Encodable, Sendable, Equatable {
+        var name: String?
+        var company: String?
+        var address1: String?
+        var address2: String?
+        var city: String?
+        var province: String?
+        var zip: String?
+        var country: String?
+        var isDefault: Bool?
+
+        init(name: String? = nil, company: String? = nil, address1: String?, address2: String?, city: String?,
+             province: String?, zip: String?, country: String?, isDefault: Bool?) {
+            self.name = name
+            self.company = company
+            self.address1 = address1
+            self.address2 = address2
+            self.city = city
+            self.province = province
+            self.zip = zip
+            self.country = country
+            self.isDefault = isDefault
+        }
+
+        init(_ address: CustomerAddress) {
+            self.init(name: address.name, company: address.company, address1: address.address1, address2: address.address2,
+                      city: address.city, province: address.province, zip: address.zip, country: address.country,
+                      isDefault: address.isDefault)
+        }
+
+        var isEmpty: Bool {
+            [address1, address2, city, province, zip, country].allSatisfy { $0?.trimmedOrNil == nil }
+        }
+    }
 }
 
 struct Store: Identifiable, Hashable, Sendable, Decodable {
@@ -114,6 +193,19 @@ struct Product: Identifiable, Hashable, Sendable {
     var storeName: String?
     var storeCurrency: String?
     var categoryName: String?
+    var barcode: String?
+    var costPrice: Decimal?
+    var shortDescription: String?
+    var isFeatured: Bool
+    var isDigital: Bool
+    var slug: String?
+    var thumbnailURL: String?
+
+    /// The picture to show: the thumbnail, else the first image that is a web address.
+    var imageURL: URL? {
+        let candidate = thumbnailURL ?? images.first { $0.hasPrefix("http") }
+        return candidate.flatMap(URL.init(string:))
+    }
 
     var isLowStock: Bool { trackInventory && inventoryQuantity <= lowStockThreshold }
 }
@@ -121,7 +213,8 @@ struct Product: Identifiable, Hashable, Sendable {
 extension Product: Decodable {
     enum CodingKeys: String, CodingKey {
         case uuid, storeId, namespaceId, name, sku, description, price, comparePrice, inventoryQuantity
-        case lowStockThreshold, trackInventory, isActive, images, store, category
+        case lowStockThreshold, trackInventory, isActive, images, store, category, barcode, costPrice, shortDescription
+        case isFeatured, isDigital, slug, thumbnailUrl
     }
 
     private struct Embedded: Decodable { let name: String?; let currency: String? }
@@ -146,6 +239,13 @@ extension Product: Decodable {
         storeName = store?.name
         storeCurrency = store?.currency
         categoryName = (try? c.decodeIfPresent(Embedded.self, forKey: .category))?.name
+        barcode = c.decodeFlexibleString(forKey: .barcode)?.trimmedOrNil
+        costPrice = c.decodeFlexibleDecimal(forKey: .costPrice)
+        shortDescription = (try? c.decodeIfPresent(String.self, forKey: .shortDescription))?.trimmedOrNil
+        isFeatured = c.decodeFlexibleBool(forKey: .isFeatured) ?? false
+        isDigital = c.decodeFlexibleBool(forKey: .isDigital) ?? false
+        slug = (try? c.decodeIfPresent(String.self, forKey: .slug))?.trimmedOrNil
+        thumbnailURL = (try? c.decodeIfPresent(String.self, forKey: .thumbnailUrl))?.trimmedOrNil
     }
 }
 
@@ -160,6 +260,15 @@ struct ProductBody: Encodable, Sendable, Equatable {
     var trackInventory: Bool?
     var isActive: Bool?
     var storeId: String?
+    var barcode: String?
+    /// A number, or `"null"` to clear it (the products route's own way).
+    var comparePrice: String?
+    var costPrice: Decimal?
+    var lowStockThreshold: Int?
+    var isFeatured: Bool?
+    var shortDescription: String?
+    /// First product only: the catalogue's currency, kept on the store for every later product.
+    var currency: String?
 }
 
 // MARK: - Orders
