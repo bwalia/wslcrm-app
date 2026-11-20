@@ -6,8 +6,8 @@ import Foundation
 
 // MARK: - Suppliers
 
-/// `GET /suppliers`: the shop's supplier directory. Price feeds and their column mapping are set up on
-/// the web; the app shows and edits who to talk to.
+/// `GET /suppliers`: the shop's supplier directory, with where their price list comes from (a feed URL
+/// or files uploaded by hand), how to read it, and how their costs become our prices.
 struct ShopSupplier: Identifiable, Hashable, Sendable, Decodable {
     let uuid: String
     var id: String { uuid }
@@ -24,6 +24,29 @@ struct ShopSupplier: Identifiable, Hashable, Sendable, Decodable {
     var feedUrl: String?
     var lastSyncedAt: Date?
     var lastStatus: String?
+    var lastError: String?
+    var lastSummary: ShopSupplierSyncSummary?
+    /// csv, json or xml.
+    var feedFormat: String
+    var feedOptions: ShopSupplierFeedOptions
+    /// none, basic, bearer or header.
+    var authType: String
+    var authUsername: String?
+    var authHeaderName: String?
+    /// A password or token is saved (it is never sent back).
+    var hasAuthSecret: Bool
+    /// Our field (`supplier_sku`, `cost`…) → the column name in their file.
+    var mapping: [String: String]
+    var filterKeywords: [String]
+    /// No keyword list saved: the server keeps items matching its standard list (NVIDIA and GPU words).
+    var usesStandardFilter: Bool
+    var pricesIncludeVat: Bool
+    var defaultMarginPct: Double?
+    var changeThresholdPct: Double?
+    var updateLeadTimes: Bool
+    var syncHours: Int?
+    var currency: String
+    var itemCounts: ShopSupplierItemCounts
 
     /// Where price requests go: the purchase order address, else the general contact address.
     var email: String? { poEmail?.trimmedOrNil ?? contactEmail?.trimmedOrNil }
@@ -31,7 +54,9 @@ struct ShopSupplier: Identifiable, Hashable, Sendable, Decodable {
 
     enum CodingKeys: String, CodingKey {
         case uuid, name, contactName, contactEmail, poEmail, poPhone, poAddress, accountNumber, poNotes
-        case isActive, portalEnabled, feedUrl, lastSyncedAt, lastStatus
+        case isActive, portalEnabled, feedUrl, lastSyncedAt, lastStatus, lastError, lastSummary
+        case feedFormat, feedOptions, authType, authUsername, authHeaderName, hasAuthSecret, mapping, filter
+        case pricesIncludeVat, defaultMarginPct, changeThresholdPct, updateLeadTimes, syncHours, currency, itemCounts
     }
 
     init(from decoder: Decoder) throws {
@@ -50,12 +75,105 @@ struct ShopSupplier: Identifiable, Hashable, Sendable, Decodable {
         feedUrl = c.decodeFlexibleString(forKey: .feedUrl)
         lastSyncedAt = c.decodeDate(forKey: .lastSyncedAt)
         lastStatus = c.decodeFlexibleString(forKey: .lastStatus)
+        lastError = c.decodeFlexibleString(forKey: .lastError)
+        lastSummary = try? c.decodeIfPresent(ShopSupplierSyncSummary.self, forKey: .lastSummary)
+        feedFormat = c.decodeFlexibleString(forKey: .feedFormat) ?? "csv"
+        feedOptions = (try? c.decodeIfPresent(ShopSupplierFeedOptions.self, forKey: .feedOptions)) ?? ShopSupplierFeedOptions()
+        authType = c.decodeFlexibleString(forKey: .authType) ?? "none"
+        authUsername = c.decodeFlexibleString(forKey: .authUsername)
+        authHeaderName = c.decodeFlexibleString(forKey: .authHeaderName)
+        hasAuthSecret = c.decodeFlexibleBool(forKey: .hasAuthSecret) ?? false
+        // `{}` from lua-cjson, or a missing key: no mapping yet. Keys are the server's own field names.
+        let rawMapping = (try? c.decodeIfPresent(JSONValue.self, forKey: .mapping)) ?? .null
+        var table: [String: String] = [:]
+        if case .object(let o) = rawMapping {
+            for (key, value) in o { if let text = value.stringValue?.trimmedOrNil { table[key] = text } }
+        }
+        mapping = table
+        let rawFilter = (try? c.decodeIfPresent(JSONValue.self, forKey: .filter)) ?? .null
+        switch rawFilter["keywords"] {
+        case .array(let words)?:
+            filterKeywords = words.compactMap { $0.stringValue?.trimmedOrNil }
+            usesStandardFilter = false
+        case .object?:
+            // lua-cjson sends an empty list as `{}`: every item is kept.
+            filterKeywords = []
+            usesStandardFilter = false
+        default:
+            filterKeywords = []
+            usesStandardFilter = true
+        }
+        pricesIncludeVat = c.decodeFlexibleBool(forKey: .pricesIncludeVat) ?? false
+        defaultMarginPct = c.decodeFlexibleDecimal(forKey: .defaultMarginPct).map { NSDecimalNumber(decimal: $0).doubleValue }
+        changeThresholdPct = c.decodeFlexibleDecimal(forKey: .changeThresholdPct).map { NSDecimalNumber(decimal: $0).doubleValue }
+        updateLeadTimes = c.decodeFlexibleBool(forKey: .updateLeadTimes) ?? true
+        syncHours = c.decodeFlexibleInt(forKey: .syncHours)
+        currency = c.decodeFlexibleString(forKey: .currency) ?? "GBP"
+        itemCounts = (try? c.decodeIfPresent(ShopSupplierItemCounts.self, forKey: .itemCounts)) ?? ShopSupplierItemCounts()
     }
 
     /// "Boston (Sam)" in pickers.
     var pickerLabel: String {
         guard let contact = contactName?.trimmedOrNil else { return name }
         return "\(name) (\(contact))"
+    }
+
+    var hasFeed: Bool { feedUrl?.trimmedOrNil != nil }
+
+    /// "CSV · every 24 h · paused"
+    var feedLine: String {
+        var parts = [feedFormat.uppercased(), hasFeed ? "every \(syncHours ?? 24) h" : "files uploaded by hand"]
+        if !isActive { parts.append("paused") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// The last sync in plain words, as the badge on the supplier.
+    var syncState: (text: String, tone: Tone, systemImage: String) {
+        switch lastStatus {
+        case "ok": ("Up to date", .success, "checkmark.circle")
+        case "error": ("Last update failed", .danger, "xmark.octagon")
+        case "running": ("Updating now", .progress, "arrow.triangle.2.circlepath")
+        default: ("Never updated", .neutral, "circle.dashed")
+        }
+    }
+}
+
+/// How to read their file: the CSV column separator, where the list is in JSON, the XML element per product.
+struct ShopSupplierFeedOptions: Hashable, Sendable, Decodable {
+    var delimiter: String?
+    var recordsPath: String?
+    var recordTag: String?
+
+    init(delimiter: String? = nil, recordsPath: String? = nil, recordTag: String? = nil) {
+        self.delimiter = delimiter
+        self.recordsPath = recordsPath
+        self.recordTag = recordTag
+    }
+
+    enum CodingKeys: String, CodingKey { case delimiter, recordsPath, recordTag }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        delimiter = try? c.decodeIfPresent(String.self, forKey: .delimiter)
+        recordsPath = c.decodeFlexibleString(forKey: .recordsPath)
+        recordTag = c.decodeFlexibleString(forKey: .recordTag)
+    }
+}
+
+struct ShopSupplierItemCounts: Hashable, Sendable, Decodable {
+    var active = 0
+    var total = 0
+    var linked = 0
+
+    init() {}
+
+    enum CodingKeys: String, CodingKey { case active, total, linked }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        active = c.decodeFlexibleInt(forKey: .active) ?? 0
+        total = c.decodeFlexibleInt(forKey: .total) ?? 0
+        linked = c.decodeFlexibleInt(forKey: .linked) ?? 0
     }
 }
 
@@ -319,8 +437,9 @@ struct ShopDealPurchaseOrder: Identifiable, Hashable, Sendable, Decodable {
     var total: Double?
     var currency: String
     var dropShip: Bool
+    var legacyDropShip = false
 
-    enum CodingKeys: String, CodingKey { case uuid, poNumber, status, supplierName, total, currency, dropShip }
+    enum CodingKeys: String, CodingKey { case uuid, poNumber, status, supplierName, total, currency, dropShip, legacyDropShip }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -331,20 +450,24 @@ struct ShopDealPurchaseOrder: Identifiable, Hashable, Sendable, Decodable {
         total = (try? c.decodeIfPresent(Double.self, forKey: .total)) ?? c.decodeFlexibleString(forKey: .total).flatMap(Double.init)
         currency = c.decodeFlexibleString(forKey: .currency) ?? "GBP"
         dropShip = c.decodeFlexibleBool(forKey: .dropShip) ?? false
+        legacyDropShip = c.decodeFlexibleBool(forKey: .legacyDropShip) ?? false
     }
 }
 
 /// One line of a supplier request, with the supplier's price once it's recorded.
 struct ShopSupplierRequestLine: Hashable, Sendable, Decodable {
+    /// Our quote line this price is for (the comparison matches on it).
+    var lineUuid: String?
     var description: String?
     var qty: Int?
     var unitPriceMinor: Int?
     var note: String?
 
-    enum CodingKeys: String, CodingKey { case description, qty, unitPriceMinor, note }
+    enum CodingKeys: String, CodingKey { case lineUuid, description, qty, unitPriceMinor, note }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        lineUuid = c.decodeFlexibleString(forKey: .lineUuid)
         description = c.decodeFlexibleString(forKey: .description)
         qty = c.decodeFlexibleInt(forKey: .qty)
         unitPriceMinor = c.decodeFlexibleInt(forKey: .unitPriceMinor)
@@ -356,6 +479,7 @@ struct ShopSupplierRequestLine: Hashable, Sendable, Decodable {
 struct ShopSupplierRequest: Identifiable, Hashable, Sendable, Decodable {
     let uuid: String
     var id: String { uuid }
+    var supplierUuid: String?
     var supplierName: String?
     var contactName: String?
     var contactEmail: String?
@@ -363,6 +487,8 @@ struct ShopSupplierRequest: Identifiable, Hashable, Sendable, Decodable {
     var channel: String?
     /// "price" or "intro".
     var kind: String
+    /// What the supplier was told about the build (never the customer).
+    var spec: String?
     var lines: [ShopSupplierRequestLine]
     var supplierQuoteRef: String?
     var leadTime: String?
@@ -370,12 +496,15 @@ struct ShopSupplierRequest: Identifiable, Hashable, Sendable, Decodable {
     var notes: String?
 
     enum CodingKeys: String, CodingKey {
-        case uuid, supplierName, contactName, contactEmail, sentAt, channel, kind, lines, supplierQuoteRef, leadTime, validUntil, notes
+        case uuid, supplierUuid, supplierName, contactName, contactEmail, sentAt, channel, kind, spec, lines, supplierQuoteRef
+        case leadTime, validUntil, notes
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         uuid = try c.decode(String.self, forKey: .uuid)
+        supplierUuid = c.decodeFlexibleString(forKey: .supplierUuid)
+        spec = c.decodeFlexibleString(forKey: .spec)
         supplierName = c.decodeFlexibleString(forKey: .supplierName)
         contactName = c.decodeFlexibleString(forKey: .contactName)
         contactEmail = c.decodeFlexibleString(forKey: .contactEmail)
@@ -396,6 +525,12 @@ struct ShopSupplierRequest: Identifiable, Hashable, Sendable, Decodable {
     var isAnswered: Bool {
         lines.contains { $0.unitPriceMinor != nil } || leadTime?.trimmedOrNil != nil
     }
+
+    /// Their prices for every line, ex VAT (nil until at least one line is priced).
+    var pricedTotalMinor: Int? {
+        guard lines.contains(where: { $0.unitPriceMinor != nil }) else { return nil }
+        return lines.reduce(0) { $0 + ($1.unitPriceMinor ?? 0) * max(1, $1.qty ?? 1) }
+    }
 }
 
 struct ShopDeal: Sendable, Decodable {
@@ -406,8 +541,16 @@ struct ShopDeal: Sendable, Decodable {
     var purchaseOrders: [ShopDealPurchaseOrder]
     var supplierRequests: [ShopSupplierRequest]
     var linesFrom: String?
+    /// Our customer lines (the newest live quote, else the order): new supplier requests start from these.
+    var lines: [ShopDealLine] = []
+    var compare = ShopDealCompare()
+    var notes: [ShopDealNote] = []
+    var leads: [ShopDealLead] = []
+    var audit: [ShopDealAuditEntry] = []
 
-    enum CodingKeys: String, CodingKey { case dealCode, customer, quotes, orders, purchaseOrders, supplierRequests, linesFrom }
+    enum CodingKeys: String, CodingKey {
+        case dealCode, customer, quotes, orders, purchaseOrders, supplierRequests, linesFrom, lines, compare, notes, leads, audit
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -418,7 +561,15 @@ struct ShopDeal: Sendable, Decodable {
         purchaseOrders = c.decodeLossyArray(ShopDealPurchaseOrder.self, forKey: .purchaseOrders)
         supplierRequests = c.decodeLossyArray(ShopSupplierRequest.self, forKey: .supplierRequests)
         linesFrom = c.decodeFlexibleString(forKey: .linesFrom)
+        lines = c.decodeLossyArray(ShopDealLine.self, forKey: .lines)
+        compare = (try? c.decodeIfPresent(ShopDealCompare.self, forKey: .compare)) ?? ShopDealCompare()
+        notes = c.decodeLossyArray(ShopDealNote.self, forKey: .notes)
+        leads = c.decodeLossyArray(ShopDealLead.self, forKey: .leads)
+        audit = c.decodeLossyArray(ShopDealAuditEntry.self, forKey: .audit)
     }
+
+    /// The deal's money is in the quotes' (or orders') currency.
+    var currency: String { quotes.first?.currency ?? orders.first?.currency ?? "GBP" }
 }
 
 // MARK: - Stock enquiries (kept on the product)
@@ -436,9 +587,13 @@ struct ShopStockEnquiry: Identifiable, Hashable, Sendable, Decodable {
     var leadTime: String?
     var unitPriceMinor: Int?
     var validUntil: String?
+    var supplierQuoteRef: String?
+    var notes: String?
+    var contactEmail: String?
 
     enum CodingKeys: String, CodingKey {
         case uuid, supplierName, contactName, qty, sentAt, channel, answered, stockQty, leadTime, unitPriceMinor, validUntil
+        case supplierQuoteRef, notes, contactEmail
     }
 
     init(from decoder: Decoder) throws {
@@ -454,6 +609,9 @@ struct ShopStockEnquiry: Identifiable, Hashable, Sendable, Decodable {
         leadTime = c.decodeFlexibleString(forKey: .leadTime)
         unitPriceMinor = c.decodeFlexibleInt(forKey: .unitPriceMinor)
         validUntil = c.decodeFlexibleString(forKey: .validUntil)
+        supplierQuoteRef = c.decodeFlexibleString(forKey: .supplierQuoteRef)
+        notes = c.decodeFlexibleString(forKey: .notes)
+        contactEmail = c.decodeFlexibleString(forKey: .contactEmail)
     }
 
     var channelLabel: String? { channel.flatMap(ShopMessageChannel.init(rawValue:))?.label }
@@ -587,10 +745,25 @@ struct ShopOrderExtras: Sendable, Decodable {
     var deliveryWindow: String?
     var customerUpdates: [ShopCustomerUpdate]
     var deliveryChangeRequests: [ShopDeliveryChangeRequest]
+    var purchaseOrders: [ShopOrderPurchaseOrderRef] = []
+    var stripeSessionId: String?
+    var paidAmountMinor: Int?
+    var billingAddress: JSONValue?
+    var deliveryMethod: String?
+    /// The delivery address agreed on the order (drop-ship), when there is one.
+    var deliveryAddress: ShopDeliveryAddress?
+    var deliveryChangePending = false
+    var shippedAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case dealCode, paymentMethod, bankTransferDue, daysWaiting, paidReference, invoiceUuid, customerPoNumber
         case deliveryDate, deliveryWindow, customerUpdates, deliveryChangeRequests
+        case purchaseOrders, stripeSessionId, paidAmountMinor, billingAddress, deliveryMethod, deliveryAddress
+        case deliveryChangePending, tracking
+    }
+
+    private struct TrackingTimes: Decodable {
+        var shippedAt: String?
     }
 
     init(from decoder: Decoder) throws {
@@ -606,6 +779,14 @@ struct ShopOrderExtras: Sendable, Decodable {
         deliveryWindow = c.decodeFlexibleString(forKey: .deliveryWindow)
         customerUpdates = c.decodeLossyArray(ShopCustomerUpdate.self, forKey: .customerUpdates)
         deliveryChangeRequests = c.decodeLossyArray(ShopDeliveryChangeRequest.self, forKey: .deliveryChangeRequests)
+        purchaseOrders = c.decodeLossyArray(ShopOrderPurchaseOrderRef.self, forKey: .purchaseOrders)
+        stripeSessionId = c.decodeFlexibleString(forKey: .stripeSessionId)?.trimmedOrNil
+        paidAmountMinor = c.decodeFlexibleInt(forKey: .paidAmountMinor)
+        billingAddress = try? c.decodeIfPresent(JSONValue.self, forKey: .billingAddress)
+        deliveryMethod = c.decodeFlexibleString(forKey: .deliveryMethod)?.trimmedOrNil
+        deliveryAddress = try? c.decodeIfPresent(ShopDeliveryAddress.self, forKey: .deliveryAddress)
+        deliveryChangePending = c.decodeFlexibleBool(forKey: .deliveryChangePending) ?? false
+        shippedAt = ((try? c.decodeIfPresent(TrackingTimes.self, forKey: .tracking))?.shippedAt).flatMap(APIDate.parse)
     }
 
     init() {

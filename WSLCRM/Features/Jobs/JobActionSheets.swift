@@ -1,190 +1,5 @@
 import SwiftUI
 
-/// Logs a part, material or labour line against a job (engineers booked on the job may do this).
-struct AddJobItemSheet: View {
-    let detail: JobDetail
-    let onAdded: () -> Void
-    @Environment(\.services) private var services
-    @Environment(SessionStore.self) private var session
-    @Environment(\.dismiss) private var dismiss
-    @State private var itemType: JobItemType = .part
-    @State private var description = ""
-    @State private var quantity: Decimal = 1
-    @State private var unitPrice: Decimal?
-    @State private var phaseUuid: String?
-    @State private var saving = false
-    @State private var error: APIError?
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    Picker("Type", selection: $itemType) {
-                        ForEach(JobItemType.allCases, id: \.self) { Text(Formatters.humanize($0.rawValue)).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    TextField("What was used?", text: $description, axis: .vertical)
-                        .accessibilityIdentifier("addItem.description")
-                    Stepper(value: $quantity, in: 0.25...10_000, step: itemType == .labour ? 0.25 : 1) {
-                        LabeledContent("Quantity", value: quantity.formatted())
-                    }
-                    TextField("Unit price (optional)", value: $unitPrice, format: .number)
-                        .keyboardType(.decimalPad)
-                } footer: {
-                    if itemType == .part || itemType == .material {
-                        Text("Parts and materials need office approval before they're invoiced.")
-                    }
-                }
-                if !detail.phases.isEmpty {
-                    Section("Phase") {
-                        Picker("Phase", selection: $phaseUuid) {
-                            Text("None").tag(String?.none)
-                            ForEach(detail.sortedPhases) { Text($0.name).tag(Optional($0.uuid)) }
-                        }
-                    }
-                }
-                if let error { Section { InlineErrorRow(error: error) } }
-            }
-            .navigationTitle("Add item")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") { submit() }
-                        .disabled(description.trimmingCharacters(in: .whitespaces).isEmpty || saving)
-                }
-            }
-            .onAppear {
-                phaseUuid = detail.sortedPhases.first { !$0.status.isFinished }?.uuid
-            }
-        }
-    }
-
-    private func submit() {
-        saving = true
-        error = nil
-        let myOpenVisit = detail.visits.first { $0.engineerUserUuid == session.user?.uuid && $0.status == .onSite }
-        let body = AddJobItemBody(itemType: itemType.rawValue, description: description.trimmingCharacters(in: .whitespaces),
-                                  quantity: quantity, unitPrice: unitPrice, visitUuid: myOpenVisit?.uuid, phaseUuid: phaseUuid)
-        Task {
-            defer { saving = false }
-            do {
-                _ = try await services.fieldService.addItem(jobUuid: detail.job.uuid, body: body)
-                onAdded()
-                dismiss()
-            } catch {
-                self.error = error.asAPIError
-            }
-        }
-    }
-}
-
-/// Books an engineer visit (dispatchers with `fs_visits.create`).
-struct BookVisitSheet: View {
-    let detail: JobDetail
-    let onBooked: () -> Void
-    @Environment(\.services) private var services
-    @Environment(\.dismiss) private var dismiss
-    @State private var start = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0,
-                                                     of: Calendar.current.date(byAdding: .day, value: 1, to: Date())!) ?? Date()
-    @State private var durationHours = 2.0
-    @State private var engineerUuid: String?
-    @State private var engineers: [Engineer] = []
-    @State private var phaseUuid: String?
-    @State private var instructions = ""
-    @State private var saving = false
-    @State private var error: APIError?
-    @State private var conflicts: [String] = []
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("When") {
-                    DatePicker("Start", selection: $start, in: Date()...)
-                    Stepper(value: $durationHours, in: 0.5...12, step: 0.5) {
-                        LabeledContent("Duration", value: Formatters.hours(Decimal(durationHours)) ?? "")
-                    }
-                }
-                Section("Who") {
-                    Picker("Engineer", selection: $engineerUuid) {
-                        Text("Unassigned").tag(String?.none)
-                        ForEach(engineers) { Text($0.displayName).tag(Optional($0.uuid)) }
-                    }
-                }
-                if !detail.phases.isEmpty {
-                    Section("Phase") {
-                        Picker("Phase", selection: $phaseUuid) {
-                            Text("None").tag(String?.none)
-                            ForEach(detail.sortedPhases.filter { !$0.status.isFinished }) { Text($0.name).tag(Optional($0.uuid)) }
-                        }
-                    }
-                }
-                Section("Instructions") {
-                    TextField("Access notes, parking, contact on arrival…", text: $instructions, axis: .vertical)
-                        .lineLimit(2...6)
-                }
-                if !conflicts.isEmpty {
-                    Section {
-                        ForEach(conflicts, id: \.self) { Label($0, systemImage: "calendar.badge.exclamationmark") }
-                    } header: {
-                        Text("Booked — note overlapping visits")
-                    }
-                }
-                if let error { Section { InlineErrorRow(error: error) } }
-            }
-            .navigationTitle("Book visit")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(conflicts.isEmpty ? "Cancel" : "Done") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    if conflicts.isEmpty {
-                        Button("Book") { submit() }.disabled(saving)
-                    }
-                }
-            }
-            .task { engineers = (try? await services.fieldService.engineers()) ?? [] }
-        }
-    }
-
-    private struct BookingBody: Encodable, Sendable {
-        let scheduledStart: Date
-        let scheduledEnd: Date
-        let engineerUserUuid: String?
-        let phaseUuid: String?
-        let instructions: String?
-    }
-
-    private struct BookingResult: Decodable, Sendable {
-        struct Conflict: Decodable, Sendable { let jobNumber: String?; let scheduledStart: Date? }
-        let conflicts: LossyArray<Conflict>?
-    }
-
-    private func submit() {
-        saving = true
-        error = nil
-        // Dates encode as ISO-8601 UTC — the API silently drops offsets.
-        let body = BookingBody(scheduledStart: start, scheduledEnd: start.addingTimeInterval(durationHours * 3600),
-                        engineerUserUuid: engineerUuid, phaseUuid: phaseUuid,
-                        instructions: instructions.isEmpty ? nil : instructions)
-        Task {
-            defer { saving = false }
-            do {
-                let envelope: Envelope.Standard<BookingResult> = try await services.client.send(
-                    .post("\(FieldServiceAPI.base)/jobs/\(detail.job.uuid)/visits", json: body))
-                onBooked()
-                let overlapping = envelope.data.conflicts?.elements ?? []
-                if overlapping.isEmpty {
-                    dismiss()
-                } else {
-                    conflicts = overlapping.map { "\($0.jobNumber ?? "Another job") at \(Formatters.dateTime($0.scheduledStart) ?? "")" }
-                }
-            } catch {
-                self.error = error.asAPIError
-            }
-        }
-    }
-}
-
 /// Shows billable labour and approved items, then creates a draft invoice.
 struct JobInvoiceSheet: View {
     let detail: JobDetail
@@ -195,6 +10,18 @@ struct JobInvoiceSheet: View {
     @State private var creating = false
     @State private var error: APIError?
     @State private var created: JobInvoiceResult?
+    @State private var labourVAT: Decimal? = 20
+    @State private var fallbackRate: Decimal?
+    @State private var hasDueDate = false
+    @State private var dueDate = Calendar.current.date(byAdding: .day, value: 30, to: Date()) ?? Date()
+    @State private var notes = ""
+
+    private var options: JobInvoiceOptions {
+        let trimmed = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        return JobInvoiceOptions(labourTaxRate: labourVAT, hourlyRate: fallbackRate,
+                                 dueDate: hasDueDate ? CalendarDay(date: dueDate) : nil,
+                                 notes: trimmed.isEmpty ? nil : trimmed)
+    }
 
     var body: some View {
         NavigationStack {
@@ -211,6 +38,30 @@ struct JobInvoiceSheet: View {
                                 .foregroundStyle(Tone.success.color)
                             NavigationLink("Open invoice") { InvoiceDetailView(invoiceUuid: created.invoiceUuid) }
                                 .accessibilityIdentifier("jobInvoice.open")
+                        }
+                    }
+                    if created == nil {
+                        Section {
+                            LabeledContent("Labour VAT %") {
+                                TextField("20", value: $labourVAT, format: .number)
+                                    .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+                                    .accessibilityIdentifier("jobInvoice.labourVAT")
+                            }
+                            LabeledContent("Hourly rate if missing") {
+                                TextField("Only if missing", value: $fallbackRate, format: .number)
+                                    .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+                                    .accessibilityIdentifier("jobInvoice.fallbackRate")
+                            }
+                            Toggle("Set a due date", isOn: $hasDueDate)
+                            if hasDueDate {
+                                DatePicker("Due", selection: $dueDate, displayedComponents: .date)
+                            }
+                            TextField("Invoice notes (optional)", text: $notes, axis: .vertical)
+                                .lineLimit(1...4)
+                        } header: {
+                            Text("Invoice options")
+                        } footer: {
+                            Text("The fallback rate prices labour that has no hourly rate on the visit, job or job type.")
                         }
                     }
                     Section("Billable") {
@@ -252,7 +103,7 @@ struct JobInvoiceSheet: View {
                             .listRowInsets(EdgeInsets())
                         } footer: {
                             if preview.missingRate {
-                                Text("Set an hourly rate on the job or job type before invoicing.")
+                                Text("Enter a fallback hourly rate above (or set one on the job) to price the labour marked “No hourly rate”.")
                             } else if !preview.canInvoice {
                                 Text("Draft and cancelled jobs can't be invoiced.")
                             }
@@ -264,16 +115,27 @@ struct JobInvoiceSheet: View {
             .navigationTitle("Invoice \(detail.job.jobNumber)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .task { await load() }
+            .task(id: PreviewKey(labourVAT: labourVAT, fallbackRate: fallbackRate)) {
+                if state.value != nil { try? await Task.sleep(for: .milliseconds(400)) }
+                guard !Task.isCancelled, created == nil else { return }
+                await load()
+            }
         }
     }
 
+    private struct PreviewKey: Hashable {
+        let labourVAT: Decimal?
+        let fallbackRate: Decimal?
+    }
+
     private func load() async {
-        state = .loading
+        if state.value == nil { state = .loading }
         do {
-            state = .loaded(try await services.invoices.jobInvoicePreview(jobUuid: detail.job.uuid))
+            state = .loaded(try await services.fieldService.invoicePreview(jobUuid: detail.job.uuid, options: options))
         } catch {
-            state = .failed(error.asAPIError)
+            let apiError = error.asAPIError
+            if case .cancelled = apiError { return }
+            state = .failed(apiError)
         }
     }
 
@@ -282,7 +144,7 @@ struct JobInvoiceSheet: View {
         error = nil
         defer { creating = false }
         do {
-            created = try await services.invoices.createJobInvoice(jobUuid: detail.job.uuid, dueDate: nil)
+            created = try await services.fieldService.createInvoice(jobUuid: detail.job.uuid, options: options)
             onInvoiced()
         } catch {
             self.error = error.asAPIError

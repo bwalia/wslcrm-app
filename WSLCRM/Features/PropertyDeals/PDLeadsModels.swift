@@ -138,6 +138,8 @@ struct PDRenovationBody: Encodable, Sendable, Equatable {
     /// `yyyy-MM-dd`.
     var startDate: String?
     var targetEndDate: String?
+    /// Builders and site managers added to the board as members.
+    var builderUserUuids: [String]?
 }
 
 // MARK: - Hot leads, news and replies
@@ -219,6 +221,8 @@ struct PDLeadSignal: Decodable, Sendable, Hashable, Identifiable {
     var url: String?
     var occurredAt: Date?
     var createdAt: Date?
+    /// When a follow-up last quoted it.
+    var usedAt: Date?
 
     var id: String { uuid }
     var fromCompaniesHouse: Bool { source == "companies_house" }

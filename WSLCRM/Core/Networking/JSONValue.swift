@@ -229,3 +229,21 @@ extension JSONEncoder {
         return encoder
     }
 }
+
+extension JSONValue {
+    /// The `data` of the house envelope (`{success, data, meta}`), else the value itself. A record
+    /// that merely has a `data` field is left alone; a `null` data means there was nothing inside.
+    var payload: JSONValue {
+        guard case .object(let o) = self, let inner = o["data"], o["success"] != nil || o.count <= 3 else { return self }
+        if case .null = inner { return self }
+        return inner
+    }
+}
+
+extension JSONValue {
+    /// The keys and values of an object (empty for anything else).
+    var objectFields: [String: JSONValue] {
+        if case .object(let o) = self { return o }
+        return [:]
+    }
+}

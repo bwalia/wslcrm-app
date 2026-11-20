@@ -5,13 +5,13 @@ import SwiftUI
 struct HomeView: View {
     let hubs: [NavigationPolicy.Home]
     let open: (AppTab) -> Void
-    @Binding var assistant: WebPageRoute?
 
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @Environment(SyncCenter.self) private var sync
     @Environment(\.dynamicTypeSize) private var typeSize
-    @State private var stats: LoadState<FieldServiceStats> = .idle
+    @State private var digest = HomeDigest()
+    @State private var editingHome = false
     @State private var showingProfile = false
     @State private var showingCapture = false
     @State private var creatingRequest = false
@@ -32,11 +32,15 @@ struct HomeView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
+                if !HomeDigest.sources(session: session).isEmpty { todaySection }
                 if !hubs.isEmpty { workSection }
-                if session.permissions.can(.read, .fsJobs) { todaySection }
                 quickActions(catalog: catalog)
                 if !catalog.nativeEntries.isEmpty { appsSection(catalog: catalog) }
-                if let route = catalog.assistant { AssistantCard { assistant = route } }
+                // The AI Navigator, once its native screen is in this person's menu.
+                if let chat = catalog.entry(forKey: AppMenu.aiChatKey) {
+                    AppEntryLink(entry: chat) { AssistantCardLabel() }
+                        .accessibilityIdentifier("home.assistant")
+                }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 32)
@@ -47,9 +51,13 @@ struct HomeView: View {
         .navigationTitle("Home")
         .refreshable {
             await session.reloadPermissions()
-            await loadStats()
+            await digest.load(session: session, services: services)
         }
-        .task { await loadStats() }
+        .task(id: session.workspace?.uuid) { await digest.load(session: session, services: services) }
+        .sheet(isPresented: $editingHome) {
+            let policy = NavigationPolicy(session: session)
+            EditHomeSheet(available: policy.available, current: policy.ordered)
+        }
         .sheet(isPresented: $showingProfile) { ProfileSheet() }
         .sheet(isPresented: $showingCapture) {
             PDQuickCaptureView { message in withAnimation { toast = message } }
@@ -67,7 +75,10 @@ struct HomeView: View {
 
     private var workSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            DashboardSectionHeader("Your work")
+            DashboardSectionHeader("Your work") {
+                Button("Edit") { editingHome = true }
+                    .accessibilityIdentifier("home.editWork")
+            }
             if let first = hubs.first {
                 Button { open(.hub(first)) } label: { PrimaryHubCard(hub: first) }
                     .buttonStyle(.pressableCard)
@@ -88,34 +99,49 @@ struct HomeView: View {
 
     // MARK: Today
 
+    /// What needs the person today, from their own modules: each count opens where to deal with it.
     @ViewBuilder
     private var todaySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            DashboardSectionHeader("Today") {
-                if hubs.contains(.fieldService) {
-                    Button("Field Service") { open(.hub(.fieldService)) }
-                }
-            }
-            switch stats {
-            case .idle, .loading:
+            DashboardSectionHeader("Needs you today")
+            if !digest.hasLoaded {
                 LazyVGrid(columns: columns(min: 150), spacing: 10) {
                     ForEach(0..<4, id: \.self) { _ in
                         MetricCard(title: "Loading", value: "00", systemImage: "circle").redacted(reason: .placeholder)
                     }
                 }
-            case .failed(let error):
-                InlineErrorRow(error: error) { Task { await loadStats() } }
-                    .brandCard(padding: 12, radius: 16)
-            case .loaded(let stats):
+            } else if digest.signals.isEmpty {
+                Label("Nothing is waiting for you. Nice work.", systemImage: "checkmark.circle.fill")
+                    .font(.brandCallout)
+                    .foregroundStyle(Tone.success.textColor)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .brandCard(padding: 14, radius: 16)
+                    .accessibilityIdentifier("home.allClear")
+            } else {
                 LazyVGrid(columns: columns(min: 150), spacing: 10) {
-                    MetricCard(title: "Visits today", value: "\(stats.visitsToday)", systemImage: "calendar", tone: .info)
-                    MetricCard(title: "On site now", value: "\(stats.engineersOnSite)", systemImage: "mappin.and.ellipse", tone: .success)
-                    MetricCard(title: "Open jobs", value: "\(stats.openJobs)", systemImage: "wrench.and.screwdriver", tone: .progress)
-                    MetricCard(title: "Overdue", value: "\(stats.overdueJobs)", systemImage: "exclamationmark.triangle",
-                               tone: stats.overdueJobs > 0 ? .danger : .neutral)
+                    ForEach(digest.signals) { signal in
+                        signalLink(signal)
+                    }
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func signalLink(_ signal: HomeSignal) -> some View {
+        let card = MetricCard(title: signal.title, value: signal.count.formatted(), systemImage: signal.systemImage,
+                              tone: signal.tone)
+        Group {
+            if let hub = signal.hub, hubs.contains(hub) {
+                Button { open(.hub(hub)) } label: { card }
+            } else if let destination = NativeModules.destination(forKey: signal.menuKey) {
+                MenuDestinationLink(destination: destination) { card }
+            } else {
+                card
+            }
+        }
+        .buttonStyle(.pressableCard)
+        .accessibilityIdentifier("home.signal.\(signal.id)")
     }
 
     // MARK: Quick actions
@@ -125,14 +151,16 @@ struct HomeView: View {
         let title: String
         let systemImage: String
         let color: Color
-        let run: () -> Void
+        /// A screen to push instead of running `run`.
+        var destination: MenuDestination?
+        var run: () -> Void = {}
     }
 
     private func actions(catalog: AppCatalog) -> [QuickAction] {
         var actions: [QuickAction] = []
-        if let route = catalog.assistant {
+        if case .menu(let chat)? = catalog.entry(forKey: AppMenu.aiChatKey)?.destination {
             actions.append(QuickAction(id: "ai", title: "Ask AI", systemImage: "sparkles",
-                                       color: Palette.tileColors[1]) { assistant = route })
+                                       color: Palette.tileColors[1], destination: chat))
         }
         if let access = session.propertyDeals, access.can(.create, .deals) || access.can(.create, .properties) {
             actions.append(QuickAction(id: "capture", title: "Capture", systemImage: "camera.viewfinder",
@@ -152,16 +180,12 @@ struct HomeView: View {
             DashboardSectionHeader("Quick actions")
             HStack(alignment: .top, spacing: 8) {
                 ForEach(actions(catalog: catalog)) { action in
-                    Button(action: action.run) {
-                        VStack(spacing: 8) {
-                            AppIconTile(systemImage: action.systemImage, color: action.color, size: 52)
-                            Text(action.title)
-                                .font(.brandCaption)
-                                .foregroundStyle(Color(.label))
-                                .multilineTextAlignment(.center)
-                                .lineLimit(2)
+                    Group {
+                        if let destination = action.destination {
+                            MenuDestinationLink(destination: destination) { quickActionLabel(action) }
+                        } else {
+                            Button(action: action.run) { quickActionLabel(action) }
                         }
-                        .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.pressableCard)
                     .accessibilityIdentifier("home.action.\(action.id)")
@@ -169,6 +193,18 @@ struct HomeView: View {
             }
             .brandCard(padding: 14)
         }
+    }
+
+    private func quickActionLabel(_ action: QuickAction) -> some View {
+        VStack(spacing: 8) {
+            AppIconTile(systemImage: action.systemImage, color: action.color, size: 52)
+            Text(action.title)
+                .font(.brandCaption)
+                .foregroundStyle(Color(.label))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: Your apps
@@ -183,7 +219,7 @@ struct HomeView: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top),
                                      count: typeSize.isAccessibilitySize ? 2 : 4), spacing: 16) {
                 ForEach(entries) { entry in
-                    AppEntryLink(entry: entry, assistant: $assistant) {
+                    AppEntryLink(entry: entry) {
                         VStack(spacing: 8) {
                             AppIconTile(systemImage: entry.systemImage, color: entry.color, size: 56)
                             Text(entry.name)
@@ -194,6 +230,7 @@ struct HomeView: View {
                         }
                         .frame(maxWidth: .infinity)
                     }
+                    .contextMenu { PinToTabBarButton(pin: .app(entry.key)) }
                 }
             }
             .brandCard(padding: 16)
@@ -204,15 +241,6 @@ struct HomeView: View {
         [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 280 : min), spacing: 10)]
     }
 
-    private func loadStats() async {
-        guard session.permissions.can(.read, .fsJobs) else { return }
-        if stats.value == nil { stats = .loading }
-        do {
-            stats = .loaded(try await services.fieldService.stats())
-        } catch {
-            if stats.value == nil { stats = .failed(error.asAPIError) }
-        }
-    }
 }
 
 // MARK: - Hero
@@ -381,40 +409,34 @@ private struct HubCard: View {
     }
 }
 
-/// The AI Navigator, offered at the foot of Home.
-private struct AssistantCard: View {
-    let action: () -> Void
-
+/// The AI Navigator, offered at the foot of Home (its native chat screen).
+private struct AssistantCardLabel: View {
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 14) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 48, height: 48)
-                    .background(
-                        LinearGradient(colors: [Color.accentColor, Palette.tileColors[1]],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing),
-                        in: Circle())
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Ask the AI Navigator")
-                        .font(.brandHeadline)
-                        .foregroundStyle(Color(.label))
-                    Text("Questions about customers, jobs, deals — in plain English.")
-                        .font(.brandFootnote)
-                        .foregroundStyle(.secondaryText)
-                        .multilineTextAlignment(.leading)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "arrow.up.right")
+        HStack(spacing: 14) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 48, height: 48)
+                .background(
+                    LinearGradient(colors: [Color.accentColor, Palette.tileColors[1]],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                    in: Circle())
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Ask the AI Navigator")
+                    .font(.brandHeadline)
+                    .foregroundStyle(Color(.label))
+                Text("Questions about customers, jobs, deals — in plain English.")
+                    .font(.brandFootnote)
                     .foregroundStyle(.secondaryText)
-                    .accessibilityHidden(true)
+                    .multilineTextAlignment(.leading)
             }
-            .brandCard(padding: 16)
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .foregroundStyle(.secondaryText)
+                .accessibilityHidden(true)
         }
-        .buttonStyle(.pressableCard)
-        .accessibilityIdentifier("home.assistant")
+        .brandCard(padding: 16)
     }
 }
 

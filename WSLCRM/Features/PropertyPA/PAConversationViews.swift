@@ -70,6 +70,9 @@ struct PAPrepareView: View {
 /// knowledge, with sources and stated gaps. Coaching separates fact from assumption.
 struct PAAskView: View {
     var context: PAContext?
+    /// "ask" or "coach" sends the question straight to the PA in that mode (the opportunity page's
+    /// Ask my PA and Coach). nil: coaching from the record when there's an opportunity, else a question.
+    var mode: String? = nil
 
     struct Turn: Identifiable, Equatable {
         let id = UUID()
@@ -80,6 +83,7 @@ struct PAAskView: View {
     }
 
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var turns: [Turn] = []
     @State private var question = ""
@@ -124,9 +128,11 @@ struct PAAskView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { handingOff = true } label: { Label("Ask your manager", systemImage: "arrowshape.turn.up.right") }
-                    .accessibilityIdentifier("pa.ask.manager")
+            if session.permissions.pa(.create, "handoffs") {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { handingOff = true } label: { Label("Ask your manager", systemImage: "arrowshape.turn.up.right") }
+                        .accessibilityIdentifier("pa.ask.manager")
+                }
             }
         }
         .safeAreaInset(edge: .bottom) { askBar }
@@ -162,8 +168,14 @@ struct PAAskView: View {
         turns.append(turn)
         Task {
             do {
-                let answer = try await services.propertyPA.ask(PAAskBody(question: text, context: context),
+                let answer: PAAnswer
+                if let mode {
+                    answer = try await services.propertyPA.askRun(message: text, mode: mode,
+                                                                  opportunityUuid: context?.opportunityUuid)
+                } else {
+                    answer = try await services.propertyPA.ask(PAAskBody(question: text, context: context),
                                                                mode: context?.opportunityUuid == nil ? "ask" : "coach")
+                }
                 update(turn.id) { $0.answer = answer }
             } catch {
                 update(turn.id) { $0.error = PDApprovalDetailView.describe(error.asAPIError) }
@@ -186,12 +198,15 @@ struct PAHandoffSheet: View {
     var lastQuestion: String?
     var lastAnswer: String?
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var question = ""
     @State private var recommendation = ""
     @State private var sending = false
     @State private var error: APIError?
     @State private var sent: PAHandoff?
+    /// The deal's facts that go with the question (seller minimum, our position, decision makers).
+    @State private var facts: [String: JSONValue] = [:]
     @State private var managers: [PAManager] = []
     @State private var to: String?
     @State private var managersMessage: String?
@@ -230,7 +245,8 @@ struct PAHandoffSheet: View {
                     } header: {
                         Text("Recommendation (optional)")
                     } footer: {
-                        Text("The PA adds the context: the person, the property and the latest facts with their sources.")
+                        Text(facts.isEmpty ? "The question goes to your manager's day as a decision card."
+                                           : "The deal's facts go with it: \(PAMapping.contextText(.object(facts)) ?? "").")
                     }
                     if let error { Section { InlineErrorRow(error: error) } }
                 }
@@ -253,11 +269,20 @@ struct PAHandoffSheet: View {
             }
             .task {
                 do {
-                    managers = try await services.propertyPA.managers()
+                    // Never yourself (as on the web).
+                    managers = try await services.propertyPA.managers().filter { $0.uuid != session.user?.uuid }
                     to = managers.first?.uuid
-                    if managers.isEmpty { managersMessage = "No manager is set up in this workspace yet." }
+                    if managers.isEmpty { managersMessage = "No manager is set up in this workspace yet. Ask a workspace admin to give someone the manager role." }
                 } catch {
-                    managersMessage = "Couldn't find your managers. Ask on the web for now."
+                    managersMessage = "Couldn't load your managers. Close this and try again in a moment."
+                }
+                if let opportunity = context?.opportunityUuid {
+                    if let record = try? await services.propertyPA.opportunity(opportunity) { facts = record.handoffContext }
+                    if recommendation.isEmpty,
+                       let prepared: PAServerPrepare = try? await services.propertyPA.paData(.get("\(PropertyPAAPI.base)/prepare/\(opportunity)")),
+                       let action = prepared.recommendedAction {
+                        recommendation = action
+                    }
                 }
             }
         }
@@ -268,9 +293,13 @@ struct PAHandoffSheet: View {
         defer { sending = false }
         do {
             let trimmed = recommendation.trimmingCharacters(in: .whitespacesAndNewlines)
-            sent = try await services.propertyPA.handoff(PAHandoffBody(
-                toUserUuid: to, opportunityUuid: context?.opportunityUuid, question: question.trimmingCharacters(in: .whitespacesAndNewlines),
-                recommendation: trimmed.isEmpty ? nil : trimmed))
+            guard let to else { return }
+            let text = question.trimmingCharacters(in: .whitespacesAndNewlines)
+            try await services.propertyPA.handoff(toUserUuid: to, question: text, opportunityUuid: context?.opportunityUuid,
+                                                  recommendation: trimmed.isEmpty ? nil : trimmed, context: facts)
+            let name = managers.first { $0.uuid == to }?.name
+            sent = PAHandoff(uuid: UUID().uuidString, to: name.map { PACard.Person(uuid: to, name: $0) },
+                             opportunityUuid: context?.opportunityUuid, question: text)
             error = nil
         } catch {
             self.error = error.asAPIError
@@ -288,6 +317,7 @@ struct PAHandoffView: View {
     @State private var replyText = ""
     @State private var sending = false
     @State private var message: String?
+    @State private var notice: String?
 
     var body: some View {
         Group {
@@ -313,13 +343,28 @@ struct PAHandoffView: View {
                     NavigationLink(value: PDDealRoute(uuid: dealUuid)) { Label("Open deal", systemImage: "house") }
                 }
             }
+            if let opportunity = handoff.opportunityUuid {
+                Section {
+                    NavigationLink(value: NativeScreenRoute("pa.opportunity", opportunity)) {
+                        Label("Open the opportunity", systemImage: "arrow.up.right.square")
+                    }
+                    .accessibilityIdentifier("pa.handoff.opportunity")
+                }
+            }
             if let recommendation = handoff.recommendation {
-                Section("Recommendation") { Text(recommendation) }
+                Section("PA recommends") { Text(recommendation) }
+            }
+            if let context = handoff.contextText {
+                Section("Context") { Text(context).font(.wsSubheadline).foregroundStyle(.secondaryText) }
             }
             if !handoff.contextFacts.isEmpty {
                 Section("What we know") { ForEach(handoff.contextFacts) { PAFactRow(fact: $0) } }
             }
-            if handoff.isOpen {
+            if handoff.isOpen, !session.permissions.pa(.update, "handoffs") {
+                Section {
+                    Label("Your role can't answer handoffs.", systemImage: "lock").foregroundStyle(.secondaryText)
+                }
+            } else if handoff.isOpen {
                 Section {
                     Button { Task { await decide(handoff, .agree) } } label: {
                         Label("Agree", systemImage: session.biometrics.availableKind == .touchID ? "touchid" : "faceid").frame(maxWidth: .infinity)
@@ -344,6 +389,12 @@ struct PAHandoffView: View {
                         .accessibilityIdentifier("pa.handoff.answered")
                 }
             }
+            if let notice {
+                Section {
+                    Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor)
+                        .accessibilityIdentifier("pa.handoff.notice")
+                }
+            }
             if let message { Section { Text(message).foregroundStyle(Tone.warning.textColor) } }
         }
     }
@@ -357,9 +408,21 @@ struct PAHandoffView: View {
         defer { sending = false }
         do {
             let text = replyText.trimmingCharacters(in: .whitespacesAndNewlines)
-            state = .loaded(try await services.propertyPA.reply(handoffUuid: handoff.uuid,
-                                                                PAHandoffReply(decision: decision, text: text.isEmpty ? nil : text)))
+            // As on the web: agreeing records the PA's recommendation as the decision.
+            let reply: String
+            let decided: String?
+            if decision == .agree {
+                reply = handoff.recommendation.map { "Agreed: \($0)" } ?? (text.isEmpty ? "Agreed." : text)
+                decided = handoff.recommendation ?? reply
+            } else {
+                reply = text
+                decided = nil
+            }
+            try await services.propertyPA.replyHandoff(handoff.uuid, reply: reply, decision: decided)
+            replyText = ""
             message = nil
+            notice = "Sent. It goes back onto the deal."
+            state = .loaded(try await services.propertyPA.handoffDetail(handoff.uuid))
         } catch {
             message = PDApprovalDetailView.describe(error.asAPIError)
         }
@@ -427,11 +490,16 @@ struct PATeachSheet: View {
                     }
                     Section {
                         Picker("Who it's for", selection: $scope) {
-                            Text("Only my PA").tag(PATeachBody.Scope.personal)
-                            if isManager { Text("The company").tag(PATeachBody.Scope.company) }
+                            Text("Just me").tag(PATeachBody.Scope.personal)
+                            Text("My team").tag(PATeachBody.Scope.team)
+                            Text("The company").tag(PATeachBody.Scope.company)
                         }
                         .pickerStyle(.segmented)
                         .accessibilityIdentifier("pa.teach.scope")
+                    } footer: {
+                        if scope != .personal, !isManager {
+                            Text("A manager approves team and company rules before the PA uses them.")
+                        }
                     }
                 }
                 if let error { Section { InlineErrorRow(error: error) } }
@@ -440,7 +508,9 @@ struct PATeachSheet: View {
             .navigationTitle("Teach PA")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(proposed?.isApproved == true ? "Done" : "Cancel") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(proposed?.isApproved == true || (proposed != nil && proposed?.scope != "personal" && !isManager) ? "Done" : "Cancel") { dismiss() }
+                }
                 if proposed == nil {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Next") { Task { await teach() } }
@@ -470,9 +540,14 @@ struct PATeachSheet: View {
                     Label("Approved\(rule.version.map { " · version \($0)" } ?? ""). The PA uses it from now on.", systemImage: "checkmark.seal.fill")
                         .foregroundStyle(Tone.success.textColor)
                         .accessibilityIdentifier("pa.teach.approved")
+                } else if rule.scope != "personal", !isManager {
+                    Label("Sent for approval. A manager approves it before the PA uses it.", systemImage: "paperplane")
+                        .foregroundStyle(Tone.info.textColor)
+                        .accessibilityIdentifier("pa.teach.proposed")
                 } else {
                     Button { Task { await approve(rule) } } label: {
-                        Text(rule.scope == "company" ? "Teach the company" : "Teach my PA").frame(maxWidth: .infinity)
+                        Text(rule.scope == "company" ? "Teach the company" : rule.scope == "team" ? "Teach my team" : "Teach my PA")
+                            .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.large(.brand))
                     .listRowSeparator(.hidden)
@@ -501,7 +576,7 @@ struct PATeachSheet: View {
     }
 
     private func approve(_ rule: PAKnowledgeRule) async {
-        if rule.scope == "company" {
+        if rule.scope != "personal" {
             guard await session.biometrics.authenticate(reason: "Approve a company rule") else {
                 message = "Not approved: \(session.biometrics.displayName) didn't confirm it's you."
                 return

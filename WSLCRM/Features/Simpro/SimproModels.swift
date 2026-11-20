@@ -296,6 +296,7 @@ struct ReportQuery: Sendable, Equatable {
     var weeks: Int?
     var expiringWithinDays: Int?
     var assetUuid: String?
+    var contractUuid: String?
 
     var queryItems: [URLQueryItem] {
         var items: [URLQueryItem] = []
@@ -306,6 +307,7 @@ struct ReportQuery: Sendable, Equatable {
         add("weeks", weeks.map(String.init))
         add("expiring_within_days", expiringWithinDays.map(String.init))
         add("asset_uuid", assetUuid)
+        add("contract_uuid", contractUuid)
         return items
     }
 }
@@ -314,10 +316,47 @@ struct SimproStatus: Sendable, Decodable {
     struct Connection: Sendable, Decodable {
         var name: String?
         var baseUrl: String?
+        var companyId: String?
         var mode: String?
         var pushEnabled: Bool?
+        var pullEnabled: Bool?
+        var isActive: Bool?
         var lastPullAt: String?
         var lastPushAt: String?
+        var lastError: String?
+
+        enum CodingKeys: String, CodingKey {
+            case name, baseUrl, companyId, mode, pushEnabled, pullEnabled, isActive, lastPullAt, lastPushAt, lastError
+        }
+
+        init(name: String? = nil, baseUrl: String? = nil, companyId: String? = nil, mode: String? = nil,
+             pushEnabled: Bool? = nil, pullEnabled: Bool? = nil, isActive: Bool? = nil, lastPullAt: String? = nil,
+             lastPushAt: String? = nil, lastError: String? = nil) {
+            self.name = name
+            self.baseUrl = baseUrl
+            self.companyId = companyId
+            self.mode = mode
+            self.pushEnabled = pushEnabled
+            self.pullEnabled = pullEnabled
+            self.isActive = isActive
+            self.lastPullAt = lastPullAt
+            self.lastPushAt = lastPushAt
+            self.lastError = lastError
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            name = c.decodeFlexibleString(forKey: .name)
+            baseUrl = c.decodeFlexibleString(forKey: .baseUrl)
+            companyId = c.decodeFlexibleString(forKey: .companyId)
+            mode = c.decodeFlexibleString(forKey: .mode)
+            pushEnabled = c.decodeFlexibleBool(forKey: .pushEnabled)
+            pullEnabled = c.decodeFlexibleBool(forKey: .pullEnabled)
+            isActive = c.decodeFlexibleBool(forKey: .isActive)
+            lastPullAt = c.decodeFlexibleString(forKey: .lastPullAt)
+            lastPushAt = c.decodeFlexibleString(forKey: .lastPushAt)
+            lastError = c.decodeFlexibleString(forKey: .lastError)
+        }
     }
 
     struct Counts: Sendable, Decodable {
@@ -342,6 +381,138 @@ struct SimproStatus: Sendable, Decodable {
     var connected: Bool
     var connection: Connection?
     var counts: [String: Counts]
+}
+
+// MARK: - Running a sync
+
+/// `POST /simpro/pull` and `/simpro/push` → what each entity did, e.g.
+/// `{ batch_uuid, direction, mode, duration_seconds, results: { customers: { created: 2, updated: 5 } }, failures? }`.
+struct SimproSyncResult: Sendable, Decodable {
+    var batchUuid: String?
+    var direction: String
+    var mode: String?
+    var durationSeconds: Int?
+    var results: [String: [String: JSONValue]]
+    var failures: [String: String]
+
+    enum CodingKeys: String, CodingKey { case batchUuid, direction, mode, durationSeconds, results, failures }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        batchUuid = c.decodeFlexibleString(forKey: .batchUuid)
+        direction = c.decodeFlexibleString(forKey: .direction) ?? "pull"
+        mode = c.decodeFlexibleString(forKey: .mode)
+        durationSeconds = c.decodeFlexibleInt(forKey: .durationSeconds)
+        // lua-cjson sends an empty table as `{}` either way, so both are read leniently.
+        results = (try? c.decodeIfPresent([String: [String: JSONValue]].self, forKey: .results)) ?? [:]
+        failures = (try? c.decodeIfPresent([String: String].self, forKey: .failures)) ?? [:]
+    }
+
+    /// "Customers: 2 created, 5 updated · Sites: 1 updated", or "Nothing to do".
+    var summary: String {
+        let order = SimproEntities.all.map(\.key)
+        let keys = results.keys.sorted { (order.firstIndex(of: $0) ?? 99, $0) < (order.firstIndex(of: $1) ?? 99, $1) }
+        let parts = keys.compactMap { entity -> String? in
+            let stats = (results[entity] ?? [:])
+                .filter { $0.key != "queued_remaining" && (Double($0.value.stringValue ?? "") ?? 0) > 0 }
+                .sorted { $0.key < $1.key }
+                .map { "\($0.value.stringValue ?? "") \(Formatters.humanize($0.key).lowercased())" }
+            return stats.isEmpty ? nil : "\(SimproEntities.label(entity)): \(stats.joined(separator: ", "))"
+        }
+        var text = parts.isEmpty ? "Nothing to do" : parts.joined(separator: " · ")
+        if !failures.isEmpty {
+            text += ". Failed: " + failures.keys.sorted().map { "\(SimproEntities.label($0)) (\(failures[$0] ?? ""))" }
+                .joined(separator: ", ")
+        }
+        return text
+    }
+}
+
+/// `POST /simpro/test` → `{ mode, company?, base_url }`.
+struct SimproTestResult: Sendable, Decodable {
+    var mode: String?
+    var company: String?
+    var baseUrl: String?
+
+    enum CodingKeys: String, CodingKey { case mode, company, baseUrl }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        mode = c.decodeFlexibleString(forKey: .mode)
+        company = c.decodeFlexibleString(forKey: .company)
+        baseUrl = c.decodeFlexibleString(forKey: .baseUrl)
+    }
+}
+
+/// One line of the sync audit trail (`GET /simpro/log`).
+struct SimproLogEntry: Sendable, Decodable, Identifiable, Hashable {
+    var uuid: String
+    var id: String { uuid }
+    var direction: String
+    var entityType: String
+    var simproId: String?
+    var operation: String?
+    var status: String
+    var httpStatus: Int?
+    var errorMessage: String?
+    var createdAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case uuid, direction, entityType, simproId, operation, status, httpStatus, errorMessage, createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        uuid = c.decodeFlexibleString(forKey: .uuid) ?? UUID().uuidString
+        direction = c.decodeFlexibleString(forKey: .direction) ?? "pull"
+        entityType = c.decodeFlexibleString(forKey: .entityType) ?? ""
+        simproId = c.decodeFlexibleString(forKey: .simproId)
+        operation = c.decodeFlexibleString(forKey: .operation)
+        status = c.decodeFlexibleString(forKey: .status) ?? "ok"
+        httpStatus = c.decodeFlexibleInt(forKey: .httpStatus)
+        errorMessage = c.decodeFlexibleString(forKey: .errorMessage)
+        createdAt = c.decodeFlexibleString(forKey: .createdAt)
+    }
+
+    /// What to say under the line: the error, or what a conflict means.
+    var detail: String? {
+        if let errorMessage, !errorMessage.isEmpty { return errorMessage }
+        if status == "conflict" { return "Changed here and in Simpro; Simpro's version was kept and ours was logged." }
+        return nil
+    }
+}
+
+/// The record types Simpro sync knows, in the server's order, with plain names.
+enum SimproEntities {
+    struct Entity: Hashable, Sendable {
+        let key: String
+        let label: String
+        let pulls: Bool
+        let pushes: Bool
+    }
+
+    static let all: [Entity] = [
+        Entity(key: "customers", label: "Customers", pulls: true, pushes: true),
+        Entity(key: "sites", label: "Sites", pulls: true, pushes: true),
+        Entity(key: "assets", label: "Assets", pulls: true, pushes: true),
+        Entity(key: "jobs", label: "Jobs & projects", pulls: true, pushes: true),
+        Entity(key: "quotes", label: "Quotes", pulls: false, pushes: true),
+        Entity(key: "invoices", label: "Invoices", pulls: false, pushes: false),
+        // Simpro's API has survey history read-only; outcomes reach it through the asset's condition.
+        Entity(key: "asset_tests", label: "Asset surveys", pulls: false, pushes: false),
+    ]
+
+    static func label(_ key: String) -> String { all.first { $0.key == key }?.label ?? Formatters.humanize(key) }
+}
+
+/// Who may run a sync. The server allows it with `simpro_sync.manage` (or a platform admin): a push
+/// writes to the customer's system of record, so by default only the Owner role has it. Owning the
+/// workspace alone isn't enough on the server, so it isn't here either.
+enum SimproAccess {
+    static func canRunSync(_ permissions: PermissionSet) -> Bool {
+        if permissions.isAdmin { return true }
+        return permissions.grants["simpro_sync"]?.contains(Action.manage.rawValue) ?? false
+    }
 }
 
 // MARK: - Formatting

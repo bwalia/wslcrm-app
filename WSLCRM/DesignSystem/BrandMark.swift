@@ -7,14 +7,22 @@ struct BrandMark: View {
     /// nil follows the workspace (BrandStore); set only in previews and tests.
     var brand: Brand?
     @State private var store = BrandStore.shared
+    @State private var theme = ThemeStore.shared
     /// Decorative where the brand name is already spelled out beside it (sign-in).
     /// In a navigation bar there is no such label, so the mark names itself instead.
     var isDecorative: Bool = true
 
     var body: some View {
-        let brand = brand ?? store.brand
+        let brand = self.brand ?? personalised(store.brand)
         Group {
-            if let file = brand.logoFile, let logo = UIImage(contentsOfFile: file.path) {
+            if self.brand == nil, let custom = theme.customLogo {
+                // The person's own picture (Settings › Appearance).
+                Image(uiImage: custom)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+                    .id(theme.logoVersion)
+            } else if let file = brand.logoFile, let logo = UIImage(contentsOfFile: file.path) {
                 Image(uiImage: logo)
                     .resizable()
                     .scaledToFit()
@@ -33,6 +41,17 @@ struct BrandMark: View {
         .accessibilityHidden(isDecorative)
         .accessibilityLabel(isDecorative ? Text(verbatim: "") : Text(brand.name))
         .accessibilityIdentifier(isDecorative ? "" : "brand.mark")
+    }
+}
+
+extension BrandMark {
+    /// "Workstation logo" chosen in Settings › Appearance: the house mark, whatever the workspace.
+    fileprivate func personalised(_ brand: Brand) -> Brand {
+        guard theme.logo == .house else { return brand }
+        var house = brand
+        house.logoFile = nil
+        house.markImageName = Brand.house.markImageName
+        return house
     }
 }
 

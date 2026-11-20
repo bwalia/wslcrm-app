@@ -4,11 +4,36 @@ import SwiftUI
 enum AppTab: Hashable {
     case home
     case hub(NavigationPolicy.Home)
+    /// An app the person pinned to the tab bar (server menu key).
+    case app(String)
     case apps
 }
 
 /// How a work hub presents itself: on its tab, and on Home's "Your work" cards.
 extension NavigationPolicy.Home {
+    /// Stable name for storing the person's order.
+    var key: String {
+        switch self {
+        case .propertyPA: "propertyPA"
+        case .myWork: "myWork"
+        case .fieldService: "fieldService"
+        case .propertyDeals: "propertyDeals"
+        case .leads: "leads"
+        case .tasks: "tasks"
+        case .shop: "shop"
+        case .ai: "ai"
+        case .projects: "projects"
+        case .more: "more"
+        }
+    }
+
+    init?(key: String) {
+        let all: [NavigationPolicy.Home] = [.propertyPA, .myWork, .fieldService, .propertyDeals, .leads, .tasks, .shop,
+                                            .ai, .projects, .more]
+        guard let match = all.first(where: { $0.key == key }) else { return nil }
+        self = match
+    }
+
     var title: String {
         switch self {
         case .propertyPA: "PA"
@@ -90,25 +115,6 @@ extension NavigationPolicy.Home {
         case .tasks: MyTasksView()
         case .shop: ShopHomeView()
         case .ai, .projects, .more: EmptyView()
-        }
-    }
-}
-
-/// The AI Navigator over the app: a sheet with its own Done, so it is clearly a place you visit
-/// and leave, rather than the app turning into a web page.
-struct AssistantSheet: View {
-    let route: WebPageRoute
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            WebPageView(route: route)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") { dismiss() }
-                            .accessibilityIdentifier("assistant.done")
-                    }
-                }
         }
     }
 }

@@ -87,19 +87,37 @@ struct PropertyDealsAPI: Sendable {
 
     // MARK: Approvals
 
-    /// `GET /approvals/inbox`: pending approvals I may decide. Cached so the list can be read
-    /// with no signal; deciding still needs one.
-    func approvalsInbox() async throws -> Fetched<[PDApproval]> {
+    /// `GET /approvals/inbox`: pending approvals I may decide (or, with `all`, every pending one,
+    /// marked `can_decide`). Cached so the list can be read with no signal; deciding still needs one.
+    func approvalsInbox(all: Bool = false, page: Int = 1, perPage: Int = 50) async throws -> Fetched<[PDApproval]> {
+        let fetched = try await approvalsPage(all: all, page: page, perPage: perPage)
+        return Fetched(value: fetched.value.items, cachedAt: fetched.cachedAt)
+    }
+
+    /// One page of the inbox, with how many there are in all.
+    func approvalsPage(all: Bool = false, page: Int = 1, perPage: Int = 50) async throws -> Fetched<Page<PDApproval>> {
+        var query = [URLQueryItem(name: "page", value: String(page)), URLQueryItem(name: "per_page", value: String(perPage))]
+        if all { query.append(URLQueryItem(name: "all", value: "true")) }
         let fetched: Fetched<Envelope.Standard<LossyArray<PDApproval>>> =
-            try await cachedEnvelope(.get("\(Self.base)/approvals/inbox"), cacheKey: "pd/approvals/inbox")
-        return Fetched(value: fetched.value.data.elements, cachedAt: fetched.cachedAt)
+            try await cachedEnvelope(.get("\(Self.base)/approvals/inbox", query: query),
+                                     cacheKey: all || page > 1 ? "pd/approvals/inbox/\(all)/\(page)" : "pd/approvals/inbox")
+        let items = fetched.value.data.elements
+        let meta = fetched.value.meta
+        return Fetched(value: Page(items: items, page: meta?.page ?? page, perPage: meta?.perPage ?? perPage,
+                                   total: meta?.total ?? items.count), cachedAt: fetched.cachedAt)
     }
 
     /// The current version of one approval, read fresh from the server (there is no single-item
-    /// route, so it comes from the inbox). Nil when it is no longer waiting for me.
+    /// route, so it comes from the inbox: mine first, then every pending one). Nil when it is no
+    /// longer pending.
     func currentApproval(_ uuid: String) async throws -> PDApproval? {
-        let envelope: Envelope.Standard<LossyArray<PDApproval>> = try await client.send(.get("\(Self.base)/approvals/inbox"))
-        return envelope.data.elements.first { $0.uuid == uuid }
+        for all in [false, true] {
+            let envelope: Envelope.Standard<LossyArray<PDApproval>> = try await client.send(
+                .get("\(Self.base)/approvals/inbox", query: [URLQueryItem(name: "per_page", value: "100")]
+                     + (all ? [URLQueryItem(name: "all", value: "true")] : [])))
+            if let found = envelope.data.elements.first(where: { $0.uuid == uuid }) { return found }
+        }
+        return nil
     }
 
     /// `POST /approvals/{id}/decide`. Deliberately not a `PendingMutation`: an approval is

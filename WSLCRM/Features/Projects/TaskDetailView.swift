@@ -1,28 +1,70 @@
+import PhotosUI
+import QuickLook
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// One card, and everything a person needs to steer it: what it asked for, how the run is going,
-/// what came back, and the decisions only a person makes.
+/// One card, and everything the web's task page does with it: every field, the people and
+/// labels, subtasks, checklists, files and links, time, comments with replies and mentions,
+/// the activity log, AI work — plus the agent contract a person steers an agent's run with.
 struct TaskDetailView: View {
     let uuid: String
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var state: LoadState<KanbanTask> = .idle
+    @State private var project: KanbanProject?
     @State private var columns: [KanbanColumn] = []
+    @State private var sprints: [KanbanSprint] = []
+    @State private var epics: [KanbanEpic] = []
     @State private var comments: [KanbanComment] = []
-    @State private var checklists: [KanbanChecklist] = []
     @State private var activity: [KanbanActivity] = []
     @State private var timeEntries: [KanbanTimeEntry] = []
+    @State private var timeSummary: TaskTimeSummary?
     @State private var runningTimer: RunningTimer?
-    @State private var moving = false
-    @State private var reviewing = false
+    @State private var aiEnabled = false
+    @State private var aiChecked = false
+    @State private var aiWork: TaskAIWork?
+    @State private var aiRuns: [TaskAIRun] = []
+    @State private var sheet: TaskSheet?
+    @State private var assigneeDraft: [WorkspacePerson] = []
+    @State private var labelDraft: [KanbanLabel] = []
+    @State private var confirm: PendingConfirmation?
+    @State private var prompt: PendingPrompt?
+    @State private var notice: WorkNotice?
     @State private var newComment = ""
+    @State private var mentions: [WorkspacePerson] = []
+    @State private var photo: PhotosPickerItem?
+    @State private var importingFile = false
+    @State private var uploading = false
+    @State private var preview: URL?
     @State private var busy = false
     @State private var conflict = false
     @State private var actionError: APIError?
+    @State private var deleted = false
+    @Environment(\.dismiss) private var dismiss
+
+    enum TaskSheet: Identifiable {
+        case move, review, details, assignees, labels, mention, addLink, logTime, startAI
+        case addItem(KanbanChecklist)
+        case editEntry(KanbanTimeEntry)
+        case reply(KanbanComment)
+        case editComment(KanbanComment)
+
+        var id: String {
+            switch self {
+            case .addItem(let list): "item.\(list.uuid)"
+            case .editEntry(let entry): "entry.\(entry.uuid)"
+            case .reply(let comment): "reply.\(comment.uuid)"
+            case .editComment(let comment): "edit.\(comment.uuid)"
+            default: String(describing: self)
+            }
+        }
+    }
 
     private var me: WorkActor {
         WorkActor(uuid: session.user?.uuid ?? "", name: session.user?.displayName ?? "Me", kind: .person)
     }
+
+    private var access: ProjectAccess { ProjectAccess(project: project, session: session) }
 
     var body: some View {
         Group {
@@ -34,25 +76,57 @@ struct TaskDetailView: View {
         }
         .navigationTitle(state.value?.reference ?? "Task")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let task = state.value {
+                ToolbarItem(placement: .topBarTrailing) { toolbarMenu(task) }
+            }
+        }
         .task { await load() }
-        .sheet(isPresented: $moving) {
-            if let task = state.value {
-                MoveTaskSheet(task: task, columns: columns) { column in
-                    await perform { try await services.kanban.moveTask(task.uuid, toColumnId: column.columnId) }
+        .sheet(item: $sheet, onDismiss: applyPickers) { sheet in sheetView(sheet) }
+        .workConfirmation($confirm)
+        .workPrompt($prompt)
+        .workNotice($notice)
+        .quickLookPreview($preview)
+        .fileImporter(isPresented: $importingFile, allowedContentTypes: Self.uploadTypes) { result in
+            if case .success(let url) = result { Task { await uploadFile(url) } }
+        }
+        .onChange(of: photo) { _, item in
+            guard let item else { return }
+            Task { await uploadPhoto(item) }
+        }
+    }
+
+    // MARK: Toolbar
+
+    private func toolbarMenu(_ task: KanbanTask) -> some View {
+        Menu {
+            Button("Copy reference", systemImage: "doc.on.doc") {
+                UIPasteboard.general.string = task.reference
+                notice = .done("Copied \(task.reference).")
+            }
+            Button("Copy card ID", systemImage: "number") {
+                UIPasteboard.general.string = task.uuid
+                notice = .done("Card ID copied.")
+            }
+            if access.canEdit {
+                Button("Move to another column", systemImage: "arrow.right.square") { sheet = .move }
+                    .disabled(columns.isEmpty)
+                Button("Edit details", systemImage: "pencil") { sheet = .details }
+            }
+            if aiEnabled, session.permissions.can(.create, moduleName: "ai_runs") {
+                Button("Start with AI", systemImage: "sparkles") { sheet = .startAI }
+            }
+            if access.canEdit {
+                Button("Delete card", systemImage: "trash", role: .destructive) {
+                    confirm = PendingConfirmation(title: "Delete \(task.reference)?",
+                                                  message: "The card leaves its board. It can't be brought back from the app.",
+                                                  button: "Delete card") { await deleteTask(task) }
                 }
             }
+        } label: {
+            Label("More", systemImage: "ellipsis.circle")
         }
-        .sheet(isPresented: $reviewing) {
-            if let task = state.value {
-                ReviewSheet(task: task, columns: columns) { approved, reason, column in
-                    await perform {
-                        _ = try await services.kanban.review(task: task, approved: approved,
-                                                             reason: reason.isEmpty ? nil : reason,
-                                                             by: me, moveTo: column)
-                    }
-                }
-            }
-        }
+        .accessibilityIdentifier("task.more")
     }
 
     // MARK: Content
@@ -63,26 +137,14 @@ struct TaskDetailView: View {
             if conflict {
                 Section { ConflictBanner { await load() } }
             }
-
-            Section {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(task.title).font(.wsTitle3.weight(.semibold))
-                    HStack(spacing: 8) {
-                        StatusBadge(text: task.status.label, systemImage: task.status.systemImage,
-                                    tone: task.status.tone)
-                        if task.priority != .none, task.priority != .unknown {
-                            StatusBadge(text: task.priority.rawValue.capitalized,
-                                        systemImage: task.priority.systemImage, tone: task.priority.tone)
-                        }
-                    }
-                    if let description = task.description, !description.isEmpty {
-                        Text(description).font(.wsSubheadline)
-                    }
-                    CopyableRow(label: "Reference", value: task.reference)
+            if task.archivedAt != nil {
+                Section {
+                    Label("This card was deleted. It no longer shows on its board.", systemImage: "archivebox")
+                        .foregroundStyle(Tone.warning.textColor)
                 }
-                .padding(.vertical, 2)
-                .accessibilityIdentifier("task.header")
             }
+
+            Section { header(task) }
 
             if let contract = task.contract {
                 Section { AgentContractCard(contract: contract) }
@@ -94,77 +156,40 @@ struct TaskDetailView: View {
 
             Section { actions(task) }
 
-            Section("Details") {
-                if let due = task.dueDate {
-                    DetailRow(label: "Due", value: Formatters.day(due) ?? "—")
+            Section("Details") { details(task) }
+
+            Section {
+                if let description = task.description, !RichText.plain(description).isEmpty {
+                    Text(RichText.plain(description)).font(.wsBody).textSelection(.enabled)
+                        .accessibilityIdentifier("task.description")
+                } else {
+                    Text("No description.").foregroundStyle(.secondaryText)
                 }
-                if let points = task.storyPoints {
-                    DetailRow(label: "Points", value: String(points))
+                if access.canEdit {
+                    Button("Edit title and description", systemImage: "pencil") { sheet = .details }
+                        .accessibilityIdentifier("task.editDescription")
                 }
-                if let estimate = task.timeEstimateMinutes {
-                    DetailRow(label: "Estimate", value: "\(estimate) min")
-                }
-                DetailRow(label: "Time spent", value: "\(task.timeSpentMinutes) min")
-                if let assignees = task.assignees, !assignees.isEmpty {
-                    LabeledContent("Assigned") {
-                        HStack { ForEach(assignees) { ActorChip(actor: $0.actor) } }
-                    }
-                }
-                if let labels = task.labels, !labels.isEmpty {
-                    LabeledContent("Labels") {
-                        HStack {
-                            ForEach(labels) { label in
-                                Text(label.name).font(.wsCaption)
-                                    .padding(.horizontal, 8).padding(.vertical, 3)
-                                    .background(Color.secondary.opacity(0.15), in: Capsule())
-                            }
-                        }
-                    }
-                }
+            } header: {
+                Text("Description")
             }
 
+            peopleSection(task)
+            subtasksSection(task)
+            checklistsSection(task)
+            attachmentsSection(task)
             timeSection(task)
 
-            ForEach(checklists) { checklist in
-                Section(checklist.name) {
-                    ForEach(checklist.items ?? []) { item in
-                        Button {
-                            Task { await perform { try await services.kanban.toggleChecklistItem(item.uuid) } }
-                        } label: {
-                            Label {
-                                Text(item.content).strikethrough(item.isCompleted)
-                                    .foregroundStyle(.primary)
-                            } icon: {
-                                Image(systemName: item.isCompleted ? "checkmark.square.fill" : "square")
-                                    .foregroundStyle(item.isCompleted ? Tone.success.color : Color.secondary)
-                            }
-                        }
-                        .frame(minHeight: 44)
-                        .accessibilityIdentifier("task.checklist.\(item.uuid)")
-                        .accessibilityValue(item.isCompleted ? "Done" : "Not done")
-                    }
-                }
+            if aiEnabled, session.permissions.can(.read, moduleName: "ai_runs") {
+                TaskAIPanel(task: task, work: aiWork, runs: aiRuns,
+                            canStart: session.permissions.can(.create, moduleName: "ai_runs"),
+                            canReview: session.permissions.can(.manage, moduleName: "ai_runs")
+                                || session.permissions.can(.manage, moduleName: "ai_runs_approvals"),
+                            start: { sheet = .startAI },
+                            review: { pr, approved in reviewPullRequest(task, pr: pr, approved: approved) })
             }
 
             commentsSection(task)
-
-            if !activity.isEmpty {
-                Section("Activity") {
-                    ForEach(activity.prefix(30)) { row in
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 6) {
-                                ActorChip(actor: row.actor)
-                                Text(row.summary).font(.wsSubheadline)
-                            }
-                            if let at = row.createdAt {
-                                Text(Formatters.relative(at) ?? "").font(.wsCaption)
-                                    .foregroundStyle(.secondaryText)
-                            }
-                        }
-                        .accessibilityElement(children: .combine)
-                    }
-                }
-            }
+            activitySection
 
             if let actionError {
                 Section { InlineErrorRow(error: actionError) { Task { await load() } } }
@@ -174,51 +199,83 @@ struct TaskDetailView: View {
         .refreshable { await load() }
     }
 
+    private func header(_ task: KanbanTask) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let cover = Color(hexString: task.coverColor) {
+                Rectangle().fill(cover).frame(height: 6).clipShape(Capsule()).accessibilityHidden(true)
+            }
+            Text(task.title).font(.wsTitle3.weight(.semibold))
+            HStack(spacing: 8) {
+                StatusBadge(text: task.status.label, systemImage: task.status.systemImage, tone: task.status.tone)
+                if task.priority != .none, task.priority != .unknown {
+                    StatusBadge(text: task.priority.label, systemImage: task.priority.systemImage, tone: task.priority.tone)
+                }
+                if task.isOverdue {
+                    StatusBadge(text: "Overdue", systemImage: "clock.badge.exclamationmark", tone: .danger)
+                }
+            }
+            if let epic = task.epicName {
+                TagChip(name: epic, color: task.epicColor ?? "#7C3AED", systemImage: "square.stack")
+            }
+            let place = [task.projectName, task.boardName, task.columnName].compactMap { $0 }
+            if !place.isEmpty {
+                Text(place.joined(separator: " › ")).font(.wsCaption).foregroundStyle(.secondaryText)
+            }
+            CopyableRow(label: "Reference", value: task.reference)
+        }
+        .padding(.vertical, 2)
+        .accessibilityIdentifier("task.header")
+    }
+
     // MARK: Actions
 
     @ViewBuilder
     private func actions(_ task: KanbanTask) -> some View {
         let contract = task.contract
         let claim = contract?.claimState()
-        let canReview = session.policy.canReviewAgentWork(as: me, permissions: task.project?.permissions)
+        let canReview = session.policy.canReviewAgentWork(as: me, permissions: project?.permissions)
 
         if contract?.result?.status == .needsReview, canReview {
-            Button("Review the result") { reviewing = true }
+            Button("Review the result") { sheet = .review }
                 .buttonStyle(LargeButtonStyle(tone: .warning))
                 .accessibilityIdentifier("task.review")
         }
 
-        Button("Move to…") { moving = true }
-            .disabled(columns.isEmpty)
-            .accessibilityIdentifier("task.move")
-        if columns.isEmpty {
-            Text("Loading the board's columns…").font(.wsFootnote).foregroundStyle(.secondaryText)
+        if access.canEdit {
+            Button("Move to another column", systemImage: "arrow.right.square") { sheet = .move }
+                .disabled(columns.isEmpty)
+                .accessibilityIdentifier("task.move")
+            if columns.isEmpty {
+                Text("Loading the board's columns…").font(.wsFootnote).foregroundStyle(.secondaryText)
+            }
         }
 
-        switch claim {
-        case .live(let held) where held.kind == .agent:
-            Button("Take it over") {
-                Task { await perform { _ = try await services.kanban.takeOver(task: task, by: me) } }
-            }
-            .accessibilityIdentifier("task.takeOver")
-            if !(contract?.isStopRequested ?? false) {
-                Button("Ask it to stop", role: .destructive) {
-                    Task { await perform { _ = try await services.kanban.requestStop(task: task, by: me) } }
+        if contract != nil {
+            switch claim {
+            case .live(let held) where held.kind == .agent:
+                Button("Take it over") {
+                    Task { await perform("You took this card over.") { _ = try await services.kanban.takeOver(task: task, by: me) } }
                 }
-                .accessibilityIdentifier("task.stop")
+                .accessibilityIdentifier("task.takeOver")
+                if !(contract?.isStopRequested ?? false) {
+                    Button("Ask it to stop", role: .destructive) {
+                        Task { await perform("Asked the agent to stop.") { _ = try await services.kanban.requestStop(task: task, by: me) } }
+                    }
+                    .accessibilityIdentifier("task.stop")
+                }
+            case .stale:
+                Button("Claim it — the lease expired") {
+                    Task { await perform("The card is yours.") { _ = try await services.kanban.claim(task: task, as: me) } }
+                }
+                .accessibilityIdentifier("task.claimStale")
+            case .unclaimed, .none:
+                Button("Claim it") {
+                    Task { await perform("The card is yours.") { _ = try await services.kanban.claim(task: task, as: me) } }
+                }
+                .accessibilityIdentifier("task.claim")
+            case .live:
+                Text("You hold this card.").font(.wsFootnote).foregroundStyle(.secondaryText)
             }
-        case .stale:
-            Button("Claim it — the lease expired") {
-                Task { await perform { _ = try await services.kanban.claim(task: task, as: me) } }
-            }
-            .accessibilityIdentifier("task.claimStale")
-        case .unclaimed, .none:
-            Button("Claim it") {
-                Task { await perform { _ = try await services.kanban.claim(task: task, as: me) } }
-            }
-            .accessibilityIdentifier("task.claim")
-        case .live:
-            Text("You hold this card.").font(.wsFootnote).foregroundStyle(.secondaryText)
         }
 
         if let gaps = contract?.eligibilityGaps, !gaps.isEmpty, contract?.goal != nil {
@@ -228,20 +285,338 @@ struct TaskDetailView: View {
         }
     }
 
+    // MARK: Details
+
+    @ViewBuilder
+    private func details(_ task: KanbanTask) -> some View {
+        if access.canEdit {
+            Menu {
+                ForEach(KanbanTaskStatus.choosable, id: \.self) { status in
+                    Button(status.label) { Task { await update(task, UpdateTaskBody(status: status.rawValue), "Status set to \(status.label).") } }
+                }
+            } label: {
+                LabeledContent("Status", value: task.status.label)
+            }
+            .accessibilityIdentifier("task.status")
+            Menu {
+                ForEach(KanbanTaskPriority.choosable, id: \.self) { priority in
+                    Button(priority.label) { Task { await update(task, UpdateTaskBody(priority: priority.rawValue), "Priority set to \(priority.label).") } }
+                }
+            } label: {
+                LabeledContent("Priority", value: task.priority.label)
+            }
+            .accessibilityIdentifier("task.priority")
+        } else {
+            DetailRow(label: "Status", value: task.status.label)
+            DetailRow(label: "Priority", value: task.priority.label)
+        }
+        DetailRow(label: "Starts", value: task.startDay()?.shortDay)
+        DetailRow(label: "Due", value: task.dueDay()?.shortDay)
+        DetailRow(label: "Story points", value: task.storyPoints.map(String.init))
+        DetailRow(label: "Estimate", value: task.timeEstimateMinutes.flatMap { $0 > 0 ? Minutes.format($0) : nil })
+        if !epics.isEmpty || task.epicName != nil {
+            DetailRow(label: "Epic", value: task.epicName ?? "None")
+        }
+        let sprint = sprints.first { $0.numericId != nil && $0.numericId == task.sprintId }
+        if access.canEdit, !sprints.isEmpty {
+            Menu {
+                Button("Not in a sprint") { Task { await setSprint(task, to: nil, from: sprint) } }
+                ForEach(sprints.filter { $0.status == .active || $0.status.isPlanned }) { option in
+                    Button(option.name) { Task { await setSprint(task, to: option, from: sprint) } }
+                }
+            } label: {
+                LabeledContent("Sprint", value: sprint?.name ?? "Not in a sprint")
+            }
+            .accessibilityIdentifier("task.sprint")
+        } else if let sprint {
+            DetailRow(label: "Sprint", value: sprint.name)
+        }
+        if let reporter = task.reporter {
+            LabeledContent("Reported by") { ActorChip(actor: WorkActor(user: reporter, uuid: task.reporterUserUuid)) }
+        }
+        DetailRow(label: "Created", value: Formatters.dateTime(task.createdAt))
+        DetailRow(label: "Updated", value: Formatters.dateTime(task.updatedAt))
+        if access.canEdit {
+            Button("Edit details", systemImage: "slider.horizontal.3") { sheet = .details }
+                .accessibilityIdentifier("task.editDetails")
+        }
+    }
+
+    // MARK: People and labels
+
+    @ViewBuilder
+    private func peopleSection(_ task: KanbanTask) -> some View {
+        Section {
+            let assignees = task.assignees ?? []
+            if assignees.isEmpty {
+                Text("Nobody is assigned.").foregroundStyle(.secondaryText)
+            }
+            ForEach(assignees) { assignee in
+                HStack {
+                    ActorChip(actor: assignee.actor, compact: false)
+                    Spacer()
+                    if access.canEdit {
+                        Button("Remove", systemImage: "xmark.circle") {
+                            Task { await perform("\(assignee.actor.name) unassigned.") {
+                                try await services.kanban.unassign(taskUuid: task.uuid, userUuid: assignee.userUuid)
+                            } }
+                        }
+                        .labelStyle(.iconOnly)
+                        .accessibilityLabel("Unassign \(assignee.actor.name)")
+                    }
+                }
+            }
+            if access.canEdit {
+                Button("Assign people", systemImage: "person.badge.plus") {
+                    assigneeDraft = assignees.map { a in
+                        WorkspacePerson(uuid: a.userUuid, firstName: a.user?.firstName, lastName: a.user?.lastName, email: a.user?.email)
+                    }
+                    lastPicker = .assignees
+                    sheet = .assignees
+                }
+                .accessibilityIdentifier("task.assign")
+            }
+            let labels = task.labels ?? []
+            if !labels.isEmpty {
+                FlowChips(labels: labels)
+            }
+            if access.canEdit, task.projectUuid != nil {
+                Button(labels.isEmpty ? "Add labels" : "Change labels", systemImage: "tag") {
+                    labelDraft = labels
+                    lastPicker = .labels
+                    sheet = .labels
+                }
+                .accessibilityIdentifier("task.labels")
+            }
+        } header: {
+            Text("People and labels")
+        }
+    }
+
+    // MARK: Subtasks
+
+    @ViewBuilder
+    private func subtasksSection(_ task: KanbanTask) -> some View {
+        let subtasks = task.subtasks ?? []
+        if !subtasks.isEmpty || access.canEdit {
+            Section {
+                if !subtasks.isEmpty {
+                    let done = subtasks.filter { $0.status == .completed }.count
+                    ProgressView(value: Double(done), total: Double(subtasks.count)) {
+                        Text("\(done) of \(subtasks.count) done").font(.wsCaption)
+                    }
+                    .tint(Tone.success.color)
+                }
+                ForEach(subtasks) { subtask in
+                    HStack {
+                        Button {
+                            let next: KanbanTaskStatus = subtask.status == .completed ? .open : .completed
+                            Task { await perform(next == .completed ? "Subtask done." : "Subtask reopened.") {
+                                _ = try await services.kanban.updateTask(subtask.uuid, body: UpdateTaskBody(status: next.rawValue))
+                            } }
+                        } label: {
+                            Image(systemName: subtask.status == .completed ? "checkmark.square.fill" : "square")
+                                .foregroundStyle(subtask.status == .completed ? Tone.success.color : Color.secondary)
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!access.canEdit)
+                        .accessibilityLabel(subtask.status == .completed ? "Mark not done" : "Mark done")
+                        NavigationLink(value: TaskRoute(uuid: subtask.uuid)) {
+                            Text("\(subtask.taskNumber.map { "#\($0) " } ?? "")\(subtask.title)")
+                                .strikethrough(subtask.status == .completed)
+                        }
+                    }
+                    .swipeActions {
+                        if access.canEdit {
+                            Button("Delete", systemImage: "trash", role: .destructive) {
+                                confirm = PendingConfirmation(title: "Delete the subtask “\(subtask.title)”?", button: "Delete subtask") {
+                                    await perform("Subtask deleted.") { try await services.kanban.deleteTask(subtask.uuid) }
+                                }
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("task.subtask.\(subtask.uuid)")
+                }
+                if access.canEdit, task.boardUuid != nil, let numericId = task.numericId {
+                    Button("Add a subtask", systemImage: "plus") {
+                        prompt = PendingPrompt(title: "New subtask", placeholder: "What needs doing?", button: "Add") { title in
+                            await perform("Subtask added.") {
+                                _ = try await services.kanban.createTask(boardUuid: task.boardUuid!,
+                                                                         body: CreateTaskBody(title: title, parentTaskId: numericId))
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("task.addSubtask")
+                }
+            } header: {
+                Text("Subtasks")
+            }
+        }
+    }
+
+    // MARK: Checklists
+
+    @ViewBuilder
+    private func checklistsSection(_ task: KanbanTask) -> some View {
+        let lists = task.checklists ?? []
+        ForEach(lists) { checklist in
+            Section {
+                ForEach(checklist.items ?? []) { item in
+                    Button {
+                        Task { await perform(item.isCompleted ? "Unticked." : "Ticked off.") {
+                            try await services.kanban.toggleChecklistItem(item.uuid)
+                        } }
+                    } label: {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.content).strikethrough(item.isCompleted).foregroundStyle(.primary)
+                                if let due = KanbanTask.localDay(item.dueDate) {
+                                    Text("Due \(due.shortDay)").font(.wsCaption).foregroundStyle(.secondaryText)
+                                }
+                            }
+                        } icon: {
+                            Image(systemName: item.isCompleted ? "checkmark.square.fill" : "square")
+                                .foregroundStyle(item.isCompleted ? Tone.success.color : Color.secondary)
+                        }
+                    }
+                    .frame(minHeight: 44)
+                    .disabled(!access.canEdit)
+                    .accessibilityIdentifier("task.checklist.\(item.uuid)")
+                    .accessibilityValue(item.isCompleted ? "Done" : "Not done")
+                    .swipeActions {
+                        if access.canEdit {
+                            Button("Delete", systemImage: "trash", role: .destructive) {
+                                Task { await perform("Item deleted.") { try await services.kanban.deleteChecklistItem(item.uuid) } }
+                            }
+                        }
+                    }
+                }
+                if access.canEdit {
+                    Button("Add an item", systemImage: "plus") { sheet = .addItem(checklist) }
+                        .accessibilityIdentifier("task.checklist.add.\(checklist.uuid)")
+                }
+            } header: {
+                HStack {
+                    Text("\(checklist.name) · \(checklist.completedItemCount)/\(checklist.itemCount)")
+                    Spacer()
+                    if access.canEdit {
+                        Button("Delete", systemImage: "trash") {
+                            confirm = PendingConfirmation(title: "Delete the checklist “\(checklist.name)”?",
+                                                          message: "Its items go with it.", button: "Delete checklist") {
+                                await perform("Checklist deleted.") { try await services.kanban.deleteChecklist(checklist.uuid) }
+                            }
+                        }
+                        .labelStyle(.iconOnly)
+                        .accessibilityLabel("Delete the checklist \(checklist.name)")
+                    }
+                }
+            }
+        }
+        if access.canEdit {
+            Section {
+                Button("Add a checklist", systemImage: "checklist") {
+                    prompt = PendingPrompt(title: "New checklist", placeholder: "Checklist name", button: "Add") { name in
+                        await perform("Checklist “\(name)” added.") { try await services.kanban.createChecklist(taskUuid: task.uuid, name: name) }
+                    }
+                }
+                .accessibilityIdentifier("task.addChecklist")
+            }
+        }
+    }
+
+    // MARK: Attachments
+
+    @ViewBuilder
+    private func attachmentsSection(_ task: KanbanTask) -> some View {
+        Section {
+            let files = task.attachments ?? []
+            if files.isEmpty { Text("No files or links.").foregroundStyle(.secondaryText) }
+            ForEach(files) { file in
+                let canDelete = access.canAdmin || file.uploadedBy == session.user?.uuid
+                Group {
+                    if file.isLink {
+                        Menu {
+                            Button("Copy link", systemImage: "doc.on.doc") {
+                                UIPasteboard.general.string = file.fileUrl
+                                notice = .done("Link copied.")
+                            }
+                            if let url = URL(string: file.fileUrl) {
+                                ShareLink(item: url) { Label("Share", systemImage: "square.and.arrow.up") }
+                            }
+                        } label: {
+                            attachmentRow(file)
+                        }
+                    } else {
+                        Button {
+                            Task { await open(file) }
+                        } label: {
+                            attachmentRow(file)
+                        }
+                    }
+                }
+                .accessibilityIdentifier("task.attachment.\(file.uuid)")
+                .swipeActions {
+                    if canDelete {
+                        Button("Delete", systemImage: "trash", role: .destructive) {
+                            confirm = PendingConfirmation(title: "Remove “\(file.fileName)”?", button: "Remove") {
+                                await perform("“\(file.fileName)” removed.") { try await services.kanban.deleteAttachment(file.uuid) }
+                            }
+                        }
+                    }
+                }
+            }
+            if uploading {
+                HStack { ProgressView(); Text("Uploading…").foregroundStyle(.secondaryText) }
+            }
+            if access.canEdit {
+                PhotosPicker(selection: $photo, matching: .images) {
+                    Label("Add a photo", systemImage: "photo.badge.plus")
+                }
+                .accessibilityIdentifier("task.addPhoto")
+                Button("Add a file", systemImage: "doc.badge.plus") { importingFile = true }
+                    .accessibilityIdentifier("task.addFile")
+                Button("Add a link", systemImage: "link.badge.plus") { sheet = .addLink }
+                    .accessibilityIdentifier("task.addLink")
+            }
+        } header: {
+            Text("Files and links")
+        } footer: {
+            if access.canEdit { Text("Photos and documents up to 10 MB. Tap a file to open it.") }
+        }
+    }
+
+    private func attachmentRow(_ file: KanbanAttachment) -> some View {
+        HStack {
+            Image(systemName: file.systemImage).frame(width: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(file.fileName).foregroundStyle(.primary).lineLimit(2)
+                let detail = [file.uploader?.displayName, file.fileSize.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file) },
+                              file.createdAt.map { $0.shortDay }].compactMap { $0 }
+                if !detail.isEmpty { Text(detail.joined(separator: " · ")).font(.wsCaption).foregroundStyle(.secondaryText) }
+            }
+        }
+    }
+
+    // MARK: Time
+
     @ViewBuilder
     private func timeSection(_ task: KanbanTask) -> some View {
-        Section("Time") {
+        Section {
             if let running = runningTimer, running.taskUuid == task.uuid {
+                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    LabeledContent("Timer running", value: Duration.seconds(running.startedAt.map { Date().timeIntervalSince($0) } ?? running.elapsed)
+                        .formatted(.time(pattern: .hourMinuteSecond)))
+                }
+                .accessibilityIdentifier("task.timer.running")
                 Button("Stop the timer") {
-                    Task { await perform { try await services.kanban.stopTimer() } }
+                    Task { await perform("Timer stopped and the time logged.") { try await services.kanban.stopTimer() } }
                 }
                 .buttonStyle(LargeButtonStyle(tone: .danger))
                 .accessibilityIdentifier("task.timer.stop")
-                Text("Running since \(Formatters.time(running.startedAt) ?? "")")
-                    .font(.wsCaption).foregroundStyle(.secondaryText)
-            } else {
-                Button("Start a timer") {
-                    Task { await perform { try await services.kanban.startTimer(taskUuid: task.uuid, description: nil) } }
+            } else if access.canEdit {
+                Button("Start a timer", systemImage: "play.circle") {
+                    Task { await perform("Timer started.") { try await services.kanban.startTimer(taskUuid: task.uuid, description: nil) } }
                 }
                 .accessibilityIdentifier("task.timer.start")
                 if let running = runningTimer, running.taskUuid != nil {
@@ -249,60 +624,247 @@ struct TaskDetailView: View {
                         .font(.wsCaption).foregroundStyle(.secondaryText)
                 }
             }
+            let total = timeSummary?.totalMinutes ?? task.timeSpentMinutes
+            LabeledContent("Time spent", value: Minutes.format(total) + (task.timeEstimateMinutes.flatMap { $0 > 0 ? " of \(Minutes.format($0))" : nil } ?? ""))
+                .accessibilityIdentifier("task.timeSpent")
+            if let summary = timeSummary, (summary.totalMinutes ?? 0) > 0 {
+                Text("Board timer \(Minutes.format(summary.kanbanMinutes ?? 0)) · Timesheets \(Minutes.format(summary.timesheetMinutes ?? 0)) · Billable \(Minutes.format(summary.billableMinutes ?? 0))")
+                    .font(.wsCaption).foregroundStyle(.secondaryText)
+                ForEach(summary.byUser) { person in
+                    LabeledContent(person.name, value: Minutes.format(person.totalMinutes))
+                        .font(.wsSubheadline)
+                }
+            }
             ForEach(timeEntries) { entry in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(entry.description ?? "Time").font(.wsSubheadline)
+                        Text(entry.description?.trimmedOrNil ?? "Time").font(.wsSubheadline)
                         HStack(spacing: 6) {
                             ActorChip(actor: entry.actor)
-                            if entry.isMachineTime {
-                                Text("machine time").font(.wsCaption2).foregroundStyle(.secondaryText)
-                            }
+                            if let started = entry.startedAt { Text(started.shortDay).font(.wsCaption).foregroundStyle(.secondaryText) }
+                            if entry.isMachineTime { Text("machine time").font(.wsCaption2).foregroundStyle(.secondaryText) }
+                            if entry.isBillable { Text("billable").font(.wsCaption2).foregroundStyle(.secondaryText) }
                         }
                     }
                     Spacer()
-                    Text("\(entry.durationMinutes) min").font(.wsSubheadline.monospacedDigit())
+                    Text(Minutes.format(entry.durationMinutes)).font(.wsSubheadline.monospacedDigit())
                 }
                 .accessibilityIdentifier("task.timeEntry.\(entry.uuid)")
+                .swipeActions {
+                    if entry.userUuid == session.user?.uuid {
+                        Button("Delete", systemImage: "trash", role: .destructive) {
+                            Task { await perform("Time entry deleted.") { try await services.kanban.deleteTimeEntry(entry.uuid) } }
+                        }
+                        Button("Edit", systemImage: "pencil") { sheet = .editEntry(entry) }.tint(.blue)
+                    }
+                }
+            }
+            if access.canRead {
+                Button("Log time", systemImage: "clock.badge.checkmark") { sheet = .logTime }
+                    .accessibilityIdentifier("task.logTime")
+            }
+        } header: {
+            Text("Time")
+        }
+    }
+
+    // MARK: Comments and activity
+
+    @ViewBuilder
+    private func commentsSection(_ task: KanbanTask) -> some View {
+        Section {
+            if access.canEdit {
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("Write a comment", text: $newComment, axis: .vertical)
+                        .lineLimit(1...6)
+                        .accessibilityIdentifier("task.comment.field")
+                    HStack {
+                        Button("Mention someone", systemImage: "at") {
+                            lastPicker = .mention
+                            sheet = .mention
+                        }
+                            .labelStyle(.titleAndIcon)
+                            .font(.wsSubheadline)
+                            .accessibilityIdentifier("task.comment.mention")
+                        Spacer()
+                        Button("Post") { Task { await postComment(task) } }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(newComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .accessibilityIdentifier("task.comment.post")
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            if comments.isEmpty { Text("No comments yet.").foregroundStyle(.secondaryText) }
+            ForEach(comments) { comment in
+                commentRow(comment, task: task, isReply: false)
+                ForEach(comment.replies) { reply in
+                    commentRow(reply, task: task, isReply: true)
+                }
+            }
+        } header: {
+            Text("Comments (\(comments.count))")
+        }
+    }
+
+    private func commentRow(_ comment: KanbanComment, task: KanbanTask, isReply: Bool) -> some View {
+        let isMine = comment.userUuid == session.user?.uuid
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                ActorChip(actor: comment.actor)
+                if comment.isEdited { Text("edited").font(.wsCaption2).foregroundStyle(.secondaryText) }
+                Spacer()
+                if let at = comment.createdAt {
+                    Text(Formatters.relative(at) ?? "").font(.wsCaption).foregroundStyle(.secondaryText)
+                }
+            }
+            Text(comment.visibleContent).font(.wsSubheadline).textSelection(.enabled)
+            if !isReply, access.canEdit {
+                Button("Reply") { sheet = .reply(comment) }
+                    .font(.wsCaption.weight(.semibold))
+                    .buttonStyle(.borderless)
+                    .accessibilityIdentifier("task.comment.reply.\(comment.uuid)")
+            }
+        }
+        .padding(.leading, isReply ? 24 : 0)
+        .accessibilityIdentifier("task.comment.\(comment.uuid)")
+        .swipeActions {
+            if isMine || access.canAdmin {
+                Button("Delete", systemImage: "trash", role: .destructive) {
+                    confirm = PendingConfirmation(title: "Delete this comment?", button: "Delete comment") {
+                        await perform("Comment deleted.") { try await services.kanban.deleteComment(comment.uuid) }
+                    }
+                }
+            }
+            if isMine {
+                Button("Edit", systemImage: "pencil") { sheet = .editComment(comment) }.tint(.blue)
             }
         }
     }
 
     @ViewBuilder
-    private func commentsSection(_ task: KanbanTask) -> some View {
-        Section("Comments") {
-            ForEach(comments) { comment in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        ActorChip(actor: comment.actor)
-                        Spacer()
-                        if let at = comment.createdAt {
+    private var activitySection: some View {
+        if !activity.isEmpty {
+            Section("Activity") {
+                ForEach(activity.prefix(50)) { row in
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            ActorChip(actor: row.actor)
+                            Text(row.summary).font(.wsSubheadline)
+                        }
+                        if let at = row.createdAt {
                             Text(Formatters.relative(at) ?? "").font(.wsCaption).foregroundStyle(.secondaryText)
                         }
                     }
-                    Text(comment.visibleContent).font(.wsSubheadline)
+                    .accessibilityElement(children: .combine)
                 }
-                .accessibilityIdentifier("task.comment.\(comment.uuid)")
-            }
-            HStack {
-                TextField("Add a comment", text: $newComment, axis: .vertical)
-                    .lineLimit(1...4)
-                    .accessibilityIdentifier("task.comment.field")
-                Button("Post") {
-                    let text = newComment
-                    newComment = ""
-                    Task {
-                        await perform {
-                            try await services.kanban.comment(taskUuid: task.uuid, content: text,
-                                                              idempotencyKey: IdempotencyMarker.make())
-                        }
-                    }
-                }
-                .disabled(newComment.trimmingCharacters(in: .whitespaces).isEmpty)
-                .accessibilityIdentifier("task.comment.post")
             }
         }
     }
+
+    // MARK: Sheets
+
+    @ViewBuilder
+    private func sheetView(_ sheet: TaskSheet) -> some View {
+        if let task = state.value {
+            switch sheet {
+            case .move:
+                MoveTaskSheet(task: task, columns: columns) { column in
+                    await perform("Moved to \(column.name).") { try await services.kanban.moveTask(task.uuid, toColumnId: column.columnId) }
+                }
+            case .review:
+                ReviewSheet(task: task, columns: columns) { approved, reason, column in
+                    await perform(approved ? "Approved." : "Sent back with your reason.") {
+                        _ = try await services.kanban.review(task: task, approved: approved,
+                                                             reason: reason.isEmpty ? nil : reason, by: me, moveTo: column)
+                    }
+                }
+            case .details:
+                TaskDetailsSheet(task: task, epics: epics) { body in
+                    await perform("Card saved.") { _ = try await services.kanban.updateTask(task.uuid, body: body) }
+                }
+            case .assignees:
+                PeoplePickerSheet(projectUuid: task.projectUuid, title: "Assign to", selection: $assigneeDraft)
+            case .labels:
+                if let projectUuid = task.projectUuid { LabelPickerSheet(projectUuid: projectUuid, selection: $labelDraft) }
+            case .mention:
+                PeoplePickerSheet(projectUuid: task.projectUuid, title: "Mention", selection: $mentions)
+            case .addLink:
+                AddLinkSheet { name, url in
+                    await perform("Link added.") {
+                        try await services.kanban.attachLink(taskUuid: task.uuid, body: AttachmentBody(fileName: name, fileUrl: url))
+                    }
+                }
+            case .logTime:
+                TimeEntrySheet(entry: nil) { body in
+                    await perform("Time logged.") { try await services.kanban.logTime(taskUuid: task.uuid, body: body) }
+                }
+            case .editEntry(let entry):
+                TimeEntrySheet(entry: entry) { body in
+                    await perform("Time entry saved.") { try await services.kanban.updateTimeEntry(entry.uuid, body: body) }
+                }
+            case .addItem(let checklist):
+                ChecklistItemSheet(projectUuid: task.projectUuid, checklistName: checklist.name) { body in
+                    await perform("Item added to \(checklist.name).") {
+                        try await services.kanban.addChecklistItem(checklistUuid: checklist.uuid, body)
+                    }
+                }
+            case .reply(let comment):
+                CommentEditorSheet(title: "Reply to \(comment.actor.name)", initial: "", projectUuid: task.projectUuid) { text, picked in
+                    await perform("Reply posted.") {
+                        try await services.kanban.postComment(taskUuid: task.uuid, html: RichText.html(text, mentions: picked.mentions),
+                                                              parentCommentId: comment.numericId, mentions: picked.uuids)
+                    }
+                }
+            case .editComment(let comment):
+                CommentEditorSheet(title: "Edit comment", initial: comment.visibleContent, projectUuid: task.projectUuid) { text, picked in
+                    await perform("Comment saved.") {
+                        try await services.kanban.editComment(comment.uuid, html: RichText.html(text, mentions: picked.mentions))
+                    }
+                }
+            case .startAI:
+                StartAIRunSheet(task: task) { run in
+                    notice = .done(run.status == .pendingApproval ? "Sent to a manager for approval." : "AI work started.")
+                    await load()
+                }
+            }
+        }
+    }
+
+    /// The people and label pickers edit a draft; closing them applies the difference.
+    private func applyPickers() {
+        guard let task = state.value, let picker = lastPicker else { return }
+        lastPicker = nil
+        switch picker {
+        case .mention:
+            for person in mentions where !newComment.contains("@\(person.name)") {
+                newComment += (newComment.isEmpty || newComment.hasSuffix(" ") ? "" : " ") + "@\(person.name) "
+            }
+        case .assignees:
+            let current = Set(task.assignees?.map(\.userUuid) ?? [])
+            let wanted = Set(assigneeDraft.map(\.uuid))
+            guard current != wanted else { return }
+            Task {
+                await perform("People updated.") {
+                    for uuid in wanted.subtracting(current) { try await services.kanban.assign(taskUuid: task.uuid, userUuid: uuid) }
+                    for uuid in current.subtracting(wanted) { try await services.kanban.unassign(taskUuid: task.uuid, userUuid: uuid) }
+                }
+            }
+        case .labels:
+            let current = Set(task.labels?.compactMap(\.labelId) ?? [])
+            let wanted = Set(labelDraft.compactMap(\.labelId))
+            guard current != wanted else { return }
+            Task {
+                await perform("Labels updated.") {
+                    for id in wanted.subtracting(current) { try await services.kanban.addLabel(taskUuid: task.uuid, labelId: id) }
+                    for id in current.subtracting(wanted) { try await services.kanban.removeLabel(taskUuid: task.uuid, labelId: id) }
+                }
+            }
+        }
+    }
+
+    @State private var lastPicker: PickerKind?
+    enum PickerKind { case assignees, labels, mention }
 
     // MARK: Loading and writing
 
@@ -315,201 +877,195 @@ struct TaskDetailView: View {
                 conflict = false   // the reload *is* the resolution
             }
             state = .loaded(task)
+            comments = task.comments ?? comments
             async let comments = services.kanban.comments(taskUuid: uuid)
-            async let checklists = services.kanban.checklists(taskUuid: uuid)
             async let activity = services.kanban.activities(taskUuid: uuid)
             async let entries = services.kanban.timeEntries(taskUuid: uuid)
+            async let summary = services.kanban.timeSummary(taskUuid: uuid)
             async let timer = services.kanban.currentTimer()
-            self.comments = (try? await comments) ?? []
-            self.checklists = (try? await checklists) ?? []
+            self.comments = (try? await comments) ?? self.comments
             self.activity = (try? await activity) ?? []
             self.timeEntries = (try? await entries) ?? []
+            self.timeSummary = try? await summary
             self.runningTimer = (try? await timer) ?? nil
-            await loadColumns(for: task)
+            await loadContext(for: task)
         } catch {
-            state = .failed(error.asAPIError)
+            if state.value == nil { state = .failed(error.asAPIError) } else { actionError = error.asAPIError }
         }
     }
 
-    private func loadColumns(for task: KanbanTask) async {
-        guard columns.isEmpty, let projectUuid = task.project?.uuid else { return }
-        guard let boards = try? await services.kanban.boards(projectUuid: projectUuid),
-              let board = boards.first(where: { $0.numericId == task.boardId }) ?? boards.first,
-              let full = try? await services.kanban.boardWithColumns(board.uuid)
-        else { return }
-        columns = (full.columns ?? []).sorted { $0.position < $1.position }
+    private func loadContext(for task: KanbanTask) async {
+        if let projectUuid = task.projectUuid {
+            async let project = services.kanban.project(projectUuid)
+            async let sprints = services.kanban.allSprints(projectUuid: projectUuid)
+            async let epics = services.kanban.epics(projectUuid: projectUuid)
+            self.project = (try? await project) ?? self.project
+            self.sprints = (try? await sprints) ?? self.sprints
+            self.epics = (try? await epics) ?? self.epics
+        }
+        if columns.isEmpty, let boardUuid = task.boardUuid,
+           let full = try? await services.kanban.boardWithColumns(boardUuid) {
+            columns = (full.columns ?? []).sorted { $0.position < $1.position }
+        }
+        let ai = services.kanban.ai
+        if !aiChecked {
+            aiEnabled = await ai.isEnabled()
+            aiChecked = true
+        }
+        if aiEnabled, session.permissions.can(.read, moduleName: "ai_runs") {
+            async let work = ai.work(taskUuid: task.uuid)
+            async let runs = ai.runs(taskUuid: task.uuid)
+            aiWork = try? await work
+            aiRuns = (try? await runs) ?? []
+        }
     }
 
-    /// Runs a write, then reloads. A conflict is surfaced, never resolved behind the user's back.
-    private func perform(_ work: () async throws -> Void) async {
+    /// Runs a write, says what happened, then reloads. A conflict is surfaced, never resolved
+    /// behind the person's back.
+    private func perform(_ done: String, _ work: () async throws -> Void) async {
         busy = true
         defer { busy = false }
         actionError = nil
         do {
             try await work()
             conflict = false
+            notice = .done(done)
             await load()
         } catch let error as KanbanAPI.ConflictError {
             state = .loaded(error.latest)
             conflict = true
         } catch let error as KanbanAPI.ClaimedError {
-            actionError = .server(ServerError(status: 409,
-                                              message: "\(error.claim.name ?? "Someone else") is working on this.",
-                                              fieldErrors: [:], rawBody: ""))
+            notice = .failed("\(error.claim.name ?? "Someone else") is working on this.")
         } catch {
-            actionError = error.asAPIError
+            notice = .failed(error.asAPIError.plainMessage)
+            await load()
         }
     }
-}
 
-// MARK: - My tasks
+    private func update(_ task: KanbanTask, _ body: UpdateTaskBody, _ done: String) async {
+        await perform(done) { _ = try await services.kanban.updateTask(task.uuid, body: body) }
+    }
 
-/// Where a phone user starts: their own cards across every project, seen three ways — what to do
-/// today, everything by deadline, or the running sprint's share of it.
-struct MyTasksView: View {
-    enum Scope: String, CaseIterable, Identifiable {
-        case today, dueDate, sprint
-        var id: String { rawValue }
-        var title: String {
-            switch self {
-            case .today: "Today"
-            case .dueDate: "By due date"
-            case .sprint: "Sprint"
+    private func setSprint(_ task: KanbanTask, to sprint: KanbanSprint?, from current: KanbanSprint?) async {
+        guard sprint?.uuid != current?.uuid else { return }
+        await perform(sprint.map { "Added to \($0.name)." } ?? "Taken out of the sprint.") {
+            if let sprint {
+                try await services.kanban.addToSprint(sprint.uuid, taskUuids: [task.uuid])
+            } else if let current {
+                try await services.kanban.removeFromSprint(current.uuid, taskUuids: [task.uuid])
             }
         }
     }
 
-    @Environment(\.services) private var services
-    @State private var state: LoadState<[KanbanTask]> = .idle
-    @State private var activeSprints: [Int: KanbanSprint] = [:]
-    @AppStorage("myTasks.scope") private var scope: Scope = .today
-
-    var body: some View {
-        Group {
-            switch state {
-            case .idle, .loading: SkeletonList()
-            case .failed(let error): ErrorStateView(error: error) { Task { await load() } }
-            case .loaded(let tasks) where tasks.isEmpty:
-                ContentUnavailableView("No tasks assigned to you", systemImage: "checklist",
-                                       description: Text("Cards assigned to you across every project show up here."))
-            case .loaded(let tasks):
-                List {
-                    Section {
-                        Picker("Show", selection: $scope) {
-                            ForEach(Scope.allCases) { Text($0.title).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets())
-                        .accessibilityIdentifier("mytasks.scope")
-                    }
-                    switch scope {
-                    case .today: todaySections(tasks)
-                    case .dueDate: dueDateSections(tasks)
-                    case .sprint: sprintSections(tasks)
-                    }
-                }
-                .refreshable { await load() }
-            }
-        }
-        .navigationTitle("My tasks")
-        .task { await load() }
-    }
-
-    @ViewBuilder
-    private func todaySections(_ tasks: [KanbanTask]) -> some View {
-        let today = TaskAgenda.today(tasks)
-        if today.isEmpty {
-            ContentUnavailableView("Nothing due today", systemImage: "sun.max",
-                                   description: Text("Nothing is overdue, due today or in progress. Switch to By due date to pick up what's next."))
-                .listRowBackground(Color.clear)
-        } else {
-            Section {
-                ForEach(today) { row($0) }
-            } footer: {
-                Text("Overdue first, then due today, then work you've already started.")
-            }
+    private func postComment(_ task: KanbanTask) async {
+        let text = newComment.trimmingCharacters(in: .whitespacesAndNewlines)
+        let picked = mentions.filter { text.contains("@\($0.name)") }
+        let html = RichText.html(text, mentions: picked.map { RichText.Mention(userUuid: $0.uuid, name: $0.name) })
+        let key = IdempotencyMarker.make()
+        await perform(picked.isEmpty ? "Comment posted." : "Comment posted; \(picked.map(\.name).joined(separator: ", ")) will be told.") {
+            try await services.kanban.postComment(taskUuid: task.uuid, html: html, mentions: picked.map(\.uuid), idempotencyKey: key)
+            newComment = ""
+            mentions = []
         }
     }
 
-    @ViewBuilder
-    private func dueDateSections(_ tasks: [KanbanTask]) -> some View {
-        ForEach(TaskAgenda.byDueDate(tasks)) { bucket in
-            Section(bucket.title) {
-                ForEach(bucket.tasks) { row($0) }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func sprintSections(_ tasks: [KanbanTask]) -> some View {
-        let sprints = TaskAgenda.bySprint(tasks, activeSprints: activeSprints)
-        let inSprint = sprints.reduce(0) { $0 + $1.tasks.count }
-        if sprints.isEmpty {
-            ContentUnavailableView("No running sprint", systemImage: "flag.checkered",
-                                   description: Text("None of your cards are in a sprint that has started."))
-                .listRowBackground(Color.clear)
-        }
-        ForEach(sprints) { bucket in
-            Section {
-                ForEach(bucket.tasks) { row($0) }
-            } header: {
-                SprintHeader(sprint: bucket.sprint)
-            }
-        }
-        let outside = TaskAgenda.open(tasks).count - inSprint
-        if !sprints.isEmpty, outside > 0 {
-            Section {
-            } footer: {
-                Text(outside == 1 ? "1 more of your cards isn't in a running sprint. It's under By due date."
-                                  : "\(outside) more of your cards aren't in a running sprint. They're under By due date.")
-            }
-        }
-    }
-
-    private func row(_ task: KanbanTask) -> some View {
-        NavigationLink(value: TaskRoute(uuid: task.uuid)) {
-            VStack(alignment: .leading, spacing: 2) {
-                TaskCard(task: task)
-                if let place = task.projectName {
-                    Text([place, task.columnName].compactMap { $0 }.joined(separator: " · "))
-                        .font(.wsCaption)
-                        .foregroundStyle(.secondaryText)
-                }
-            }
-        }
-        .accessibilityIdentifier("mytask.row.\(task.reference)")
-    }
-
-    private func load() async {
-        if state.value == nil { state = .loading }
+    private func deleteTask(_ task: KanbanTask) async {
         do {
-            let page = try await services.kanban.myTasks(perPage: 100)
-            activeSprints = await services.kanban.activeSprints(for: page.items)
-            state = .loaded(page.items)
+            try await services.kanban.deleteTask(task.uuid)
+            notice = .done("\(task.reference) deleted.")
+            try? await Task.sleep(for: .milliseconds(800))
+            dismiss()
         } catch {
-            state = .failed(error.asAPIError)
+            notice = .failed(error.asAPIError.plainMessage)
+        }
+    }
+
+    private func reviewPullRequest(_ task: KanbanTask, pr: TaskAIWork.PullRequest, approved: Bool) {
+        if approved {
+            confirm = PendingConfirmation(title: "Approve \(pr.title)?",
+                                          message: "This records your sign-off and posts it on the card. It doesn't merge anything.",
+                                          button: "Approve", destructive: false) {
+                await perform("Pull request approved.") {
+                    try await services.kanban.ai.reviewPullRequest(taskUuid: task.uuid, prUuid: pr.uuid, approved: true, note: nil)
+                }
+            }
+        } else {
+            prompt = PendingPrompt(title: "Request changes", message: "Say what needs changing. It's posted on the card.",
+                                   placeholder: "What needs changing?", button: "Send") { note in
+                await perform("Changes requested.") {
+                    try await services.kanban.ai.reviewPullRequest(taskUuid: task.uuid, prUuid: pr.uuid, approved: false, note: note)
+                }
+            }
+        }
+    }
+
+    // MARK: Files
+
+    static let uploadTypes: [UTType] = [.image, .pdf, .plainText, .commaSeparatedText, .spreadsheet, .presentation]
+        + ["com.microsoft.word.doc", "org.openxmlformats.wordprocessingml.document", "com.microsoft.excel.xls",
+           "org.openxmlformats.spreadsheetml.sheet", "com.microsoft.powerpoint.ppt",
+           "org.openxmlformats.presentationml.presentation", "net.daringfireball.markdown"].compactMap { UTType($0) }
+
+    private func uploadPhoto(_ item: PhotosPickerItem) async {
+        defer { photo = nil }
+        guard let task = state.value else { return }
+        guard let data = try? await item.loadTransferable(type: Data.self) else {
+            notice = .failed("Couldn't read that photo.")
+            return
+        }
+        let image = UIImage(data: data)
+        let jpeg = image?.jpegData(compressionQuality: 0.8) ?? data
+        await upload(task, data: jpeg, filename: "photo-\(Int(Date().timeIntervalSince1970)).jpg", mime: "image/jpeg")
+    }
+
+    private func uploadFile(_ url: URL) async {
+        guard let task = state.value else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url) else {
+            notice = .failed("Couldn't read that file.")
+            return
+        }
+        let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+        await upload(task, data: data, filename: url.lastPathComponent, mime: mime)
+    }
+
+    private func upload(_ task: KanbanTask, data: Data, filename: String, mime: String) async {
+        guard data.count <= KanbanAPI.maxUploadBytes else {
+            notice = .failed("That file is over 10 MB, the most the server takes.")
+            return
+        }
+        uploading = true
+        defer { uploading = false }
+        await perform("“\(filename)” attached.") {
+            try await services.kanban.attachFile(taskUuid: task.uuid, data: data, filename: filename, mimeType: mime)
+        }
+    }
+
+    private func open(_ file: KanbanAttachment) async {
+        do {
+            let base = await services.kanban.client.currentBaseURL
+            preview = try await FileFetcher.download(file.fileUrl, named: file.fileName, base: base)
+        } catch {
+            notice = .failed("Couldn't open “\(file.fileName)”. Check your connection and try again.")
         }
     }
 }
 
-private struct SprintHeader: View {
-    let sprint: KanbanSprint
+/// Labels as wrapping chips.
+private struct FlowChips: View {
+    let labels: [KanbanLabel]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(sprint.name)
-            HStack(spacing: 8) {
-                ProgressView(value: sprint.progress)
-                    .frame(maxWidth: 120)
-                if let end = sprint.endDate {
-                    Text("Ends \(Formatters.day(end) ?? "")")
-                }
-            }
-            .font(.wsCaption)
-            .textCase(nil)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) { chips }
+            VStack(alignment: .leading, spacing: 6) { chips }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("mytasks.sprint.\(sprint.name)")
+        .accessibilityLabel("Labels: " + labels.map(\.name).joined(separator: ", "))
+    }
+
+    private var chips: some View {
+        ForEach(labels) { TagChip(name: $0.name, color: $0.color) }
     }
 }

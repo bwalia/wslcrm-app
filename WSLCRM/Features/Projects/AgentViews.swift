@@ -186,7 +186,10 @@ struct AgentResultCard: View {
             }
             ForEach(result.artifacts) { artifact in
                 if let url = artifact.url, let link = URL(string: url) {
-                    Link(destination: link) {
+                    Menu {
+                        Button("Copy the address", systemImage: "doc.on.doc") { UIPasteboard.general.string = url }
+                        ShareLink(item: link) { Label("Share", systemImage: "square.and.arrow.up") }
+                    } label: {
                         Label(artifact.name, systemImage: "doc")
                     }
                     .frame(minHeight: 44)
@@ -227,26 +230,77 @@ struct ReviewQueueRow: View {
     }
 }
 
-/// Everything an agent has finished that is waiting on a person. This is the screen that makes
-/// running work in parallel supervisable, so it sits beside My Tasks rather than inside a menu.
+/// Everything waiting on this person: work an agent finished on their cards, AI runs a manager
+/// must approve, permissions an AI run is asking for, and timesheets to approve. This is the
+/// screen that makes running work in parallel supervisable, so it sits beside My Tasks.
 struct ReviewQueueView: View {
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @State private var state: LoadState<[KanbanTask]> = .idle
+    @State private var approvals: [TaskAIRun] = []
+    @State private var requests: [AIRunRequest] = []
+    @State private var timesheets: [Timesheet] = []
+
+    private var isEmpty: Bool {
+        (state.value ?? []).isEmpty && approvals.isEmpty && requests.isEmpty && timesheets.isEmpty
+    }
 
     var body: some View {
         Group {
             switch state {
             case .idle, .loading: SkeletonList()
             case .failed(let error): ErrorStateView(error: error) { Task { await load() } }
-            case .loaded(let tasks) where tasks.isEmpty:
+            case .loaded where isEmpty:
                 ContentUnavailableView("Nothing waiting on you", systemImage: "checkmark.circle",
-                                       description: Text("Work an agent finishes shows up here for a decision."))
+                                       description: Text("Agent work to review, AI runs to approve, permissions to grant and timesheets to approve show up here."))
             case .loaded(let tasks):
-                List(tasks) { task in
-                    NavigationLink(value: TaskRoute(uuid: task.uuid)) {
-                        ReviewQueueRow(task: task)
+                List {
+                    if !tasks.isEmpty {
+                        Section("Agent work to review") {
+                            ForEach(tasks) { task in
+                                NavigationLink(value: TaskRoute(uuid: task.uuid)) {
+                                    ReviewQueueRow(task: task)
+                                }
+                                .accessibilityIdentifier("review.row.\(task.reference)")
+                            }
+                        }
                     }
-                    .accessibilityIdentifier("review.row.\(task.reference)")
+                    if !requests.isEmpty {
+                        Section("AI runs asking for permission") {
+                            ForEach(requests) { request in
+                                NavigationLink(value: WorkScreen.aiRun(uuid: request.runUuid ?? "").route) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(request.headline).font(.wsSubheadline.weight(.semibold))
+                                        Text([request.taskNumber.map { "#\($0)" }, request.taskTitle, request.requestedByName.map { "asked by \($0)" }]
+                                            .compactMap { $0 }.joined(separator: " · "))
+                                            .font(.wsCaption).foregroundStyle(.secondaryText)
+                                    }
+                                }
+                                .disabled(request.runUuid == nil)
+                                .accessibilityIdentifier("review.permission.\(request.uuid)")
+                            }
+                        }
+                    }
+                    if !approvals.isEmpty {
+                        Section("AI runs waiting for approval") {
+                            ForEach(approvals) { run in
+                                NavigationLink(value: WorkScreen.aiRun(uuid: run.uuid).route) {
+                                    TaskAIRunRow(run: run)
+                                }
+                                .accessibilityIdentifier("review.approval.\(run.uuid)")
+                            }
+                        }
+                    }
+                    if !timesheets.isEmpty {
+                        Section("Timesheets to approve") {
+                            ForEach(timesheets) { sheet in
+                                NavigationLink(value: TimesheetRoute(uuid: sheet.uuid)) {
+                                    TimesheetRow(timesheet: sheet, showsActor: true)
+                                }
+                                .accessibilityIdentifier("review.timesheet.\(sheet.uuid)")
+                            }
+                        }
+                    }
                 }
                 .listStyle(.insetGrouped)
                 .refreshable { await load() }
@@ -262,6 +316,17 @@ struct ReviewQueueView: View {
             let page = try await services.kanban.myTasks(perPage: 100)
             let waiting = page.items.filter { $0.contract?.result?.status == .needsReview }
                 .sorted { ($0.updatedAt ?? .distantPast) < ($1.updatedAt ?? .distantPast) }
+            let ai = services.kanban.ai
+            if await ai.isEnabled(), let found = try? await ai.waiting() {
+                approvals = found.approvals
+                requests = found.requests
+            } else {
+                approvals = []
+                requests = []
+            }
+            if session.policy.canSeeOthersTimesheets {
+                timesheets = (try? await services.timesheets.approvalQueue(page: 1, perPage: 50).items) ?? []
+            }
             state = .loaded(waiting)
         } catch {
             state = .failed(error.asAPIError)

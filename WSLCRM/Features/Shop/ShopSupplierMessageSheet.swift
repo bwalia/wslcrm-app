@@ -49,6 +49,8 @@ struct ShopSupplierMessageSheet: View {
     @State private var customerAgreed = false
     @State private var ccCustomer = true
     @State private var editingSupplier: ShopSupplier?
+    @State private var addingSupplier = false
+    @Environment(SessionStore.self) private var session
 
     private var isIntroduction: Bool {
         if case .introduction = kind { return true }
@@ -81,6 +83,17 @@ struct ShopSupplierMessageSheet: View {
         .safeAreaInset(edge: .bottom) { if draft != nil { sendBar } }
         .interactiveDismissDisabled(sending != nil)
         .task { await loadSuppliers() }
+        .sheet(isPresented: $addingSupplier) {
+            NavigationStack {
+                ShopSupplierFormView(supplier: nil) { saved in
+                    Task {
+                        await loadSuppliers(force: true)
+                        supplierUuid = saved.uuid
+                        await loadDraft()
+                    }
+                }
+            }
+        }
         .navigationDestination(item: $editingSupplier) { supplier in
             ShopSupplierDetailView(summary: supplier) { _ in
                 Task {
@@ -98,8 +111,15 @@ struct ShopSupplierMessageSheet: View {
         Section {
             switch suppliers {
             case .loaded(let list) where list.isEmpty:
-                Text("You have no suppliers yet. Add them under Shop → Suppliers on the web, then come back.")
+                Text(session.shopPolicy.canUpdate
+                     ? "You have no suppliers yet. Add one here with their contact details, then write the message."
+                     : "You have no suppliers yet. Ask someone who manages the shop to add one.")
                     .foregroundStyle(.secondaryText)
+                if session.shopPolicy.canUpdate {
+                    Button { addingSupplier = true } label: { Label("Add a supplier", systemImage: "plus.circle") }
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("supplierMessage.addSupplier")
+                }
             case .loaded(let list):
                 Picker("Supplier", selection: $supplierUuid) {
                     Text("Choose a supplier…").tag("")
@@ -164,7 +184,7 @@ struct ShopSupplierMessageSheet: View {
                     if !old.isEmpty, !new.isEmpty, old != new { Task { await loadDraft() } }
                 }
             } footer: {
-                Text("Templates are set up on the web under Shop → Templates.")
+                Text("Change the wording under Shop → Message templates.")
             }
         }
 

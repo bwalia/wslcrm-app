@@ -15,6 +15,7 @@ struct WSLCRMApp: App {
         WindowGroup {
             RootView()
                 .modifier(BrandBodyFont())
+                .modifier(ThemeModifier())
                 .environment(appDelegate.router)
                 .environment(environment.push)
                 .onAppear { appDelegate.push = environment.push }

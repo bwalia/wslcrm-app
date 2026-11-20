@@ -6,9 +6,10 @@ import SwiftUI
 @Observable
 final class ServiceRequestsListViewModel {
     enum Filter: String, CaseIterable, Identifiable {
-        case open, all, new, assigned
+        case open, all, new, triaged, assigned
         case inProgress = "in_progress"
-        case resolved, closed
+        case onHold = "on_hold"
+        case resolved, closed, rejected, duplicate
 
         var id: String { rawValue }
         var title: String { self == .open ? "Open" : self == .all ? "All" : Formatters.humanize(rawValue) }
@@ -16,6 +17,10 @@ final class ServiceRequestsListViewModel {
 
     var filter: Filter = .open
     var search = ""
+    /// low / normal / high / urgent; nil: any.
+    var priority: String?
+    /// Only requests that missed their response or fix target.
+    var slaBreached = false
     private(set) var items: [ServiceRequest] = []
     private(set) var state: LoadState<Void> = .idle
     private(set) var lastPage: Page<ServiceRequest>?
@@ -30,7 +35,8 @@ final class ServiceRequestsListViewModel {
     func load() async {
         if items.isEmpty { state = .loading }
         do {
-            let page = try await api.serviceRequests(status: filter.rawValue, search: search, page: 1)
+            let page = try await api.serviceRequests(status: filter.rawValue, search: search, page: 1,
+                                                     priority: priority, slaBreached: slaBreached)
             items = page.items
             lastPage = page
             pageError = nil
@@ -42,12 +48,17 @@ final class ServiceRequestsListViewModel {
         }
     }
 
+    func remove(_ uuid: String) {
+        items.removeAll { $0.uuid == uuid }
+    }
+
     func loadMoreIfNeeded(_ item: ServiceRequest) async {
         guard let lastPage, lastPage.hasMore, !isLoadingMore, item.id == items.last?.id else { return }
         isLoadingMore = true
         defer { isLoadingMore = false }
         do {
-            let page = try await api.serviceRequests(status: filter.rawValue, search: search, page: lastPage.page + 1)
+            let page = try await api.serviceRequests(status: filter.rawValue, search: search, page: lastPage.page + 1,
+                                                     priority: priority, slaBreached: slaBreached)
             let known = Set(items.map(\.id))
             items += page.items.filter { !known.contains($0.id) }
             self.lastPage = page
@@ -62,6 +73,9 @@ struct ServiceRequestsListView: View {
     @Environment(SessionStore.self) private var session
     @State private var model: ServiceRequestsListViewModel?
     @State private var creating = false
+    @State private var deleting: ServiceRequest?
+    @State private var notice: String?
+    @State private var deleteError: APIError?
 
     var body: some View {
         Group {
@@ -93,12 +107,21 @@ struct ServiceRequestsListView: View {
     private func content(_ model: ServiceRequestsListViewModel) -> some View {
         @Bindable var model = model
         return List {
+            if let notice {
+                Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor)
+            }
+            if let deleteError { InlineErrorRow(error: deleteError) }
             ForEach(model.items) { request in
                 NavigationLink(value: ServiceRequestRoute(uuid: request.uuid)) {
                     ServiceRequestRow(request: request)
                 }
                 .accessibilityIdentifier("requests.row.\(request.title)")
                 .task { await model.loadMoreIfNeeded(request) }
+                .swipeActions {
+                    if session.permissions.can(.delete, .fsServiceRequests) {
+                        Button("Delete", role: .destructive) { deleting = request }
+                    }
+                }
             }
             if model.isLoadingMore { HStack { Spacer(); ProgressView(); Spacer() } }
             if let error = model.pageError {
@@ -125,13 +148,41 @@ struct ServiceRequestsListView: View {
         .refreshable { await model.load() }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Picker("Filter", selection: $model.filter) {
-                    ForEach(ServiceRequestsListViewModel.Filter.allCases) { Text($0.title).tag($0) }
+                Menu {
+                    Picker("Status", selection: $model.filter) {
+                        ForEach(ServiceRequestsListViewModel.Filter.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Priority", selection: $model.priority) {
+                        Text("Any priority").tag(String?.none)
+                        ForEach(ModuleCatalog.jobPriorityChoices) { Text($0.label).tag(Optional($0.value)) }
+                    }
+                    Toggle("Missed its target (SLA)", isOn: $model.slaBreached)
+                } label: {
+                    Label("Filter", systemImage: model.filter == .open && model.priority == nil && !model.slaBreached
+                          ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
                 }
-                .pickerStyle(.menu)
+                .accessibilityIdentifier("requests.filter")
             }
         }
-        .task(id: "\(model.filter.rawValue)|\(model.search)") {
+        .confirmationDialog("Delete this request?", isPresented: .init(get: { deleting != nil },
+                                                                      set: { if !$0 { deleting = nil } }),
+                            titleVisibility: .visible, presenting: deleting) { request in
+            Button("Delete “\(request.title)”", role: .destructive) {
+                Task {
+                    do {
+                        try await services.fieldService.deleteServiceRequest(request.uuid)
+                        model.remove(request.uuid)
+                        notice = "Request deleted."
+                        deleteError = nil
+                    } catch {
+                        deleteError = error.asAPIError
+                    }
+                }
+            }
+        } message: { _ in
+            Text("This can't be undone. Close or reject it instead to keep a record.")
+        }
+        .task(id: "\(model.filter.rawValue)|\(model.search)|\(model.priority ?? "")|\(model.slaBreached)") {
             if !model.items.isEmpty { try? await Task.sleep(for: .milliseconds(350)) }
             guard !Task.isCancelled else { return }
             await model.load()
@@ -263,6 +314,8 @@ private struct ServiceRequestDetailContent: View {
     @State private var showingConvert = false
     @State private var editing = false
     @State private var openJob: JobRoute?
+    @State private var confirmingDelete = false
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         Group {
@@ -311,6 +364,26 @@ private struct ServiceRequestDetailContent: View {
                         .accessibilityIdentifier("request.edit")
                 }
             }
+            if session.permissions.can(.delete, .fsServiceRequests), model.state.value != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(role: .destructive) { confirmingDelete = true } label: { Label("Delete", systemImage: "trash") }
+                        .accessibilityIdentifier("request.delete")
+                }
+            }
+        }
+        .confirmationDialog("Delete this request?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("Delete request", role: .destructive) {
+                Task {
+                    do {
+                        try await services.fieldService.deleteServiceRequest(model.uuid)
+                        dismiss()
+                    } catch {
+                        model.actionError = error.asAPIError
+                    }
+                }
+            }
+        } message: {
+            Text("This can't be undone. Jobs made from it stay. Close or reject it instead to keep a record.")
         }
         .onChange(of: model.convertedJobUuid) { _, uuid in
             if let uuid { openJob = JobRoute(uuid: uuid) }
@@ -402,6 +475,17 @@ private struct ServiceRequestDetailContent: View {
                 DetailRow(label: "Respond by", value: Formatters.dateTime(request.slaResponseDueAt))
                 DetailRow(label: "Resolve by", value: Formatters.dateTime(request.slaResolveDueAt))
                 DetailRow(label: "Resolution", value: request.resolutionNotes)
+            }
+
+            Section("Timeline") {
+                DetailRow(label: "Logged", value: Formatters.dateTime(request.createdAt))
+                DetailRow(label: "First response", value: Formatters.dateTime(request.firstResponseAt) ?? "Not yet")
+                if let resolved = request.resolvedAt {
+                    DetailRow(label: "Resolved", value: Formatters.dateTime(resolved))
+                }
+                if let closed = request.closedAt {
+                    DetailRow(label: "Closed", value: Formatters.dateTime(closed))
+                }
             }
 
             if !detail.jobs.isEmpty {

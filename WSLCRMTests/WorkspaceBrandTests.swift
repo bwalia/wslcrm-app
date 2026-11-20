@@ -130,10 +130,10 @@ final class WorkspaceBrandTests: XCTestCase {
         let svg = """
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect x="0" y="0" width="96" height="96" fill="#0b2545"/></svg>
         """
-        let rendered = await SVGRasterizer.render(Data(svg.utf8), side: 60, timeout: .seconds(60))
+        let rendered = NativeSVG.render(Data(svg.utf8), side: 60)
         let image = try XCTUnwrap(rendered)
         XCTAssertGreaterThan(image.size.width, 0)
-        // The middle pixel is the navy fill, not transparent: WebKit really drew it.
+        // The middle pixel is the navy fill, not transparent: it really was drawn.
         let cg = try XCTUnwrap(image.cgImage)
         var pixel = [UInt8](repeating: 0, count: 4)
         let context = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,

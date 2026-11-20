@@ -1,54 +1,104 @@
+import QuickLook
 import SwiftUI
 
-/// One lead: who they are, what to do next, what the AI thinks, meetings and history — and every
-/// action a person working leads takes from a phone. The server decides who may do what
-/// (`lead.permissions`); the buttons follow it.
+/// One lead, end to end: where it stands, who owns it, the next step, what the AI made of it, and every
+/// action — call, email, WhatsApp, book a meeting, qualify, pass to a partner, convert, nurture, lost —
+/// with its meetings, referrals, what the shop and website saved, and the full timeline. The server decides
+/// who may do what (`lead.permissions`); the buttons follow it.
 struct LeadDetailView: View {
     let leadUuid: String
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @State private var state: LoadState<Lead> = .idle
     @State private var timeline: [LeadTimelineItem] = []
+    @State private var bundle: LeadSettingsBundle?
+    @State private var formResponses: [WebFormRecordResponse] = []
     @State private var sheet: Sheet?
     @State private var busy = false
     @State private var actionError: APIError?
     @State private var notice: String?
-    @State private var markingLost = false
-    @State private var lostReason = ""
+    @State private var reportURL: URL?
+    @State private var loadingReport = false
+    @State private var cancellingMeeting: LeadMeeting?
+    @State private var cancelReason = ""
 
     enum Sheet: Identifiable {
-        case edit, call, step, meeting, nurture, convert, assign
-        var id: Self { self }
+        case edit, call, step, meeting(LeadMeeting?), outcome(LeadMeeting), park(LeadStage), convert, assign
+        case email(subject: String?, body: String?), qualify, refer(partner: String?)
+
+        var id: String {
+            switch self {
+            case .edit: "edit"
+            case .call: "call"
+            case .step: "step"
+            case .meeting(let m): "meeting-\(m?.uuid ?? "new")"
+            case .outcome(let m): "outcome-\(m.uuid)"
+            case .park(let stage): "park-\(stage.rawValue)"
+            case .convert: "convert"
+            case .assign: "assign"
+            case .email: "email"
+            case .qualify: "qualify"
+            case .refer: "refer"
+            }
+        }
     }
 
     var body: some View {
         Group {
             switch state {
             case .idle, .loading: SkeletonList(rows: 4)
-            case .failed(let error): ErrorStateView(error: error) { Task { await load() } }
+            case .failed(let error):
+                if case .notFound = error {
+                    ContentUnavailableView("Lead not found", systemImage: "person.crop.circle.badge.questionmark",
+                                           description: Text("This lead doesn't exist, or it isn't yours to see."))
+                } else {
+                    ErrorStateView(error: error) { Task { await load() } }
+                }
             case .loaded(let lead): content(lead)
             }
         }
         .navigationTitle("Lead")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
+        .task { bundle = try? await services.leads.settings() }
+        .task(id: leadUuid) {
+            formResponses = await WebFormRecordResponsesSection.load(services: services, session: session,
+                                                                     entityType: "lead", entityUUID: leadUuid)
+        }
         .refreshable { await load() }
         .toolbar {
-            if let lead = state.value, canWork(lead), session.permissions.can(.update, .crmLeads) {
+            if let lead = state.value, canWork(lead), session.permissions.can(.update, .crmLeads), lead.stage != .converted {
                 ToolbarItem(placement: .topBarTrailing) { Button("Edit") { sheet = .edit } }
             }
         }
         .sheet(item: $sheet) { sheet in
             if let lead = state.value { sheetView(sheet, lead) }
         }
-        .alert("Mark as lost", isPresented: $markingLost) {
-            TextField("Why? (optional)", text: $lostReason)
-            Button("Mark lost", role: .destructive) {
-                let reason = lostReason.trimmingCharacters(in: .whitespaces)
-                Task { await act { try await services.leads.move(leadUuid, LeadStageBody(stage: "lost", reason: reason.isEmpty ? nil : reason)) } }
+        .quickLookPreview($reportURL)
+        .alert("Cancel the meeting?", isPresented: Binding(get: { cancellingMeeting != nil },
+                                                          set: { if !$0 { cancellingMeeting = nil } })) {
+            TextField("Reason (optional)", text: $cancelReason)
+            Button("Cancel meeting", role: .destructive) {
+                if let meeting = cancellingMeeting {
+                    let reason = cancelReason
+                    Task {
+                        await meetingAction("Meeting cancelled. Everyone invited is told.") {
+                            try await services.leads.cancelMeeting(meeting.uuid, reason: reason)
+                        }
+                    }
+                }
             }
-            Button("Cancel", role: .cancel) {}
+            Button("Keep it", role: .cancel) {}
+        } message: {
+            Text("The reason is included in the cancellation everyone receives.")
+        }
+        // While the AI works, check back every few seconds.
+        .task(id: state.value?.analysis?.isRunning == true) {
+            guard state.value?.analysis?.isRunning == true else { return }
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            await load()
         }
     }
 
@@ -57,19 +107,26 @@ struct LeadDetailView: View {
     private func content(_ lead: Lead) -> some View {
         List {
             header(lead)
-            if let phone = lead.phone { Section { PhoneLinkRow(name: "Call \(lead.firstName)", phone: phone) } }
-            if let email = lead.email { Section { EmailLinkRow(email: email) } }
-            if let notice { Section { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) } }
+            if let notice {
+                Section { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
+            }
             if let actionError { Section { InlineErrorRow(error: actionError) } }
+            if canWork(lead) { quickActions(lead) }
+            banners(lead)
             if lead.isOpen, canWork(lead) { nextStep(lead) }
             ai(lead)
             meetings(lead)
+            referrals(lead)
             if canWork(lead) { manage(lead) }
             details(lead)
+            qualification(lead)
+            LeadShopSections(metadata: lead.metadata)
+            // The lead's answers to the workspace's forms (as on the web's lead page).
+            WebFormRecordResponsesSection(items: formResponses)
             if !timeline.isEmpty { history }
-            if canWork(lead), session.permissions.can(.delete, .crmLeads) {
+            if canWork(lead), session.permissions.can(.delete, .crmLeads), lead.stage != .converted {
                 Section {
-                    DeleteButton(title: "Delete lead", message: "This removes the lead and its history.") {
+                    DeleteButton(title: "Delete lead", message: "The lead and its planned steps are removed. This can’t be undone.") {
                         do {
                             try await services.leads.delete(lead.uuid)
                             return true
@@ -80,38 +137,113 @@ struct LeadDetailView: View {
                     }
                 }
             }
+            if !canWork(lead) {
+                Section {
+                    Label("You can see this lead but not work on it. Ask a manager to give it to you.", systemImage: "person.fill.questionmark")
+                        .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                }
+            }
         }
         .listStyle(.insetGrouped)
         .disabled(busy)
     }
 
+    private func stageLabel(_ stage: LeadStage) -> String { bundle?.stageLabels[stage.rawValue] ?? stage.label }
+
     private func header(_ lead: Lead) -> some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
                 Text(lead.displayName).font(.wsTitle2.bold())
-                if let line = [lead.jobTitle, lead.companyName].compactMap({ $0 }).joined(separator: " · ").nilIfEmpty {
-                    Text(line).foregroundStyle(.secondaryText)
-                }
+                Text(headline(lead)).font(.wsSubheadline).foregroundStyle(.secondaryText)
+                LeadStageTrack(stage: lead.stage, label: stageLabel)
                 HStack {
-                    StatusBadge(text: lead.stageLabel, systemImage: lead.stage.systemImage, tone: lead.stage.tone)
                     if let score = lead.aiScore {
-                        StatusBadge(text: "Score \(score)", systemImage: "sparkles", tone: score >= 70 ? .success : .neutral)
+                        StatusBadge(text: "AI score \(score)", systemImage: "sparkles", tone: score >= 70 ? .success : .neutral)
+                    }
+                    if let value = lead.estimatedValue, value > 0,
+                       let text = Formatters.money(value, currency: lead.currency ?? LeadsAPI.defaultCurrency) {
+                        Text(text + (lead.valueFromAI ? " (AI)" : "")).font(.wsHeadline.monospacedDigit())
                     }
                 }
-                if let value = lead.estimatedValue, value > 0, let text = Formatters.money(value, currency: lead.currency ?? LeadsAPI.defaultCurrency) {
-                    Text(text).font(.wsTitle3.monospacedDigit())
-                }
-                Text(lead.ownerName.map { "Owner: \($0)" } ?? "Not assigned yet")
+                Text(lead.ownerName.map { "Owner: \($0)" } ?? "No owner yet — it's in the queue")
                     .font(.wsSubheadline).foregroundStyle(.secondaryText)
             }
             .padding(.vertical, 4)
-            if lead.stage == .converted, let deal = lead.convertedDealUuid {
+            if let phone = lead.phone { PhoneLinkRow(name: "Call \(lead.firstName.nonEmpty ?? "them")", phone: phone) }
+            if let email = lead.email { EmailLinkRow(email: email) }
+        }
+    }
+
+    /// The common actions, one tap each, as on the web's action bar.
+    private func quickActions(_ lead: Lead) -> some View {
+        Section {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    if lead.stage != .converted {
+                        actionChip("Log a call", "phone.badge.checkmark", id: "call") { sheet = .call }
+                    }
+                    if lead.email != nil {
+                        actionChip("Email", "envelope", id: "email") { sheet = .email(subject: nil, body: nil) }
+                    }
+                    if let whatsApp = LeadContact.whatsAppURL(phone: lead.phone, text: nil) {
+                        actionChip("WhatsApp", "message", id: "whatsapp") { openWhatsApp(whatsApp) }
+                    }
+                    if lead.isOpen {
+                        actionChip("Book a meeting", "calendar.badge.plus", id: "meeting") { sheet = .meeting(nil) }
+                        actionChip("Qualify", "checklist", id: "qualify") { sheet = .qualify }
+                    }
+                    if session.permissions.can(.update, .crmDeals) {
+                        actionChip("Pass to a partner", "arrowshape.turn.up.right", id: "refer") { sheet = .refer(partner: nil) }
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
+        }
+    }
+
+    private func actionChip(_ title: String, _ image: String, id: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: image)
+                .font(.wsSubheadline.weight(.semibold))
+                .padding(.horizontal, 14)
+                .frame(minHeight: 44)
+                .background(Color(.secondarySystemBackground), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("lead.action.\(id)")
+    }
+
+    @ViewBuilder
+    private func banners(_ lead: Lead) -> some View {
+        if lead.stage == .converted, let deal = lead.convertedDealUuid {
+            Section {
                 NavigationLink { CRMDealDetailView(dealUuid: deal) } label: {
-                    Label("Open the deal\(lead.convertedDealName.map { ": \($0)" } ?? "")", systemImage: "briefcase.fill")
+                    Label("Converted to the deal \(lead.convertedDealName ?? "")"
+                          + (lead.convertedDealValue.flatMap { Formatters.money($0, currency: lead.currency ?? LeadsAPI.defaultCurrency) }
+                             .map { " (\($0))" } ?? "") + ". Work continues there.",
+                          systemImage: "briefcase.fill")
                 }
             }
-            if lead.stage == .lost, let reason = lead.lostReason { DetailRow(label: "Lost", value: reason) }
-            if lead.stage == .nurture, let until = lead.nurtureUntil { DetailRow(label: "Comes back on", value: until) }
+        }
+        if lead.stage == .lost, let reason = lead.lostReason {
+            Section { Label("Lost: \(reason)", systemImage: "xmark.circle").foregroundStyle(.secondaryText) }
+        }
+        if lead.stage == .nurture, let until = lead.nurtureUntil {
+            Section {
+                Label("Comes back on \(CalendarDay(string: until).flatMap { Formatters.day($0.date()) } ?? until) with a call planned.",
+                      systemImage: "leaf")
+            }
+        }
+        if let duplicate = lead.duplicateOf, duplicate != lead.uuid {
+            Section {
+                NavigationLink { LeadDetailView(leadUuid: duplicate) } label: {
+                    Label("Another open lead has the same email or phone. Look at it before calling, so they aren’t contacted twice.",
+                          systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(Tone.warning.textColor)
+                }
+                .accessibilityIdentifier("lead.duplicate")
+            }
         }
     }
 
@@ -140,11 +272,12 @@ struct LeadDetailView: View {
             HStack {
                 Button { sheet = .step } label: { Label("Plan a step", systemImage: "calendar.badge.clock") }
                 Spacer()
-                Button { sheet = .meeting } label: { Label("Book a meeting", systemImage: "video") }
+                Button { sheet = .meeting(nil) } label: { Label("Book a meeting", systemImage: "video") }
             }
             .buttonStyle(.borderless)
             .frame(minHeight: 44)
-            Text("\(lead.contactAttempts) call\(lead.contactAttempts == 1 ? "" : "s") so far")
+            Text("\(lead.contactAttempts) call\(lead.contactAttempts == 1 ? "" : "s") so far"
+                 + (lead.firstContactedAt.map { " · first contact \(Formatters.dateTime($0) ?? "")" } ?? " · not contacted yet"))
                 .font(.wsCaption).foregroundStyle(.secondaryText)
         }
     }
@@ -152,50 +285,152 @@ struct LeadDetailView: View {
     @ViewBuilder
     private func ai(_ lead: Lead) -> some View {
         let analysis = lead.analysis
-        Section("AI") {
+        let currency = lead.currency ?? LeadsAPI.defaultCurrency
+        Section {
             if analysis?.isRunning == true || lead.aiStatus == "pending" || lead.aiStatus == "running" {
-                Label("The AI is reading this lead…", systemImage: "hourglass").foregroundStyle(.secondaryText)
-            } else if let result = analysis?.result {
+                Label("The AI is reading this lead and sizing the deal…", systemImage: "hourglass").foregroundStyle(.secondaryText)
+            } else if let result = analysis?.result, analysis?.status == "done" || analysis?.status == nil || result.summary != nil {
                 if let summary = result.summary { Text(summary) }
                 if let wants = result.wants { DetailRow(label: "They want", value: wants) }
+                if let origin = result.origin { DetailRow(label: "Where it came from", value: origin) }
+                ForEach(result.flags, id: \.self) { flag in
+                    Label(LeadAIText.flag(flag), systemImage: "exclamationmark.triangle")
+                        .font(.wsSubheadline)
+                        .foregroundStyle(flag == "existing_customer" ? Tone.info.textColor : Tone.warning.textColor)
+                }
                 if let action = result.nextBestAction, let label = action.label {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Suggested: \(label)").font(.wsHeadline)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Suggested: \(label)\(LeadAIText.when(action.when))").font(.wsHeadline)
                         if let reason = action.reason { Text(reason).font(.wsSubheadline).foregroundStyle(.secondaryText) }
+                        if canWork(lead), lead.isOpen, let code = action.action {
+                            Button("Do it", systemImage: "wand.and.stars") {
+                                doAI(code, partner: result.partnerSuggestions.first?.partnerUuid, lead: lead)
+                            }
+                            .buttonStyle(.borderless)
+                            .frame(minHeight: 44)
+                            .accessibilityIdentifier("lead.ai.doIt")
+                        }
                     }
                 }
-                if let low = result.valueLow, let high = result.valueHigh,
-                   let l = Formatters.money(low, currency: lead.currency ?? LeadsAPI.defaultCurrency), let h = Formatters.money(high, currency: lead.currency ?? LeadsAPI.defaultCurrency) {
-                    DetailRow(label: "Deal size", value: "\(l) – \(h)")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Deal size").font(.wsCaption).foregroundStyle(.secondaryText)
+                    Text(result.estimatedValue.flatMap { Formatters.money($0, currency: currency) } ?? "Not known yet")
+                        .font(.wsHeadline.monospacedDigit())
+                    if let low = result.valueLow, let high = result.valueHigh,
+                       let l = Formatters.money(low, currency: currency), let h = Formatters.money(high, currency: currency) {
+                        Text("Range \(l) – \(h)").font(.wsSubheadline)
+                    }
+                    Text(result.valueSource == "web_search" ? "From a web price search" : "Estimated by the AI without a web search")
+                        .font(.wsCaption).foregroundStyle(.secondaryText)
+                    if let basis = result.valueBasis { Text(basis).font(.wsCaption).foregroundStyle(.secondaryText) }
+                }
+                if !result.scoreReasons.isEmpty {
+                    DisclosureGroup("Why score \(result.score.map(String.init) ?? "—")") {
+                        ForEach(result.scoreReasons, id: \.self) { Text("• \($0)").font(.wsSubheadline) }
+                    }
+                }
+                if let research = result.research {
+                    if research.hidden, let message = research.message {
+                        Text(message).font(.wsCaption).foregroundStyle(.secondaryText)
+                    } else if !research.sources.isEmpty {
+                        DisclosureGroup("Web sources (\(research.sources.count))") {
+                            ForEach(research.sources, id: \.url) { source in
+                                if let url = URL(string: source.url) {
+                                    Link(destination: url) {
+                                        Label(source.title ?? source.url, systemImage: "link").font(.wsSubheadline)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if !result.partnerSuggestions.isEmpty {
+                    DisclosureGroup("Partners who could fulfil this (\(result.partnerSuggestions.count))") {
+                        ForEach(result.partnerSuggestions, id: \.partnerUuid) { suggestion in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(suggestion.partnerName ?? "Partner").font(.wsSubheadline.weight(.semibold))
+                                    Text([suggestion.fit.map { "fit \($0)" }, suggestion.reason].compactMap { $0 }.joined(separator: " · "))
+                                        .font(.wsCaption).foregroundStyle(.secondaryText)
+                                }
+                                Spacer()
+                                if canWork(lead), session.permissions.can(.update, .crmDeals) {
+                                    Button("Pass on") { sheet = .refer(partner: suggestion.partnerUuid) }.buttonStyle(.borderless)
+                                }
+                            }
+                        }
+                    }
                 }
                 if !result.questions.isEmpty {
-                    DisclosureGroup("Questions to ask (\(result.questions.count))") {
-                        ForEach(result.questions, id: \.self) { Text("• \($0)").font(.wsSubheadline) }
+                    DisclosureGroup("Ask on the call (\(result.questions.count))") {
+                        ForEach(Array(result.questions.enumerated()), id: \.offset) { index, question in
+                            Text("\(index + 1). \(question)").font(.wsSubheadline)
+                        }
                     }
                 }
+                if let reply = result.firstReply, let body = reply.body {
+                    DisclosureGroup("Draft first reply") {
+                        Text([reply.subject, body].compactMap { $0 }.joined(separator: "\n\n")).font(.wsSubheadline).textSelection(.enabled)
+                        HStack {
+                            Button("Copy", systemImage: "doc.on.doc") {
+                                UIPasteboard.general.string = [reply.subject, body].compactMap { $0 }.joined(separator: "\n\n")
+                                notice = "Draft reply copied."
+                            }
+                            Spacer()
+                            if lead.email != nil, canWork(lead) {
+                                Button("Email it", systemImage: "envelope") { sheet = .email(subject: reply.subject, body: body) }
+                            }
+                            if let whatsApp = LeadContact.whatsAppURL(phone: lead.phone, text: body) {
+                                Button("WhatsApp", systemImage: "message") { openWhatsApp(whatsApp) }
+                            }
+                        }
+                        .buttonStyle(.borderless)
+                        .frame(minHeight: 44)
+                    }
+                }
+                Button {
+                    Task { await openReport(lead) }
+                } label: {
+                    if loadingReport { ProgressView() } else { Label("View the AI report (PDF)", systemImage: "doc.richtext") }
+                }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("lead.ai.report")
+                Text("\([analysis?.providerName, analysis?.model].compactMap { $0 }.joined(separator: " · ").nonEmpty ?? "AI")"
+                     + (analysis?.finishedAt.flatMap { " · \(Formatters.dateTime($0) ?? "")" } ?? "")
+                     + ". Suggestions only — check before acting.")
+                    .font(.wsCaption).foregroundStyle(.secondaryText)
             } else if let error = analysis?.error {
-                Text("The AI couldn't read this lead: \(error)").font(.wsSubheadline).foregroundStyle(.secondaryText)
+                Text(error).font(.wsSubheadline).foregroundStyle(.secondaryText)
+                if error.contains("turned off"), bundle?.canEdit == true {
+                    NavigationLink { LeadSettingsView() } label: { Label("Open lead settings", systemImage: "gearshape") }
+                }
             } else {
-                Text("No AI analysis yet.").font(.wsSubheadline).foregroundStyle(.secondaryText)
+                Text("The AI hasn’t looked at this lead yet.").font(.wsSubheadline).foregroundStyle(.secondaryText)
             }
-            if canWork(lead) {
+            if canWork(lead), analysis?.isRunning != true {
                 Button {
                     Task {
-                        await act(notice: "The AI is reading the lead again. Pull down to refresh in a minute.") {
-                            try await services.leads.analyse(lead.uuid)
+                        await act {
+                            let message = try await services.leads.analyse(lead.uuid)
+                            notice = message ?? "The AI is analysing the lead. This takes a minute."
                             return try await services.leads.lead(lead.uuid)
                         }
                     }
                 } label: { Label("Run the AI again", systemImage: "sparkles") }
                 .frame(minHeight: 44)
             }
+        } header: {
+            Label("AI analysis", systemImage: "sparkles")
         }
     }
 
     @ViewBuilder
     private func meetings(_ lead: Lead) -> some View {
-        if !lead.meetings.isEmpty {
+        if !lead.meetings.isEmpty || (lead.isOpen && canWork(lead)) {
             Section("Meetings") {
+                if lead.meetings.isEmpty {
+                    Text("No meetings yet.").font(.wsSubheadline).foregroundStyle(.secondaryText)
+                }
                 ForEach(lead.meetings) { meeting in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(meeting.subject).font(.wsHeadline)
@@ -210,17 +445,22 @@ struct LeadDetailView: View {
                         if meeting.isPlanned, canWork(lead) {
                             HStack {
                                 if (meeting.startsAt ?? .distantFuture) < Date().addingTimeInterval(15 * 60) {
-                                    Button("It happened") { Task { await meetingAction { try await services.leads.meetingOutcome(meeting.uuid, held: true) } } }
-                                    Button("They didn't come") { Task { await meetingAction { try await services.leads.meetingOutcome(meeting.uuid, held: false) } } }
+                                    Button("How did it go?") { sheet = .outcome(meeting) }
                                 }
+                                Button("Move") { sheet = .meeting(meeting) }
                                 Spacer()
-                                Button("Cancel", role: .destructive) { Task { await meetingAction { try await services.leads.cancelMeeting(meeting.uuid) } } }
+                                Button("Cancel", role: .destructive) { cancelReason = ""; cancellingMeeting = meeting }
                             }
                             .buttonStyle(.borderless)
                             .frame(minHeight: 44)
                         }
                     }
                     .padding(.vertical, 2)
+                    .accessibilityIdentifier("lead.meeting.\(meeting.uuid)")
+                }
+                if lead.isOpen, canWork(lead) {
+                    Button("Book a meeting", systemImage: "calendar.badge.plus") { sheet = .meeting(nil) }
+                        .frame(minHeight: 44)
                 }
             }
         }
@@ -231,7 +471,24 @@ struct LeadDetailView: View {
         case "completed": meeting.outcome == "no_show" ? "They didn't come" : "It happened"
         case "cancelled": "Cancelled"
         default:
-            if let error = meeting.inviteError { "Invite not sent yet: \(error)" } else if meeting.inviteSent { "Invite sent" } else { "No invite sent" }
+            if !meeting.inviteEnabled { "No invites sent" }
+            else if let error = meeting.inviteError { "Invite not sent yet: \(error)" }
+            else if meeting.inviteSent { "Invite sent to \(meeting.attendeeCount)" }
+            else { "Sending the invite…" }
+        }
+    }
+
+    @ViewBuilder
+    private func referrals(_ lead: Lead) -> some View {
+        if !lead.referrals.isEmpty {
+            Section("Passed to partners") {
+                ForEach(lead.referrals) { referral in
+                    ReferralRow(referral: referral, canWork: canWork(lead) && session.permissions.can(.update, .crmDeals)) { message in
+                        notice = message
+                        await load()
+                    }
+                }
+            }
         }
     }
 
@@ -240,32 +497,45 @@ struct LeadDetailView: View {
             if lead.isOpen {
                 Menu {
                     ForEach(LeadStage.open.filter { $0 != lead.stage }, id: \.self) { stage in
-                        Button(stage.label) { Task { await act { try await services.leads.move(lead.uuid, LeadStageBody(stage: stage.rawValue)) } } }
+                        Button(stageLabel(stage)) {
+                            Task { await act(notice: "Moved to \(stageLabel(stage)).") { try await services.leads.move(lead.uuid, LeadStageBody(stage: stage.rawValue)) } }
+                        }
                     }
                 } label: {
                     Label("Move to stage…", systemImage: "arrow.right.circle").frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 }
-                if lead.permissions?.canConvert ?? session.permissions.can(.create, .crmDeals) {
-                    Button { sheet = .convert } label: { Label("Convert to a deal", systemImage: "briefcase.fill") }
-                        .buttonStyle(.large(.success, prominent: false))
-                        .listRowSeparator(.hidden)
-                }
-                Button { sheet = .nurture } label: { Label("Nurture: come back later", systemImage: "leaf") }
+                .accessibilityIdentifier("lead.moveStage")
+            }
+            if lead.stage != .converted, lead.permissions?.canConvert ?? session.permissions.can(.create, .crmDeals) {
+                Button { sheet = .convert } label: { Label("Convert to a deal", systemImage: "briefcase.fill") }
+                    .buttonStyle(.large(.success, prominent: false))
+                    .listRowSeparator(.hidden)
+                    .accessibilityIdentifier("lead.convert")
+            }
+            if lead.isOpen {
+                Button { sheet = .park(.nurture) } label: { Label("Nurture: come back later", systemImage: "leaf") }
                     .frame(minHeight: 44)
-                Button(role: .destructive) { lostReason = ""; markingLost = true } label: { Label("Mark lost", systemImage: "xmark.circle") }
+                Button(role: .destructive) { sheet = .park(.lost) } label: { Label("Mark lost", systemImage: "xmark.circle") }
                     .frame(minHeight: 44)
-            } else if lead.stage != .converted {
-                Button { Task { await act { try await services.leads.move(lead.uuid, LeadStageBody(stage: "new")) } } } label: {
+            } else if lead.stage == .lost || lead.stage == .nurture {
+                Button {
+                    Task { await act(notice: "Reopened. A call is planned.") { try await services.leads.move(lead.uuid, LeadStageBody(stage: "contacting")) } }
+                } label: {
                     Label("Reopen", systemImage: "arrow.uturn.backward")
                 }
                 .frame(minHeight: 44)
             }
-            if lead.permissions?.canAssignAny == true {
-                Button { sheet = .assign } label: { Label(lead.ownerName == nil ? "Assign" : "Change owner", systemImage: "person.crop.circle.badge.plus") }
+            if lead.isOpen, lead.permissions?.canAssignAny == true {
+                Button { sheet = .assign } label: { Label(lead.ownerName == nil ? "Give it an owner" : "Change owner", systemImage: "person.crop.circle.badge.plus") }
                     .frame(minHeight: 44)
-            } else if lead.ownerUserUuid == nil, let me = session.user?.uuid {
-                Button { Task { await act { try await services.leads.assign(lead.uuid, to: me) } } } label: {
+            } else if lead.isOpen, lead.ownerUserUuid == nil, let me = session.user?.uuid {
+                Button { Task { await act(notice: "It's yours now.") { try await services.leads.assign(lead.uuid, to: me) } } } label: {
                     Label("Take this lead", systemImage: "hand.raised")
+                }
+                .frame(minHeight: 44)
+            } else if lead.isOpen, lead.ownerUserUuid == session.user?.uuid {
+                Button { Task { await act(notice: "Back in the queue.") { try await services.leads.assign(lead.uuid, to: nil) } } } label: {
+                    Label("Hand it back to the queue", systemImage: "tray.and.arrow.up")
                 }
                 .frame(minHeight: 44)
             }
@@ -274,14 +544,19 @@ struct LeadDetailView: View {
 
     private func details(_ lead: Lead) -> some View {
         Section("Details") {
+            DetailRow(label: "Email", value: lead.email)
+            DetailRow(label: "Phone", value: lead.phone)
+            DetailRow(label: "Company", value: lead.companyName)
+            DetailRow(label: "Job title", value: lead.jobTitle)
             DetailRow(label: "Source", value: lead.source.map(Formatters.humanize))
-            DetailRow(label: "Came in", value: Formatters.day(lead.createdAt))
-            DetailRow(label: "First contact", value: Formatters.day(lead.firstContactedAt))
-            DetailRow(label: "Expected close", value: lead.expectedCloseDate)
+            DetailRow(label: "Channel", value: lead.channel)
+            DetailRow(label: "Campaign", value: lead.campaign)
             DetailRow(label: "Priority", value: lead.priority.map(Formatters.humanize))
-            ForEach(lead.qualification.sorted(by: { $0.key < $1.key }), id: \.key) { item in
-                DetailRow(label: Formatters.humanize(item.key), value: item.value)
-            }
+            DetailRow(label: "Value", value: lead.estimatedValue.flatMap { Formatters.money($0, currency: lead.currency ?? LeadsAPI.defaultCurrency) }
+                .map { $0 + (lead.valueFromAI ? " (AI)" : "") })
+            DetailRow(label: "Expected close", value: lead.expectedCloseDate.flatMap { CalendarDay(string: $0) }.flatMap { Formatters.day($0.date()) })
+            DetailRow(label: "Came in", value: Formatters.dateTime(lead.createdAt))
+            DetailRow(label: "Last contact", value: Formatters.dateTime(lead.lastContactedAt))
             if let notes = lead.notes {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Their message").font(.wsCaption).foregroundStyle(.secondaryText)
@@ -291,15 +566,38 @@ struct LeadDetailView: View {
         }
     }
 
+    @ViewBuilder
+    private func qualification(_ lead: Lead) -> some View {
+        let questions = bundle?.settings.qualificationQuestions ?? []
+        if !questions.isEmpty || !lead.qualification.isEmpty {
+            Section("Qualification") {
+                ForEach(questions) { question in
+                    LabeledContent(question.label) {
+                        Text(lead.qualification[question.key] ?? "Not known")
+                            .foregroundStyle(lead.qualification[question.key] == nil ? Color.secondaryText : Color.primary)
+                    }
+                }
+                ForEach(lead.qualification.keys.sorted().filter { key in !questions.contains { $0.key == key } }, id: \.self) { key in
+                    DetailRow(label: Formatters.humanize(key), value: lead.qualification[key])
+                }
+                if lead.isOpen, canWork(lead) {
+                    Button("Qualify", systemImage: "checklist") { sheet = .qualify }.frame(minHeight: 44)
+                }
+            }
+        }
+    }
+
     private var history: some View {
-        Section("History") {
-            ForEach(timeline.prefix(30)) { item in
+        Section("Timeline") {
+            ForEach(timeline.prefix(50)) { item in
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
                         Text(item.title).font(.wsSubheadline.weight(.semibold))
                         if let outcome = item.outcomeLabel { Text(outcome).font(.wsCaption).foregroundStyle(.secondaryText) }
+                        if item.status == "planned" { StatusBadge(text: "Planned", systemImage: "clock", tone: .warning) }
+                        if item.status == "cancelled" { StatusBadge(text: "Cancelled", systemImage: "xmark", tone: .neutral) }
                     }
-                    Text([Formatters.relative(item.at), item.by].compactMap { $0 }.joined(separator: " · "))
+                    Text([Formatters.dateTime(item.at), item.by].compactMap { $0 }.joined(separator: " · "))
                         .font(.wsCaption).foregroundStyle(.secondaryText)
                     if let detail = item.detail { Text(detail).font(.wsSubheadline) }
                 }
@@ -313,35 +611,143 @@ struct LeadDetailView: View {
     private func sheetView(_ sheet: Sheet, _ lead: Lead) -> some View {
         switch sheet {
         case .edit:
-            LeadForm(lead: lead) { body in
+            LeadForm(lead: lead, isManager: false) { body in
                 let updated = try await services.leads.update(lead.uuid, body)
+                notice = "Lead saved."
                 await reload(updated)
                 return updated
             }
         case .call:
-            LogCallSheet(lead: lead) { body in await reload(try await services.leads.logCall(lead.uuid, body)) }
+            LogCallSheet(lead: lead, outcomes: lead.callOutcomes.isEmpty ? (bundle?.callOutcomes ?? [:]) : lead.callOutcomes) { body in
+                let updated = try await services.leads.logCall(lead.uuid, body)
+                notice = "Call logged."
+                await reload(updated)
+            }
         case .step:
-            PlanStepSheet { body in await reload(try await services.leads.planStep(lead.uuid, body)) }
-        case .meeting:
-            BookMeetingSheet(lead: lead) { body in
-                _ = try await services.leads.bookMeeting(lead.uuid, body)
+            PlanStepSheet { body in
+                let updated = try await services.leads.planStep(lead.uuid, body)
+                notice = "Step planned. The owner is reminded before it's due."
+                await reload(updated)
+            }
+        case .meeting(let existing):
+            BookMeetingSheet(lead: lead, meeting: existing, bundle: bundle) { body in
+                if let existing {
+                    try await services.leads.updateMeeting(existing.uuid, body)
+                    notice = "Meeting moved. Everyone gets the updated invite."
+                } else {
+                    _ = try await services.leads.bookMeeting(lead.uuid, body)
+                    notice = body.sendInvite == true && lead.email != nil
+                        ? "Meeting booked. \(lead.firstName.nonEmpty ?? "They") get a calendar invite by email." : "Meeting booked."
+                }
                 await reload(try await services.leads.lead(lead.uuid))
             }
-        case .nurture:
-            NurtureSheet { until in await reload(try await services.leads.move(lead.uuid, LeadStageBody(stage: "nurture", nurtureUntil: until))) }
+        case .outcome(let meeting):
+            MeetingOutcomeSheet { held, notes in
+                try await services.leads.meetingOutcome(meeting.uuid, held: held, notes: notes)
+                notice = held ? "Saved. The AI is updating its analysis." : "Saved. A call to rebook is planned."
+                await reload(try await services.leads.lead(lead.uuid))
+            }
+        case .park(let stage):
+            LeadParkSheet(name: lead.displayName, stage: stage,
+                          lostReasons: bundle?.settings.lostReasons ?? LeadParkSheet.defaultReasons) { body in
+                let updated = try await services.leads.move(lead.uuid, body)
+                notice = stage == .lost ? "Moved to Lost." : "In Nurture. It comes back with a call planned."
+                await reload(updated)
+            }
         case .convert:
-            ConvertSheet(lead: lead) { body in
-                _ = try await services.leads.convert(lead.uuid, body)
+            ConvertSheet(lead: lead, currency: lead.currency ?? bundle?.settings.currency ?? LeadsAPI.defaultCurrency) { body in
+                let result = try await services.leads.convert(lead.uuid, body)
+                notice = "Deal created\(result.dealName.map { ": \($0)" } ?? ""). Work continues there."
                 await reload(try await services.leads.lead(lead.uuid))
             }
         case .assign:
-            AssignSheet(current: lead.ownerUserUuid) { owner in await reload(try await services.leads.assign(lead.uuid, to: owner)) }
+            AssignSheet(current: lead.ownerUserUuid) { owner in
+                let updated = try await services.leads.assign(lead.uuid, to: owner)
+                notice = owner == nil ? "Back in the queue." : "Owner changed."
+                await reload(updated)
+            }
+        case .email(let subject, let body):
+            EmailLeadSheet(lead: lead, subject: subject, message: body) { email in
+                let to = try await services.leads.email(lead.uuid, email)
+                notice = "Email sent\(to.map { " to \($0)" } ?? ""). It's on the timeline."
+                await reload(try await services.leads.lead(lead.uuid))
+            }
+        case .qualify:
+            QualifySheet(lead: lead, questions: bundle?.settings.qualificationQuestions ?? [],
+                         currency: lead.currency ?? bundle?.settings.currency ?? LeadsAPI.defaultCurrency) { body in
+                let updated = try await services.leads.qualify(lead.uuid, body)
+                notice = body.move ? "Qualified." : "Saved."
+                await reload(updated)
+            }
+        case .refer(let partner):
+            ReferSheet(subject: referSubject(lead), dealValue: lead.estimatedValue,
+                       currency: lead.currency, suggestions: (lead.analysis?.result?.partnerSuggestions ?? []).map {
+                           PartnerSuggestion(partnerUuid: $0.partnerUuid, partnerName: $0.partnerName ?? "Partner", fit: $0.fit, reason: $0.reason)
+                       }, preselect: partner) { referral in
+                notice = "Sent to \(referral.partnerName). They get a private link to accept or decline."
+                await load()
+            }
         }
     }
 
     // MARK: Actions
 
+    /// A converted lead's referrals go on its deal.
+    private func referSubject(_ lead: Lead) -> ReferSheet.Subject {
+        if let deal = lead.convertedDealUuid { return .deal(deal) }
+        return .lead(lead.uuid)
+    }
+
+    /// "Designer at Park & Co · came from website form · 1 Nov 2026".
+    private func headline(_ lead: Lead) -> String {
+        let role = [lead.jobTitle, lead.companyName].compactMap { $0 }.joined(separator: " at ")
+        var parts: [String] = [role.isEmpty ? "No company given" : role]
+        if let source = lead.source { parts.append("came from \(Formatters.humanize(source).lowercased())") }
+        if let day = Formatters.day(lead.createdAt) { parts.append(day) }
+        return parts.joined(separator: " · ")
+    }
+
     private func canWork(_ lead: Lead) -> Bool { lead.permissions?.canWork ?? session.permissions.can(.update, .crmLeads) }
+
+    /// The AI's suggested next step, done in one tap.
+    private func doAI(_ action: String, partner: String?, lead: Lead) {
+        switch action {
+        case "call_now", "call":
+            if let phone = lead.phone, let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") { openURL(url) }
+            sheet = .call
+        case "email":
+            let reply = lead.analysis?.result?.firstReply
+            if lead.email != nil { sheet = .email(subject: reply?.subject, body: reply?.body) } else {
+                actionError = ResourceService.problem(422, "This lead has no email address.")
+            }
+        case "book_meeting": sheet = .meeting(nil)
+        case "qualify": sheet = .qualify
+        case "send_quote": sheet = .convert
+        case "refer_to_partner": sheet = .refer(partner: partner)
+        case "nurture": sheet = .park(.nurture)
+        case "disqualify": sheet = .park(.lost)
+        default: sheet = .call
+        }
+    }
+
+    private func openWhatsApp(_ url: URL) {
+        openURL(url) { accepted in
+            if !accepted { notice = "WhatsApp isn't on this phone. Call or email them instead." }
+        }
+    }
+
+    private func openReport(_ lead: Lead) async {
+        loadingReport = true
+        defer { loadingReport = false }
+        do {
+            let data = try await services.leads.report(lead.uuid)
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("lead-report-\(lead.uuid.prefix(8)).pdf")
+            try data.write(to: url, options: .atomic)
+            reportURL = url
+        } catch {
+            actionError = error.asAPIError
+        }
+    }
 
     private func load() async {
         if state.value == nil { state = .loading }
@@ -355,7 +761,7 @@ struct LeadDetailView: View {
     }
 
     private func reload(_ lead: Lead) async {
-        // Writes return the lead without its analysis/meetings; fetch the full one.
+        // Writes return the lead without the raw maps (metadata, qualification); fetch the full one.
         let full = (try? await services.leads.lead(lead.uuid)) ?? lead
         state = .loaded(full)
         actionError = nil
@@ -367,26 +773,94 @@ struct LeadDetailView: View {
         defer { busy = false }
         do {
             await reload(try await work())
-            notice = message
+            if let message { notice = message }
         } catch {
             actionError = error.asAPIError
             notice = nil
         }
     }
 
-    private func meetingAction(_ work: @escaping () async throws -> Void) async {
+    private func meetingAction(_ message: String, _ work: @escaping () async throws -> Void) async {
         busy = true
         defer { busy = false }
         do {
             try await work()
             await load()
             actionError = nil
+            notice = message
         } catch {
             actionError = error.asAPIError
         }
     }
 }
 
-private extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
+/// New → Contacting → Qualified → Meeting → Converted, with the current stage marked (nurture and lost aside).
+struct LeadStageTrack: View {
+    let stage: LeadStage
+    let label: (LeadStage) -> String
+
+    private static let funnel: [LeadStage] = [.new, .contacting, .qualified, .meeting, .converted]
+
+    var body: some View {
+        let parked = stage == .nurture || stage == .lost
+        let current = Self.funnel.firstIndex(of: stage) ?? -1
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(Array(Self.funnel.enumerated()), id: \.offset) { index, step in
+                    let done = !parked && current >= 0 && index < current
+                    let now = step == stage
+                    HStack(spacing: 3) {
+                        if done { Image(systemName: "checkmark.circle.fill").font(.wsCaption) }
+                        Text(label(step)).font(.wsCaption.weight(now ? .bold : .regular))
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .foregroundStyle(now ? step.tone.textColor : done ? Color.primary : Color.secondaryText)
+                    .background(now ? step.tone.color.opacity(0.15) : Color.clear, in: Capsule())
+                    if index < Self.funnel.count - 1 {
+                        Image(systemName: "chevron.right").font(.wsCaption).foregroundStyle(.secondaryText)
+                    }
+                }
+                if parked {
+                    StatusBadge(text: label(stage), systemImage: stage.systemImage, tone: stage.tone)
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Stage: \(label(stage))")
+    }
+}
+
+/// Phone links for a lead.
+enum LeadContact {
+    /// Opens the WhatsApp app (`whatsapp://send`); nil when the number is too short to be real.
+    static func whatsAppURL(phone: String?, text: String?) -> URL? {
+        let digits = (phone ?? "").filter(\.isNumber)
+        guard digits.count >= 7 else { return nil }
+        var components = URLComponents()
+        components.scheme = "whatsapp"
+        components.host = "send"
+        components.queryItems = [URLQueryItem(name: "phone", value: digits)] + (text.map { [URLQueryItem(name: "text", value: $0)] } ?? [])
+        return components.url
+    }
+}
+
+/// The AI's words, in plain English.
+enum LeadAIText {
+    static func flag(_ flag: String) -> String {
+        switch flag {
+        case "spam": "Possibly spam"
+        case "vulnerable": "May be vulnerable — take care"
+        case "existing_customer": "Already a customer"
+        case "out_of_scope": "May be outside what you do"
+        default: Formatters.humanize(flag)
+        }
+    }
+
+    static func when(_ when: String?) -> String {
+        switch when {
+        case "now": " — now"
+        case "today": " — today"
+        default: ""
+        }
+    }
 }

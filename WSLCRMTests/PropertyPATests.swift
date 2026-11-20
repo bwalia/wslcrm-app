@@ -234,9 +234,14 @@ final class PropertyPATests: XCTestCase {
         XCTAssertNil(AppDeepLink(userInfo: ["route": "handoff"]), "a handoff needs its id")
     }
 
-    func testThePAIsHomeOnlyWhereItsOn() {
+    func testThePAIsHomeOnlyWhenItHasTheMostWaiting() {
         let permissions = PermissionSet(isAdmin: false, isOwner: false, grants: [:], menuKeys: [])
-        XCTAssertEqual(NavigationPolicy(permissions: permissions, isEngineerRole: false, hasPropertyDeals: true, hasPropertyPA: true).home, .propertyPA)
+        let quiet = NavigationPolicy(permissions: permissions, isEngineerRole: false, hasPropertyDeals: true, hasPropertyPA: true)
+        XCTAssertEqual(quiet.home, .propertyDeals, "the PA being switched on doesn't make it the home")
+        XCTAssertEqual(quiet.tabs, [.propertyDeals, .propertyPA])
+        let busy = NavigationPolicy(permissions: permissions, isEngineerRole: false, hasPropertyDeals: true, hasPropertyPA: true,
+                                    activity: [.propertyPA: 4, .propertyDeals: 1])
+        XCTAssertEqual(busy.home, .propertyPA, "the PA leads when most is waiting there")
         XCTAssertEqual(NavigationPolicy(permissions: permissions, isEngineerRole: false, hasPropertyDeals: true).home, .propertyDeals,
                        "PA off: Deals Today as before")
     }

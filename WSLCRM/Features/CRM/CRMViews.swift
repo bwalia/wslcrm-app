@@ -31,8 +31,15 @@ struct CRMHomeView: View {
                 // The board lists pipelines (crm_pipelines) and then their deals (crm_deals).
                 if session.permissions.can(.read, .crmDeals), session.permissions.can(.read, .crmPipelines) {
                     NavigationLink { DealPipelineView() } label: {
-                        Label("Deal pipeline", systemImage: "rectangle.split.3x1")
+                        Label("Deal board", systemImage: "rectangle.split.3x1")
                     }
+                    .accessibilityIdentifier("crm.board")
+                }
+                if session.permissions.can(.read, .crmDeals) {
+                    NavigationLink { CRMDealsListView() } label: {
+                        Label("All deals", systemImage: "briefcase")
+                    }
+                    .accessibilityIdentifier("crm.deals")
                 }
                 if session.permissions.can(.read, .crmAccounts) {
                     NavigationLink { CRMAccountsListView() } label: {
@@ -43,6 +50,26 @@ struct CRMHomeView: View {
                     NavigationLink { CRMContactsListView() } label: {
                         Label("Contacts", systemImage: "person.crop.circle")
                     }
+                }
+                if session.permissions.can(.read, moduleName: "crm_activities") {
+                    NavigationLink(value: ResourceListRoute(ModuleCatalog.crmActivities.id)) {
+                        Label("Activities", systemImage: "calendar.badge.clock")
+                    }
+                    .accessibilityIdentifier("crm.activities")
+                }
+            }
+            Section("Set up") {
+                if session.permissions.can(.read, .crmPipelines) {
+                    NavigationLink { CRMPipelinesView() } label: {
+                        Label("Pipelines and stages", systemImage: "list.number")
+                    }
+                    .accessibilityIdentifier("crm.pipelines")
+                }
+                if session.permissions.can(.read, .crmAccounts) {
+                    NavigationLink { PartnersHubView() } label: {
+                        Label("Partners and referrals", systemImage: "person.2.badge.gearshape")
+                    }
+                    .accessibilityIdentifier("crm.partners")
                 }
             }
         }
@@ -64,10 +91,13 @@ struct CRMHomeView: View {
     private func statsGrid(_ stats: CRMDashboardStats) -> some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 12)], spacing: 12) {
             StatTile(title: "Open deals", value: "\(stats.openDeals)", systemImage: "briefcase")
+            StatTile(title: "Deal value", value: Formatters.money(stats.totalValue, currency: nil) ?? "0",
+                     systemImage: "sterlingsign.circle")
             StatTile(title: "Won", value: "\(stats.wonDeals)", systemImage: "trophy")
             StatTile(title: "Win rate", value: "\(stats.winRate.formatted(.number.precision(.fractionLength(0...1))))%",
                      systemImage: "percent")
             StatTile(title: "Accounts", value: "\(stats.totalAccounts)", systemImage: "building.2")
+            StatTile(title: "Activities today", value: "\(stats.activitiesToday)", systemImage: "calendar")
         }
         .padding(.vertical, 4)
     }
@@ -80,10 +110,18 @@ struct StatTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label(title, systemImage: systemImage)
+            // Icon above the words: side by side, a narrow tile broke words mid-way ("Ope / n").
+            Image(systemName: systemImage)
+                .font(.wsCaption.weight(.semibold))
+                .foregroundStyle(Color(.label))
+                .accessibilityHidden(true)
+            Text(title)
                 .font(.wsCaption.weight(.semibold))
                 // `.secondary` is 60% of label colour: it fails the contrast audit on this card.
                 .foregroundStyle(Color(.label))
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
             Text(value)
                 .font(.wsTitle2.bold().monospacedDigit())
                 .minimumScaleFactor(0.6)
@@ -97,10 +135,25 @@ struct StatTile: View {
 }
 
 /// What the person may change, per CRM area: the server checks each one separately (opsapi #849).
-private extension SessionStore {
+extension SessionStore {
     func canCreate(_ module: Module) -> Bool { permissions.can(.create, module) }
     func canUpdate(_ module: Module) -> Bool { permissions.can(.update, module) }
     func canDelete(_ module: Module) -> Bool { permissions.can(.delete, module) }
+}
+
+/// "All / Active / Inactive" for accounts and contacts (`?status=`).
+enum CRMRecordStatusFilter: String, CaseIterable, Identifiable, Sendable {
+    case all = "", active, inactive
+    var id: String { rawValue }
+    var label: String { self == .all ? "All" : Formatters.humanize(rawValue) }
+    var query: String? { self == .all ? nil : rawValue }
+}
+
+/// Lets a list's fetch closure read the current filter without capturing view state.
+@MainActor
+final class CRMFilterBox {
+    var status: String?
+    var pipelineId: Int?
 }
 
 // MARK: - Accounts
@@ -109,24 +162,27 @@ struct CRMAccountsListView: View {
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var creating = false
+    @State private var filter: CRMRecordStatusFilter = .all
+    @State private var box = CRMFilterBox()
 
     var body: some View {
-        ModelHost(make: { [crm = services.crm] in
-            PagedListModel<CRMAccount> { search, page in try await crm.accounts(search: search, page: page) }
+        ModelHost(make: { [crm = services.crm, box] in
+            PagedListModel<CRMAccount> { search, page in try await crm.accounts(search: search, status: box.status, page: page) }
         }) { model in
-            PagedList(model: model, searchPrompt: "Name or email", emptyTitle: "No accounts", emptySystemImage: "building.2") { account in
+            PagedList(model: model, searchPrompt: "Name or email", emptyTitle: "No accounts", emptySystemImage: "building.2",
+                      emptyDescription: "Companies you work with. Tap + to add one.") { account in
                 NavigationLink {
                     CRMAccountDetailView(accountUuid: account.uuid) { updated in
                         if let updated { model.replace(updated) } else { model.remove(id: account.id) }
                     }
                 } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(account.name).font(.wsHeadline)
-                        Text([account.industry, account.city].compactMap { $0 }.joined(separator: " · "))
-                            .font(.wsSubheadline).foregroundStyle(.secondaryText)
-                    }
-                    .padding(.vertical, 4)
+                    CRMAccountRow(account: account)
                 }
+                .accessibilityIdentifier("crm.account.\(account.uuid)")
+            }
+            .onChange(of: filter) { _, value in
+                box.status = value.query
+                Task { await model.load() }
             }
             .sheet(isPresented: $creating) {
                 CRMAccountForm(account: nil) { body in
@@ -138,12 +194,51 @@ struct CRMAccountsListView: View {
         }
         .navigationTitle("Accounts")
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) { CRMStatusFilterMenu(filter: $filter) }
             if session.canCreate(.crmAccounts) {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .primaryAction) {
                     Button("New account", systemImage: "plus") { creating = true }
+                        .accessibilityIdentifier("crm.account.new")
                 }
             }
         }
+    }
+}
+
+struct CRMStatusFilterMenu: View {
+    @Binding var filter: CRMRecordStatusFilter
+
+    var body: some View {
+        Menu {
+            Picker("Status", selection: $filter) {
+                ForEach(CRMRecordStatusFilter.allCases) { Text($0.label).tag($0) }
+            }
+        } label: {
+            Label("Filter", systemImage: filter == .all ? "line.3.horizontal.decrease.circle"
+                                                        : "line.3.horizontal.decrease.circle.fill")
+        }
+        .accessibilityIdentifier("crm.filter")
+    }
+}
+
+private struct CRMAccountRow: View {
+    let account: CRMAccount
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(account.name).font(.wsHeadline)
+                Spacer()
+                if account.status != "active" {
+                    StatusBadge(text: Formatters.humanize(account.status), systemImage: "pause.circle", tone: .neutral)
+                }
+            }
+            if let line = [account.industry, account.city, account.email].compactMap({ $0 }).joined(separator: " · ").nonEmpty {
+                Text(line).font(.wsSubheadline).foregroundStyle(.secondaryText)
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -156,7 +251,11 @@ struct CRMAccountDetailView: View {
     @State private var contacts: [CRMContact] = []
     @State private var deals: [CRMDeal] = []
     @State private var editing = false
+    @State private var addingContact = false
+    @State private var addingDeal = false
     @State private var deleteError: APIError?
+    @State private var reload = 0
+    @State private var notice: String?
 
     var body: some View {
         Group {
@@ -184,7 +283,28 @@ struct CRMAccountDetailView: View {
                     let updated = try await services.crm.updateAccount(account.uuid, body)
                     state = .loaded(updated)
                     onChange(updated)
+                    notice = "Account saved."
                     return updated
+                }
+            }
+        }
+        .sheet(isPresented: $addingContact) {
+            if let account = state.value {
+                CRMContactForm(contact: nil, presetAccountId: account.id) { body in
+                    let created = try await services.crm.createContact(body)
+                    notice = "\(created.fullName) added to \(account.name)."
+                    await load()
+                    return created
+                }
+            }
+        }
+        .sheet(isPresented: $addingDeal) {
+            if let account = state.value {
+                CRMDealForm(deal: nil, pipeline: nil, presetAccountId: account.id) { body in
+                    let created = try await services.crm.createDeal(body)
+                    notice = "Deal “\(created.name)” added."
+                    await load()
+                    return created
                 }
             }
         }
@@ -202,8 +322,11 @@ struct CRMAccountDetailView: View {
                 if let email = account.email { EmailLinkRow(email: email) }
                 if let address = account.address { MapsLinkRow(address: address) }
                 if let website = account.website, let url = URL(string: website.hasPrefix("http") ? website : "https://\(website)") {
-                    Link(destination: url) { Label(website, systemImage: "safari").frame(minHeight: 44) }
+                    Link(destination: url) { Label(website, systemImage: "globe").frame(minHeight: 44) }
                 }
+            }
+            if let notice {
+                Section { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
             }
             Section("Summary") {
                 DetailRow(label: "Contacts", value: account.contactCount.map(String.init))
@@ -211,8 +334,9 @@ struct CRMAccountDetailView: View {
                 DetailRow(label: "Deal value", value: Formatters.money(account.totalDealValue, currency: nil))
                 DetailRow(label: "Employees", value: account.employeeCount.map(String.init))
                 DetailRow(label: "Annual revenue", value: Formatters.money(account.annualRevenue, currency: nil))
+                DetailRow(label: "Added", value: Formatters.day(account.createdAt))
             }
-            if !contacts.isEmpty {
+            if session.permissions.can(.read, .crmContacts) {
                 Section("Contacts") {
                     ForEach(contacts) { contact in
                         NavigationLink { CRMContactDetailView(contactUuid: contact.uuid) } label: {
@@ -222,15 +346,32 @@ struct CRMAccountDetailView: View {
                             }
                         }
                     }
+                    if contacts.isEmpty {
+                        Text("No contacts at this account yet.").font(.wsSubheadline).foregroundStyle(.secondaryText)
+                    }
+                    if session.canCreate(.crmContacts) {
+                        Button("Add a contact", systemImage: "person.badge.plus") { addingContact = true }
+                            .frame(minHeight: 44)
+                            .accessibilityIdentifier("crm.account.addContact")
+                    }
                 }
             }
-            if !deals.isEmpty {
+            if session.permissions.can(.read, .crmDeals) {
                 Section("Deals") {
                     ForEach(deals) { deal in
                         NavigationLink { CRMDealDetailView(dealUuid: deal.uuid) } label: { DealRow(deal: deal) }
                     }
+                    if deals.isEmpty {
+                        Text("No deals with this account yet.").font(.wsSubheadline).foregroundStyle(.secondaryText)
+                    }
+                    if session.canCreate(.crmDeals) {
+                        Button("Add a deal", systemImage: "briefcase") { addingDeal = true }
+                            .frame(minHeight: 44)
+                            .accessibilityIdentifier("crm.account.addDeal")
+                    }
                 }
             }
+            CRMActivitiesSection(relation: .account(id: account.id, uuid: account.uuid), reload: reload)
             if session.canDelete(.crmAccounts) {
                 Section {
                     DeleteButton(title: "Delete account", message: "Contacts and deals keep their link to this account's name.") {
@@ -259,6 +400,7 @@ struct CRMAccountDetailView: View {
             async let dealsPage = services.crm.deals(accountId: account.id, page: 1, perPage: 50)
             contacts = (try? await contactsPage.items) ?? []
             deals = (try? await dealsPage.items) ?? []
+            reload += 1
         } catch {
             if state.value == nil { state = .failed(error.asAPIError) }
         }
@@ -270,6 +412,8 @@ struct CRMAccountForm: View {
     let save: (AccountBody) async throws -> CRMAccount
     @Environment(\.dismiss) private var dismiss
     @State private var body_: AccountBody
+    @State private var revenue: String
+    @State private var employees: String
     @State private var saving = false
     @State private var error: APIError?
 
@@ -278,20 +422,23 @@ struct CRMAccountForm: View {
         self.save = save
         _body_ = State(initialValue: AccountBody(
             name: account?.name ?? "", industry: account?.industry, website: account?.website, phone: account?.phone,
-            email: account?.email, addressLine1: account?.addressLine1, city: account?.city,
-            postalCode: account?.postalCode, country: account?.country, status: account?.status ?? "active"))
+            email: account?.email, addressLine1: account?.addressLine1, addressLine2: account?.addressLine2,
+            city: account?.city, state: account?.state, postalCode: account?.postalCode, country: account?.country,
+            status: account?.status ?? "active"))
+        _revenue = State(initialValue: account?.annualRevenue.map { "\($0)" } ?? "")
+        _employees = State(initialValue: account?.employeeCount.map(String.init) ?? "")
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Account") {
-                    TextField("Name", text: $body_.name)
+                    TextField("Name (needed)", text: $body_.name)
+                        .accessibilityIdentifier("crm.accountForm.name")
                     OptionalTextField("Industry", text: $body_.industry)
                     Picker("Status", selection: Binding(get: { body_.status ?? "active" }, set: { body_.status = $0 })) {
                         Text("Active").tag("active")
                         Text("Inactive").tag("inactive")
-                        Text("Prospect").tag("prospect")
                     }
                 }
                 Section("Contact details") {
@@ -301,9 +448,15 @@ struct CRMAccountForm: View {
                 }
                 Section("Address") {
                     OptionalTextField("Street", text: $body_.addressLine1).textContentType(.streetAddressLine1)
-                    OptionalTextField("City", text: $body_.city).textContentType(.addressCity)
+                    OptionalTextField("Suite, unit, building", text: $body_.addressLine2).textContentType(.streetAddressLine2)
+                    OptionalTextField("Town or city", text: $body_.city).textContentType(.addressCity)
+                    OptionalTextField("County or state", text: $body_.state).textContentType(.addressState)
                     OptionalTextField("Postcode", text: $body_.postalCode).textContentType(.postalCode)
                     OptionalTextField("Country", text: $body_.country).textContentType(.countryName)
+                }
+                Section("Size") {
+                    TextField("Employees", text: $employees).keyboardType(.numberPad)
+                    TextField("Annual revenue", text: $revenue).keyboardType(.decimalPad)
                 }
                 if let error { Section { InlineErrorRow(error: error) } }
             }
@@ -314,6 +467,7 @@ struct CRMAccountForm: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { submit() }
                         .disabled(body_.name.trimmingCharacters(in: .whitespaces).isEmpty || saving)
+                        .accessibilityIdentifier("crm.accountForm.save")
                 }
             }
             .interactiveDismissDisabled(saving)
@@ -323,10 +477,13 @@ struct CRMAccountForm: View {
     private func submit() {
         saving = true
         error = nil
+        var body = body_
+        body.annualRevenue = Decimal(string: revenue.replacingOccurrences(of: ",", with: ""))
+        body.employeeCount = Int(employees.trimmingCharacters(in: .whitespaces))
         Task {
             defer { saving = false }
             do {
-                _ = try await save(body_)
+                _ = try await save(body)
                 dismiss()
             } catch {
                 self.error = error.asAPIError
@@ -356,22 +513,32 @@ struct CRMContactsListView: View {
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var creating = false
+    @State private var filter: CRMRecordStatusFilter = .all
+    @State private var box = CRMFilterBox()
 
     var body: some View {
-        ModelHost(make: { [crm = services.crm] in
-            PagedListModel<CRMContact> { search, page in try await crm.contacts(search: search, page: page) }
+        ModelHost(make: { [crm = services.crm, box] in
+            PagedListModel<CRMContact> { search, page in try await crm.contacts(search: search, status: box.status, page: page) }
         }) { model in
-            PagedList(model: model, searchPrompt: "Name or email", emptyTitle: "No contacts", emptySystemImage: "person.crop.circle") { contact in
+            PagedList(model: model, searchPrompt: "Name or email", emptyTitle: "No contacts", emptySystemImage: "person.crop.circle",
+                      emptyDescription: "The people at your accounts. Tap + to add one.") { contact in
                 NavigationLink {
                     CRMContactDetailView(contactUuid: contact.uuid)
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(contact.fullName).font(.wsHeadline)
-                        Text([contact.jobTitle, contact.accountName].compactMap { $0 }.joined(separator: " · "))
-                            .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                        if let line = [contact.jobTitle, contact.accountName, contact.email].compactMap({ $0 })
+                            .joined(separator: " · ").nonEmpty {
+                            Text(line).font(.wsSubheadline).foregroundStyle(.secondaryText)
+                        }
                     }
                     .padding(.vertical, 4)
                 }
+                .accessibilityIdentifier("crm.contact.\(contact.uuid)")
+            }
+            .onChange(of: filter) { _, value in
+                box.status = value.query
+                Task { await model.load() }
             }
             .sheet(isPresented: $creating) {
                 CRMContactForm(contact: nil) { body in
@@ -383,8 +550,9 @@ struct CRMContactsListView: View {
         }
         .navigationTitle("Contacts")
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) { CRMStatusFilterMenu(filter: $filter) }
             if session.canCreate(.crmContacts) {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .primaryAction) {
                     Button("New contact", systemImage: "plus") { creating = true }
                 }
             }
@@ -399,6 +567,8 @@ struct CRMContactDetailView: View {
     @State private var state: LoadState<CRMContact> = .idle
     @State private var editing = false
     @State private var deleteError: APIError?
+    @State private var reload = 0
+    @State private var accountUuid: String?
 
     var body: some View {
         Group {
@@ -412,18 +582,32 @@ struct CRMContactDetailView: View {
                     Section {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(contact.fullName).font(.wsTitle2.bold())
-                            Text([contact.jobTitle, contact.department].compactMap { $0 }.joined(separator: " · "))
-                                .foregroundStyle(.secondaryText)
+                            if let line = [contact.jobTitle, contact.department].compactMap({ $0 }).joined(separator: " · ").nonEmpty {
+                                Text(line).foregroundStyle(.secondaryText)
+                            }
+                            if contact.status != "active" {
+                                StatusBadge(text: Formatters.humanize(contact.status), systemImage: "pause.circle", tone: .neutral)
+                            }
                         }
                         if let account = contact.accountName {
-                            Label(account, systemImage: "building.2")
+                            if let accountUuid, session.permissions.can(.read, .crmAccounts) {
+                                NavigationLink { CRMAccountDetailView(accountUuid: accountUuid) } label: {
+                                    Label(account, systemImage: "building.2")
+                                }
+                            } else {
+                                Label(account, systemImage: "building.2")
+                            }
                         }
                     }
                     Section("Reach") {
                         if let mobile = contact.mobile { PhoneLinkRow(name: "Mobile", phone: mobile) }
                         if let phone = contact.phone { PhoneLinkRow(name: "Phone", phone: phone) }
                         if let email = contact.email { EmailLinkRow(email: email) }
+                        if contact.mobile == nil && contact.phone == nil && contact.email == nil {
+                            Text("No phone or email yet. Tap Edit to add them.").font(.wsSubheadline).foregroundStyle(.secondaryText)
+                        }
                     }
+                    CRMActivitiesSection(relation: .contact(id: contact.id, uuid: contact.uuid), reload: reload)
                     if session.canDelete(.crmContacts) {
                         Section {
                             DeleteButton(title: "Delete contact", message: "This removes the contact from CRM.") {
@@ -464,7 +648,14 @@ struct CRMContactDetailView: View {
     private func load() async {
         if state.value == nil { state = .loading }
         do {
-            state = .loaded(try await services.crm.contact(contactUuid))
+            let contact = try await services.crm.contact(contactUuid)
+            state = .loaded(contact)
+            reload += 1
+            // Contacts carry the account's numeric id only; find its uuid to open it.
+            if let accountId = contact.accountId, accountUuid == nil, session.permissions.can(.read, .crmAccounts) {
+                let accounts = (try? await services.crm.accounts(search: contact.accountName ?? "", page: 1, perPage: 50).items) ?? []
+                accountUuid = accounts.first { $0.id == accountId }?.uuid
+            }
         } catch {
             if state.value == nil { state = .failed(error.asAPIError) }
         }
@@ -479,21 +670,25 @@ struct CRMContactForm: View {
     @State private var saving = false
     @State private var error: APIError?
 
-    init(contact: CRMContact?, save: @escaping (ContactBody) async throws -> CRMContact) {
+    init(contact: CRMContact?, presetAccountId: Int? = nil, save: @escaping (ContactBody) async throws -> CRMContact) {
         self.contact = contact
         self.save = save
         _body_ = State(initialValue: ContactBody(firstName: contact?.firstName ?? "", lastName: contact?.lastName,
                                                  email: contact?.email, phone: contact?.phone, mobile: contact?.mobile,
-                                                 jobTitle: contact?.jobTitle, accountId: contact?.accountId))
+                                                 jobTitle: contact?.jobTitle, department: contact?.department,
+                                                 status: contact?.status ?? "active",
+                                                 accountId: contact?.accountId ?? presetAccountId))
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Name") {
-                    TextField("First name", text: $body_.firstName).textContentType(.givenName)
+                    TextField("First name (needed)", text: $body_.firstName).textContentType(.givenName)
+                        .accessibilityIdentifier("crm.contactForm.firstName")
                     OptionalTextField("Last name", text: $body_.lastName).textContentType(.familyName)
                     OptionalTextField("Job title", text: $body_.jobTitle).textContentType(.jobTitle)
+                    OptionalTextField("Department", text: $body_.department)
                 }
                 Section("Reach") {
                     OptionalTextField("Mobile", text: $body_.mobile).keyboardType(.phonePad).textContentType(.telephoneNumber)
@@ -502,6 +697,10 @@ struct CRMContactForm: View {
                 }
                 Section("Account") {
                     CRMAccountPicker(accountId: $body_.accountId)
+                    Picker("Status", selection: Binding(get: { body_.status ?? "active" }, set: { body_.status = $0 })) {
+                        Text("Active").tag("active")
+                        Text("Inactive").tag("inactive")
+                    }
                 }
                 if let error { Section { InlineErrorRow(error: error) } }
             }
@@ -524,8 +723,10 @@ struct CRMContactForm: View {
                         }
                     }
                     .disabled(body_.firstName.trimmingCharacters(in: .whitespaces).isEmpty || saving)
+                    .accessibilityIdentifier("crm.contactForm.save")
                 }
             }
+            .interactiveDismissDisabled(saving)
         }
     }
 }
@@ -540,475 +741,38 @@ struct CRMAccountPicker: View {
         Picker("Account", selection: $accountId) {
             Text("None").tag(Int?.none)
             ForEach(accounts) { Text($0.name).tag(Optional($0.id)) }
+            if let accountId, !accounts.contains(where: { $0.id == accountId }) {
+                Text("Current account").tag(Optional(accountId))
+            }
         }
         .task {
-            accounts = (try? await services.crm.accounts(search: "", page: 1, perPage: 100).items) ?? []
+            accounts = (try? await services.crm.accounts(search: "", page: 1, perPage: 200).items) ?? []
         }
     }
 }
 
-// MARK: - Deals
-
-struct DealRow: View {
-    let deal: CRMDeal
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(deal.name).font(.wsHeadline).lineLimit(2)
-                Spacer()
-                Text(Formatters.money(deal.value, currency: deal.currency) ?? "")
-                    .font(.wsSubheadline.monospacedDigit().weight(.semibold))
-            }
-            HStack(spacing: 8) {
-                deal.statusBadge
-                Text(Formatters.humanize(deal.stage)).font(.wsSubheadline).foregroundStyle(.secondaryText)
-                if deal.probability > 0 {
-                    Text("\(deal.probability)%").font(.wsSubheadline.monospacedDigit()).foregroundStyle(.secondaryText)
-                }
-            }
-            if let account = deal.accountName ?? deal.contactName {
-                Label(account, systemImage: "building.2").font(.wsFootnote).foregroundStyle(.secondaryText)
-            }
-        }
-        .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
-    }
-}
-
-extension CRMDeal {
-    var statusBadge: StatusBadge {
-        switch status {
-        case .open: StatusBadge(text: "Open", systemImage: "circle", tone: .info)
-        case .won: StatusBadge(text: "Won", systemImage: "trophy.fill", tone: .success)
-        case .lost: StatusBadge(text: "Lost", systemImage: "xmark.circle.fill", tone: .danger)
-        case .unknown: StatusBadge(text: "Unknown", systemImage: "questionmark.circle", tone: .neutral)
-        }
-    }
-}
-
-@MainActor
-@Observable
-final class DealPipelineViewModel {
-    private(set) var pipelines: [CRMPipeline] = []
-    var selectedPipelineUuid: String?
-    var selectedStage: String?
-    private(set) var dealsByStage: [String: [CRMDeal]] = [:]
-    private(set) var state: LoadState<Void> = .idle
-    /// Used when the workspace has no pipelines: all deals grouped by stage.
-    private(set) var unpipelinedDeals: [CRMDeal] = []
-    private let api: CRMAPI
-
-    init(api: CRMAPI) {
-        self.api = api
-    }
-
-    var selectedPipeline: CRMPipeline? { pipelines.first { $0.uuid == selectedPipelineUuid } }
-
-    /// Columns from the pipeline definition, plus any stage names that only appear on deals.
-    var stages: [String] {
-        let defined = selectedPipeline?.orderedStages.map(\.name) ?? []
-        let source = selectedPipeline == nil ? Dictionary(grouping: unpipelinedDeals, by: \.stage) : dealsByStage
-        let extra = source.keys.filter { !defined.contains($0) }.sorted()
-        return defined + extra
-    }
-
-    func deals(in stage: String) -> [CRMDeal] {
-        if selectedPipeline == nil {
-            return unpipelinedDeals.filter { $0.stage == stage }
-        }
-        return dealsByStage[stage] ?? []
-    }
-
-    func load() async {
-        if pipelines.isEmpty && unpipelinedDeals.isEmpty { state = .loading }
-        do {
-            pipelines = try await api.pipelines()
-            if selectedPipelineUuid == nil || !pipelines.contains(where: { $0.uuid == selectedPipelineUuid }) {
-                selectedPipelineUuid = (pipelines.first { $0.isDefault } ?? pipelines.first)?.uuid
-            }
-            try await loadDeals()
-            state = .loaded(())
-        } catch {
-            state = .failed(error.asAPIError)
-        }
-    }
-
-    func loadDeals() async throws {
-        if let uuid = selectedPipelineUuid {
-            dealsByStage = try await api.dealsByStage(pipelineUuid: uuid)
-        } else {
-            unpipelinedDeals = try await api.deals(page: 1, perPage: 100).items
-        }
-        if selectedStage == nil || !stages.contains(selectedStage!) {
-            selectedStage = stages.first
-        }
-    }
-
-    func move(_ deal: CRMDeal, to stage: String) async throws {
-        _ = try await api.updateDeal(deal.uuid, DealBody(stage: stage,
-                                                         probability: selectedPipeline?.stages.first { $0.name == stage }?.probability))
-        try await loadDeals()
-    }
-}
-
-struct DealPipelineView: View {
+/// Picks a contact by numeric id, from the chosen account's people when there is one.
+struct CRMContactPicker: View {
+    @Binding var contactId: Int?
+    var accountId: Int?
     @Environment(\.services) private var services
-    @Environment(SessionStore.self) private var session
-    @State private var creating = false
+    @State private var contacts: [CRMContact] = []
 
     var body: some View {
-        ModelHost(make: { DealPipelineViewModel(api: services.crm) }) { model in
-            DealPipelineContent(model: model)
-                .sheet(isPresented: $creating) {
-                    CRMDealForm(deal: nil, pipeline: model.selectedPipeline) { body in
-                        let created = try await services.crm.createDeal(body)
-                        try? await model.loadDeals()
-                        return created
-                    }
-                }
-        }
-        .navigationTitle("Pipeline")
-        .toolbar {
-            if session.canCreate(.crmDeals) {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("New deal", systemImage: "plus") { creating = true }
-                }
+        Picker("Contact", selection: $contactId) {
+            Text("None").tag(Int?.none)
+            ForEach(contacts) { Text($0.fullName).tag(Optional($0.id)) }
+            if let contactId, !contacts.contains(where: { $0.id == contactId }) {
+                Text("Current contact").tag(Optional(contactId))
             }
+        }
+        .task(id: accountId) {
+            contacts = (try? await services.crm.contacts(search: "", accountId: accountId, page: 1, perPage: 200).items) ?? []
         }
     }
 }
 
-private struct DealPipelineContent: View {
-    @Bindable var model: DealPipelineViewModel
-    @Environment(SessionStore.self) private var session
-    @State private var moveError: APIError?
-
-    var body: some View {
-        List {
-            if model.pipelines.count > 1 {
-                Picker("Pipeline", selection: $model.selectedPipelineUuid) {
-                    ForEach(model.pipelines) { Text($0.name).tag(Optional($0.uuid)) }
-                }
-            }
-            if !model.stages.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(model.stages, id: \.self) { stage in
-                            let selected = model.selectedStage == stage
-                            Button {
-                                model.selectedStage = stage
-                            } label: {
-                                Text("\(Formatters.humanize(stage)) · \(model.deals(in: stage).count)")
-                                    .font(.wsSubheadline.weight(.semibold))
-                                    .padding(.horizontal, 14)
-                                    .frame(minHeight: 44)
-                                    .background(selected ? Color.accentColor : Color(.secondarySystemBackground), in: Capsule())
-                                    .foregroundStyle(selected ? Color.white : Color.primary)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityAddTraits(selected ? .isSelected : [])
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-                .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
-            }
-            if let moveError {
-                InlineErrorRow(error: moveError)
-            }
-            if let stage = model.selectedStage {
-                let deals = model.deals(in: stage)
-                Section("\(Formatters.humanize(stage)) — \(Formatters.money(deals.reduce(0) { $0 + $1.value }, currency: deals.first?.currency) ?? "")") {
-                    if deals.isEmpty {
-                        Text("No deals in this stage").foregroundStyle(.secondaryText)
-                    }
-                    ForEach(deals) { deal in
-                        NavigationLink { CRMDealDetailView(dealUuid: deal.uuid) } label: { DealRow(deal: deal) }
-                            .contextMenu {
-                                if session.canUpdate(.crmDeals) {
-                                    moveMenu(deal)
-                                }
-                            }
-                            .swipeActions(edge: .trailing) {
-                                if session.canUpdate(.crmDeals), let next = nextStage(after: stage) {
-                                    Button("Move to \(Formatters.humanize(next))") {
-                                        Task { await move(deal, to: next) }
-                                    }
-                                    .tint(.indigo)
-                                }
-                            }
-                    }
-                }
-            }
-        }
-        .listStyle(.insetGrouped)
-        .overlay {
-            switch model.state {
-            case .idle, .loading:
-                SkeletonList()
-            case .failed(let error):
-                ErrorStateView(error: error) { Task { await model.load() } }
-            case .loaded where model.stages.isEmpty:
-                ContentUnavailableView("No deals yet", systemImage: "briefcase",
-                                       description: Text(model.pipelines.isEmpty ? "This workspace has no pipelines." : "Create a deal to start the pipeline."))
-            default:
-                EmptyView()
-            }
-        }
-        .task { await model.load() }
-        .refreshable { await model.load() }
-        .onChange(of: model.selectedPipelineUuid) { _, _ in
-            Task { try? await model.loadDeals() }
-        }
-    }
-
-    @ViewBuilder
-    private func moveMenu(_ deal: CRMDeal) -> some View {
-        ForEach(model.stages.filter { $0 != deal.stage }, id: \.self) { stage in
-            Button("Move to \(Formatters.humanize(stage))") { Task { await move(deal, to: stage) } }
-        }
-    }
-
-    private func nextStage(after stage: String) -> String? {
-        guard let index = model.stages.firstIndex(of: stage), index + 1 < model.stages.count else { return nil }
-        return model.stages[index + 1]
-    }
-
-    private func move(_ deal: CRMDeal, to stage: String) async {
-        do {
-            try await model.move(deal, to: stage)
-            moveError = nil
-        } catch {
-            moveError = error.asAPIError
-        }
-    }
-}
-
-struct CRMDealDetailView: View {
-    let dealUuid: String
-    @Environment(\.services) private var services
-    @Environment(SessionStore.self) private var session
-    @State private var state: LoadState<CRMDeal> = .idle
-    @State private var editing = false
-    @State private var busy = false
-    @State private var actionError: APIError?
-    @State private var markingLost = false
-    @State private var lostReason = ""
-
-    var body: some View {
-        Group {
-            switch state {
-            case .idle, .loading:
-                SkeletonList(rows: 3)
-            case .failed(let error):
-                ErrorStateView(error: error) { Task { await load() } }
-            case .loaded(let deal):
-                content(deal)
-            }
-        }
-        .navigationTitle("Deal")
-        .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
-        .refreshable { await load() }
-        .toolbar {
-            if session.canUpdate(.crmDeals), state.value != nil {
-                ToolbarItem(placement: .topBarTrailing) { Button("Edit") { editing = true } }
-            }
-        }
-        .sheet(isPresented: $editing) {
-            if let deal = state.value {
-                CRMDealForm(deal: deal, pipeline: nil) { body in
-                    let updated = try await services.crm.updateDeal(deal.uuid, body)
-                    state = .loaded(updated)
-                    return updated
-                }
-            }
-        }
-        .alert("Mark as lost", isPresented: $markingLost) {
-            TextField("Reason (optional)", text: $lostReason)
-            Button("Mark lost", role: .destructive) {
-                let reason = lostReason
-                Task { await update(DealBody(stage: "lost", lostReason: reason.isEmpty ? nil : reason)) }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
-    }
-
-    private func content(_ deal: CRMDeal) -> some View {
-        List {
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(deal.name).font(.wsTitle2.bold())
-                    Text(Formatters.money(deal.value, currency: deal.currency) ?? "")
-                        .font(.wsTitle3.monospacedDigit())
-                    HStack {
-                        deal.statusBadge
-                        StatusBadge(text: Formatters.humanize(deal.stage), systemImage: "flag", tone: .progress)
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-            if session.canUpdate(.crmDeals) {
-                Section("Stage") {
-                    if !deal.pipelineStages.isEmpty {
-                        Menu {
-                            ForEach(deal.pipelineStages.map(\.name).filter { $0 != deal.stage }, id: \.self) { stage in
-                                Button(Formatters.humanize(stage)) { Task { await update(DealBody(stage: stage)) } }
-                            }
-                        } label: {
-                            Label("Move to stage…", systemImage: "arrow.right.circle")
-                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        }
-                    }
-                    if deal.status == .open {
-                        Button { Task { await update(DealBody(stage: "won")) } } label: {
-                            Label("Mark won", systemImage: "trophy.fill")
-                        }
-                        .buttonStyle(.large(.success, prominent: false))
-                        .listRowSeparator(.hidden)
-                        Button { lostReason = ""; markingLost = true } label: {
-                            Label("Mark lost", systemImage: "xmark.circle")
-                        }
-                        .buttonStyle(.large(.danger, prominent: false))
-                        .listRowSeparator(.hidden)
-                    } else {
-                        Button("Reopen deal") { Task { await update(DealBody(stage: "new", status: "open")) } }
-                            .frame(minHeight: 44)
-                    }
-                    if let actionError { InlineErrorRow(error: actionError) }
-                }
-                .disabled(busy)
-            }
-            Section("Details") {
-                DetailRow(label: "Account", value: deal.accountName, systemImage: "building.2")
-                DetailRow(label: "Contact", value: deal.contactName, systemImage: "person")
-                if let email = deal.contactEmail { EmailLinkRow(email: email) }
-                DetailRow(label: "Pipeline", value: deal.pipelineName)
-                DetailRow(label: "Probability", value: "\(deal.probability)%")
-                DetailRow(label: "Expected close", value: deal.expectedCloseDate.flatMap { Formatters.day($0.date()) })
-                DetailRow(label: "Closed", value: deal.actualCloseDate.flatMap { Formatters.day($0.date()) })
-                DetailRow(label: "Lost reason", value: deal.lostReason)
-            }
-            if session.canDelete(.crmDeals) {
-                Section {
-                    DeleteButton(title: "Delete deal", message: "This removes the deal from the pipeline.") {
-                        do {
-                            try await services.crm.deleteDeal(deal.uuid)
-                            return true
-                        } catch {
-                            actionError = error.asAPIError
-                            return false
-                        }
-                    }
-                }
-            }
-        }
-        .listStyle(.insetGrouped)
-    }
-
-    private func load() async {
-        if state.value == nil { state = .loading }
-        do {
-            state = .loaded(try await services.crm.deal(dealUuid))
-        } catch {
-            if state.value == nil { state = .failed(error.asAPIError) }
-        }
-    }
-
-    private func update(_ body: DealBody) async {
-        busy = true
-        defer { busy = false }
-        do {
-            state = .loaded(try await services.crm.updateDeal(dealUuid, body))
-            actionError = nil
-        } catch {
-            actionError = error.asAPIError
-        }
-    }
-}
-
-struct CRMDealForm: View {
-    let deal: CRMDeal?
-    let pipeline: CRMPipeline?
-    let save: (DealBody) async throws -> CRMDeal
-    @Environment(\.dismiss) private var dismiss
-    @State private var name: String
-    @State private var value: Decimal
-    @State private var currency: String
-    @State private var probability: Int
-    @State private var accountId: Int?
-    @State private var hasCloseDate: Bool
-    @State private var closeDate: Date
-    @State private var saving = false
-    @State private var error: APIError?
-
-    init(deal: CRMDeal?, pipeline: CRMPipeline?, save: @escaping (DealBody) async throws -> CRMDeal) {
-        self.deal = deal
-        self.pipeline = pipeline
-        self.save = save
-        _name = State(initialValue: deal?.name ?? "")
-        _value = State(initialValue: deal?.value ?? 0)
-        _currency = State(initialValue: deal?.currency ?? Formatters.fallbackCurrency)
-        _probability = State(initialValue: deal?.probability ?? 10)
-        _accountId = State(initialValue: deal?.accountId)
-        _hasCloseDate = State(initialValue: deal?.expectedCloseDate != nil)
-        _closeDate = State(initialValue: deal?.expectedCloseDate?.date() ?? Calendar.current.date(byAdding: .month, value: 1, to: Date())!)
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Deal") {
-                    TextField("Name", text: $name)
-                    TextField("Value", value: $value, format: .number)
-                        .keyboardType(.decimalPad)
-                    Picker("Currency", selection: $currency) {
-                        ForEach(Formatters.currencyChoices(including: currency), id: \.self) { Text($0).tag($0) }
-                    }
-                    Stepper("Probability \(probability)%", value: $probability, in: 0...100, step: 10)
-                }
-                Section("Timing") {
-                    Toggle("Expected close date", isOn: $hasCloseDate)
-                    if hasCloseDate {
-                        DatePicker("Close by", selection: $closeDate, displayedComponents: .date)
-                    }
-                }
-                Section("Account") {
-                    CRMAccountPicker(accountId: $accountId)
-                }
-                if let error { Section { InlineErrorRow(error: error) } }
-            }
-            .navigationTitle(deal == nil ? "New deal" : "Edit deal")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { submit() }
-                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || saving)
-                }
-            }
-        }
-    }
-
-    private func submit() {
-        saving = true
-        error = nil
-        var body = DealBody(name: name.trimmingCharacters(in: .whitespaces), value: value, currency: currency,
-                            probability: probability, accountId: accountId)
-        if hasCloseDate { body.expectedCloseDate = CalendarDay(date: closeDate) }
-        if deal == nil {
-            body.pipelineId = pipeline?.id
-            body.stage = pipeline?.orderedStages.first?.name ?? "new"
-        }
-        Task {
-            defer { saving = false }
-            do {
-                _ = try await save(body)
-                dismiss()
-            } catch {
-                self.error = error.asAPIError
-            }
-        }
-    }
+extension String {
+    /// nil for an empty string, so optional chains can skip it.
+    var nonEmpty: String? { isEmpty ? nil : self }
 }

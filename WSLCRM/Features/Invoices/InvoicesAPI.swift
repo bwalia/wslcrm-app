@@ -5,12 +5,16 @@ struct InvoicesAPI: Sendable {
     let client: APIClient
     static let base = "/api/v2/invoices"
 
-    func invoices(search: String, status: InvoiceStatus?, page: Int, perPage: Int = 25) async throws -> Page<Invoice> {
+    /// `issuedFrom`/`issuedTo` filter on the issue date.
+    func invoices(search: String, status: InvoiceStatus?, issuedFrom: CalendarDay? = nil, issuedTo: CalendarDay? = nil,
+                  page: Int, perPage: Int = 25) async throws -> Page<Invoice> {
         var q = QueryBuilder()
         q.add("page", page)
         q.add("perPage", perPage)
         q.add("search", search.trimmingCharacters(in: .whitespaces))
         if let status, [.draft, .sent, .paid, .void].contains(status) { q.add("status", status.rawValue) }
+        q.add("from_date", issuedFrom?.isoString)
+        q.add("to_date", issuedTo?.isoString)
         let envelope: Envelope.Invoices<LossyArray<Invoice>> = try await client.send(.get(Self.base, query: q.items))
         return Page(items: envelope.data.elements, page: envelope.meta?.page ?? page,
                     perPage: envelope.meta?.perPage ?? perPage, total: envelope.meta?.total ?? envelope.data.elements.count)
@@ -91,6 +95,64 @@ struct InvoicesAPI: Sendable {
     func deletePayment(_ invoiceUuid: String, paymentId: String) async throws -> Invoice {
         try await client.sendDiscardingBody(.delete("\(Self.base)/payments/\(paymentId)"))
         return try await invoice(invoiceUuid)
+    }
+
+    // MARK: Getting paid, billing hours, VAT
+
+    /// The workspace's ways to be paid (`/api/v2/namespace/payment-methods`, readable with invoices.read).
+    func paymentMethods() async throws -> [PaymentMethodInfo] {
+        let envelope: Envelope.Standard<LossyArray<PaymentMethodInfo>> = try await client.send(.get("/api/v2/namespace/payment-methods"))
+        return envelope.data.elements
+    }
+
+    /// Customers to bill hours to (the timesheets lookup the web uses).
+    func billableCustomers(search: String) async throws -> [BillableCustomer] {
+        var q = QueryBuilder()
+        q.add("q", search.trimmingCharacters(in: .whitespaces))
+        let envelope: Envelope.Standard<LossyArray<BillableCustomer>> =
+            try await client.send(.get("/api/v2/timesheets/lookups/customers", query: q.items))
+        return envelope.data.elements
+    }
+
+    func customerBillable(customerUuid: String, from: CalendarDay?, to: CalendarDay?) async throws -> CustomerBillablePreview {
+        var q = QueryBuilder()
+        q.add("customer_uuid", customerUuid)
+        q.add("from", from?.isoString)
+        q.add("to", to?.isoString)
+        return try await data(.get("\(Self.base)/customer-billable", query: q.items))
+    }
+
+    /// One invoice for every approved, un-invoiced hour of the customer in the period.
+    func createFromCustomer(customerUuid: String, from: CalendarDay?, to: CalendarDay?) async throws -> Invoice {
+        struct Body: Encodable, Sendable { let customerUuid: String; let periodStart: String?; let periodEnd: String? }
+        let created: Invoice = try await data(.post("\(Self.base)/from-customer",
+                                                    json: Body(customerUuid: customerUuid, periodStart: from?.isoString,
+                                                               periodEnd: to?.isoString)))
+        return created
+    }
+
+    /// nil when the deployment has no VAT feature (the route answers 404).
+    func vatCheck(_ uuid: String) async throws -> VatInvoiceCheck? {
+        do {
+            let envelope: Envelope.Standard<VatInvoiceCheck> = try await client.send(.get("/api/v2/vat/invoices/\(uuid)/check"))
+            return envelope.data
+        } catch let error as APIError {
+            if case .notFound = error { return nil }
+            throw error
+        }
+    }
+
+    func einvoiceCheck(_ uuid: String) async throws -> EinvoiceCheck {
+        struct Result: Decodable, Sendable { let check: EinvoiceCheck }
+        let envelope: Envelope.Standard<Result> = try await client.send(
+            .get("/api/v2/vat/invoices/\(uuid)/einvoice", query: [URLQueryItem(name: "check", value: "1")]))
+        return envelope.data.check
+    }
+
+    /// The Peppol UBL e-invoice (XML).
+    func einvoiceXML(_ uuid: String) async throws -> Data {
+        let (data, _) = try await client.sendRaw(.get("/api/v2/vat/invoices/\(uuid)/einvoice"))
+        return data
     }
 
     // MARK: Field-service billing

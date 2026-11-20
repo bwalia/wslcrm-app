@@ -29,16 +29,9 @@ struct AppMenu: Sendable, Equatable {
 
     static let empty = AppMenu(sections: [], secondary: [])
 
-    /// The web's AI chat ("AI Navigator", `/dashboard/chat`) and project management.
+    /// The AI chat ("AI Navigator") and project management.
     static let aiChatKey = "chat"
     static let projectsKey = "projects"
-
-    /// The web page of a menu item, by key — for the tabs that are web pages.
-    func route(for key: String) -> WebPageRoute? {
-        guard let item = sections.lazy.flatMap(\.items).first(where: { $0.key == key }),
-              let path = item.path, path.hasPrefix("/") else { return nil }
-        return WebPageRoute(title: item.name, path: path)
-    }
 
     var isEmpty: Bool { sections.isEmpty && secondary.isEmpty }
 
@@ -102,57 +95,6 @@ struct AppMenu: Sendable, Equatable {
         let bare = key.split(separator: ":").last.map(String.init) ?? key
         let words = bare.replacingOccurrences(of: "_", with: " ")
         return words.prefix(1).uppercased() + words.dropFirst()
-    }
-}
-
-// MARK: - Where an item opens
-
-/// The app's own screens that stand in for a web page. Anything not listed opens the web page
-/// itself, inside the app.
-enum NativeScreen: Hashable, Sendable {
-    case crm, leads, customers, products, orders, shop, fieldService, propertyDealsToday
-}
-
-/// Where tapping a menu item goes: one of the app's screens (each with the route the rest of the
-/// app already uses), or the web page.
-enum MenuDestination: Hashable {
-    case screen(NativeScreen)
-    case area(FieldServiceArea)
-    case purchaseOrders
-    case propertyDealsApprovals
-    case propertyDealsRenovations
-    case propertyPA(manager: Bool)
-    case web(WebPageRoute)
-
-    /// nil when the item has neither a screen nor a page (nothing to open).
-    static func of(_ item: AppMenu.Item) -> MenuDestination? {
-        switch item.key {
-        case "crm": return .screen(.crm)
-        case "crm_leads": return .screen(.leads)
-        case "customers": return .screen(.customers)
-        case "products": return .screen(.products)
-        case "orders": return .screen(.orders)
-        case "shop": return .screen(.shop)
-        case "invoices": return .area(.invoices)
-        case "purchase_orders": return .purchaseOrders
-        case "my_tasks": return .area(.myTasks)
-        // The app has its own projects, boards and sprints: no need for the web page.
-        case AppMenu.projectsKey: return .area(.projects)
-        case "timesheets": return .area(.timesheets)
-        case "field_service_jobs": return .screen(.fieldService)
-        case "field_service_requests": return .area(.requests)
-        case "field_service_assets": return .area(.customerAssets)
-        case "field_service_reports": return .area(.reports)
-        case "field_service_simpro": return .area(.simpro)
-        case "plugin:property_deals:today": return .screen(.propertyDealsToday)
-        case "plugin:property_deals:approvals": return .propertyDealsApprovals
-        case "plugin:property_deals:renovations": return .propertyDealsRenovations
-        case "plugin:property_pa:today": return .propertyPA(manager: false)
-        case "plugin:property_pa:manager": return .propertyPA(manager: true)
-        default:
-            guard let path = item.path, path.hasPrefix("/") else { return nil }
-            return .web(WebPageRoute(title: item.name, path: path))
-        }
     }
 }
 

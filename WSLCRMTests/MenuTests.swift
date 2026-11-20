@@ -82,17 +82,17 @@ final class MenuTests: XCTestCase {
         XCTAssertEqual(MenuDestination.of(item("plugin:property_deals:approvals")), .propertyDealsApprovals)
     }
 
-    func testEverythingElseOpensTheWebPage() throws {
-        XCTAssertEqual(MenuDestination.of(item("chat", path: "/dashboard/chat", name: "Chat")),
-                       .web(WebPageRoute(title: "Chat", path: "/dashboard/chat")))
-        XCTAssertEqual(MenuDestination.of(item("field_service_parts", path: "/dashboard/field-service/parts")),
-                       .web(WebPageRoute(title: "X", path: "/dashboard/field-service/parts")))
-        XCTAssertNil(MenuDestination.of(item("odd", path: nil)), "no screen and no page: nothing to open")
-        XCTAssertNil(MenuDestination.of(item("odd", path: "https://elsewhere.example")), "only dashboard paths")
-
+    func testNothingOpensAWebPage() throws {
+        // A module without a native screen yet isn't offered at all — never as a web page.
+        XCTAssertNil(MenuDestination.of(item("odd", path: "/dashboard/odd")), "unknown modules stay hidden")
+        XCTAssertNil(MenuDestination.of(item("odd", path: "https://elsewhere.example")))
         let (_, menu) = try rootMenu()
-        let unreachable = menu.sections.flatMap(\.items).filter { MenuDestination.of($0) == nil }
-        XCTAssertEqual(unreachable.map(\.key), [], "every item root sees opens something")
+        for item in menu.sections.flatMap(\.items) + menu.secondary {
+            guard let destination = MenuDestination.of(item) else { continue }
+            if case .resource(let route) = destination {
+                XCTAssertNotNil(ModuleCatalog.descriptor(route.descriptorID), "\(item.key) → \(route.descriptorID) exists")
+            }
+        }
     }
 
     func testIconsFallBackToATile() {
@@ -113,84 +113,6 @@ final class MenuTests: XCTestCase {
         XCTAssertNil(dashboard("https://opsapi"), "a bare name isn't a dashboard address")
     }
 
-    // MARK: Signing the page in
-
-    private func session(dashboard: String = "https://int-opsapi-ui.workstation.co.uk",
-                         firstName: String = "Root") -> WebSession {
-        WebSession(dashboard: URL(string: dashboard)!, accessToken: "header.payload.sig",
-                   user: CurrentUser(uuid: "u-1", email: "root@example.com", username: nil, firstName: firstName,
-                                     lastName: "User", platformRoles: ["administrative"]),
-                   workspace: Workspace(uuid: "ns-1", internalId: 2, name: "Workstation", slug: "workstation", isOwner: true))
-    }
-
-    /// Runs the script the way WebKit does, against a stand-in `window` and `localStorage`.
-    private func run(_ script: String, origin: String) throws -> [String: String] {
-        let context = try XCTUnwrap(JSContext())
-        context.evaluateScript("""
-        var store = { 'menu-storage': 'old' };
-        var window = { location: { origin: \(WebSession.json(origin)) } };
-        var localStorage = { setItem: function (k, v) { store[k] = String(v); }, removeItem: function (k) { delete store[k]; } };
-        """)
-        context.evaluateScript(script)
-        XCTAssertNil(context.exception, context.exception?.toString() ?? "")
-        let store = try XCTUnwrap(context.objectForKeyedSubscript("store").toDictionary() as? [String: String])
-        return store
-    }
-
-    func testTheScriptSignsTheDashboardInToTheAppsWorkspace() throws {
-        let store = try run(session().bootstrapScript, origin: "https://int-opsapi-ui.workstation.co.uk")
-        XCTAssertEqual(store["auth_token"], "header.payload.sig")
-        let namespace = try JSONSerialization.jsonObject(with: Data(try XCTUnwrap(store["current_namespace"]).utf8)) as? [String: Any]
-        XCTAssertEqual(namespace?["uuid"] as? String, "ns-1", "the dashboard sends this as X-Namespace-Id")
-        XCTAssertEqual(namespace?["id"] as? Int, 2)
-        let auth = try JSONSerialization.jsonObject(with: Data(try XCTUnwrap(store["auth-storage"]).utf8)) as? [String: Any]
-        let state = auth?["state"] as? [String: Any]
-        XCTAssertEqual(state?["isAuthenticated"] as? Bool, true)
-        XCTAssertEqual((state?["user"] as? [String: Any])?["email"] as? String, "root@example.com")
-        XCTAssertNotNil(store["namespace-storage"])
-        XCTAssertNil(store["menu-storage"], "another workspace's cached menu is dropped")
-        XCTAssertEqual(store["opsapi-embed"], "app", "the dashboard hides its own top bar, sidebar and footer")
-    }
-
-    func testTheScriptDoesNothingOnAnotherSite() throws {
-        let store = try run(session().bootstrapScript, origin: "https://evil.example")
-        XCTAssertEqual(store, ["menu-storage": "old"], "the token is never written anywhere but the dashboard")
-    }
-
-    func testOddCharactersCantBreakOutOfTheScript() throws {
-        let tricky = #"Ro"ot\'</script><img src=x>"#
-        let store = try run(session(firstName: tricky).bootstrapScript, origin: "https://int-opsapi-ui.workstation.co.uk")
-        let user = try JSONSerialization.jsonObject(with: Data(try XCTUnwrap(store["auth_user"]).utf8)) as? [String: Any]
-        XCTAssertEqual(user?["first_name"] as? String, tricky)
-    }
-
-    func testLocalDashboardOriginKeepsItsPort() throws {
-        let local = session(dashboard: "http://127.0.0.1:8039")
-        XCTAssertTrue(local.bootstrapScript.contains(#""http:\/\/127.0.0.1:8039""#))
-        XCTAssertEqual(local.url(for: WebPageRoute(title: "Chat", path: "/dashboard/chat"))?.absoluteString,
-                       "http://127.0.0.1:8039/dashboard/chat")
-    }
-
-    // MARK: What the page may load
-
-    func testOnlyTheDashboardLoadsInsideTheApp() {
-        let dashboard = URL(string: "https://int-opsapi-ui.workstation.co.uk")!
-        func decide(_ url: String, main: Bool = true) -> WebNavigation {
-            WebNavigation.decide(URL(string: url), dashboard: dashboard, isMainFrame: main)
-        }
-        XCTAssertEqual(decide("https://int-opsapi-ui.workstation.co.uk/dashboard/chat"), .allow)
-        XCTAssertEqual(decide("https://int-opsapi-ui.workstation.co.uk/login"), .signInAgain)
-        XCTAssertEqual(decide("https://int-opsapi-ui.workstation.co.uk/login?next=/x"), .signInAgain)
-        XCTAssertEqual(decide("https://int-opsapi-ui.workstation.co.uk/login-help"), .allow)
-        XCTAssertEqual(decide("https://www.workstation.co.uk/pricing"), .openOutside, "another site opens in Safari")
-        XCTAssertEqual(decide("mailto:someone@example.com"), .openOutside)
-        XCTAssertEqual(decide("javascript:alert(1)"), .block)
-        XCTAssertEqual(decide("about:blank"), .allow)
-        XCTAssertEqual(decide("https://js.stripe.com/frame", main: false), .allow, "embedded frames don't get the session")
-        XCTAssertEqual(decide("http://insecure.example/frame", main: false), .block)
-        XCTAssertEqual(WebNavigation.decide(nil, dashboard: dashboard, isMainFrame: true), .block)
-    }
-
     // MARK: Tab bar
 
     func testRootGetsWorkHubsAndTheTabBarNeverOverflows() {
@@ -200,7 +122,26 @@ final class MenuTests: XCTestCase {
         let navigation = NavigationPolicy(permissions: root, isEngineerRole: false, hasPropertyDeals: true, hasPropertyPA: true)
         XCTAssertEqual(navigation.home, .more, "root has no hub of its own: Home and Apps")
         XCTAssertLessThanOrEqual(navigation.tabs.count, 3, "Home + three hubs + Apps: nothing hides behind iOS's More")
-        XCTAssertEqual(navigation.tabs, [.propertyPA, .myWork, .fieldService])
+        XCTAssertEqual(navigation.tabs, [.fieldService, .propertyDeals, .myWork],
+                       "the PA isn't put first just because it's switched on")
+    }
+
+    func testWorkAreasFollowWhatIsWaitingAndThePersonsOwnOrder() {
+        let owner = PermissionSet(isAdmin: false, isOwner: true, grants: [:],
+                                  menuKeys: ["field_service_jobs", "projects", "shop", "my_tasks"])
+        let waiting = NavigationPolicy(permissions: owner, isEngineerRole: false, hasPropertyPA: true,
+                                       activity: [.shop: 7, .tasks: 2])
+        XCTAssertEqual(waiting.tabs, [.shop, .tasks, .fieldService], "most waiting first, then the usual order")
+        XCTAssertEqual(waiting.home, .shop)
+
+        let chosen = NavigationPolicy(permissions: owner, isEngineerRole: false, hasPropertyPA: true,
+                                      activity: [.shop: 7], preferredOrder: [.tasks, .propertyPA], hiddenHubs: [.fieldService])
+        XCTAssertEqual(chosen.ordered, [.tasks, .propertyPA, .myWork, .shop], "Edit Home: their order first, hidden ones gone")
+
+        let engineer = NavigationPolicy(permissions: PermissionSet(isAdmin: false, isOwner: false, grants: ["fs_visits": ["read"]],
+                                                                   menuKeys: ["field_service_visits", "shop"]),
+                                        isEngineerRole: true, activity: [.shop: 9])
+        XCTAssertEqual(engineer.home, .myWork, "engineers always start on their visits")
     }
 
     func testTheAIChatAndProjectsNeverTakeATab() {
@@ -212,10 +153,7 @@ final class MenuTests: XCTestCase {
         XCTAssertFalse(engineer.tabs.contains(.projects), "projects are a native screen in Apps")
     }
 
-    func testProjectsOpenTheAppsOwnScreenAndTheChatStaysTheWebPage() throws {
-        let (_, menu) = try rootMenu()
-        XCTAssertEqual(menu.route(for: AppMenu.aiChatKey), WebPageRoute(title: "AI Navigator", path: "/dashboard/chat"))
-        XCTAssertNil(menu.route(for: "not-there"))
+    func testProjectsOpenTheAppsOwnScreen() {
         XCTAssertEqual(MenuDestination.of(item("projects", path: "/dashboard/projects", name: "Projects")),
                        .area(.projects), "the app has its own projects, boards and sprints")
     }
@@ -236,18 +174,16 @@ final class MenuTests: XCTestCase {
 
     // MARK: Apps catalog
 
-    func testTheCatalogPutsNativeScreensFirstAndMarksWebPages() throws {
+    func testTheCatalogListsOnlyNativeScreens() throws {
         let (_, menu) = try rootMenu()
         let catalog = AppCatalog(menu: menu)
         let all = catalog.groups.flatMap(\.entries)
+        XCTAssertFalse(all.isEmpty)
         XCTAssertFalse(all.contains { AppCatalog.hiddenKeys.contains($0.key) }, "the web's home page is the Home tab")
-        XCTAssertNotNil(catalog.assistant, "the AI chat opens over the app")
-        XCTAssertTrue(all.contains { $0.key == AppMenu.aiChatKey && $0.isAssistant })
-        for group in catalog.groups {
-            let firstWeb = group.entries.firstIndex(where: \.isWeb) ?? group.entries.count
-            XCTAssertFalse(group.entries[firstWeb...].contains { !$0.isWeb }, "native first in \(group.title)")
+        for entry in all {
+            XCTAssertNotNil(NativeModules.destination(forKey: entry.key), "\(entry.key) opens a native screen")
         }
-        XCTAssertFalse(catalog.nativeEntries.contains(where: \.isWeb))
+        XCTAssertFalse(catalog.nativeEntries.contains { $0.key == AppMenu.aiChatKey }, "the AI has its own card on Home")
     }
 
     func testTheCatalogSearchKeepsAWholeGroupWhenItsNameMatches() throws {

@@ -3,6 +3,8 @@ import SwiftUI
 struct VisitSummaryRow: View {
     let visit: Visit
     var showsJob = true
+    /// The schedule of every engineer's visits shows who is going (or that nobody is yet).
+    var showsEngineer = false
     var pending = false
     var failed = false
 
@@ -36,6 +38,21 @@ struct VisitSummaryRow: View {
                 Label(phase, systemImage: "list.bullet.clipboard")
                     .font(.wsFootnote)
                     .foregroundStyle(.secondaryText)
+            }
+            if showsEngineer && showsJob {
+                Label(visit.engineerName ?? "No engineer assigned yet", systemImage: "person.fill")
+                    .font(.wsFootnote)
+                    .foregroundStyle(visit.engineerName == nil ? Tone.warning.textColor : .secondaryText)
+            }
+            if showsEngineer && (visit.isUrgent || visit.followUpRequired) {
+                HStack(spacing: 8) {
+                    if visit.isUrgent { visit.jobPriority.badge }
+                    if visit.followUpRequired {
+                        Label("Follow-up", systemImage: "flag.fill")
+                            .font(.wsFootnote.weight(.semibold))
+                            .foregroundStyle(Tone.warning.textColor)
+                    }
+                }
             }
             if pending { PendingSyncBadge(failed: failed) }
         }

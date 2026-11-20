@@ -18,6 +18,8 @@ struct PDTodayView: View {
     @State private var hotLeads: [PDHotLead] = []
     @State private var activeRenovations = 0
     @State private var calledLead: PDHotLead?
+    /// The web's task filter: all, overdue or blocking.
+    @State private var taskFilter = "all"
 
     private static let pollInterval: Duration = .seconds(60)
 
@@ -79,10 +81,19 @@ struct PDTodayView: View {
 
     // MARK: Content
 
+    /// My tasks, filtered as on the web: overdue ones, or the ones that block exchange or completion.
+    static func filtered(_ tasks: [PDTaskSummary], _ filter: String) -> [PDTaskSummary] {
+        switch filter {
+        case "overdue": tasks.filter { $0.overdue == true }
+        case "blocking": tasks.filter { $0.blocking == true }
+        default: tasks
+        }
+    }
+
     private func list(_ today: PDToday) -> some View {
         let access = session.propertyDeals
-        let layout = PDTodayLayout(tasks: today.tasks, now: Date(), timeZone: access?.timeZone ?? .current,
-                                   hidden: hiddenTaskUuids)
+        let layout = PDTodayLayout(tasks: Self.filtered(today.tasks, taskFilter), now: Date(),
+                                   timeZone: access?.timeZone ?? .current, hidden: hiddenTaskUuids)
         return List {
             if let captureMessage {
                 Section {
@@ -107,6 +118,15 @@ struct PDTodayView: View {
                         .foregroundStyle(Tone.warning.textColor)
                         .accessibilityIdentifier("pd.today.unsynced")
                 }
+            }
+            Section {
+                Picker("Show tasks", selection: $taskFilter) {
+                    Text("All").tag("all")
+                    Text("Overdue").tag("overdue")
+                    Text("Blocking").tag("blocking")
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("pd.today.taskFilter")
             }
             taskSection("Overdue", tasks: layout.overdue, id: "overdue")
             taskSection("Due today", tasks: layout.dueToday, id: "dueToday")
@@ -165,11 +185,27 @@ struct PDTodayView: View {
                         PDTaskRow(task: task)
                     }
                     .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                        if canUpdateTasks {
+                        if canUpdateTasks, task.pdStatus != .awaitingApproval {
                             Button {
-                                actions.askToComplete(task.ref, compliance: task.compliance ?? false)
-                            } label: { Label("Done", systemImage: "checkmark") }
-                                .tint(Tone.success.solidColor)
+                                actions.askToComplete(task.ref, compliance: task.compliance ?? false,
+                                                      approvalRule: task.approvalRule, access: session.propertyDeals)
+                            } label: {
+                                Label(PDTaskActions.needsApproval(rule: task.approvalRule, access: session.propertyDeals)
+                                      ? "Send for approval" : "Done", systemImage: "checkmark")
+                            }
+                            .tint(Tone.success.solidColor)
+                        }
+                    }
+                    .contextMenu {
+                        if canUpdateTasks {
+                            Button("Assign to someone", systemImage: "person.badge.plus") {
+                                actions.assigning = PDTaskActions.TaskRequest(task: task.ref)
+                            }
+                        }
+                        if session.propertyDeals?.can(.create, .tasks) ?? false, task.dealUuid != nil {
+                            Button("Log a call or message", systemImage: "phone.arrow.up.right") {
+                                actions.loggingContact = PDTaskActions.TaskRequest(task: task.ref)
+                            }
                         }
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -177,7 +213,8 @@ struct PDTodayView: View {
                             Button { actions.askToSnooze(task.ref) } label: { Label("Snooze", systemImage: "moon.zzz") }
                                 .tint(Tone.progress.solidColor)
                         }
-                        if task.agentEligible == true, session.propertyDeals?.can(.create, .ai) ?? false {
+                        if task.agentEligible == true, session.propertyDeals?.can(.create, .ai) ?? false,
+                           ![.agentRunning, .awaitingApproval].contains(task.pdStatus) {
                             Button {
                                 Task { await actions.letAIDoIt(task.ref, api: services.propertyDeals, isOnline: connectivity.isOnline) }
                             } label: { Label("Let AI do it", systemImage: "sparkles") }

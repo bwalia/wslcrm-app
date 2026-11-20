@@ -23,6 +23,8 @@ final class VisitDetailViewModel {
         return "The task stayed open, so the office may chase it. Finish the checklist to close it."
     }
     var queuedMessage: String?
+    /// Said after an action worked ("Logged 2.5 h to the timesheet").
+    var notice: String?
 
     private let api: FieldServiceAPI
     private let sync: SyncCenter
@@ -167,6 +169,83 @@ final class VisitDetailViewModel {
         }
     }
 
+    // MARK: Timesheet, phase and items
+
+    /// A completed visit with labour hours and an engineer, not yet on a timesheet.
+    var canLogTimesheet: Bool {
+        guard canWork, let visit = detail?.visit else { return false }
+        return Self.canLogTimesheet(visit)
+    }
+
+    nonisolated static func canLogTimesheet(_ visit: Visit) -> Bool {
+        visit.status == .completed && visit.timesheetUuid == nil && (visit.labourHours ?? 0) > 0
+            && visit.engineerUserUuid != nil
+    }
+
+    func logTimesheet() async {
+        busy = true
+        defer { busy = false }
+        do {
+            let result = try await api.logTimesheet(visitUuid: visitUuid)
+            notice = "\(Formatters.hours(result.hours) ?? "The hours") logged to the timesheet."
+            await load()
+        } catch {
+            actionError = error.asAPIError
+        }
+    }
+
+    /// Completes the visit's phase. `signoffName` is needed when the phase asks for a sign-off;
+    /// `force` completes it with checklist items still unticked (the server says no otherwise).
+    func completePhase(signoffName: String?, force: Bool) async -> Bool {
+        guard let detail, let phase = detail.phase, let context = session.mutationContext else { return false }
+        let name = signoffName?.trimmingCharacters(in: .whitespaces)
+        let body = PhaseStatusChangeBody(status: PhaseStatus.completed.rawValue,
+                                         signoffName: name?.isEmpty == false ? name : nil,
+                                         force: force ? true : nil, notes: nil)
+        busy = true
+        defer { busy = false }
+        do {
+            switch try await sync.perform(FieldServiceAPI.Mutations.phaseStatus(phase: phase, body: body,
+                                                                                 jobUuid: detail.visit.jobUuid,
+                                                                                 context: context)) {
+            case .sent:
+                notice = "“\(phase.name)” is complete."
+                await load()
+            case .queued:
+                queuedMessage = "Saved on this device. The phase will be completed when you're back online."
+            }
+            return true
+        } catch {
+            actionError = error.asAPIError
+            return false
+        }
+    }
+
+    /// Managers change any line; an engineer only the lines they logged (as the server checks).
+    func canEdit(_ item: JobItem) -> Bool {
+        guard !item.invoiced else { return false }
+        if session.permissions.can(.update, .fsJobs) { return true }
+        return canWork && item.createdByUuid != nil && item.createdByUuid == session.user?.uuid
+    }
+
+    /// After the line form saved: say so and show the new state.
+    func itemSaved(_ message: String) {
+        notice = message
+        Task { await load() }
+    }
+
+    func deleteItem(_ item: JobItem) async {
+        busy = true
+        defer { busy = false }
+        do {
+            try await api.deleteItem(itemUuid: item.uuid)
+            notice = "“\(item.description)” removed from the visit."
+            await load()
+        } catch {
+            actionError = error.asAPIError
+        }
+    }
+
     @discardableResult
     private func perform(_ mutation: PendingMutation) async -> Bool {
         busy = true
@@ -265,10 +344,17 @@ struct VisitDetailView: View {
 
 private struct VisitDetailContent: View {
     @Bindable var model: VisitDetailViewModel
+    @Environment(SessionStore.self) private var session
     @State private var showingCheckOut = false
     @State private var showingNoAccess = false
     @State private var confirmingCancel = false
     @State private var cancelReason = ""
+    @State private var quoteKind: QuoteLineSheet.Kind?
+    @State private var editingItem: JobItem?
+    @State private var addingLine = false
+    @State private var deletingItem: JobItem?
+    @State private var completingPhase = false
+    @State private var signoffName = ""
 
     var body: some View {
         Group {
@@ -295,6 +381,46 @@ private struct VisitDetailContent: View {
         .sheet(isPresented: $showingNoAccess) {
             NoAccessSheet { reason in await model.markNoAccess(reason: reason) }
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $quoteKind) { kind in
+            QuoteLineSheet(kind: kind, showsPrices: model.showsPrices) { body in
+                await model.addItem(body)
+            }
+        }
+        .sheet(item: $editingItem) { item in
+            if let detail = model.detail {
+                JobItemFormSheet(jobUuid: detail.visit.jobUuid, currency: detail.visit.jobCurrency ?? "GBP",
+                                 phases: detail.phase.map { [$0] } ?? [], item: item,
+                                 showsPrices: model.showsPrices) { message in model.itemSaved(message) }
+            }
+        }
+        .sheet(isPresented: $addingLine) {
+            if let detail = model.detail {
+                JobItemFormSheet(jobUuid: detail.visit.jobUuid, currency: detail.visit.jobCurrency ?? "GBP",
+                                 phases: detail.phase.map { [$0] } ?? [], item: nil, visitUuid: detail.visit.uuid,
+                                 showsPrices: model.showsPrices) { message in model.itemSaved(message) }
+            }
+        }
+        .confirmationDialog("Remove this line?", isPresented: .init(get: { deletingItem != nil },
+                                                                   set: { if !$0 { deletingItem = nil } }),
+                            titleVisibility: .visible, presenting: deletingItem) { item in
+            Button("Remove “\(item.description)”", role: .destructive) {
+                Task { await model.deleteItem(item) }
+            }
+        } message: { _ in
+            Text("It comes off the job and won't be invoiced.")
+        }
+        .alert("Complete this phase?", isPresented: $completingPhase) {
+            if model.detail?.phase?.needsSignoff == true {
+                TextField("Customer's name for sign-off", text: $signoffName)
+            }
+            Button("Complete phase") {
+                let unticked = model.detail?.phase?.uncheckedCount ?? 0
+                Task { _ = await model.completePhase(signoffName: signoffName, force: unticked > 0) }
+            }
+            Button("Not yet", role: .cancel) {}
+        } message: {
+            Text(completeMessage)
         }
         .alert("Cancel this visit?", isPresented: $confirmingCancel) {
             TextField("Reason (optional)", text: $cancelReason)
@@ -323,13 +449,25 @@ private struct VisitDetailContent: View {
         }
     }
 
+    private var completeMessage: String {
+        guard let phase = model.detail?.phase else { return "" }
+        var lines: [String] = []
+        if phase.uncheckedCount > 0 {
+            lines.append("\(phase.uncheckedCount) checklist item(s) aren't ticked. The phase will be completed anyway.")
+        }
+        if phase.needsSignoff { lines.append("This phase needs the customer's name.") }
+        return lines.isEmpty ? "“\(phase.name)” will be marked complete." : lines.joined(separator: " ")
+    }
+
     private func loaded(detail: VisitDetail, visit: Visit) -> some View {
-        List {
+        let jobOpen = visit.jobStatus != .completed && visit.jobStatus != .cancelled
+        return List {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         visit.status.badge
                             .accessibilityIdentifier("visit.status")
+                        if visit.isUrgent { visit.jobPriority.badge }
                         if !model.pendingWrites.isEmpty {
                             PendingSyncBadge(failed: model.pendingWrites.contains(where: \.isFailed))
                         }
@@ -339,18 +477,39 @@ private struct VisitDetailContent: View {
                         Label(scheduleText(start: start, end: visit.scheduledEnd), systemImage: "clock")
                             .font(.wsSubheadline)
                     }
+                    Label(visit.engineerName ?? "No engineer assigned yet", systemImage: "person.fill")
+                        .font(.wsSubheadline)
+                        .foregroundStyle(visit.engineerName == nil ? Tone.warning.textColor : .primary)
+                    if let phase = visit.phaseName {
+                        Label("Phase: \(phase)", systemImage: "list.bullet.clipboard").font(.wsSubheadline)
+                    }
                     if let checkedIn = visit.checkedInAt {
                         Label("Checked in \(Formatters.time(checkedIn) ?? "")", systemImage: "arrow.down.to.line")
                             .font(.wsSubheadline)
                     }
+                    if visit.followUpRequired {
+                        Label("Follow-up needed", systemImage: "flag.fill")
+                            .font(.wsSubheadline.weight(.semibold))
+                            .foregroundStyle(Tone.warning.textColor)
+                    }
                 }
                 .padding(.vertical, 4)
-                NavigationLink(value: JobRoute(uuid: visit.jobUuid)) {
-                    Label("Open job \(visit.jobNumber)", systemImage: "wrench.and.screwdriver")
+                if session.permissions.can(.read, .fsJobs) {
+                    NavigationLink(value: JobRoute(uuid: visit.jobUuid)) {
+                        Label("Open job \(visit.jobNumber)", systemImage: "wrench.and.screwdriver")
+                    }
+                    .accessibilityIdentifier("visit.openJob")
                 }
-                .accessibilityIdentifier("visit.openJob")
                 if let cachedAt = model.cachedAt {
                     CachedDataNotice(savedAt: cachedAt)
+                }
+            }
+
+            if let notice = model.notice {
+                Section {
+                    Label(notice, systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(Tone.success.textColor)
+                        .accessibilityIdentifier("visit.notice")
                 }
             }
 
@@ -359,80 +518,196 @@ private struct VisitDetailContent: View {
             }
 
             Section("Site") {
-                DetailRow(label: "Customer", value: visit.customerName, systemImage: "person")
+                DetailRow(label: "Customer", value: visit.customerName ?? "No customer", systemImage: "person")
                 if let phone = visit.customerPhone {
-                    PhoneLinkRow(name: visit.customerName, phone: phone)
+                    PhoneLinkRow(name: visit.customerName ?? "Customer", phone: phone)
                 }
                 if let address = visit.fullAddress {
                     MapsLinkRow(address: address)
                 }
                 DetailRow(label: "Product", value: [visit.productName, visit.productRef].compactMap { $0 }.joined(separator: " · "),
                           systemImage: "shippingbox")
-                if let instructions = visit.instructions, !instructions.isEmpty {
+                if let access = visit.siteAccessNotes, !access.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
-                        Label("Instructions", systemImage: "text.bubble").font(.wsCaption).foregroundStyle(.secondaryText)
-                        Text(instructions)
+                        Label("Getting in", systemImage: "key").font(.wsCaption).foregroundStyle(.secondaryText)
+                        Text(access)
                     }
                 }
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Instructions", systemImage: "text.bubble").font(.wsCaption).foregroundStyle(.secondaryText)
+                    Text(visit.instructions?.isEmpty == false ? visit.instructions! : "No instructions.")
+                }
+            }
+
+            Section {
+                FGasCard(visit: visit, canEdit: model.canWork) { updated in model.replace(updated) }
             }
 
             if let phase = detail.phase {
-                Section("Phase") {
-                    HStack {
-                        Text(phase.name).font(.wsHeadline)
-                        Spacer()
-                        phase.status.badge
-                    }
-                    if !phase.checklist.isEmpty {
-                        Label("\(phase.checklist.count - phase.uncheckedCount) of \(phase.checklist.count) checklist items done",
-                              systemImage: "checklist")
-                            .font(.wsSubheadline)
-                    }
-                    if phase.needsSignoff {
-                        Label("Needs customer sign-off", systemImage: "signature")
-                            .font(.wsSubheadline)
-                            .foregroundStyle(Tone.warning.textColor)
-                    }
-                    NavigationLink(value: JobRoute(uuid: visit.jobUuid)) {
-                        Text("Open checklist in job")
-                    }
-                }
+                phaseSection(phase, canTick: model.canWork && jobOpen)
             }
 
-            if visit.status == .completed || visit.status == .noAccess {
-                Section("Report") {
-                    if let summary = visit.workSummary {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Work summary").font(.wsCaption).foregroundStyle(.secondaryText)
-                            Text(summary)
-                        }
+            reportSection(visit)
+
+            itemsSection(detail: detail, visit: visit)
+        }
+        .listStyle(.insetGrouped)
+    }
+
+    @ViewBuilder
+    private func phaseSection(_ phase: JobPhase, canTick: Bool) -> some View {
+        Section {
+            HStack {
+                Text(phase.name).font(.wsHeadline)
+                Spacer()
+                phase.status.badge
+            }
+            if let description = phase.description, !description.isEmpty {
+                Text(description).font(.wsSubheadline).foregroundStyle(.secondaryText)
+            }
+            if phase.checklist.isEmpty {
+                Label("No checklist for this phase.", systemImage: "checklist").foregroundStyle(.secondaryText)
+            }
+            ForEach(Array(phase.checklist.enumerated()), id: \.offset) { index, item in
+                Button {
+                    Task { await model.toggleChecklist(index: index) }
+                } label: {
+                    Label {
+                        Text(item.label).foregroundStyle(.primary).strikethrough(item.done)
+                    } icon: {
+                        Image(systemName: item.done ? "checkmark.square.fill" : "square")
+                            .foregroundStyle(item.done ? Tone.success.textColor : .secondaryText)
                     }
-                    DetailRow(label: "Labour", value: Formatters.hours(visit.labourHours))
-                    DetailRow(label: "Signed off by", value: visit.customerSignoffName)
-                    DetailRow(label: "Checked out", value: Formatters.dateTime(visit.checkedOutAt))
-                    if visit.followUpRequired {
-                        Label(visit.followUpNotes ?? "Follow-up required", systemImage: "flag.fill")
-                            .foregroundStyle(Tone.warning.textColor)
+                    .frame(minHeight: 44, alignment: .leading)
+                }
+                .disabled(!canTick)
+                .accessibilityValue(item.done ? "Done" : "Not done")
+                .accessibilityIdentifier("visit.checklist.\(index)")
+            }
+            if phase.needsSignoff {
+                Label("Needs the customer's sign-off", systemImage: "signature")
+                    .font(.wsSubheadline)
+                    .foregroundStyle(Tone.warning.textColor)
+            } else if let signed = phase.signoffName {
+                Label("Signed off by \(signed)", systemImage: "signature").font(.wsSubheadline)
+            }
+            if canTick && !phase.status.isFinished {
+                Button {
+                    signoffName = ""
+                    completingPhase = true
+                } label: {
+                    Label("Complete phase", systemImage: "checkmark.circle")
+                }
+                .frame(minHeight: 44)
+                .disabled(model.busy)
+                .accessibilityIdentifier("visit.completePhase")
+            }
+        } header: {
+            Text("Phase")
+        } footer: {
+            if !canTick && !phase.checklist.isEmpty {
+                Text("The checklist can be ticked by the engineer on this visit while the job is open.")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func reportSection(_ visit: Visit) -> some View {
+        let hasReport = visit.checkedInAt != nil || visit.checkedOutAt != nil || visit.workSummary != nil
+            || visit.customerSignoffName != nil || visit.followUpNotes != nil || visit.cancelledReason != nil
+            || visit.timesheetUuid != nil
+        if hasReport {
+            Section("Report") {
+                if let summary = visit.workSummary {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Work carried out").font(.wsCaption).foregroundStyle(.secondaryText)
+                        Text(summary)
                     }
                 }
-            }
-
-            if !detail.items.isEmpty {
-                Section("Items logged on this visit") {
-                    ForEach(detail.items) { item in
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(item.description)
-                                Text("Qty \(item.quantity.formatted())").font(.wsCaption).foregroundStyle(.secondaryText)
-                            }
-                            Spacer()
-                            item.approvalStatus.badge
-                        }
-                    }
+                if let checkedIn = visit.checkedInAt {
+                    DetailRow(label: "Checked in", value: Formatters.dateTime(checkedIn))
+                }
+                if let checkedOut = visit.checkedOutAt {
+                    DetailRow(label: "Checked out", value: Formatters.dateTime(checkedOut))
+                }
+                if let hours = Formatters.hours(visit.labourHours) {
+                    DetailRow(label: "Labour", value: hours)
+                }
+                if let signoff = visit.customerSignoffName {
+                    Label("Signed off by \(signoff)\(visit.customerSignedAt.flatMap { " · \(Formatters.dateTime($0) ?? "")" } ?? "")",
+                          systemImage: "checkmark.seal.fill")
+                        .foregroundStyle(Tone.success.textColor)
+                }
+                if let notes = visit.followUpNotes {
+                    Label("\(visit.status == .noAccess ? "No access" : "Follow-up"): \(notes)", systemImage: "flag.fill")
+                        .foregroundStyle(Tone.warning.textColor)
+                }
+                if let reason = visit.cancelledReason {
+                    Label("Cancelled: \(reason)", systemImage: "xmark.octagon")
+                        .foregroundStyle(Tone.danger.textColor)
+                }
+                if visit.timesheetUuid != nil {
+                    Label("Logged to the timesheet", systemImage: "clock.badge.checkmark")
+                        .font(.wsSubheadline).foregroundStyle(.secondaryText)
                 }
             }
         }
-        .listStyle(.insetGrouped)
+    }
+
+    @ViewBuilder
+    private func itemsSection(detail: VisitDetail, visit: Visit) -> some View {
+        let canLog = model.canWork && visit.jobStatus != .cancelled
+        if !detail.items.isEmpty || canLog {
+            Section {
+                if detail.items.isEmpty {
+                    Text("Nothing logged on this visit yet.").foregroundStyle(.secondaryText)
+                }
+                ForEach(detail.items) { item in
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.description)
+                            Text([Formatters.humanize(item.itemType), "Qty \(item.quantity.formatted())",
+                                  model.showsPrices ? Formatters.money(item.lineTotal, currency: visit.jobCurrency ?? "GBP") : nil]
+                                .compactMap { $0 }.joined(separator: " · "))
+                                .font(.wsCaption).foregroundStyle(.secondaryText)
+                        }
+                        Spacer()
+                        item.approvalStatus.badge
+                    }
+                    .accessibilityElement(children: .combine)
+                    .swipeActions {
+                        if model.canEdit(item) {
+                            Button("Remove", role: .destructive) { deletingItem = item }
+                            Button("Edit") { editingItem = item }
+                        }
+                    }
+                    .contextMenu {
+                        if model.canEdit(item) {
+                            Button { editingItem = item } label: { Label("Edit", systemImage: "pencil") }
+                            Button(role: .destructive) { deletingItem = item } label: { Label("Remove", systemImage: "trash") }
+                        }
+                    }
+                }
+                if canLog {
+                    Menu {
+                        Button { addingLine = true } label: { Label("Part from the catalogue, or any line", systemImage: "shippingbox") }
+                        ForEach(QuoteLineSheet.Kind.allCases) { kind in
+                            Button { quoteKind = kind } label: { Label(kind.title, systemImage: kind.systemImage) }
+                        }
+                    } label: {
+                        Label("Log a part, labour or hire", systemImage: "plus.circle")
+                            .frame(minHeight: 44)
+                    }
+                    .accessibilityIdentifier("visit.logItem")
+                }
+            } header: {
+                Text("Parts and labour on this visit")
+            } footer: {
+                if detail.items.contains(where: { model.canEdit($0) }) {
+                    Text("Swipe a line to edit or remove it.")
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -476,6 +751,15 @@ private struct VisitDetailContent: View {
                 }
             } footer: {
                 Text("Your location is recorded only at check-in and check-out.")
+            }
+        } else if model.canLogTimesheet {
+            Section {
+                actionButton("Log to timesheet", systemImage: "clock.badge.checkmark", tone: .info, prominent: false,
+                             id: "logTimesheet") {
+                    Task { await model.logTimesheet() }
+                }
+            } footer: {
+                Text("Adds this visit's \(Formatters.hours(visit.labourHours) ?? "hours") to the engineer's timesheet.")
             }
         }
     }

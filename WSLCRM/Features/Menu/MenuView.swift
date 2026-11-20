@@ -2,10 +2,9 @@ import SwiftUI
 import UIKit
 
 /// The Apps tab: everything in the workspace, from the server's menu (the same items, modules and
-/// permissions as the web's sidebar), as an app launcher. Each group is a card; the app's own
-/// screens come first, and the web dashboard's pages are marked "Web" so nobody is surprised.
+/// permissions as the web's sidebar), as an app launcher. Each group is a card, and every entry is a
+/// native screen.
 struct AppsView: View {
-    @Binding var assistant: WebPageRoute?
     @Environment(SessionStore.self) private var session
     @State private var search = ""
 
@@ -31,7 +30,8 @@ struct AppsView: View {
                             DashboardSectionHeader(group.title)
                             VStack(spacing: 0) {
                                 ForEach(Array(group.entries.enumerated()), id: \.element.id) { index, entry in
-                                    AppEntryLink(entry: entry, assistant: $assistant) { AppRow(entry: entry) }
+                                    AppEntryLink(entry: entry) { AppRow(entry: entry) }
+                                        .contextMenu { PinToTabBarButton(pin: .app(entry.key)) }
                                     if index < group.entries.count - 1 {
                                         Divider().padding(.leading, 60)
                                     }
@@ -53,7 +53,7 @@ struct AppsView: View {
     }
 }
 
-/// One app in a group card: its coloured icon, its name, and "Web" where it is a web page.
+/// One app in a group card: its coloured icon and its name.
 private struct AppRow: View {
     let entry: AppCatalog.Entry
 
@@ -65,13 +65,6 @@ private struct AppRow: View {
                 .foregroundStyle(Color(.label))
                 .multilineTextAlignment(.leading)
             Spacer(minLength: 8)
-            if entry.isWeb {
-                Pill(text: "Web", systemImage: "globe")
-                    .accessibilityLabel("Opens the web page")
-            } else if entry.isAssistant {
-                Pill(text: "AI", systemImage: "sparkles", foreground: Tone.brand.textColor,
-                     background: Color.accentColor.opacity(0.12))
-            }
             Image(systemName: "chevron.right")
                 .font(.wsFootnote.weight(.semibold))
                 .foregroundStyle(.tertiary)
@@ -127,16 +120,10 @@ struct ProfileSheet: View {
                         }
                         .accessibilityIdentifier("more.workspace")
                         ForEach(session.menu.secondary) { item in
-                            if case .web(let route)? = MenuDestination.of(item) {
-                                NavigationLink {
-                                    WebPageView(route: route)
-                                } label: {
-                                    LabeledContent {
-                                        Pill(text: "Web", systemImage: "globe")
-                                    } label: {
-                                        Label(item.key == "settings" ? "Workspace settings" : item.name,
-                                              systemImage: "slider.horizontal.3")
-                                    }
+                            if let destination = MenuDestination.of(item) {
+                                MenuDestinationLink(destination: destination) {
+                                    Label(item.key == "settings" ? "Account settings" : item.name,
+                                          systemImage: "slider.horizontal.3")
                                 }
                                 .accessibilityIdentifier("menu.item.\(item.key)")
                             }
@@ -215,7 +202,7 @@ extension NativeScreen {
         case .leads: LeadsHomeView()
         case .customers: CustomersListView()
         case .products: ProductsListView()
-        case .orders: OrdersListView()
+        case .orders: SalesOrdersView()
         case .shop: ShopHomeView()
         case .fieldService: FieldServiceHubView()
         case .propertyDealsToday: PDTodayView()

@@ -35,10 +35,42 @@ private struct JobDetailContent: View {
     @State private var invoicing = false
     @State private var quoting = false
     @State private var photos: JobPhotosModel?
+    @State private var editingJob = false
+    @State private var confirmingDelete = false
+    @State private var phaseForm: PhaseFormTarget?
+    @State private var deletingPhase: JobPhase?
+    @State private var visitForm: VisitFormTarget?
+    @State private var cancellingVisit: Visit?
+    @State private var visitCancelReason = ""
+    @State private var deletingVisit: Visit?
+    @State private var editingItem: JobItem?
+    @State private var deletingItem: JobItem?
+    @State private var jobSheet: URL?
+    @State private var notice: String?
+    @State private var manageError: APIError?
     @Environment(SessionStore.self) private var session
     @Environment(\.services) private var services
+    @Environment(\.dismiss) private var dismiss
+
+    /// Add a phase, or change one.
+    struct PhaseFormTarget: Identifiable {
+        let phase: JobPhase?
+        var id: String { phase?.uuid ?? "new" }
+    }
+
+    /// Book a visit, or reschedule / reassign one.
+    struct VisitFormTarget: Identifiable {
+        let visit: Visit?
+        var id: String { visit?.uuid ?? "new" }
+    }
 
     var body: some View {
+        toolbarLayer
+    }
+
+    /// The screen, its loading and the job-status prompts. The modifiers are split into layers so
+    /// the compiler can type-check each in reasonable time.
+    private var core: some View {
         content
             .navigationTitle(model.detail?.job.jobNumber ?? "Job")
             .task { await model.load() }
@@ -56,15 +88,104 @@ private struct JobDetailContent: View {
             } message: {
                 Text("Scheduled and en-route visits will also be cancelled.")
             }
+    }
+
+    /// Forms: lines, visits, phases, job details.
+    private var sheetLayer: some View {
+        core
             .sheet(isPresented: $addingItem) {
                 if let detail = model.detail {
-                    AddJobItemSheet(detail: detail) { Task { await model.load() } }
+                    JobItemFormSheet(jobUuid: detail.job.uuid, currency: detail.job.currency, phases: detail.sortedPhases,
+                                     item: nil, visitUuid: myOpenVisit(detail)?.uuid,
+                                     showsPrices: model.policy.isDispatcherForJobs) { saved($0) }
+                }
+            }
+            .sheet(item: $editingItem) { item in
+                if let detail = model.detail {
+                    JobItemFormSheet(jobUuid: detail.job.uuid, currency: detail.job.currency, phases: detail.sortedPhases,
+                                     item: item, showsPrices: model.policy.isDispatcherForJobs) { saved($0) }
                 }
             }
             .sheet(isPresented: $bookingVisit) {
                 if let detail = model.detail {
-                    BookVisitSheet(detail: detail) { Task { await model.load() } }
+                    VisitFormSheet(jobUuid: detail.job.uuid, phases: detail.sortedPhases.filter { !$0.status.isFinished },
+                                   visit: nil) { saved($0) }
                 }
+            }
+            .sheet(item: $visitForm) { target in
+                if let detail = model.detail {
+                    VisitFormSheet(jobUuid: detail.job.uuid, phases: detail.sortedPhases, visit: target.visit) { saved($0) }
+                }
+            }
+            .sheet(item: $phaseForm) { target in
+                if let detail = model.detail {
+                    PhaseFormSheet(title: target.phase == nil ? "Add a phase" : "Edit phase",
+                                   initial: target.phase.map(PhaseFormValues.init(phase:)) ?? PhaseFormValues(),
+                                   showsNotes: target.phase != nil) { values in
+                        try await services.fieldService.savePhase(jobUuid: detail.job.uuid, phaseUuid: target.phase?.uuid,
+                                                                  body: values.phaseBody(existing: target.phase))
+                        saved(target.phase == nil ? "Phase “\(values.trimmedName)” added." : "Phase saved.")
+                    }
+                }
+            }
+            .sheet(isPresented: $editingJob) {
+                JobEditSheet(jobUuid: model.jobUuid) { saved("Job details saved.") }
+            }
+    }
+
+    /// Confirmations before deleting or cancelling, then the quote and invoice sheets.
+    private var dialogLayer: some View {
+        sheetLayer
+            .confirmationDialog("Delete this job?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                Button("Delete job", role: .destructive) { Task { await deleteJob() } }
+            } message: {
+                Text("Its visits are removed too. Cancel the job instead if you need to keep a record.")
+            }
+            .confirmationDialog("Remove this phase?", isPresented: .init(get: { deletingPhase != nil },
+                                                                        set: { if !$0 { deletingPhase = nil } }),
+                                titleVisibility: .visible, presenting: deletingPhase) { phase in
+                Button("Remove “\(phase.name)”", role: .destructive) {
+                    Task { await manage("Phase removed.") { try await services.fieldService.deletePhase(phase.uuid) } }
+                }
+            } message: { _ in
+                Text("Visits and parts linked to it keep their records but lose the phase link.")
+            }
+            .confirmationDialog("Delete this visit?", isPresented: .init(get: { deletingVisit != nil },
+                                                                        set: { if !$0 { deletingVisit = nil } }),
+                                titleVisibility: .visible, presenting: deletingVisit) { visit in
+                Button("Delete visit", role: .destructive) {
+                    Task { await manage("Visit deleted.") { try await services.fieldService.deleteVisit(visit.uuid) } }
+                }
+            } message: { _ in
+                Text("It's removed from the schedule. Cancel it instead to keep a record.")
+            }
+            .confirmationDialog("Remove this line?", isPresented: .init(get: { deletingItem != nil },
+                                                                       set: { if !$0 { deletingItem = nil } }),
+                                titleVisibility: .visible, presenting: deletingItem) { item in
+                Button("Remove “\(item.description)”", role: .destructive) {
+                    Task { await manage("Line removed.") { try await services.fieldService.deleteItem(itemUuid: item.uuid) } }
+                }
+            } message: { _ in
+                Text("It comes off the job and won't be invoiced.")
+            }
+    }
+
+    /// Cancelling a visit, and the quote and invoice sheets.
+    private var promptLayer: some View {
+        dialogLayer
+            .alert("Cancel this visit?", isPresented: .init(get: { cancellingVisit != nil },
+                                                            set: { if !$0 { cancellingVisit = nil } }),
+                   presenting: cancellingVisit) { visit in
+                TextField("Reason (optional)", text: $visitCancelReason)
+                Button("Cancel visit", role: .destructive) {
+                    let reason = visitCancelReason.trimmingCharacters(in: .whitespaces)
+                    Task {
+                        await manage("Visit cancelled.") {
+                            try await services.fieldService.cancelVisit(visit.uuid, reason: reason.isEmpty ? nil : reason)
+                        }
+                    }
+                }
+                Button("Keep visit", role: .cancel) {}
             }
             .sheet(isPresented: $quoting) {
                 if let detail = model.detail {
@@ -76,29 +197,66 @@ private struct JobDetailContent: View {
                     JobInvoiceSheet(detail: detail) { Task { await model.load() } }
                 }
             }
+    }
+
+    /// The "More actions" menu and the job sheet it makes.
+    private var toolbarLayer: some View {
+        promptLayer
             .toolbar {
                 if let detail = model.detail {
                     let policy = model.policy
-                    let canBook = detail.job.status.isOpen && session.permissions.can(.create, .fsVisits)
-                    if policy.canAddItem(in: detail) || canBook || policy.canCreateInvoice(for: detail) {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Menu {
-                                if policy.canAddItem(in: detail) {
-                                    Button("Add part or item", systemImage: "shippingbox") { addingItem = true }
-                                }
-                                if canBook {
-                                    Button("Book visit", systemImage: "calendar.badge.plus") { bookingVisit = true }
-                                }
-                                if policy.canCreateInvoice(for: detail) {
-                                    Button("Invoice job", systemImage: "doc.text") { invoicing = true }
-                                }
-                            } label: {
-                                Label("More actions", systemImage: "ellipsis.circle")
+                    let canBook = detail.job.status.isOpen
+                        && (session.permissions.can(.create, .fsVisits) || policy.isDispatcherForJobs)
+                    let editable = detail.job.status != .completed && detail.job.status != .cancelled
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            if policy.canAddItem(in: detail) {
+                                Button("Add a line", systemImage: "shippingbox") { addingItem = true }
                             }
-                            .accessibilityIdentifier("job.moreActions")
+                            if canBook {
+                                Button("Book a visit", systemImage: "calendar.badge.plus") { bookingVisit = true }
+                            }
+                            if policy.isDispatcherForJobs && editable {
+                                Button("Add a phase", systemImage: "list.bullet.rectangle") {
+                                    phaseForm = PhaseFormTarget(phase: nil)
+                                }
+                            }
+                            if policy.canCreateInvoice(for: detail) {
+                                Button("Invoice job", systemImage: "doc.text") { invoicing = true }
+                            }
+                            Button("Job sheet (PDF)", systemImage: "printer") {
+                                jobSheet = JobSheetPDF.file(for: detail, company: session.workspace?.name)
+                            }
+                            if policy.isDispatcherForJobs {
+                                Button("Edit job details", systemImage: "pencil") { editingJob = true }
+                            }
+                            if session.permissions.can(.delete, .fsJobs) && detail.job.invoiceUuid == nil {
+                                Button("Delete job", systemImage: "trash", role: .destructive) { confirmingDelete = true }
+                            }
+                        } label: {
+                            Label("More actions", systemImage: "ellipsis.circle")
                         }
+                        .accessibilityIdentifier("job.moreActions")
                     }
                 }
+            }
+            .sheet(item: Binding(get: { jobSheet.map { ExportedFile(url: $0) } }, set: { if $0 == nil { jobSheet = nil } })) { file in
+                NavigationStack {
+                    List {
+                        Section {
+                            Label("Job sheet ready", systemImage: "doc.richtext")
+                            ShareLink(item: file.url) { Label("Share, print or save the PDF", systemImage: "square.and.arrow.up") }
+                                .accessibilityIdentifier("job.sheet.share")
+                        } footer: {
+                            Text("The engineer's worksheet: customer and site, phases and checklists, visits, labour, "
+                                 + "materials, hire, notes and signature lines.")
+                        }
+                    }
+                    .navigationTitle("Job sheet")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { jobSheet = nil } } }
+                }
+                .presentationDetents([.medium])
             }
     }
 
@@ -122,6 +280,17 @@ private struct JobDetailContent: View {
                 if let cachedAt = model.cachedAt {
                     CachedDataNotice(savedAt: cachedAt)
                 }
+            }
+
+            if let notice {
+                Section {
+                    Label(notice, systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(Tone.success.textColor)
+                        .accessibilityIdentifier("job.notice")
+                }
+            }
+            if let manageError {
+                Section { InlineErrorRow(error: manageError) }
             }
 
             if policy.canChangeJobStatus(detail) {
@@ -151,7 +320,7 @@ private struct JobDetailContent: View {
             phasesSection(detail, policy: policy)
 
             if !detail.visits.isEmpty {
-                Section("Visits") {
+                Section {
                     ForEach(detail.visits.sorted { ($0.scheduledStart ?? .distantPast) < ($1.scheduledStart ?? .distantPast) }) { visit in
                         Group {
                             if visit.engineerUserUuid == session.user?.uuid && !policy.isDispatcherForVisits {
@@ -164,11 +333,19 @@ private struct JobDetailContent: View {
                                 }
                             }
                         }
+                        .swipeActions { visitActions(visit, detail: detail) }
+                        .contextMenu { visitActions(visit, detail: detail) }
+                    }
+                } header: {
+                    Text("Visits")
+                } footer: {
+                    if canManageVisits(detail) {
+                        Text("Swipe a visit that hasn't started to reschedule, reassign, cancel or delete it.")
                     }
                 }
             }
 
-            if !detail.items.isEmpty {
+            if !detail.items.isEmpty || policy.canAddItem(in: detail) {
                 itemsSection(detail, policy: policy)
             }
 
@@ -195,9 +372,12 @@ private struct JobDetailContent: View {
                 }
             }
 
-            if !detail.activity.isEmpty {
+            if !detail.activity.isEmpty || policy.isDispatcherForJobs || policy.isEngineer(on: detail) {
                 Section("Activity") {
-                    ForEach(detail.activity.prefix(15)) { entry in
+                    if policy.isDispatcherForJobs || policy.isEngineer(on: detail) {
+                        JobCommentRow(jobUuid: detail.job.uuid) { saved("Note added to the job.") }
+                    }
+                    ForEach(detail.activity.prefix(30)) { entry in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(entry.message ?? Formatters.humanize(entry.action)).font(.wsSubheadline)
                             Text([entry.actorName, Formatters.dateTime(entry.createdAt)].compactMap { $0 }.joined(separator: " · "))
@@ -283,6 +463,79 @@ private struct JobDetailContent: View {
         }
     }
 
+    // MARK: Managing the job
+
+    private func canManageVisits(_ detail: JobDetail) -> Bool {
+        model.policy.isDispatcherForJobs || session.permissions.can(.create, .fsVisits)
+    }
+
+    @ViewBuilder
+    private func visitActions(_ visit: Visit, detail: JobDetail) -> some View {
+        let preStart = visit.status == .scheduled || visit.status == .enRoute
+        let editable = detail.job.status != .completed && detail.job.status != .cancelled
+        if canManageVisits(detail) && preStart && editable {
+            Button { visitForm = VisitFormTarget(visit: visit) } label: { Label("Reschedule", systemImage: "calendar") }
+                .tint(.blue)
+            Button {
+                visitCancelReason = ""
+                cancellingVisit = visit
+            } label: { Label("Cancel visit", systemImage: "xmark.circle") }
+                .tint(.orange)
+        }
+        if canManageVisits(detail) && !visit.invoiced && visit.timesheetUuid == nil && visit.status != .onSite {
+            Button(role: .destructive) { deletingVisit = visit } label: { Label("Delete", systemImage: "trash") }
+        }
+    }
+
+    @ViewBuilder
+    private func phaseActions(_ phase: JobPhase, detail: JobDetail) -> some View {
+        let editable = detail.job.status != .completed && detail.job.status != .cancelled
+        if model.policy.isDispatcherForJobs && editable {
+            Button { phaseForm = PhaseFormTarget(phase: phase) } label: { Label("Edit", systemImage: "pencil") }
+                .tint(.blue)
+            if phase.status != .completed {
+                Button(role: .destructive) { deletingPhase = phase } label: { Label("Remove", systemImage: "trash") }
+            }
+        }
+    }
+
+    /// Managers change any line; an engineer only the lines they logged (as the server checks).
+    private func canEditItem(_ item: JobItem, detail: JobDetail) -> Bool {
+        guard !item.invoiced, detail.job.status != .cancelled else { return false }
+        if model.policy.isDispatcherForJobs { return true }
+        return model.policy.isEngineer(on: detail) && item.createdByUuid != nil && item.createdByUuid == session.user?.uuid
+    }
+
+    /// The engineer's visit that is on site now: a line they add is logged on it.
+    private func myOpenVisit(_ detail: JobDetail) -> Visit? {
+        detail.visits.first { $0.engineerUserUuid == session.user?.uuid && $0.status == .onSite }
+    }
+
+    private func saved(_ message: String) {
+        notice = message
+        manageError = nil
+        Task { await model.load() }
+    }
+
+    private func manage(_ message: String, _ work: () async throws -> Void) async {
+        do {
+            try await work()
+            saved(message)
+        } catch {
+            manageError = error.asAPIError
+            notice = nil
+        }
+    }
+
+    private func deleteJob() async {
+        do {
+            try await services.fieldService.deleteJob(model.jobUuid)
+            dismiss()
+        } catch {
+            manageError = error.asAPIError
+        }
+    }
+
     private func header(_ detail: JobDetail) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(detail.job.title)
@@ -309,13 +562,27 @@ private struct JobDetailContent: View {
             if let type = detail.job.jobTypeName {
                 Label(type, systemImage: "tag").font(.wsSubheadline)
             }
+            if detail.job.estimatedHours != nil || detail.job.hourlyRate != nil {
+                Text([detail.job.estimatedHours.map { "Estimate \(Formatters.hours($0) ?? "")" },
+                      detail.job.hourlyRate.map { "Rate \(Formatters.money($0, currency: detail.job.currency) ?? "") an hour" }]
+                    .compactMap { $0 }.joined(separator: " · "))
+                    .font(.wsSubheadline).foregroundStyle(.secondaryText)
+            }
+            if let notes = detail.job.notes, !notes.isEmpty {
+                Label("Notes: \(notes)", systemImage: "note.text").font(.wsFootnote).foregroundStyle(.secondaryText)
+            }
+            if detail.job.status == .cancelled, let reason = detail.job.cancelledReason {
+                Label("Cancelled: \(reason)", systemImage: "xmark.octagon").font(.wsSubheadline)
+                    .foregroundStyle(Tone.danger.textColor)
+            }
         }
         .padding(.vertical, 4)
     }
 
     @ViewBuilder
     private func customerSection(_ job: Job) -> some View {
-        if job.customerName != nil || job.fullAddress != nil || job.customerPhone != nil || job.siteName != nil {
+        if job.customerName != nil || job.fullAddress != nil || job.customerPhone != nil || job.siteName != nil
+            || job.customerEmail != nil {
             Section("Customer & site") {
                 DetailRow(label: "Customer", value: job.customerName, systemImage: "person")
                 DetailRow(label: "Site", value: job.siteName, systemImage: "building.2")
@@ -327,6 +594,9 @@ private struct JobDetailContent: View {
                 }
                 if let phone = job.customerPhone {
                     PhoneLinkRow(name: job.customerName, phone: phone)
+                }
+                if let email = job.customerEmail {
+                    EmailLinkRow(email: email)
                 }
                 if let address = job.fullAddress {
                     MapsLinkRow(address: address)
@@ -351,6 +621,8 @@ private struct JobDetailContent: View {
                     PhaseRow(display: display)
                 }
                 .accessibilityIdentifier("job.phase.\(display.phase.sortOrder)")
+                .swipeActions { phaseActions(display.phase, detail: detail) }
+                .contextMenu { phaseActions(display.phase, detail: detail) }
             }
             .onMove { source, destination in
                 Task { await model.movePhases(from: source, to: destination) }
@@ -374,6 +646,14 @@ private struct JobDetailContent: View {
 
     private func itemsSection(_ detail: JobDetail, policy: FieldServicePolicy) -> some View {
         Section("Parts & items") {
+            if detail.items.isEmpty {
+                Text("No parts, materials or labour logged yet.").foregroundStyle(.secondaryText)
+            }
+            if policy.canAddItem(in: detail) {
+                Button { addingItem = true } label: { Label("Add a line", systemImage: "plus.circle") }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("job.addItem")
+            }
             ForEach(detail.items) { item in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
@@ -403,6 +683,18 @@ private struct JobDetailContent: View {
                     }
                 }
                 .padding(.vertical, 4)
+                .contextMenu {
+                    if canEditItem(item, detail: detail) {
+                        Button { editingItem = item } label: { Label("Edit", systemImage: "pencil") }
+                        Button(role: .destructive) { deletingItem = item } label: { Label("Remove", systemImage: "trash") }
+                    }
+                }
+                .swipeActions(edge: .leading) {
+                    if canEditItem(item, detail: detail) {
+                        Button("Edit") { editingItem = item }.tint(.blue)
+                        Button("Remove", role: .destructive) { deletingItem = item }
+                    }
+                }
                 .swipeActions {
                     if policy.canApproveItems(in: detail), !item.invoiced {
                         if item.approvalStatus != .approved {
@@ -461,7 +753,10 @@ extension View {
             .navigationDestination(for: PDRenovationsRoute.self) { _ in PDRenovationsListView() }
             .navigationDestination(for: PurchaseOrdersRoute.self) { PurchaseOrdersListView(route: $0) }
             .navigationDestination(for: NativeScreen.self) { $0.view }
-            .navigationDestination(for: WebPageRoute.self) { WebPageView(route: $0) }
+            .navigationDestination(for: ResourceListRoute.self) { ResourceListView(route: $0) }
+            .navigationDestination(for: ResourceRoute.self) { ResourceDetailView(route: $0) }
+            .navigationDestination(for: ResourceReportRoute.self) { ResourceReportView(route: $0) }
+            .navigationDestination(for: NativeScreenRoute.self) { NativeScreenView(route: $0) }
             .navigationDestination(for: PurchaseOrderRoute.self) { PurchaseOrderDetailView(uuid: $0.uuid) }
             .navigationDestination(for: FieldServiceArea.self) { area in
                 switch area {

@@ -53,10 +53,28 @@ private struct CustomerAssetsContent: View {
                     FilterChip(title: "Overdue", isOn: $model.filter.serviceOverdue)
                         .accessibilityIdentifier("customerAssets.filter.overdue")
                     FilterChip(title: "F-Gas", isOn: $model.filter.fgasOnly)
-                    FilterChip(title: "Condition 4+", isOn: Binding(
-                        get: { model.filter.conditionMin == 4 },
-                        set: { model.filter.conditionMin = $0 ? 4 : nil }))
-                        .accessibilityIdentifier("customerAssets.filter.condition")
+                    Menu {
+                        Picker("Condition", selection: $model.filter.conditionMin) {
+                            Text("Any condition").tag(Int?.none)
+                            ForEach(1...6, id: \.self) { rating in
+                                Text("\(rating) — \(ConditionRating.label(rating)) or worse").tag(Optional(rating))
+                            }
+                        }
+                    } label: {
+                        MenuChip(title: model.filter.conditionMin.map { "Condition \($0)+" } ?? "Any condition",
+                                 isOn: model.filter.conditionMin != nil)
+                    }
+                    .accessibilityIdentifier("customerAssets.filter.condition")
+                    Menu {
+                        Picker("Discipline", selection: $model.filter.discipline) {
+                            Text("All disciplines").tag(String?.none)
+                            ForEach(SimproAPI.AssetFilter.disciplines, id: \.value) { Text($0.label).tag(Optional($0.value)) }
+                        }
+                    } label: {
+                        MenuChip(title: SimproAPI.AssetFilter.disciplines.first { $0.value == model.filter.discipline }?.label
+                                 ?? "All disciplines", isOn: model.filter.discipline != nil)
+                    }
+                    .accessibilityIdentifier("customerAssets.filter.discipline")
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 8)
@@ -64,6 +82,20 @@ private struct CustomerAssetsContent: View {
             .background(.bar)
         }
         .onChange(of: model.filter) { _, _ in Task { await model.list.load() } }
+    }
+}
+
+/// A chip that opens a menu of choices.
+private struct MenuChip: View {
+    let title: String
+    let isOn: Bool
+
+    var body: some View {
+        Label(title, systemImage: "chevron.down")
+            .font(.wsSubheadline.weight(.medium))
+            .padding(.horizontal, 12)
+            .frame(minHeight: 36)
+            .background(isOn ? Color.accentColor.opacity(0.15) : Color(.secondarySystemBackground), in: Capsule())
     }
 }
 

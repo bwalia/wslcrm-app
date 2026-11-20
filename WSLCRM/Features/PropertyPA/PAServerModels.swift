@@ -140,6 +140,8 @@ struct PAServerHandoff: Decodable, Sendable {
     var repliedAt: Date?
     var status: String?
     var createdAt: Date?
+    /// What the asker sent with it (`{ seller_minimum, our_position, decision_makers }`).
+    var context: JSONValue?
 }
 
 struct PAServerHandoffBody: Encodable, Sendable, Equatable {
@@ -301,7 +303,14 @@ struct PAServerPrepare: Decodable, Sendable {
     var recommendedAction: String?
 
     struct Question: Decodable, Sendable, Hashable { var field: String?; var question: String? }
-    struct Rule: Decodable, Sendable, Hashable { var key: String?; var title: String?; var rule: String?; var ref: String? }
+    struct Rule: Decodable, Sendable, Hashable {
+        var key: String?
+        var title: String?
+        var rule: String?
+        var ref: String?
+        var scope: String?
+        @LenientInt var version: Int? = nil
+    }
 }
 
 /// `GET /coach/:opportunity_id?situation=`: known vs assumed, questions first, never a figure.

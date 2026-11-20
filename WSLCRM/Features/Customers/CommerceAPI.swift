@@ -4,14 +4,16 @@ import Foundation
 struct CommerceAPI: Sendable {
     let client: APIClient
 
-    // MARK: Customers — `{ data, total }`, paged with `perPage`; no server-side search.
+    // MARK: Customers — `{ data, total }`, paged with `perPage`; `search` matches email and names.
 
-    func customers(page: Int, perPage: Int = 25) async throws -> Page<Customer> {
+    func customers(search: String = "", orderBy: String = "created_at", orderDir: String = "desc", page: Int,
+                   perPage: Int = 25) async throws -> Page<Customer> {
         var q = QueryBuilder()
         q.add("page", page)
         q.add("perPage", perPage)
-        q.add("orderBy", "created_at")
-        q.add("orderDir", "desc")
+        q.add("search", search.trimmingCharacters(in: .whitespaces))
+        q.add("orderBy", orderBy)
+        q.add("orderDir", orderDir)
         let envelope: Envelope.DataTotal<Customer> = try await client.send(.get("/api/v2/customers", query: q.items))
         return Page(items: envelope.data, page: page, perPage: perPage, total: envelope.total)
     }
@@ -70,6 +72,38 @@ struct CommerceAPI: Sendable {
             items = items.filter { $0.namespaceId == nil || $0.namespaceId == namespaceInternalId }
         }
         return Page(items: items, page: page, perPage: perPage, total: envelope.total)
+    }
+
+    /// The catalogue's currency (kept on the workspace's store); nil until the first product sets it.
+    func catalogCurrency() async throws -> String? {
+        struct Response: Decodable, Sendable { let currency: String? }
+        return try await client.send(.get("/api/v2/products", query: [URLQueryItem(name: "perPage", value: "1")]),
+                                     as: Response.self).currency
+    }
+
+    /// Changes the catalogue's currency for every product. The route reads a form body.
+    func setCatalogCurrency(_ code: String) async throws {
+        try await client.sendDiscardingBody(Endpoint(.put, "/api/v2/products/currency").withForm([("currency", code)]))
+    }
+
+    // MARK: Variations (`/api/v2/catalog`, RBAC products)
+
+    func variants(productUuid: String) async throws -> [ProductVariant] {
+        struct Response: Decodable, Sendable { let variants: LossyArray<ProductVariant> }
+        let envelope: Envelope.Standard<Response> = try await client.send(.get("/api/v2/catalog/products/\(productUuid)/variants"))
+        return envelope.data.variants.elements
+    }
+
+    func createVariant(productUuid: String, _ body: ProductVariantBody) async throws {
+        try await client.sendDiscardingBody(.post("/api/v2/catalog/products/\(productUuid)/variants", json: body))
+    }
+
+    func updateVariant(_ uuid: String, _ body: ProductVariantBody) async throws {
+        try await client.sendDiscardingBody(.put("/api/v2/catalog/variants/\(uuid)", json: body))
+    }
+
+    func deleteVariant(_ uuid: String) async throws {
+        try await client.sendDiscardingBody(.delete("/api/v2/catalog/variants/\(uuid)"))
     }
 
     func product(_ uuid: String) async throws -> Product {

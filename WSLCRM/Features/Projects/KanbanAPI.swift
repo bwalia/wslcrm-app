@@ -159,7 +159,8 @@ struct KanbanAPI: Sendable {
 
     func comments(taskUuid: String) async throws -> [KanbanComment] {
         let envelope: Envelope.Kanban<LossyArray<KanbanComment>> =
-            try await client.send(.get("\(Self.base)/tasks/\(taskUuid)/comments"))
+            try await client.send(.get("\(Self.base)/tasks/\(taskUuid)/comments",
+                                       query: [URLQueryItem(name: "perPage", value: "200")]))
         return envelope.data.elements
     }
 
@@ -186,7 +187,8 @@ struct KanbanAPI: Sendable {
 
     func activities(taskUuid: String) async throws -> [KanbanActivity] {
         let envelope: Envelope.Kanban<LossyArray<KanbanActivity>> =
-            try await client.send(.get("\(Self.base)/tasks/\(taskUuid)/activities"))
+            try await client.send(.get("\(Self.base)/tasks/\(taskUuid)/activities",
+                                       query: [URLQueryItem(name: "perPage", value: "50")]))
         return envelope.data.elements
     }
 
@@ -259,7 +261,8 @@ struct KanbanAPI: Sendable {
     // MARK: Sprints
 
     func sprints(projectUuid: String, status: KanbanSprintStatus? = nil) async throws -> [KanbanSprint] {
-        let query = status.map { [URLQueryItem(name: "status", value: $0.rawValue)] } ?? []
+        var query = [URLQueryItem(name: "perPage", value: "200")]
+        if let status { query.append(URLQueryItem(name: "status", value: status.rawValue)) }
         let envelope: Envelope.Kanban<LossyArray<KanbanSprint>> =
             try await client.send(.get("\(Self.base)/projects/\(projectUuid)/sprints", query: query))
         return envelope.data.elements
@@ -302,10 +305,9 @@ struct KanbanAPI: Sendable {
         return envelope.data.elements
     }
 
+    /// The route answers `{ sprint, data_points }`, not a bare list.
     func burndown(sprintUuid: String) async throws -> [BurndownPoint] {
-        let envelope: Envelope.Kanban<LossyArray<BurndownPoint>> =
-            try await client.send(.get("\(Self.base)/sprints/\(sprintUuid)/burndown"))
-        return envelope.data.elements
+        try await sprintBurndown(sprintUuid).points
     }
 
     func startSprint(_ uuid: String) async throws {
@@ -320,7 +322,7 @@ struct KanbanAPI: Sendable {
 
     func currentTimer() async throws -> RunningTimer? {
         let envelope: Envelope.Kanban<RunningTimer?> = try await client.send(.get("\(Self.base)/timer/current"))
-        guard let timer = envelope.data, timer.taskUuid != nil else { return nil }
+        guard let timer = envelope.data, timer.running, timer.taskUuid != nil else { return nil }
         return timer
     }
 
@@ -333,13 +335,15 @@ struct KanbanAPI: Sendable {
             .post("\(Self.base)/timer/start", json: StartTimerBody(taskUuid: taskUuid, description: description)))
     }
 
-    func stopTimer() async throws {
-        try await client.sendDiscardingBody(.post("\(Self.base)/timer/stop", json: EmptyBody()))
+    func stopTimer(description: String? = nil) async throws {
+        let body = description?.trimmedOrNil.map { ["description": $0] } ?? [:]
+        try await client.sendDiscardingBody(.post("\(Self.base)/timer/stop", json: body))
     }
 
     func timeEntries(taskUuid: String) async throws -> [KanbanTimeEntry] {
         let envelope: Envelope.Kanban<LossyArray<KanbanTimeEntry>> =
-            try await client.send(.get("\(Self.base)/tasks/\(taskUuid)/time-entries"))
+            try await client.send(.get("\(Self.base)/tasks/\(taskUuid)/time-entries",
+                                       query: [URLQueryItem(name: "perPage", value: "200")]))
         return envelope.data.elements
     }
 

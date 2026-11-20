@@ -86,6 +86,16 @@ actor APIClient {
 
     var currentRefreshToken: String? { tokens?.refreshToken }
 
+    /// A valid access token for a WebSocket handshake: OpsAPI's hubs (`/api/chat/ws`) read the JWT
+    /// from `?token=`, not a header. Refreshed first when it is about to expire.
+    func socketAccessToken() async throws -> String {
+        guard let current = tokens else {
+            throw APIError.unauthorized(ServerError(status: 401, message: "Not signed in", fieldErrors: [:], rawBody: ""))
+        }
+        guard JWT.isExpiring(current.accessToken, within: 120, now: now()) else { return current.accessToken }
+        return try await refreshedTokens(replacing: current.accessToken).accessToken
+    }
+
     /// A URLSession configured for OpsAPI: no cookies (the server also sets a `refresh_token`
     /// cookie, which would otherwise become a second, unmanaged refresh channel) and no URL cache.
     static func makeSession() -> URLSession {
@@ -152,7 +162,7 @@ actor APIClient {
                 continue
             }
 
-            if response.statusCode == 401, endpoint.requiresAuth {
+            if response.statusCode == 401, endpoint.requiresAuth, endpoint.unauthorizedEndsSession {
                 let refreshed = try await refreshedTokens(replacing: tokenUsed)
                 (data, response) = try await perform(endpoint, accessToken: refreshed.accessToken)
                 if response.statusCode == 401 {
@@ -190,18 +200,6 @@ actor APIClient {
     }
 
     // MARK: - Refresh
-
-    /// The access token to hand a web page: refreshed first when it has under two minutes left, or
-    /// always when `forceRefresh` (the page itself was turned away).
-    func accessTokenForWeb(forceRefresh: Bool = false) async throws -> String {
-        guard let current = tokens else {
-            throw APIError.unauthorized(ServerError(status: 401, message: "Not signed in", fieldErrors: [:], rawBody: ""))
-        }
-        if !forceRefresh, !JWT.isExpiring(current.accessToken, within: 120, now: now()) {
-            return current.accessToken
-        }
-        return try await refreshedTokens(replacing: current.accessToken).accessToken
-    }
 
     /// Returns valid tokens, refreshing at most once for any number of concurrent callers.
     private func refreshedTokens(replacing staleAccessToken: String?) async throws -> AuthTokens {

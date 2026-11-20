@@ -21,6 +21,9 @@ struct Endpoint: Sendable {
     var timeout: TimeInterval = 30
     /// Extra request headers, e.g. `Idempotency-Key`.
     var headers: [String: String] = [:]
+    /// A 401 means the sign-in ended (refresh, then sign out). False for routes whose 401 means
+    /// something else: OpsAPI's HMRC routes answer 401 "No HMRC token found" when HMRC isn't connected.
+    var unauthorizedEndsSession = true
 
     init(_ method: HTTPMethod, _ path: String, query: [URLQueryItem] = [],
          requiresAuth: Bool = true, requiresNamespace: Bool = true) {

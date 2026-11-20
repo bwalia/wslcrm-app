@@ -1,4 +1,5 @@
 import SwiftUI
+import QuickLook
 
 /// One deal task: why it's urgent, the deal it belongs to, checklist, notes, attachments, and
 /// call / WhatsApp / email the people on the deal. Property tasks are kanban tasks, so checklist
@@ -22,6 +23,7 @@ struct PDTaskDetailView: View {
     @State private var actions = PDTaskActions()
     @State private var contactToLog: ContactAttempt?
     @State private var openError: String?
+    @State private var preview: URL?
 
     /// A call / WhatsApp / email the user just started from here; offered for the chase log
     /// when they come back to the app.
@@ -57,6 +59,7 @@ struct PDTaskDetailView: View {
         .alert(openError ?? "", isPresented: Binding(get: { openError != nil }, set: { if !$0 { openError = nil } })) {
             Button("OK", role: .cancel) {}
         }
+        .quickLookPreview($preview)
     }
 
     // MARK: Sections
@@ -151,29 +154,48 @@ struct PDTaskDetailView: View {
     @ViewBuilder
     private func actionsSection(_ task: PDTask) -> some View {
         let access = session.propertyDeals
-        let isOpen = effectiveStatus(task).isOpen
-        if isOpen, access?.can(.update, .tasks) ?? false {
+        let status = effectiveStatus(task)
+        let canUpdate = access?.can(.update, .tasks) ?? false
+        let needsApproval = PDTaskActions.needsApproval(rule: task.approvalRule, access: access)
+        if status.isOpen, canUpdate || (access?.can(.create, .tasks) ?? false) {
             Section {
-                Button {
-                    actions.askToComplete(task.ref, compliance: task.compliance ?? false)
-                } label: {
-                    Label("Mark done", systemImage: "checkmark.circle.fill")
-                }
-                .buttonStyle(.large(.success))
-                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 4, trailing: 16))
-                .accessibilityIdentifier("pd.task.complete")
-                HStack(spacing: 12) {
-                    Button { actions.askToSnooze(task.ref) } label: {
-                        Label("Snooze", systemImage: "moon.zzz").frame(maxWidth: .infinity)
+                // Awaiting approval: it is decided in Approvals first (the server refuses a change meanwhile).
+                if canUpdate, status != .awaitingApproval {
+                    Button {
+                        actions.askToComplete(task.ref, compliance: task.compliance ?? false, approvalRule: task.approvalRule,
+                                              access: access)
+                    } label: {
+                        Label(needsApproval ? "Send for approval" : "Mark done",
+                              systemImage: needsApproval ? "checkmark.seal" : "checkmark.circle.fill")
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                    .accessibilityIdentifier("pd.task.snooze")
-                    if task.agentEligible == true, access?.can(.create, .ai) ?? false {
+                    .buttonStyle(.large(.success))
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 4, trailing: 16))
+                    .accessibilityIdentifier("pd.task.complete")
+                }
+                if status == .awaitingApproval {
+                    NavigationLink(value: PDApprovalsRoute()) {
+                        Label("Waiting for approval: open Approvals", systemImage: "checkmark.seal")
+                    }
+                }
+                HStack(spacing: 12) {
+                    if canUpdate {
+                        Button { actions.askToSnooze(task.ref) } label: {
+                            Label("Snooze", systemImage: "moon.zzz").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .accessibilityIdentifier("pd.task.snooze")
+                    }
+                    if task.agentEligible == true, access?.can(.create, .ai) ?? false,
+                       ![.agentRunning, .awaitingApproval].contains(status) {
                         Button {
                             Task { await actions.letAIDoIt(task.ref, api: services.propertyDeals, isOnline: connectivity.isOnline) }
                         } label: {
-                            Label("Let AI do it", systemImage: "sparkles").frame(maxWidth: .infinity)
+                            if actions.isWorking {
+                                ProgressView().frame(maxWidth: .infinity)
+                            } else {
+                                Label("Let AI do it", systemImage: "sparkles").frame(maxWidth: .infinity)
+                            }
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.large)
@@ -182,6 +204,20 @@ struct PDTaskDetailView: View {
                     }
                 }
                 .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
+                if canUpdate {
+                    Button { actions.assigning = PDTaskActions.TaskRequest(task: task.ref) } label: {
+                        Label("Assign to someone", systemImage: "person.badge.plus")
+                    }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("pd.task.assign")
+                }
+                if access?.can(.create, .tasks) ?? false, task.dealUuid != nil || task.leadUuid != nil {
+                    Button { actions.loggingContact = PDTaskActions.TaskRequest(task: task.ref) } label: {
+                        Label("Log a call or message", systemImage: "phone.arrow.up.right")
+                    }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("pd.task.logContact")
+                }
             }
         }
     }
@@ -420,10 +456,10 @@ struct PDTaskDetailView: View {
         }
     }
 
+    /// Downloads the file (a five-minute private link) and shows it in the app with Quick Look.
     private func open(_ document: PDDocument) async {
         do {
-            let full = try await services.propertyDeals.document(document.uuid)
-            if let link = full.downloadUrl, let url = URL(string: link) { openURL(url) }
+            preview = try await PDFiles.download(document: document.uuid, filename: document.filename, raw: services.pdRaw)
         } catch {
             openError = error.asAPIError.localizedDescription
         }
