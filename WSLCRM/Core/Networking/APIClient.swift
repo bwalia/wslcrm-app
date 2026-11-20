@@ -86,6 +86,16 @@ actor APIClient {
 
     var currentRefreshToken: String? { tokens?.refreshToken }
 
+    /// A valid access token for a WebSocket handshake: OpsAPI's hubs (`/api/chat/ws`) read the JWT
+    /// from `?token=`, not a header. Refreshed first when it is about to expire.
+    func socketAccessToken() async throws -> String {
+        guard let current = tokens else {
+            throw APIError.unauthorized(ServerError(status: 401, message: "Not signed in", fieldErrors: [:], rawBody: ""))
+        }
+        guard JWT.isExpiring(current.accessToken, within: 120, now: now()) else { return current.accessToken }
+        return try await refreshedTokens(replacing: current.accessToken).accessToken
+    }
+
     /// A URLSession configured for OpsAPI: no cookies (the server also sets a `refresh_token`
     /// cookie, which would otherwise become a second, unmanaged refresh channel) and no URL cache.
     static func makeSession() -> URLSession {
