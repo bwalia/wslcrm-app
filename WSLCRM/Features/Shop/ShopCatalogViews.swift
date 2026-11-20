@@ -51,24 +51,27 @@ struct ShopProductsListView: View {
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var status: ShopProductStatus?
+    @State private var type: ShopProductType?
     @State private var lowStockOnly = false
     @State private var creating = false
+    @State private var importing = false
     @State private var reloadToken = 0
 
     private struct Filter: Hashable {
         let status: ShopProductStatus?
+        let type: ShopProductType?
         let lowStockOnly: Bool
         let reload: Int
     }
 
     var body: some View {
-        ModelHost(make: { [shop = services.shop, status, lowStockOnly] in
+        ModelHost(make: { [shop = services.shop, status, type, lowStockOnly] in
             PagedListModel<ShopProductSummary> { search, page in
-                try await shop.products(search: search, status: status, lowStockOnly: lowStockOnly, page: page)
+                try await shop.products(search: search, status: status, type: type, lowStockOnly: lowStockOnly, page: page)
             }
         }) { model in
             PagedList(model: model, searchPrompt: "Name, SKU or brand", emptyTitle: "No products", emptySystemImage: "shippingbox",
-                      emptyDescription: lowStockOnly ? "Nothing is running low." : "Add a product, or import the catalogue from the web dashboard.") { product in
+                      emptyDescription: lowStockOnly ? "Nothing is running low." : "Add a product with +, or import a spreadsheet of products with Import.") { product in
                 NavigationLink {
                     ShopProductDetailView(uuid: product.uuid, onChange: { model.replace($0.summary) },
                                           onDelete: { model.remove(id: product.id) })
@@ -77,7 +80,7 @@ struct ShopProductsListView: View {
                 }
             }
         }
-        .id(Filter(status: status, lowStockOnly: lowStockOnly, reload: reloadToken))
+        .id(Filter(status: status, type: type, lowStockOnly: lowStockOnly, reload: reloadToken))
         .navigationTitle("Products")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -88,22 +91,38 @@ struct ShopProductsListView: View {
                             Text(Formatters.humanize(status.rawValue)).tag(ShopProductStatus?.some(status))
                         }
                     }
+                    Picker("Type", selection: $type) {
+                        Text("Any type").tag(ShopProductType?.none)
+                        ForEach(ShopProductType.allCases, id: \.self) { Text(Formatters.humanize($0.rawValue)).tag(ShopProductType?.some($0)) }
+                    }
                     Toggle("Low stock only", isOn: $lowStockOnly)
                 } label: {
-                    Label("Filter", systemImage: status == nil && !lowStockOnly ? "line.3.horizontal.decrease.circle"
+                    Label("Filter", systemImage: status == nil && type == nil && !lowStockOnly ? "line.3.horizontal.decrease.circle"
                                                                                  : "line.3.horizontal.decrease.circle.fill")
                 }
             }
             if session.shopPolicy.canCreate {
                 ToolbarItem(placement: .primaryAction) {
-                    Button { creating = true } label: { Label("New product", systemImage: "plus") }
-                        .accessibilityIdentifier("shopProducts.new")
+                    Menu {
+                        Button { creating = true } label: { Label("New product", systemImage: "plus") }
+                            .accessibilityIdentifier("shopProducts.new")
+                        Button { importing = true } label: { Label("Import from a file", systemImage: "square.and.arrow.down") }
+                            .accessibilityIdentifier("shopProducts.import")
+                    } label: {
+                        Label("Add", systemImage: "plus")
+                    }
+                    .accessibilityIdentifier("shopProducts.add")
                 }
             }
         }
         .sheet(isPresented: $creating) {
             NavigationStack {
-                ShopProductForm(product: nil) { _ in reloadToken += 1 }
+                ShopProductEditorView(uuid: nil) { _ in reloadToken += 1 }
+            }
+        }
+        .sheet(isPresented: $importing) {
+            NavigationStack {
+                ShopCatalogImportView { reloadToken += 1 }
             }
         }
     }
@@ -224,11 +243,15 @@ struct ShopProductDetailView: View {
                         Label(supplierNotice, systemImage: "checkmark.circle")
                             .font(.wsFootnote).foregroundStyle(Tone.success.textColor)
                     }
-                    ForEach(enquiries.prefix(5)) { ShopStockEnquiryRow(enquiry: $0, currency: s.currency) }
+                    ForEach(enquiries.prefix(5)) { enquiry in
+                        ShopStockEnquiryRow(enquiry: enquiry, currency: s.currency) {
+                            enquiries = (try? await services.shop.stockEnquiries(productUuid: uuid)) ?? enquiries
+                        }
+                    }
                 } header: {
                     Text("Suppliers")
                 } footer: {
-                    Text("Ask by email from here, or WhatsApp or a text from this phone. Their answers are recorded on the web.")
+                    Text("Ask by email from here, or WhatsApp or a text from this phone. Tap an enquiry to record their answer.")
                 }
             }
 
@@ -271,10 +294,15 @@ struct ShopProductDetailView: View {
                     if !product.rules.isEmpty {
                         DetailRow(label: "Compatibility rules", value: "\(product.rules.filter(\.isActive).count) active")
                     }
+                    if policy.canUpdate {
+                        Button { editing = true } label: { Label("Edit options and rules", systemImage: "slider.horizontal.3") }
+                            .frame(minHeight: 44)
+                            .accessibilityIdentifier("shopProduct.editOptions")
+                    }
                 } header: {
                     Text("Configuration")
                 } footer: {
-                    Text("Option groups and rules are edited in the web dashboard.")
+                    Text("Options and compatibility rules are part of the product: change them with Edit.")
                 }
             }
 
@@ -320,10 +348,7 @@ struct ShopProductDetailView: View {
         }
         .sheet(isPresented: $editing) {
             NavigationStack {
-                ShopProductForm(product: product) { saved in
-                    state = .loaded(saved)
-                    onChange?(saved)
-                }
+                ShopProductEditorView(uuid: uuid) { _ in await load() }
             }
         }
         .sheet(item: $adjusting) { target in
@@ -386,157 +411,17 @@ struct ShopProductDetailView: View {
     }
 }
 
-/// Create a product, or edit the fields that make sense on a phone. Option groups and rules are
-/// never sent, so the server keeps whatever the web editor set up.
-struct ShopProductForm: View {
-    let product: ShopProduct?
-    let onSaved: (ShopProduct) -> Void
-    @Environment(\.services) private var services
-    @Environment(\.dismiss) private var dismiss
-    @State private var sku: String
-    @State private var name: String
-    @State private var brand: String
-    @State private var shortDescription: String
-    @State private var productType: String
-    @State private var priceMode: String
-    @State private var status: String
-    @State private var priceText: String
-    @State private var vatPercent: Double
-    @State private var initialStock = 0
-    @State private var lowStockThreshold: Int
-    @State private var leadTimeDays: Int
-    @State private var allowBackorder: Bool
-    @State private var isFeatured: Bool
-    @State private var priceVerified: Bool
-    @State private var categoryUuid: String
-    @State private var categories: [ShopCategory] = []
-    @State private var saving = false
-    @State private var error: APIError?
-
-    init(product: ShopProduct?, onSaved: @escaping (ShopProduct) -> Void) {
-        self.product = product
-        self.onSaved = onSaved
-        let s = product?.summary
-        _sku = State(initialValue: s?.sku ?? "")
-        _name = State(initialValue: s?.name ?? "")
-        _brand = State(initialValue: s?.brand ?? "")
-        _shortDescription = State(initialValue: product?.shortDescription ?? "")
-        _productType = State(initialValue: s?.productType ?? ShopProductType.workstation.rawValue)
-        _priceMode = State(initialValue: s?.priceMode ?? ShopPriceMode.fixed.rawValue)
-        _status = State(initialValue: s?.status ?? ShopProductStatus.draft.rawValue)
-        _priceText = State(initialValue: s.map { ShopMoney.plain($0.basePriceMinor) } ?? "")
-        _vatPercent = State(initialValue: (product?.vatRate ?? 0.2) * 100)
-        _lowStockThreshold = State(initialValue: s?.lowStockThreshold ?? 2)
-        _leadTimeDays = State(initialValue: product?.leadTimeDays ?? 10)
-        _allowBackorder = State(initialValue: product?.allowBackorder ?? true)
-        _isFeatured = State(initialValue: s?.isFeatured ?? false)
-        _priceVerified = State(initialValue: s?.priceVerified ?? false)
-        _categoryUuid = State(initialValue: s?.category?.uuid ?? "")
-    }
-
-    private var isNew: Bool { product == nil }
-    private var priceMinor: Int? { ShopMoney.minor(from: priceText) }
-    private var isValid: Bool {
-        name.trimmedOrNil != nil && (!isNew || sku.trimmedOrNil != nil) && priceMinor != nil
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                if isNew {
-                    TextField("SKU", text: $sku)
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                }
-                TextField("Name", text: $name)
-                TextField("Brand", text: $brand)
-                TextField("Short description", text: $shortDescription, axis: .vertical).lineLimit(2...5)
-            }
-            Section {
-                Picker("Type", selection: $productType) {
-                    ForEach(ShopProductType.allCases, id: \.rawValue) { Text(Formatters.humanize($0.rawValue)).tag($0.rawValue) }
-                }
-                Picker("Pricing", selection: $priceMode) {
-                    ForEach(ShopPriceMode.allCases, id: \.rawValue) { Text(Formatters.humanize($0.rawValue)).tag($0.rawValue) }
-                }
-                Picker("Status", selection: $status) {
-                    ForEach(ShopProductStatus.allCases, id: \.rawValue) { Text(Formatters.humanize($0.rawValue)).tag($0.rawValue) }
-                }
-                Picker("Category", selection: $categoryUuid) {
-                    Text("None").tag("")
-                    ForEach(categories) { Text($0.name).tag($0.uuid) }
-                }
-            }
-            Section {
-                TextField("Base price ex VAT", text: $priceText)
-                    .keyboardType(.decimalPad)
-                    .monospacedDigit()
-                Stepper("VAT \(vatPercent.formatted(.number.precision(.fractionLength(0...1))))%", value: $vatPercent, in: 0...100, step: 5)
-                Toggle("Price verified", isOn: $priceVerified)
-            } header: {
-                Text("Price")
-            } footer: {
-                Text("Unverified prices are flagged to customers and the shop assistant.")
-            }
-            Section("Stock") {
-                if isNew {
-                    Stepper("Opening stock: \(initialStock)", value: $initialStock, in: 0...100_000)
-                }
-                Stepper("Low-stock alert at \(lowStockThreshold)", value: $lowStockThreshold, in: 0...10_000)
-                Stepper("Lead time \(leadTimeDays) day\(leadTimeDays == 1 ? "" : "s")", value: $leadTimeDays, in: 0...365)
-                Toggle("Allow backorders", isOn: $allowBackorder)
-                Toggle("Featured", isOn: $isFeatured)
-            }
-            if let error { Section { InlineErrorRow(error: error) } }
-        }
-        .navigationTitle(isNew ? "New product" : "Edit product")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") { Task { await save() } }
-                    .disabled(saving || !isValid)
-            }
-        }
-        .task { categories = (try? await services.shop.categories()) ?? [] }
-    }
-
-    private func save() async {
-        guard let priceMinor else { return }
-        saving = true
-        defer { saving = false }
-        var body = ShopProductBody(name: name.trimmingCharacters(in: .whitespaces), brand: brand.trimmingCharacters(in: .whitespaces),
-                                   productType: productType, priceMode: priceMode, status: status,
-                                   shortDescription: shortDescription.trimmingCharacters(in: .whitespacesAndNewlines),
-                                   basePriceMinor: priceMinor, vatRate: (vatPercent / 100 * 10_000).rounded() / 10_000,
-                                   lowStockThreshold: lowStockThreshold, leadTimeDays: leadTimeDays,
-                                   allowBackorder: allowBackorder, priceVerified: priceVerified, isFeatured: isFeatured,
-                                   categoryUuid: categoryUuid)
-        do {
-            let saved: ShopProduct
-            if let product {
-                saved = try await services.shop.updateProduct(product.id, body)
-            } else {
-                body.sku = sku.trimmingCharacters(in: .whitespaces)
-                body.stockQty = initialStock
-                saved = try await services.shop.createProduct(body)
-            }
-            onSaved(saved)
-            dismiss()
-        } catch {
-            self.error = error.asAPIError
-        }
-    }
-}
-
-// MARK: - Categories
-
 struct ShopCategoriesView: View {
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var state: LoadState<[ShopCategory]> = .idle
     @State private var editing: ShopCategoryEdit?
+    @State private var deleting: ShopCategory?
     @State private var actionError: APIError?
+
+    private func parentName(_ category: ShopCategory) -> String? {
+        category.parentUuid.flatMap { parent in state.value?.first { $0.uuid == parent }?.name }
+    }
 
     var body: some View {
         List {
@@ -548,7 +433,8 @@ struct ShopCategoriesView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(category.name).font(.wsHeadline)
-                            Text(["/\(category.slug)", category.isActive ? nil : "hidden"].compactMap { $0 }.joined(separator: " · "))
+                            Text(["/\(category.slug)", parentName(category).map { "in \($0)" }, category.isActive ? nil : "hidden"]
+                                .compactMap { $0 }.joined(separator: " · "))
                                 .font(.wsFootnote).foregroundStyle(.secondaryText)
                         }
                         Spacer()
@@ -561,10 +447,16 @@ struct ShopCategoriesView: View {
                 .buttonStyle(.plain)
                 .swipeActions {
                     if session.shopPolicy.canDelete {
-                        Button("Delete", role: .destructive) { Task { await delete(category) } }
+                        Button("Delete", role: .destructive) { deleting = category }
                     }
                 }
             }
+        }
+        .confirmationDialog("Delete \(deleting?.name ?? "this category")?", isPresented: .init(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+                            titleVisibility: .visible, presenting: deleting) { category in
+            Button("Delete category", role: .destructive) { Task { await delete(category) } }
+        } message: { _ in
+            Text("A category that still has products can’t be deleted: move them to another category first.")
         }
         .overlay {
             switch state {
@@ -585,7 +477,7 @@ struct ShopCategoriesView: View {
         }
         .sheet(item: $editing) { edit in
             NavigationStack {
-                ShopCategoryForm(category: edit.category) { await load() }
+                ShopCategoryForm(category: edit.category, all: state.value ?? []) { await load() }
             }
         }
         .task { await load() }
@@ -620,39 +512,69 @@ private struct ShopCategoryEdit: Identifiable {
 
 private struct ShopCategoryForm: View {
     let category: ShopCategory?
+    let all: [ShopCategory]
     let onSaved: () async -> Void
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
     @State private var slug: String
     @State private var description: String
+    @State private var imageURL: String
+    @State private var parentUuid: String
     @State private var sortOrder: Int
     @State private var isActive: Bool
+    @State private var seo: [ShopLocale: ShopSeoDraft]
+    @State private var seoLocale: ShopLocale = .en
     @State private var saving = false
     @State private var error: APIError?
 
-    init(category: ShopCategory?, onSaved: @escaping () async -> Void) {
+    init(category: ShopCategory?, all: [ShopCategory], onSaved: @escaping () async -> Void) {
         self.category = category
+        self.all = all
         self.onSaved = onSaved
         _name = State(initialValue: category?.name ?? "")
         _slug = State(initialValue: category?.slug ?? "")
         _description = State(initialValue: category?.description ?? "")
+        _imageURL = State(initialValue: category?.imageUrl ?? "")
+        _parentUuid = State(initialValue: category?.parentUuid ?? "")
         _sortOrder = State(initialValue: category?.sortOrder ?? 0)
         _isActive = State(initialValue: category?.isActive ?? true)
+        _seo = State(initialValue: ShopSeoDraft.drafts(category?.seo))
     }
 
     var body: some View {
         Form {
             Section {
-                TextField("Name", text: $name)
-                TextField("Slug (optional)", text: $slug)
+                TextField("Name", text: $name).accessibilityIdentifier("shopCategory.name")
+                TextField("Web address (made from the name)", text: $slug)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                Picker("Inside", selection: $parentUuid) {
+                    Text("Top level").tag("")
+                    ForEach(all.filter { $0.uuid != category?.uuid }) { Text($0.name).tag($0.uuid) }
+                }
                 TextField("Description", text: $description, axis: .vertical).lineLimit(2...5)
+                TextField("Picture address (https://…)", text: $imageURL)
+                    .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
             }
             Section {
                 Stepper("Sort order \(sortOrder)", value: $sortOrder, in: -100...1000)
                 Toggle("Visible in the shop", isOn: $isActive)
+            }
+            Section {
+                Picker("Language", selection: $seoLocale) {
+                    ForEach(ShopLocale.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                let binding = Binding(get: { seo[seoLocale] ?? ShopSeoDraft() }, set: { seo[seoLocale] = $0 })
+                TextField("Target keyword (staff only)", text: binding.targetKeyword)
+                TextField("Page title", text: binding.title)
+                TextField("Meta description", text: binding.description, axis: .vertical).lineLimit(1...4)
+                TextField("Intro (shown above the products)", text: binding.intro, axis: .vertical).lineLimit(2...6)
+            } header: {
+                Text("Search and page content")
+            } footer: {
+                Text("What Google shows and the text above the category’s products, per shop language.")
             }
             if let error { Section { InlineErrorRow(error: error) } }
         }
@@ -670,14 +592,26 @@ private struct ShopCategoryForm: View {
     private func save() async {
         saving = true
         defer { saving = false }
-        let body = ShopCategoryBody(name: name.trimmingCharacters(in: .whitespaces), slug: slug.trimmedOrNil,
-                                    description: description.trimmedOrNil, sortOrder: sortOrder, isActive: isActive)
-        do {
-            if let category {
-                _ = try await services.shop.updateCategory(category.uuid, body)
-            } else {
-                _ = try await services.shop.createCategory(body)
+        var seoBlock = ShopSeoDraft.block(seo)
+        // Categories have no "who it's for" or questions.
+        if case .object(var blocks) = seoBlock {
+            for (key, value) in blocks {
+                if case .object(var block) = value { block["audience"] = nil; block["faqs"] = nil; blocks[key] = .object(block) }
             }
+            seoBlock = .object(blocks)
+        }
+        let document: [String: JSONValue] = [
+            "name": .string(name.shopTrimmed),
+            "slug": .string(slug.shopTrimmed.isEmpty ? ShopSlug.make(name) : slug.shopTrimmed),
+            "description": .string(description.shopTrimmed),
+            "image_url": .string(imageURL.shopTrimmed),
+            "parent_uuid": parentUuid.isEmpty ? .null : .string(parentUuid),
+            "sort_order": .number(Double(sortOrder)),
+            "is_active": .bool(isActive),
+            "seo": seoBlock,
+        ]
+        do {
+            try await services.shop.saveCategoryDocument(category?.uuid, document)
             await onSaved()
             dismiss()
         } catch {
@@ -781,13 +715,16 @@ struct ShopStockView: View {
     @State private var movements: [ShopStockMovement] = []
     @State private var adjusting: ShopStockTarget?
     @State private var showingMovements = false
+    @State private var historyOf: ShopStockRow?
+    /// "product", "option" or "" for both.
+    @State private var kind = ""
 
     init(lowOnly: Bool = false) {
         _lowOnly = State(initialValue: lowOnly)
     }
 
     private var rows: [ShopStockRow] {
-        let all = state.value ?? []
+        let all = (state.value ?? []).filter { kind.isEmpty || $0.kind == kind }
         guard let term = search.trimmedOrNil?.lowercased() else { return all }
         return all.filter { "\($0.title) \($0.sku ?? "")".lowercased().contains(term) }
     }
@@ -802,6 +739,15 @@ struct ShopStockView: View {
                 .pickerStyle(.segmented)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
+                Picker("Items", selection: $kind) {
+                    Text("Products and options").tag("")
+                    Text("Products").tag("product")
+                    Text("Options").tag("option")
+                }
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+                .accessibilityIdentifier("shopStock.kind")
             }
             Section {
                 ForEach(rows) { row in
@@ -814,9 +760,18 @@ struct ShopStockView: View {
                         ShopStockRowView(row: row)
                     }
                     .buttonStyle(.plain)
+                    .swipeActions(edge: .trailing) {
+                        Button { historyOf = row } label: { Label("History", systemImage: "clock.arrow.circlepath") }
+                            .tint(.blue)
+                    }
+                    .contextMenu {
+                        Button { historyOf = row } label: { Label("Movement history", systemImage: "clock.arrow.circlepath") }
+                    }
                 }
             } footer: {
-                if session.shopPolicy.canUpdate, !rows.isEmpty { Text("Tap a row to adjust its stock.") }
+                if !rows.isEmpty {
+                    Text(session.shopPolicy.canUpdate ? "Tap a row to adjust its stock; swipe left for its history." : "Swipe left on a row for its history.")
+                }
             }
         }
         .searchable(text: $search, prompt: "Product, option or SKU")
@@ -846,6 +801,12 @@ struct ShopStockView: View {
         .sheet(isPresented: $showingMovements) {
             NavigationStack { ShopMovementsView() }
         }
+        .sheet(item: $historyOf) { row in
+            NavigationStack {
+                ShopMovementsView(productUuid: row.isOption ? nil : row.uuid, optionUuid: row.isOption ? row.uuid : nil,
+                                  title: row.title)
+            }
+        }
     }
 
     private func load() async {
@@ -861,6 +822,9 @@ struct ShopStockView: View {
 }
 
 private struct ShopMovementsView: View {
+    var productUuid: String?
+    var optionUuid: String?
+    var title = "Stock movements"
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
     @State private var state: LoadState<[ShopStockMovement]> = .idle
@@ -875,7 +839,7 @@ private struct ShopMovementsView: View {
                 default: EmptyView()
                 }
             }
-            .navigationTitle("Stock movements")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .task { await load() }
@@ -884,7 +848,7 @@ private struct ShopMovementsView: View {
 
     private func load() async {
         do {
-            state = .loaded(try await services.shop.movements(limit: 100))
+            state = .loaded(try await services.shop.movements(productUuid: productUuid, optionUuid: optionUuid, limit: 100))
         } catch {
             state = .failed(error.asAPIError)
         }

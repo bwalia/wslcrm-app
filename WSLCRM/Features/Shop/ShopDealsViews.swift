@@ -126,6 +126,18 @@ struct ShopDealDetailView: View {
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var state: LoadState<ShopDeal> = .idle
+    @State private var editing: RequestEdit?
+    @State private var emailDraft: ShopSupplierEmailDraft?
+    @State private var deleting: ShopSupplierRequest?
+    @State private var busy: String?
+    @State private var notice: String?
+    @State private var actionError: APIError?
+
+    /// The request form: a new one, or one being changed.
+    struct RequestEdit: Identifiable {
+        let request: ShopSupplierRequest?
+        var id: String { request?.uuid ?? "new" }
+    }
 
     var body: some View {
         Group {
@@ -138,99 +150,207 @@ struct ShopDealDetailView: View {
         .navigationTitle(code)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if session.shopPolicy.canCreate, state.value != nil {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { editing = RequestEdit(request: nil) } label: { Label("New supplier request", systemImage: "plus") }
+                        .accessibilityIdentifier("shopDeal.newRequest")
+                }
+            }
         }
         .task { await load() }
+        .sheet(item: $editing) { edit in
+            if let deal = state.value {
+                NavigationStack {
+                    ShopDealRequestForm(deal: deal, request: edit.request) { message in
+                        notice = message
+                        Task { await load() }
+                    }
+                }
+            }
+        }
+        .sheet(item: $emailDraft) { draft in
+            NavigationStack { ShopSupplierEmailDraftView(draft: draft) }
+        }
+        .confirmationDialog("Delete the request to \(deleting?.supplierName ?? "this supplier")?",
+                            isPresented: .init(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+                            titleVisibility: .visible, presenting: deleting) { request in
+            Button("Delete request", role: .destructive) { Task { await delete(request) } }
+        } message: { _ in
+            Text("Its prices leave the comparison. The deal’s activity keeps a note that it was deleted.")
+        }
     }
 
     private func content(_ deal: ShopDeal) -> some View {
-        List {
+        let policy = session.shopPolicy
+        return List {
             Section {
                 CopyableRow(label: "Deal code", value: deal.dealCode)
             } footer: {
-                Text("Suppliers only ever see this code, never the customer.")
+                Text("Suppliers only ever see this code, never the customer. Find any deal from Deals by its code, a quote or order number, a supplier’s quote reference or the customer’s email.")
             }
+
+            if let notice {
+                Section { Label(notice, systemImage: "checkmark.circle").foregroundStyle(Tone.success.textColor) }
+            }
+            if let actionError { Section { InlineErrorRow(error: actionError) } }
 
             Section("Customer") {
                 DetailRow(label: "Name", value: deal.customer.name)
                 DetailRow(label: "Company", value: deal.customer.company)
                 if let email = deal.customer.email { EmailLinkRow(email: email) }
                 if let phone = deal.customer.phone { PhoneLinkRow(name: deal.customer.name, phone: phone) }
-            }
-
-            if !deal.quotes.isEmpty {
-                Section("Quotes") {
-                    ForEach(deal.quotes) { q in
-                        NavigationLink {
-                            ShopQuoteDetailView(uuid: q.uuid)
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(q.quoteNumber + (q.revisionNo > 0 ? " (rev \(q.revisionNo))" : ""))
-                                        .font(.wsSubheadline.monospacedDigit().weight(.semibold))
-                                    Text([q.kind == "order" ? "Order Authorisation" : nil, q.superseded ? "Replaced by a newer revision" : nil,
-                                          q.orderNumber.map { "Order \($0)" }].compactMap { $0 }.joined(separator: " · "))
-                                        .font(.wsFootnote).foregroundStyle(.secondaryText)
-                                }
-                                Spacer()
-                                VStack(alignment: .trailing, spacing: 4) {
-                                    q.status.badge
-                                    Text(ShopMoney.format(q.totalMinor, currency: q.currency) ?? "").font(.wsFootnote.monospacedDigit())
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if !deal.orders.isEmpty {
-                Section("Orders") {
-                    ForEach(deal.orders) { o in
-                        NavigationLink {
-                            ShopOrderDetailView(uuid: o.uuid)
-                        } label: {
-                            HStack {
-                                Text(o.orderNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
-                                Spacer()
-                                VStack(alignment: .trailing, spacing: 4) {
-                                    o.status.badge
-                                    Text(ShopMoney.format(o.totalMinor, currency: o.currency) ?? "").font(.wsFootnote.monospacedDigit())
-                                }
-                            }
-                        }
-                    }
+                if !deal.leads.isEmpty {
+                    DetailRow(label: "CRM lead", value: deal.leads.map {
+                        "\($0.name?.trimmedOrNil ?? $0.email ?? "Lead") (\(Formatters.humanize($0.status ?? "new")))"
+                    }.joined(separator: ", "))
                 }
             }
 
             Section {
                 if deal.supplierRequests.isEmpty {
-                    Text("No supplier has been asked yet. Ask one from the quote.").foregroundStyle(.secondaryText)
+                    Text(policy.canCreate
+                         ? "No supplier has been asked yet. Add a request with + above, then use “Email supplier” to write the email."
+                         : "No supplier has been asked yet.")
+                        .foregroundStyle(.secondaryText)
                 }
-                ForEach(deal.supplierRequests) { ShopSupplierRequestRow(request: $0) }
+                ForEach(deal.supplierRequests) { request in
+                    VStack(alignment: .leading, spacing: 8) {
+                        ShopSupplierRequestRow(request: request, currency: deal.currency)
+                        if policy.canUpdate || policy.canDelete {
+                            HStack {
+                                if policy.canUpdate {
+                                    Button { Task { await draftEmail(request) } } label: {
+                                        if busy == request.uuid { ProgressView() } else { Label("Email supplier", systemImage: "envelope") }
+                                    }
+                                    Button { editing = RequestEdit(request: request) } label: { Label("Edit", systemImage: "pencil") }
+                                }
+                                Spacer()
+                                if policy.canDelete {
+                                    Button(role: .destructive) { deleting = request } label: {
+                                        Label("Delete", systemImage: "trash").labelStyle(.iconOnly)
+                                    }
+                                    .accessibilityLabel("Delete the request to \(request.supplierName ?? "the supplier")")
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(busy != nil)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
             } header: {
                 Text("Suppliers asked")
             } footer: {
                 if !deal.supplierRequests.isEmpty {
-                    Text("Record their prices and compare them on the web.")
+                    Text("Record each supplier’s prices with Edit; they are compared with your price below.")
                 }
             }
 
-            if !deal.purchaseOrders.isEmpty {
-                Section("Purchase orders") {
-                    ForEach(deal.purchaseOrders) { po in
-                        NavigationLink {
-                            PurchaseOrderDetailView(uuid: po.uuid)
-                        } label: {
+            ShopDealCompareSection(deal: deal)
+
+            Section("Internal notes") {
+                if deal.notes.isEmpty {
+                    Text("No notes yet.").foregroundStyle(.secondaryText)
+                }
+                ForEach(deal.notes) { note in
+                    NavigationLink {
+                        if note.kind == "order" { ShopOrderDetailView(uuid: note.uuid) } else { ShopQuoteDetailView(uuid: note.uuid) }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(note.source).font(.wsFootnote.weight(.semibold))
+                            Text(note.text).font(.wsSubheadline)
+                        }
+                    }
+                }
+            }
+
+            Section("Customer quotes") {
+                if deal.quotes.isEmpty { Text("None.").foregroundStyle(.secondaryText) }
+                ForEach(deal.quotes) { q in
+                    NavigationLink {
+                        ShopQuoteDetailView(uuid: q.uuid)
+                    } label: {
+                        HStack {
                             VStack(alignment: .leading, spacing: 2) {
-                                HStack {
-                                    Text(po.poNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
-                                    Spacer()
-                                    if let status = po.status { Text(Formatters.humanize(status)).font(.wsFootnote).foregroundStyle(.secondaryText) }
-                                }
-                                Text([po.supplierName, po.dropShip ? "Delivered to the customer" : nil].compactMap { $0 }.joined(separator: " · "))
+                                Text(q.quoteNumber + (q.revisionNo > 0 ? " (rev \(q.revisionNo))" : ""))
+                                    .font(.wsSubheadline.monospacedDigit().weight(.semibold))
+                                Text([q.kind == "order" ? "Order Authorisation" : "Quote", q.superseded ? "Replaced by a newer revision" : nil,
+                                      q.orderNumber.map { "Order \($0)" }, Formatters.dateTime(q.createdAt)].compactMap { $0 }.joined(separator: " · "))
                                     .font(.wsFootnote).foregroundStyle(.secondaryText)
+                            }
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 4) {
+                                q.status.badge
+                                Text(ShopMoney.format(q.totalMinor, currency: q.currency) ?? "").font(.wsFootnote.monospacedDigit())
                             }
                         }
                     }
+                }
+            }
+
+            Section("Orders") {
+                if deal.orders.isEmpty { Text("None yet.").foregroundStyle(.secondaryText) }
+                ForEach(deal.orders) { o in
+                    NavigationLink {
+                        ShopOrderDetailView(uuid: o.uuid)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(o.orderNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
+                                if let paid = Formatters.dateTime(o.paidAt) {
+                                    Text("Paid \(paid)").font(.wsFootnote).foregroundStyle(.secondaryText)
+                                }
+                            }
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 4) {
+                                o.status.badge
+                                Text(ShopMoney.format(o.totalMinor, currency: o.currency) ?? "").font(.wsFootnote.monospacedDigit())
+                            }
+                        }
+                    }
+                }
+            }
+
+            Section("Purchase orders to suppliers") {
+                if deal.purchaseOrders.isEmpty { Text("None yet. Raise one from the paid order.").foregroundStyle(.secondaryText) }
+                ForEach(deal.purchaseOrders) { po in
+                    NavigationLink {
+                        PurchaseOrderDetailView(uuid: po.uuid)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Text(po.poNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
+                                Spacer()
+                                if let status = po.status { Text(Formatters.humanize(status)).font(.wsFootnote).foregroundStyle(.secondaryText) }
+                            }
+                            Text([po.supplierName, po.total.map { Formatters.money(Decimal($0), currency: po.currency) ?? "" }]
+                                .compactMap { $0 }.joined(separator: " · "))
+                                .font(.wsFootnote).foregroundStyle(.secondaryText)
+                            if po.dropShip {
+                                Label(po.legacyDropShip ? "Drop-ship raised before deal codes (no confirmation recorded)"
+                                                        : "Drop-ship, confirmed by staff", systemImage: "truck.box")
+                                    .font(.wsFootnote)
+                                    .foregroundStyle(po.legacyDropShip ? Tone.warning.textColor : .secondaryText)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !deal.audit.isEmpty {
+                Section {
+                    ForEach(Array(deal.audit.enumerated()), id: \.offset) { _, entry in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.title).font(.wsSubheadline)
+                            Text([entry.by ?? "System", Formatters.dateTime(entry.at)].compactMap { $0 }.joined(separator: " · "))
+                                .font(.wsCaption).foregroundStyle(.secondaryText)
+                        }
+                    }
+                } header: {
+                    Text("Activity")
+                } footer: {
+                    Text("Who viewed or changed the link between the customer and suppliers.")
                 }
             }
         }
@@ -244,41 +364,71 @@ struct ShopDealDetailView: View {
         } catch {
             let apiError = error.asAPIError
             if case .cancelled = apiError { return }
-            if state.value == nil { state = .failed(apiError) }
+            if state.value == nil { state = .failed(apiError) } else { actionError = apiError }
+        }
+    }
+
+    private func draftEmail(_ request: ShopSupplierRequest) async {
+        busy = request.uuid
+        defer { busy = nil }
+        do {
+            emailDraft = try await services.shop.supplierRequestEmailDraft(request.uuid)
+            actionError = nil
+        } catch {
+            actionError = error.asAPIError
+        }
+    }
+
+    private func delete(_ request: ShopSupplierRequest) async {
+        busy = request.uuid
+        defer { busy = nil }
+        do {
+            try await services.shop.deleteSupplierRequest(request.uuid)
+            notice = "Request to \(request.supplierName ?? "the supplier") deleted."
+            actionError = nil
+            await load()
+        } catch {
+            actionError = error.asAPIError
         }
     }
 }
 
 struct ShopSupplierRequestRow: View {
     let request: ShopSupplierRequest
+    var currency = "GBP"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(request.supplierName ?? "Supplier").font(.wsHeadline)
                 Spacer()
-                StatusBadge(text: request.kind == "intro" ? "Introduction" : (request.isAnswered ? "Answered" : "Asked"),
+                StatusBadge(text: request.kind == "intro" ? "Customer introduced" : (request.isAnswered ? "Answered" : "Asked"),
                             systemImage: request.kind == "intro" ? "person.2" : (request.isAnswered ? "checkmark.circle" : "paperplane"),
-                            tone: request.kind == "intro" ? .info : (request.isAnswered ? .success : .neutral))
+                            tone: request.kind == "intro" ? .warning : (request.isAnswered ? .success : .neutral))
             }
             let sent = [request.contactName, request.contactEmail, request.sentAt.map { "sent \($0)" },
                         request.channelLabel.map { "by \($0)" }].compactMap { $0 }
-            if !sent.isEmpty {
-                Text(sent.joined(separator: " · ")).font(.wsFootnote).foregroundStyle(.secondaryText)
-            }
+            Text(sent.isEmpty ? "No contact" : sent.joined(separator: " · ")).font(.wsFootnote).foregroundStyle(.secondaryText)
             ForEach(Array(request.lines.enumerated()), id: \.offset) { _, line in
                 HStack(alignment: .firstTextBaseline) {
                     Text("\(line.qty ?? 1) × \(line.description ?? "Item")").font(.wsSubheadline).lineLimit(2)
                     Spacer()
                     if let price = line.unitPriceMinor {
-                        Text(ShopMoney.format(price, currency: "GBP") ?? "").font(.wsSubheadline.monospacedDigit())
+                        Text(ShopMoney.format(price, currency: currency) ?? "").font(.wsSubheadline.monospacedDigit())
                     }
                 }
+            }
+            if let total = request.pricedTotalMinor {
+                Text("\(request.lines.count) line\(request.lines.count == 1 ? "" : "s") · \(ShopMoney.format(total, currency: currency) ?? "") ex VAT")
+                    .font(.wsFootnote.weight(.semibold))
             }
             let answer = [request.leadTime.map { "Lead time \($0)" }, request.validUntil.map { "valid until \($0)" },
                           request.supplierQuoteRef.map { "their ref \($0)" }].compactMap { $0 }
             if !answer.isEmpty {
                 Text(answer.joined(separator: " · ")).font(.wsFootnote).foregroundStyle(.secondaryText)
+            }
+            if let notes = request.notes?.trimmedOrNil {
+                Text(notes).font(.wsFootnote).foregroundStyle(.secondaryText).lineLimit(3)
             }
         }
         .padding(.vertical, 2)
@@ -286,29 +436,54 @@ struct ShopSupplierRequestRow: View {
     }
 }
 
+/// A stock enquiry to a supplier and, once recorded, their answer. With `onChange`, tapping it records or changes
+/// their answer (or deletes the enquiry) for people who may edit the shop.
 struct ShopStockEnquiryRow: View {
     let enquiry: ShopStockEnquiry
     let currency: String
+    var onChange: (@MainActor () async -> Void)?
+    @Environment(SessionStore.self) private var session
+    @State private var answering = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack {
-                Text(enquiry.supplierName ?? "Supplier").font(.wsSubheadline.weight(.semibold))
-                Spacer()
-                Text(enquiry.answered ? "Answered" : "Asked").font(.wsFootnote)
-                    .foregroundStyle(enquiry.answered ? Tone.success.textColor : .secondaryText)
+        let editable = onChange != nil && (session.shopPolicy.canUpdate || session.shopPolicy.canDelete)
+        Button {
+            if editable { answering = true }
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text(enquiry.supplierName ?? "Supplier").font(.wsSubheadline.weight(.semibold))
+                    Spacer()
+                    Text(enquiry.answered ? "Answered" : "Asked").font(.wsFootnote)
+                        .foregroundStyle(enquiry.answered ? Tone.success.textColor : .secondaryText)
+                }
+                Text(["\(enquiry.qty) wanted", enquiry.sentAt.map { "sent \($0)" }, enquiry.channelLabel.map { "by \($0)" }]
+                    .compactMap { $0 }.joined(separator: " · "))
+                    .font(.wsFootnote).foregroundStyle(.secondaryText)
+                if enquiry.answered {
+                    Text([enquiry.stockQty.map { "\($0) in stock" }, enquiry.leadTime.map { "lead time \($0)" },
+                          enquiry.unitPriceMinor.flatMap { ShopMoney.format($0, currency: currency) }.map { "\($0) ex VAT each" },
+                          enquiry.validUntil.map { "valid until \($0)" }, enquiry.supplierQuoteRef.map { "ref \($0)" }]
+                        .compactMap { $0 }.joined(separator: " · "))
+                        .font(.wsFootnote)
+                    if let notes = enquiry.notes?.trimmedOrNil {
+                        Text(notes).font(.wsFootnote).foregroundStyle(.secondaryText)
+                    }
+                } else {
+                    Text(editable ? "Waiting for their answer · tap to record it" : "Waiting for their answer")
+                        .font(.wsFootnote).foregroundStyle(Tone.warning.textColor)
+                }
             }
-            Text(["\(enquiry.qty) wanted", enquiry.sentAt.map { "sent \($0)" }, enquiry.channelLabel.map { "by \($0)" }]
-                .compactMap { $0 }.joined(separator: " · "))
-                .font(.wsFootnote).foregroundStyle(.secondaryText)
-            if enquiry.answered {
-                Text([enquiry.stockQty.map { "\($0) in stock" }, enquiry.leadTime.map { "lead time \($0)" },
-                      enquiry.unitPriceMinor.flatMap { ShopMoney.format($0, currency: currency) }.map { "\($0) ex VAT" },
-                      enquiry.validUntil.map { "valid until \($0)" }].compactMap { $0 }.joined(separator: " · "))
-                    .font(.wsFootnote)
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(editable ? "Record their answer" : "")
+        .sheet(isPresented: $answering) {
+            NavigationStack {
+                ShopEnquiryAnswerForm(enquiry: enquiry) { await onChange?() }
             }
         }
-        .padding(.vertical, 2)
-        .accessibilityElement(children: .combine)
     }
 }

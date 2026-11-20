@@ -202,7 +202,7 @@ extension NativeScreen {
         case .leads: LeadsHomeView()
         case .customers: CustomersListView()
         case .products: ProductsListView()
-        case .orders: OrdersListView()
+        case .orders: SalesOrdersView()
         case .shop: ShopHomeView()
         case .fieldService: FieldServiceHubView()
         case .propertyDealsToday: PDTodayView()

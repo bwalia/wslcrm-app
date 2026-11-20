@@ -15,7 +15,7 @@ extension ModuleCatalog {
 
     static let shop: [ResourceDescriptor] = [
         shopMessageTemplates, shopCredits, shopPriceChanges, shopMembers, shopMembershipSettings, shopLegal,
-        shopSettings, purchaseInvoices,
+        shopSettings, purchaseInvoices, shopWaitlist,
     ]
 
     private static let gbp = FieldKind.money(currencyKey: nil, minorUnits: true, currency: "GBP")
@@ -75,8 +75,8 @@ extension ModuleCatalog {
 
     static let shopCredits = ResourceDescriptor(
         id: "shop.credits", title: "Credits", noun: "credit", systemImage: "gift",
-        api: ResourceAPISpec(list: "\(shopBase)/credits", create: "\(shopBase)/credits", paging: .limitOffset,
-                             searchParam: "q"),
+        // Giving credit is `shop.update` on the server (POST /credits), so it is a list action, not a create form.
+        api: ResourceAPISpec(list: "\(shopBase)/credits", paging: .limitOffset, searchParam: "q"),
         permissions: ResourcePermissions(module: "shop"),
         list: ListSpec(title: ["email"],
                        subtitle: [FieldSpec("reason", "Reason"), FieldSpec("created_at", "Given", .date)],
@@ -104,22 +104,27 @@ extension ModuleCatalog {
                 FieldSpec("used_order_number", "Used on"),
             ]),
         ],
-        form: FormSpec([
-            SectionSpec(nil, [
-                FieldSpec("email", "Customer email", .email, required: true),
-                FieldSpec("amount_minor", "Amount", gbp, required: true),
-                FieldSpec("min_order_minor", "Minimum order", gbp, help: "Credit can be used on orders of at least this much."),
-                FieldSpec("reason", "Reason", .multiline, required: true),
-                FieldSpec("expires_in_days", "Expires after (days)", .integer, help: "Leave empty for the usual length."),
-                FieldSpec("notify", "Email the customer", .bool, defaultValue: .bool(true)),
-            ]),
-        ]),
         actions: [
             ActionSpec("void", "Cancel this credit", systemImage: "xmark.circle", path: "\(shopBase)/credits/{uuid}/void",
                        destructive: true, visibleWhen: .field("status", in: ["available"]),
                        inputs: [FieldSpec("reason", "Why", .multiline)], done: "Credit cancelled."),
         ],
-        summary: "Store credit customers can spend on their next order.")
+        summary: "Store credit customers can spend on their next order.",
+        listActions: [
+            ActionSpec("grant", "Give credit", systemImage: "gift", path: "\(shopBase)/credits",
+                       inputs: [
+                           FieldSpec("email", "Customer email", .email, required: true),
+                           FieldSpec("amount_minor", "Credit (before VAT)", gbp, required: true),
+                           FieldSpec("min_order_minor", "On orders over (before VAT)", gbp,
+                                     help: "Leave empty for any order."),
+                           FieldSpec("expires_in_days", "Use within (days)", .integer, required: true,
+                                     help: "1 to 3650 days.", defaultValue: .number(365)),
+                           FieldSpec("reason", "Reason (saved to the CRM)", .multiline, required: true,
+                                     placeholder: "e.g. Thank you for the university lab order"),
+                           FieldSpec("notify", "Email the customer", .bool, defaultValue: .bool(true)),
+                       ],
+                       done: "Credit given. It is saved to the customer’s CRM lead."),
+        ])
 
     // MARK: Price changes
 
@@ -135,7 +140,7 @@ extension ModuleCatalog {
         permissions: ResourcePermissions(module: "shop"),
         list: ListSpec(title: ["product_name"],
                        subtitle: [FieldSpec("product_sku", "SKU"), FieldSpec("supplier_name", "Supplier"),
-                                  FieldSpec("change_pct", "Change", .percent)],
+                                  FieldSpec("change_pct", "Change %", .decimal(places: 1))],
                        badge: FieldSpec("status", "Status", .status(priceChangeStatus)),
                        trailing: FieldSpec("new_price_minor", "New price", gbp),
                        filters: [FilterSpec("status", "Status", [
@@ -148,7 +153,8 @@ extension ModuleCatalog {
             SectionSpec("Price", [
                 FieldSpec("old_price_minor", "Was", gbp), FieldSpec("new_price_minor", "New", gbp),
                 FieldSpec("current_price_minor", "Now on the shop", gbp), FieldSpec("cost_minor", "Cost", gbp),
-                FieldSpec("margin_pct", "Margin", .percent), FieldSpec("change_pct", "Change", .percent),
+                FieldSpec("margin_pct", "Margin %", .decimal(places: 2)),
+                FieldSpec("change_pct", "Change %", .decimal(places: 1)),
             ]),
             SectionSpec("From", [
                 FieldSpec("supplier_name", "Supplier"), FieldSpec("supplier_sku", "Supplier's code"),
@@ -263,29 +269,48 @@ extension ModuleCatalog {
 
     // MARK: Legal record
 
+    /// The shop's legal documents (workstation-website shop/src/lib/legal); unknown keys show as sent.
+    static let legalDocuments = [
+        Choice("terms-of-sale", "Terms of Sale"), Choice("trade-terms", "Trade terms"),
+        Choice("privacy-notice", "Privacy notice"), Choice("ai-assistant", "AI assistant notice"),
+        Choice("important-information", "Important information"),
+    ]
+
+    static let legalCheckpoints = [
+        Choice("register", "Signing in"), Choice("quote", "Quote request"), Choice("checkout", "Checkout"),
+        Choice("trade_join", "Joining Trade"), Choice("chat", "AI chat"), Choice("enquiry", "Enquiry or waitlist"),
+        Choice("contact", "Website contact form"),
+    ]
+
     static let shopLegal = ResourceDescriptor(
         id: "shop.legal", title: "Legal record", noun: "confirmation", systemImage: "scroll",
         api: ResourceAPISpec(list: "\(shopBase)/legal/acceptances", paging: .limitOffset, searchParam: "q"),
         permissions: ResourcePermissions(module: "shop"),
         list: ListSpec(title: ["email"],
-                       subtitle: [FieldSpec("document_key", "Document"), FieldSpec("document_version", "Version"),
-                                  FieldSpec("checkpoint", "Where")],
+                       subtitle: [FieldSpec("document_key", "Document", .choice(legalDocuments)),
+                                  FieldSpec("document_version", "Version"),
+                                  FieldSpec("checkpoint", "Where", .choice(legalCheckpoints))],
+                       badge: FieldSpec("email_confirmed", "Email", .status(StatusStyle(
+                           tones: ["true": .success, "false": .neutral], labels: ["true": "Signed in", "false": "Typed"]))),
                        trailing: FieldSpec("created_at", "When", .date),
+                       filters: [FilterSpec("document_key", "Document", legalDocuments),
+                                 FilterSpec("checkpoint", "Where", legalCheckpoints)],
                        emptyTitle: "Nothing recorded yet",
                        emptyDescription: "Each time a customer ticks a legal confirmation, it is kept here.",
                        searchPrompt: "Search by email"),
         detail: [
             SectionSpec(nil, [
-                FieldSpec("email", "Customer", .email), FieldSpec("email_confirmed", "Email confirmed", .bool),
-                FieldSpec("document_key", "Document"), FieldSpec("document_version", "Version"),
-                FieldSpec("checkpoint", "Where"), FieldSpec("subject_ref", "About"),
+                FieldSpec("email", "Customer", .email),
+                FieldSpec("email_confirmed", "Signed in (not typed into a form)", .bool),
+                FieldSpec("document_key", "Document", .choice(legalDocuments)), FieldSpec("document_version", "Version"),
+                FieldSpec("checkpoint", "Where", .choice(legalCheckpoints)), FieldSpec("subject_ref", "For"),
                 FieldSpec("created_at", "When", .dateTime),
             ]),
             SectionSpec("What they agreed to", [FieldSpec("statement", "Statement", .multiline)]),
             SectionSpec("Evidence", [
                 FieldSpec("content_hash", "Document fingerprint"), FieldSpec("client_ip", "IP address"),
-                FieldSpec("user_agent", "Device", .multiline),
-            ]),
+                FieldSpec("user_agent", "Browser", .multiline),
+            ], footer: "The fingerprint is the SHA-256 of the document text they saw."),
         ],
         summary: "Legal confirmations customers have given, kept as evidence.",
         listActions: [
@@ -328,43 +353,54 @@ extension ModuleCatalog {
             ]),
             SectionSpec("Purchase orders: bill to", purchaseOrderParty("po_bill_to")),
             SectionSpec("Purchase orders: deliver to", purchaseOrderParty("po_deliver_to")),
+            SectionSpec(nil, [FieldSpec("updated_at", "Last changed", .dateTime)]),
         ],
         form: FormSpec([
             SectionSpec("Checkout", [
                 FieldSpec("checkout_enabled", "Customers can pay online", .bool,
                           help: "Off: orders become enquiries and nobody pays online."),
                 FieldSpec("order_alert_email", "New order alerts go to", .email),
-                FieldSpec("customer_delivery_notifications", "Email customers about delivery changes", .bool),
+                FieldSpec("customer_delivery_notifications", "Customer emails from the shop", .bool,
+                          help: "Order update emails and delivery change decisions. Off: staff can only send test copies to themselves."),
             ]),
-            SectionSpec("Delivery", [
-                FieldSpec("delivery_cost_minor", "Delivery charge", gbp),
-                FieldSpec("delivery_handling_min_days", "Handling from (days)", .integer),
-                FieldSpec("delivery_handling_max_days", "Handling up to (days)", .integer),
-                FieldSpec("delivery_transit_min_days", "In transit from (days)", .integer),
-                FieldSpec("delivery_transit_max_days", "In transit up to (days)", .integer),
-            ]),
-            SectionSpec("Quotes and deals", [
-                FieldSpec("quote_valid_days", "Quotes valid for (days)", .integer),
-                FieldSpec("deal_code_prefix", "Deal code starts with"),
-                FieldSpec("deal_code_length", "Deal code length", .integer),
-            ]),
+            SectionSpec("UK delivery and quote validity", [
+                FieldSpec("delivery_cost_minor", "UK delivery cost (ex VAT)", gbp, help: "0 shows as “Included”."),
+                FieldSpec("delivery_handling_min_days", "Dispatch: from (working days)", .integer,
+                          help: "In-stock items. The shop says “Ships in 1–2 days”."),
+                FieldSpec("delivery_handling_max_days", "Dispatch: up to (working days)", .integer,
+                          help: "Out-of-stock items use their own lead time."),
+                FieldSpec("delivery_transit_min_days", "Courier: from (working days)", .integer, help: "After dispatch, UK mainland."),
+                FieldSpec("delivery_transit_max_days", "Courier: up to (working days)", .integer),
+                FieldSpec("quote_valid_days", "Quotes hold their price for (days)", .integer,
+                          help: "New quotes; also the “price valid until” search engines see. 1 to 365."),
+            ], footer: "What the shop tells customers and search engines (Google Shopping) about delivery. "
+                + "Keep it the same as the basket and your Terms of Sale."),
+            SectionSpec("Deal codes", [
+                FieldSpec("deal_code_prefix", "Prefix", help: "1 to 6 letters or numbers."),
+                FieldSpec("deal_code_length", "Length (random characters)", .integer, help: "6 to 16. 8 gives XXXX-XXXX."),
+            ], footer: "Deal codes are private: staff and suppliers see them, customers never do."),
             SectionSpec("Suppliers", [
-                FieldSpec("supplier_portal_enabled", "Supplier portal on", .bool),
-                FieldSpec("supplier_portal_emails_enabled", "Email suppliers their portal link", .bool),
+                FieldSpec("supplier_portal_enabled", "Supplier portal on", .bool,
+                          help: "On: suppliers can sign in, see their own purchase orders, upload proformas and invoices, "
+                              + "enter dispatch and write to you."),
+                FieldSpec("supplier_portal_emails_enabled", "Supplier portal emails", .bool,
+                          help: "Off: nothing is emailed to suppliers about their purchase orders; they see changes when they sign in."),
             ]),
             SectionSpec("Purchase orders: bill to", purchaseOrderParty("po_bill_to")),
-            SectionSpec("Purchase orders: deliver to", purchaseOrderParty("po_deliver_to")),
+            SectionSpec("Purchase orders: deliver to us", purchaseOrderParty("po_deliver_to"),
+                        footer: "Leave empty to use the Bill to address. Suppliers deliver here unless you confirm a drop-ship."),
         ], sendOnlyChanges: true),
         summary: "How the shop takes orders, delivers and raises purchase orders.",
         singleton: true)
 
     private static func purchaseOrderParty(_ key: String) -> [FieldSpec] {
         [
-            FieldSpec("\(key).name", "Name"), FieldSpec("\(key).company", "Company"),
+            FieldSpec("\(key).company", "Company"),
             FieldSpec("\(key).line1", "Address line 1"), FieldSpec("\(key).line2", "Address line 2"),
             FieldSpec("\(key).city", "Town or city"), FieldSpec("\(key).county", "County"),
             FieldSpec("\(key).postcode", "Postcode"), FieldSpec("\(key).country", "Country"),
             FieldSpec("\(key).phone", "Phone", .phone), FieldSpec("\(key).email", "Email", .email),
+            FieldSpec("\(key).vat_number", "VAT number"),
         ]
     }
 
@@ -413,14 +449,49 @@ extension ModuleCatalog {
         links: [LinkSpec("Open the purchase order", key: "purchase_order.uuid", target: .purchaseOrder,
                          systemImage: "shippingbox.and.arrow.backward")])
 
+    // MARK: Waitlist (back-in-stock requests)
+
+    static let shopWaitlist = ResourceDescriptor(
+        id: "shop.waitlist", title: "Waitlist", noun: "request", systemImage: "bell.badge",
+        // One row per person per product, with no id of its own: rows are told apart by their content.
+        api: ResourceAPISpec(list: "\(shopBase)/waitlist", paging: .none, searchParam: nil, idKeys: []),
+        permissions: ResourcePermissions(module: "shop"),
+        list: ListSpec(title: ["email"],
+                       subtitle: [FieldSpec("product_name", "Product"), FieldSpec("sku", "SKU"),
+                                  FieldSpec("created_at", "Asked", .date)],
+                       badge: FieldSpec("is_member", "Customer", .status(StatusStyle(
+                           tones: ["true": .brand, "false": .neutral], symbols: ["true": "crown"],
+                           labels: ["true": "VIP member", "false": "Customer"]))),
+                       filters: [FilterSpec("include_notified", "Show", [Choice("true", "Include people already told")])],
+                       emptyTitle: "Nobody is waiting",
+                       emptyDescription: "When a product is out of stock, customers can ask to be told when it is back. "
+                           + "They appear here, VIP members first, until they have been told."),
+        detail: [
+            SectionSpec(nil, [
+                FieldSpec("email", "Customer", .email), FieldSpec("is_member", "VIP member", .bool),
+                FieldSpec("product_name", "Product"), FieldSpec("sku", "SKU"),
+                FieldSpec("created_at", "Asked", .dateTime), FieldSpec("notified_at", "Told it is back", .dateTime),
+            ]),
+        ],
+        summary: "Customers waiting for a product to be back in stock. They are emailed when stock arrives.",
+        links: [LinkSpec("Open the product", key: "product_uuid", target: .shopProduct, systemImage: "shippingbox")])
+
     // MARK: Reports
 
     static let shopReports: [ReportSpec] = [shopBelowCost]
 
+    /// Where a known cost comes from (product `cost_source`, option `cost_source`).
+    static let costSources = [
+        Choice("supplier", "Supplier"), Choice("manual", "Entered by hand"), Choice("component", "Component product"),
+        Choice("option", "Entered on the option"),
+    ]
+
     static let shopBelowCost = ReportSpec(
         id: "shop.below_cost", title: "Below cost", systemImage: "chart.line.downtrend.xyaxis",
-        path: "\(shopBase)/pricing/below-cost",
-        summary: "What is priced below its known cost, and what has no cost yet so its margin can’t be checked.",
+        path: "\(shopBase)/pricing/below-cost", query: ["include_quotes": "true"],
+        summary: "What is priced below its known cost (the supplier’s when linked, else the one entered by hand), "
+            + "what has no cost yet so its margin can’t be checked, and open quotes with a line below cost. "
+            + "Saving a product with a price below cost is refused.",
         metrics: [
             FieldSpec("missing_cost.products", "Products with no cost", .integer),
             FieldSpec("missing_cost.options", "Options with no cost", .integer),
@@ -428,14 +499,19 @@ extension ModuleCatalog {
         sections: [
             ReportSectionSpec("Products below cost", key: "products",
                               list: ListSpec(title: ["name"],
-                                             subtitle: [FieldSpec("sku", "SKU"), FieldSpec("cost_minor", "Cost", gbp)],
+                                             subtitle: [FieldSpec("sku", "SKU"), FieldSpec("cost_minor", "Cost", gbp),
+                                                        FieldSpec("cost_source", "Cost from", .choice(costSources)),
+                                                        FieldSpec("margin_minor", "Margin", gbp)],
+                                             badge: FieldSpec("status", "Status", .status(.standard)),
                                              trailing: FieldSpec("price_minor", "Price", gbp)),
                               opens: LinkSpec("Product", key: "uuid", target: .shopProduct),
                               empty: "No product is priced below its cost."),
             ReportSectionSpec("Options below cost", key: "options",
                               list: ListSpec(title: ["option_name"],
                                              subtitle: [FieldSpec("product_name", "Product"), FieldSpec("group_name", "Group"),
-                                                        FieldSpec("cost_minor", "Cost", gbp)],
+                                                        FieldSpec("cost_minor", "Cost", gbp),
+                                                        FieldSpec("cost_source", "Cost from", .choice(costSources)),
+                                                        FieldSpec("margin_minor", "Margin", gbp)],
                                              trailing: FieldSpec("price_minor", "Price", gbp)),
                               opens: LinkSpec("Product", key: "product_uuid", target: .shopProduct),
                               empty: "No option is priced below its cost."),
@@ -443,5 +519,14 @@ extension ModuleCatalog {
                               list: ListSpec(title: ["name"], subtitle: [FieldSpec("sku", "SKU")]),
                               opens: LinkSpec("Product", key: "uuid", target: .shopProduct),
                               empty: "Every product has a cost."),
+            ReportSectionSpec("Open quotes below current cost", key: "quotes",
+                              list: ListSpec(title: ["quote_number"],
+                                             subtitle: [FieldSpec("customer_name", "Customer"),
+                                                        FieldSpec("kind", "Kind", .choice([Choice("quote", "Quote"),
+                                                                                           Choice("order", "Order Authorisation")])),
+                                                        FieldSpec("lines", "Lines below cost", .count)],
+                                             badge: FieldSpec("status", "Status", .status(.standard))),
+                              opens: LinkSpec("Quote", key: "uuid", target: .shopQuote),
+                              empty: "No draft or sent quote has a line below its current cost."),
         ])
 }

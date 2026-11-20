@@ -7,6 +7,7 @@ struct ShopOrderRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(order.orderNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
+                ShopVipMark(email: order.customer?.email ?? order.email)
                 Spacer()
                 order.status.badge
             }
@@ -26,19 +27,26 @@ struct ShopOrderRow: View {
 
 struct ShopOrdersListView: View {
     @Environment(\.services) private var services
-    @State private var status: ShopOrderStatus?
+    @Environment(SessionStore.self) private var session
+    @State private var filter: ShopOrderListFilter?
+    @State private var counts = ShopOrderListCounts()
 
     init(initialStatus: ShopOrderStatus? = nil) {
-        _status = State(initialValue: initialStatus)
+        _filter = State(initialValue: initialStatus.map { .status($0) })
     }
 
     var body: some View {
-        ModelHost(make: { [shop = services.shop, status] in
-            PagedListModel<ShopOrder> { search, page in try await shop.orders(search: search, status: status, page: page) }
+        ModelHost(make: { [shop = services.shop, filter, counts] in
+            PagedListModel<ShopOrder> { search, page in
+                let result = try await shop.orders(search: search, filter: filter, page: page)
+                counts.bankTransferDue = result.bankTransferDue
+                counts.deliveryChangePending = result.deliveryChangePending
+                return result.page
+            }
         }) { model in
-            PagedList(model: model, searchPrompt: "Order number, email or name", emptyTitle: "No orders",
+            PagedList(model: model, searchPrompt: "Order number, email or company", emptyTitle: "No orders",
                       emptySystemImage: "cart",
-                      emptyDescription: status == nil ? "Orders placed on the shop appear here." : "No orders are \(status!.label.lowercased()).") { order in
+                      emptyDescription: filter == nil ? "Orders placed on the shop appear here." : "No orders: \(filter!.label.lowercased()).") { order in
                 NavigationLink {
                     ShopOrderDetailView(summary: order) { model.replace($0) }
                 } label: {
@@ -47,14 +55,50 @@ struct ShopOrdersListView: View {
             }
         }
         // A new filter needs a new model: the fetch closure captures it.
-        .id(status)
-        .navigationTitle(status?.label ?? "Orders")
+        .id(filter)
+        .navigationTitle(filter?.label ?? "Orders")
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                ShopStatusFilterMenu(selection: $status, options: ShopOrderStatus.filterable, label: \.label)
+            ToolbarItemGroup(placement: .primaryAction) {
+                Menu {
+                    Picker("Show", selection: $filter) {
+                        Text("All orders").tag(ShopOrderListFilter?.none)
+                        Text("Bank transfer due (\(counts.bankTransferDue))").tag(ShopOrderListFilter?.some(.bankTransferDue))
+                        Text("Delivery change requested (\(counts.deliveryChangePending))")
+                            .tag(ShopOrderListFilter?.some(.deliveryChangePending))
+                    }
+                    Picker("Status", selection: $filter) {
+                        ForEach(ShopOrderStatus.filterable, id: \.self) { status in
+                            Text(status.label).tag(ShopOrderListFilter?.some(.status(status)))
+                        }
+                    }
+                    Picker("When", selection: $filter) {
+                        ForEach([7, 30], id: \.self) { n in
+                            Text("Placed in the last \(n) days").tag(ShopOrderListFilter?.some(.placedDays(n)))
+                            Text("Paid in the last \(n) days").tag(ShopOrderListFilter?.some(.paidDays(n)))
+                        }
+                    }
+                } label: {
+                    Label("Filter", systemImage: filter == nil ? "line.3.horizontal.decrease.circle"
+                                                               : "line.3.horizontal.decrease.circle.fill")
+                }
+                .accessibilityIdentifier("shop.filter")
+                if session.shopPolicy.canCreate {
+                    NavigationLink(value: NativeScreenRoute(SalesScreen.newQuote)) {
+                        Label("Create order", systemImage: "plus")
+                    }
+                    .accessibilityIdentifier("shopOrders.create")
+                }
             }
         }
     }
+}
+
+/// The shortcut counts the list shows next to its filters.
+@MainActor
+@Observable
+final class ShopOrderListCounts {
+    var bankTransferDue = 0
+    var deliveryChangePending = 0
 }
 
 /// "All" plus one entry per status, as a toolbar menu.
@@ -90,6 +134,9 @@ struct ShopOrderDetailView: View {
     @State private var busy = false
     @State private var pendingStatus: ShopOrderStatus?
     @State private var editingFulfilment = false
+    @State private var shipping = false
+    @State private var editingAddress = false
+    @State private var notice: String?
     @State private var extras = ShopOrderExtras()
 
     private var current: ShopOrder { order ?? summary }
@@ -109,29 +156,23 @@ struct ShopOrderDetailView: View {
                 if let loadError { InlineErrorRow(error: loadError) { Task { await load() } } }
             }
 
-            let targets = session.shopPolicy.canUpdate ? current.status.manualTargets : []
-            if !targets.isEmpty {
-                Section("Update status") {
-                    ForEach(targets, id: \.self) { status in
-                        Button {
-                            pendingStatus = status
-                        } label: {
-                            Label(status.actionTitle, systemImage: status.systemImage)
-                        }
-                        .buttonStyle(.large([.cancelled, .refunded].contains(status) ? .danger : .progress, prominent: false))
-                        .listRowSeparator(.hidden)
-                        .disabled(busy)
-                    }
-                    if current.status == .pendingPayment {
-                        Text("Cancelling releases the stock held for this order.")
-                            .font(.wsFootnote).foregroundStyle(.secondaryText)
-                    }
-                    if let actionError { InlineErrorRow(error: actionError) }
-                }
+            if order != nil {
+                ShopOrderNextStepSection(order: current, extras: extras, busy: busy, changeStatus: changeStatus) { await load() }
+            }
+            if let actionError { Section { InlineErrorRow(error: actionError) } }
+            if let notice {
+                Section { Label(notice, systemImage: "checkmark.circle").foregroundStyle(Tone.success.textColor) }
+            }
+            if extras.deliveryChangePending && extras.deliveryChangeRequests.isEmpty {
+                Section { Label("The customer asked to change the delivery.", systemImage: "exclamationmark.bubble") }
             }
 
             if !extras.deliveryChangeRequests.isEmpty {
                 ShopOrderDeliveryChangesSection(order: current, requests: extras.deliveryChangeRequests) { await load() }
+            }
+
+            if order != nil {
+                ShopOrderUpdateEmailSection(order: current) { await load() }
             }
 
             Section("Customer") {
@@ -143,8 +184,17 @@ struct ShopOrderDetailView: View {
                     MapsLinkRow(address: address)
                 }
                 DetailRow(label: "VAT number", value: current.customer?.vatNumber)
+                if let agreed = extras.deliveryAddress?.formatted {
+                    DetailRow(label: "Deliver directly to", value: agreed)
+                }
+                DetailRow(label: "Delivery method", value: extras.deliveryMethod)
                 if let day = extras.deliveryDate {
                     DetailRow(label: "Agreed delivery", value: [day, extras.deliveryWindow.map(Self.windowLabel)].compactMap { $0 }.joined(separator: ", "))
+                }
+                DetailRow(label: "Bill to", value: ShopAnyAddress.format(extras.billingAddress))
+                if session.shopPolicy.canUpdate && ShopOrderWorkflow.canEditDeliveryAddress(current.status) && order != nil {
+                    Button { editingAddress = true } label: { Label("Change delivery address", systemImage: "mappin.and.ellipse") }
+                        .accessibilityIdentifier("shopOrder.changeAddress")
                 }
             }
 
@@ -177,6 +227,12 @@ struct ShopOrderDetailView: View {
                 Text("Fulfilment")
             }
 
+            if order != nil {
+                ShopOrderTimelineSection(items: ShopOrderWorkflow.timeline(order: current, extras: extras))
+                ShopOrderPurchaseOrdersSection(purchaseOrders: extras.purchaseOrders)
+                ShopOrderReferencesSection(order: current, extras: extras) { await load() }
+            }
+
             ShopOrderSignatureSection(order: current) { await load() }
 
             ShopOrderCustomerUpdatesSection(order: current, updates: extras.customerUpdates) { await load() }
@@ -184,8 +240,12 @@ struct ShopOrderDetailView: View {
             ShopOrderPaperworkSection(order: current, extras: extras) { await load() }
 
             Section("Payment") {
+                if let received = extras.paidAmountMinor {
+                    DetailRow(label: "Received", value: ShopMoney.format(received, currency: current.currency))
+                }
                 DetailRow(label: "Stripe mode", value: current.stripeMode.map(Formatters.humanize))
                 if let intent = current.stripePaymentIntentId { CopyableRow(label: "Payment intent", value: intent) }
+                if let session = extras.stripeSessionId { CopyableRow(label: "Checkout session", value: session) }
                 if let quoteNumber = current.quoteNumber, let quoteUuid = current.quoteUuid {
                     NavigationLink {
                         ShopQuoteDetailView(uuid: quoteUuid)
@@ -207,11 +267,16 @@ struct ShopOrderDetailView: View {
         .confirmationDialog(pendingStatus?.actionTitle ?? "", isPresented: .init(get: { pendingStatus != nil }, set: { if !$0 { pendingStatus = nil } }),
                             titleVisibility: .visible, presenting: pendingStatus) { status in
             Button(status.actionTitle, role: [.cancelled, .refunded].contains(status) ? .destructive : nil) {
-                Task { await save(ShopOrderUpdate(status: status.rawValue)) }
+                Task {
+                    if await save(ShopOrderUpdate(status: status.rawValue)) { notice = "Order marked \(status.label.lowercased())." }
+                }
             }
         } message: { status in
             if status == .refunded {
-                Text("This records the refund only. Issue the money back in Stripe.")
+                Text("This only records the status. Issue the refund itself in Stripe (a full refund is also picked up automatically from Stripe).")
+            } else if status == .cancelled {
+                Text(current.status == .pendingPayment ? "The order is cancelled and the stock held for it is released."
+                     : "The order will be cancelled. If it was paid, refund it in Stripe as well.")
             }
         }
         .sheet(isPresented: $editingFulfilment) {
@@ -220,6 +285,34 @@ struct ShopOrderDetailView: View {
                     await save(ShopOrderUpdate(tracking: tracking, internalNotes: notes))
                 }
             }
+        }
+        .sheet(isPresented: $shipping) {
+            NavigationStack {
+                ShopFulfilmentForm(tracking: current.tracking ?? ShopTracking(), notes: current.internalNotes ?? "",
+                                   shipping: true) { tracking, _ in
+                    var stamped = tracking ?? ShopTracking()
+                    if stamped.shippedAt == nil { stamped.shippedAt = Date().formatted(.iso8601) }
+                    let ok = await save(ShopOrderUpdate(status: ShopOrderStatus.shipped.rawValue, tracking: stamped))
+                    if ok { notice = "Order marked shipped." }
+                    return ok
+                }
+            }
+        }
+        .sheet(isPresented: $editingAddress) {
+            ShopDeliveryAddressSheet(order: current, extras: extras) { summary in
+                notice = summary
+                await load()
+            }
+        }
+    }
+
+    /// Shipped asks for tracking first; cancel and refund ask to confirm; the rest happen at once.
+    private func changeStatus(_ status: ShopOrderStatus) {
+        switch status {
+        case .shipped: shipping = true
+        case .cancelled, .refunded: pendingStatus = status
+        default:
+            Task { if await save(ShopOrderUpdate(status: status.rawValue)) { notice = "Order marked \(status.label.lowercased())." } }
         }
     }
 
@@ -245,6 +338,7 @@ struct ShopOrderDetailView: View {
             order = saved
             actionError = nil
             onChange?(saved)
+            await load()
             return true
         } catch {
             actionError = error.asAPIError
@@ -279,6 +373,8 @@ extension ShopOrder {
 private struct ShopFulfilmentForm: View {
     @State var tracking: ShopTracking
     @State var notes: String
+    /// "Mark as shipped": tracking for the customer, then the status changes.
+    var shipping = false
     let save: (ShopTracking?, String) async -> Bool
     @Environment(\.dismiss) private var dismiss
     @State private var saving = false
@@ -297,28 +393,30 @@ private struct ShopFulfilmentForm: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             }
-            Section {
-                TextField("Only staff see these", text: $notes, axis: .vertical)
-                    .lineLimit(3...8)
-            } header: {
-                Text("Internal notes")
+            if !shipping {
+                Section {
+                    TextField("Only staff see these", text: $notes, axis: .vertical)
+                        .lineLimit(3...8)
+                } header: {
+                    Text("Internal notes")
+                }
             }
             if failed {
                 Label("Couldn't save. Check your connection and try again.", systemImage: "exclamationmark.triangle")
                     .foregroundStyle(Tone.danger.textColor)
             }
         }
-        .navigationTitle("Fulfilment")
+        .navigationTitle(shipping ? "Mark as shipped" : "Fulfilment")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Save") {
+                Button(shipping ? "Mark shipped" : "Save") {
                     saving = true
                     Task {
                         let cleaned = ShopTracking(carrier: tracking.carrier?.trimmedOrNil,
                                                    trackingNumber: tracking.trackingNumber?.trimmedOrNil,
-                                                   url: tracking.url?.trimmedOrNil)
+                                                   url: tracking.url?.trimmedOrNil, shippedAt: tracking.shippedAt)
                         let ok = await save(cleaned, notes.trimmingCharacters(in: .whitespacesAndNewlines))
                         saving = false
                         failed = !ok

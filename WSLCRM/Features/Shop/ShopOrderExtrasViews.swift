@@ -497,7 +497,7 @@ struct ShopOrderCustomerUpdatesSection: View {
                     Text("The customer won't see it on their order page any more.")
                 }
         } footer: {
-            Text("The customer sees these on their order page. Emails to the customer are sent from the web.")
+            Text("The customer sees these on their order page. To email them, use Update emails above.")
         }
     }
 

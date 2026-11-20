@@ -138,14 +138,17 @@ enum ShopProductStatusPresentation {
 
 // MARK: - Dashboard
 
-/// The shop back office home: the web dashboard's KPIs, what needs doing, and the way into each area.
+/// The shop back office home: the KPIs, what needs doing, the newest VIP members and the way into each area.
 struct ShopHomeView: View {
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var state: LoadState<ShopKPIs> = .idle
     @State private var reconciling = false
+    @State private var reindexing = false
     @State private var notice: String?
+    @State private var noticeTitle = "Reconciled"
     @State private var actionError: APIError?
+    @State private var members: [Record] = []
 
     var body: some View {
         List {
@@ -154,6 +157,7 @@ struct ShopHomeView: View {
             } else if let error = state.error {
                 Section { InlineErrorRow(error: error) { Task { await load() } } }
             }
+            ShopVipMembersSection(rows: members)
             manageSection
         }
         .listStyle(.insetGrouped)
@@ -164,19 +168,30 @@ struct ShopHomeView: View {
         .toolbar {
             if session.shopPolicy.canUpdate {
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task { await reconcile() }
+                    Menu {
+                        Button {
+                            Task { await reconcile() }
+                        } label: {
+                            Label("Reconcile payments", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .accessibilityIdentifier("shop.reconcile")
+                        Button {
+                            Task { await reindex() }
+                        } label: {
+                            Label("Re-index the assistant’s knowledge", systemImage: "books.vertical")
+                        }
+                        .accessibilityIdentifier("shop.reindex")
                     } label: {
-                        if reconciling { ProgressView() } else { Label("Reconcile payments", systemImage: "arrow.triangle.2.circlepath") }
+                        if reconciling || reindexing { ProgressView() } else { Label("Shop actions", systemImage: "ellipsis.circle") }
                     }
-                    .disabled(reconciling)
-                    .accessibilityIdentifier("shop.reconcile")
+                    .disabled(reconciling || reindexing)
+                    .accessibilityIdentifier("shop.actions")
                 }
             }
         }
         .task { await load() }
         .refreshable { await load() }
-        .alert("Reconciled", isPresented: .init(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
+        .alert(noticeTitle, isPresented: .init(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
             Button("OK") {}
         } message: {
             Text(notice ?? "")
@@ -201,17 +216,34 @@ struct ShopHomeView: View {
 
         Section {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                StatTile(title: "Revenue · 30 days", value: ShopMoney.format(kpis.revenuePaid30dMinor, currency: kpis.currency) ?? "—",
-                         systemImage: "sterlingsign.circle")
-                StatTile(title: "Orders today", value: "\(kpis.ordersToday)", systemImage: "cart")
-                StatTile(title: "To fulfil", value: "\(kpis.awaitingFulfilment)", systemImage: "shippingbox")
-                StatTile(title: "Orders · 7 days", value: "\(kpis.orders7d)", systemImage: "calendar")
-                StatTile(title: "Open quotes", value: "\(kpis.openQuotes) · \(ShopMoney.format(kpis.openQuotesValueMinor, currency: kpis.currency) ?? "")",
-                         systemImage: "doc.text")
-                StatTile(title: "Quote → order", value: kpis.quoteConversionRate.formatted(.percent.precision(.fractionLength(0...1))),
-                         systemImage: "arrow.right.circle")
-                StatTile(title: "Low stock", value: "\(kpis.lowStockCount)", systemImage: "exclamationmark.triangle")
-                StatTile(title: "Chats · 7 days", value: "\(kpis.chats7d)", systemImage: "bubble.left.and.bubble.right")
+                tile(StatTile(title: "Orders · 30 days", value: "\(kpis.orders30d)", systemImage: "cart"),
+                     hint: "\(kpis.ordersToday) today, \(kpis.orders7d) in 7 days") { ShopOrdersListView() }
+                if session.shopPolicy.canSeeAnalytics {
+                    NavigationLink(value: NativeScreenRoute(SalesScreen.shopAnalytics)) {
+                        StatTile(title: "Revenue · 30 days (inc VAT)",
+                                 value: ShopMoney.format(kpis.revenuePaid30dMinor, currency: kpis.currency) ?? "—",
+                                 systemImage: "sterlingsign.circle")
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    StatTile(title: "Revenue · 30 days (inc VAT)",
+                             value: ShopMoney.format(kpis.revenuePaid30dMinor, currency: kpis.currency) ?? "—",
+                             systemImage: "sterlingsign.circle")
+                }
+                tile(StatTile(title: "Orders today", value: "\(kpis.ordersToday)", systemImage: "calendar"),
+                     hint: "\(kpis.orders7d) in the last 7 days") { ShopOrdersListView() }
+                tile(StatTile(title: "To fulfil", value: "\(kpis.awaitingFulfilment)", systemImage: "shippingbox"),
+                     hint: "Paid orders waiting to be sent") { ShopOrdersListView(initialStatus: .paid) }
+                tile(StatTile(title: "Open quotes", value: "\(kpis.openQuotes) · \(ShopMoney.format(kpis.openQuotesValueMinor, currency: kpis.currency) ?? "")",
+                              systemImage: "doc.text"),
+                     hint: "Pipeline value") { ShopQuotesListView() }
+                tile(StatTile(title: "Quote → order", value: kpis.quoteConversionRate.formatted(.percent.precision(.fractionLength(0...1))),
+                              systemImage: "arrow.right.circle"),
+                     hint: "Conversion") { ShopQuotesListView() }
+                tile(StatTile(title: "Low stock", value: "\(kpis.lowStockCount)", systemImage: "exclamationmark.triangle"),
+                     hint: "Items at or below their threshold") { ShopStockView(lowOnly: true) }
+                tile(StatTile(title: "AI chats · 7 days", value: "\(kpis.chats7d)", systemImage: "bubble.left.and.bubble.right"),
+                     hint: "Assistant sessions") { ShopChatsListView() }
             }
             .listRowInsets(EdgeInsets())
             .listRowBackground(Color.clear)
@@ -257,15 +289,33 @@ struct ShopHomeView: View {
     @ViewBuilder
     private var manageSection: some View {
         Section("Sell") {
+            if session.shopPolicy.canCreate {
+                NavigationLink(value: NativeScreenRoute(SalesScreen.newQuote)) {
+                    Label("New quote or order", systemImage: "square.and.pencil")
+                }
+                .accessibilityIdentifier("shop.newQuote")
+            }
             NavigationLink { ShopOrdersListView() } label: { Label("Orders", systemImage: "cart") }
                 .accessibilityIdentifier("shop.orders")
             NavigationLink { ShopQuotesListView() } label: { Label("Quotes", systemImage: "doc.text") }
                 .accessibilityIdentifier("shop.quotes")
             NavigationLink { ShopDealsListView() } label: { Label("Deals", systemImage: "lock.doc") }
                 .accessibilityIdentifier("shop.deals")
-            if session.permissions.shows(.orders) {
+            if session.permissions.shows(.orders) || session.permissions.can(.read, .shop) {
                 NavigationLink(value: NativeScreen.orders) { Label("All sales orders", systemImage: "list.bullet.rectangle") }
                     .accessibilityIdentifier("shop.salesOrders")
+            }
+            if session.permissions.can(.create, .orders) {
+                NavigationLink(value: NativeScreenRoute(SalesScreen.pos)) {
+                    Label("Point of Sale", systemImage: "storefront")
+                }
+                .accessibilityIdentifier("shop.pos")
+            }
+            if session.shopPolicy.canSeeAnalytics {
+                NavigationLink(value: NativeScreenRoute(SalesScreen.shopAnalytics)) {
+                    Label("Analytics", systemImage: "chart.bar.xaxis")
+                }
+                .accessibilityIdentifier("shop.analytics")
             }
         }
         Section("Catalogue") {
@@ -291,10 +341,17 @@ struct ShopHomeView: View {
                     .accessibilityIdentifier("shop.purchaseOrders")
                 resourceLink(ModuleCatalog.purchaseInvoices, id: "shop.purchaseInvoices")
             }
-            resourceLink(ModuleCatalog.shopMessageTemplates, id: "shop.templates")
+            NavigationLink { ShopTemplatesView() } label: {
+                Label(ModuleCatalog.shopMessageTemplates.title, systemImage: ModuleCatalog.shopMessageTemplates.systemImage)
+            }
+            .accessibilityIdentifier("shop.templates")
         }
         Section("Customers") {
-            resourceLink(ModuleCatalog.shopMembers, id: "shop.members")
+            NavigationLink { ShopMembersView() } label: {
+                Label(ModuleCatalog.shopMembers.title, systemImage: ModuleCatalog.shopMembers.systemImage)
+            }
+            .accessibilityIdentifier("shop.members")
+            resourceLink(ModuleCatalog.shopWaitlist, id: "shop.waitlist")
             resourceLink(ModuleCatalog.shopCredits, id: "shop.credits")
             NavigationLink { ShopChatsListView() } label: { Label("Assistant chats", systemImage: "bubble.left.and.bubble.right") }
                 .accessibilityIdentifier("shop.chats")
@@ -306,6 +363,15 @@ struct ShopHomeView: View {
             settingsLink(ModuleCatalog.shopSettings, id: "shop.settings")
             settingsLink(ModuleCatalog.shopMembershipSettings, id: "shop.membershipSettings")
         }
+    }
+
+    /// A KPI tile that opens its list, like the dashboard's tiles.
+    private func tile<Destination: View>(_ tile: StatTile, hint: String,
+                                         @ViewBuilder destination: @escaping () -> Destination) -> some View {
+        NavigationLink(destination: destination) {
+            tile.accessibilityHint(hint)
+        }
+        .buttonStyle(.plain)
     }
 
     private func resourceLink(_ descriptor: ResourceDescriptor, id: String) -> some View {
@@ -335,6 +401,10 @@ struct ShopHomeView: View {
 
     private func load() async {
         if state.value == nil { state = .loading }
+        if session.permissions.can(.read, .shop),
+           let page = try? await services.resources.page(ModuleCatalog.shopMembers, search: "", page: 1) {
+            members = page.items.filter { ShopMemberStats.inForce($0) }
+        }
         do {
             state = .loaded(try await services.shop.dashboard())
         } catch {
@@ -350,8 +420,23 @@ struct ShopHomeView: View {
         do {
             let result = try await services.shop.reconcile()
             actionError = nil
+            noticeTitle = "Reconciled"
             notice = Self.describe(result)
             await load()
+        } catch {
+            actionError = error.asAPIError
+        }
+    }
+
+    /// Re-reads products and blog posts into the shop assistant's search index.
+    private func reindex() async {
+        reindexing = true
+        defer { reindexing = false }
+        do {
+            let result = try await services.shop.reindexKnowledge(sources: ["products", "cms_posts"])
+            actionError = nil
+            noticeTitle = "Re-indexed"
+            notice = Self.describe(result)
         } catch {
             actionError = error.asAPIError
         }
