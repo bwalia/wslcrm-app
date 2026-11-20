@@ -132,12 +132,17 @@ struct PDDueRow: View {
 
 // MARK: - Renovations
 
-/// Renovations in progress: each is a kanban board of dated build jobs.
+/// Renovations: each is a kanban board of dated build jobs. In progress, completed or all; start
+/// one (from a deal or standalone, with its builders), and add builders to a running one.
 struct PDRenovationsListView: View {
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @State private var state: LoadState<[PDRenovation]> = .idle
     @State private var cachedAt: Date?
-    @State private var showCompleted = false
+    @State private var status = "active"
+    @State private var starting = false
+    @State private var addingBuilders: PDRenovation?
+    @State private var notice: String?
 
     var body: some View {
         Group {
@@ -146,33 +151,84 @@ struct PDRenovationsListView: View {
             case .failed(let error): ErrorStateView(error: error) { Task { await load() } }
             case .loaded(let renovations):
                 List {
+                    Section {
+                        Picker("Show", selection: $status) {
+                            Text("In progress").tag("active")
+                            Text("Completed").tag("completed")
+                            Text("All").tag("all")
+                        }
+                        .pickerStyle(.segmented)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                        .accessibilityIdentifier("pd.renovations.status")
+                    }
                     if let cachedAt { CachedDataNotice(savedAt: cachedAt) }
                     ForEach(renovations) { renovation in
                         PDRenovationLink(renovation: renovation)
+                            .swipeActions(edge: .trailing) {
+                                if canAddBuilders, renovation.projectUuid != nil {
+                                    Button("Add builders") { addingBuilders = renovation }.tint(.indigo)
+                                }
+                            }
+                            .contextMenu {
+                                if canAddBuilders, renovation.projectUuid != nil {
+                                    Button("Add builders", systemImage: "person.badge.plus") { addingBuilders = renovation }
+                                }
+                                if let deal = renovation.dealUuid {
+                                    NavigationLink(value: PDDealRoute(uuid: deal)) {
+                                        Label(renovation.dealName.map { "Open \($0)" } ?? "Open the deal", systemImage: "house")
+                                    }
+                                }
+                                if let project = renovation.projectUuid, session.permissions.shows(.purchaseOrders) {
+                                    NavigationLink(value: PurchaseOrdersRoute(projectUuid: project, projectName: renovation.title)) {
+                                        Label("Purchase orders", systemImage: "shippingbox.and.arrow.backward")
+                                    }
+                                }
+                            }
                     }
                     if renovations.isEmpty {
                         ContentUnavailableView("No renovations", systemImage: "hammer",
-                                               description: Text("Start one from a deal. Its build stages and jobs appear here and on the board in Projects."))
+                                               description: Text(canStart ? "Tap + to start one: you get a board with the standard build stages and dated jobs."
+                                                                  : "Renovations started from a deal show here, with their build stages and jobs."))
                             .listRowBackground(Color.clear)
                     }
                 }
             }
         }
         .navigationTitle("Renovations")
+        .safeAreaInset(edge: .top, spacing: 0) { PDNoticeBar(notice: notice, error: nil) }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Toggle(isOn: $showCompleted) { Label("Show finished", systemImage: "checkmark.circle") }
-                    .toggleStyle(.button)
+            if canStart {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { starting = true } label: { Label("Start a renovation", systemImage: "plus") }
+                        .accessibilityIdentifier("pd.renovations.start")
+                }
             }
         }
-        .task(id: showCompleted) { await load() }
+        .task(id: status) { await load() }
         .refreshable { await load() }
+        .sheet(isPresented: $starting) {
+            PDStartRenovationSheet(dealName: nil, choosesDeal: true) { body in
+                let created = try await services.propertyDeals.startRenovation(body)
+                notice = "Board created with \(created.jobsTotal ?? 0) jobs."
+                await load()
+            }
+        }
+        .sheet(item: $addingBuilders) { renovation in
+            PDAddBuildersSheet(renovation: renovation) { added in
+                notice = added == 1 ? "1 person added to the board." : "\(added) people added to the board."
+            }
+        }
     }
+
+    private var canStart: Bool { session.propertyDeals?.can(.create, .deals) ?? false }
+    /// The server checks `projects.manage` (and that you run the board).
+    private var canAddBuilders: Bool { session.permissions.can(.manage, .projects) }
 
     private func load() async {
         if state.value == nil { state = .loading }
         do {
-            let fetched = try await services.propertyDeals.renovations(status: showCompleted ? "all" : "active")
+            let fetched = try await services.propertyDeals.renovations(status: status)
             state = .loaded(fetched.value)
             cachedAt = fetched.cachedAt
         } catch {
@@ -209,6 +265,9 @@ struct PDRenovationRow: View {
                     StatusBadge(text: "\(renovation.jobsOverdue ?? 0) late", systemImage: "exclamationmark.triangle.fill", tone: .danger)
                 }
             }
+            if let place = [renovation.address, renovation.postcode].compactMap({ $0?.trimmedOrNil }).joined(separator: ", ").trimmedOrNil {
+                Text(place).font(.wsSubheadline).foregroundStyle(.secondaryText)
+            }
             if let progress = renovation.progress {
                 ProgressView(value: progress)
                     .tint(Tone.success.solidColor)
@@ -232,16 +291,12 @@ struct PDRenovationRow: View {
 }
 
 /// The deal page's Renovation section: progress and the board, its purchase orders, or a way to
-/// start one.
+/// start one. The deal page loads the renovations (a `.task` here would be copied onto every row).
 struct PDDealRenovationSection: View {
-    let dealUuid: String
-    /// Bumped by the deal page after it starts a renovation, to reload.
-    let reloadToken: Int
+    let renovations: [PDRenovation]
+    let loaded: Bool
     let onStart: () -> Void
-    @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
-    @State private var renovations: [PDRenovation] = []
-    @State private var loaded = false
 
     var body: some View {
         Section {
@@ -263,46 +318,64 @@ struct PDDealRenovationSection: View {
                 Text("Renovation")
             }
         }
-        .task(id: reloadToken) { await load() }
-    }
-
-    private func load() async {
-        if let fetched = try? await services.propertyDeals.renovations(dealUuid: dealUuid, status: "all") {
-            renovations = fetched.value
-        }
-        loaded = true
     }
 }
 
 struct PDStartRenovationSheet: View {
     let dealName: String?
+    /// From the renovations list: pick a deal, or none for a standalone build.
+    var choosesDeal = false
     let save: (PDRenovationBody) async throws -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var name = ""
     @State private var start = Date()
     @State private var finish = Calendar.current.date(byAdding: .day, value: 50, to: Date()) ?? Date()
     @State private var budget: Decimal?
+    @State private var deal = ""
+    @State private var deals: [Record] = []
+    @State private var builders: Set<String> = []
     @State private var saving = false
     @State private var error: APIError?
 
     var body: some View {
         NavigationStack {
             Form {
+                if choosesDeal {
+                    Section {
+                        Picker("Deal", selection: $deal) {
+                            Text("No deal (standalone)").tag("")
+                            ForEach(deals) { Text($0.string("name") ?? "Deal").tag($0.id) }
+                        }
+                        .accessibilityIdentifier("pd.renovation.deal")
+                    }
+                }
                 Section {
-                    TextField(dealName.map { "Renovation — \($0)" } ?? "Name", text: $name)
+                    TextField(dealName.map { "Renovation — \($0)" } ?? "Name (optional)", text: $name)
                         .accessibilityIdentifier("pd.renovation.name")
                     DatePicker("Start", selection: $start, displayedComponents: .date)
                     DatePicker("Finish by", selection: $finish, in: start..., displayedComponents: .date)
                     TextField("Budget (optional)", value: $budget, format: .number)
                         .keyboardType(.decimalPad)
                 } footer: {
-                    Text("Creates a board in Projects with the build stages (survey to snagging) and 19 dated jobs spread to finish by this date. Add builders on the web.")
+                    Text("Creates a board in Projects with the build stages (survey to snagging) and 19 dated jobs spread to finish by this date. Change anything on the board afterwards.")
+                }
+                Section {
+                    PDBuilderPicker(selected: $builders)
+                } header: {
+                    Text("Builders and site managers on the board")
+                } footer: {
+                    Text("Optional. You can add more people later: swipe the renovation and choose “Add builders”.")
                 }
                 if let error { Section { InlineErrorRow(error: error) } }
             }
             .navigationTitle("Start a renovation")
             .navigationBarTitleDisplayMode(.inline)
+            .task {
+                guard choosesDeal else { return }
+                deals = (try? await services.pdRaw.rows("/deals", ["per_page": "100", "sort": "created"])) ?? []
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -311,9 +384,11 @@ struct PDStartRenovationSheet: View {
                         Task {
                             do {
                                 let trimmed = name.trimmingCharacters(in: .whitespaces)
-                                try await save(PDRenovationBody(name: trimmed.isEmpty ? nil : trimmed, budget: budget,
+                                try await save(PDRenovationBody(dealUuid: deal.isEmpty ? nil : deal,
+                                                                name: trimmed.isEmpty ? nil : trimmed, budget: budget,
                                                                 currency: budget == nil ? nil : session.propertyDeals?.me.settings?.currency,
-                                                                startDate: Self.day(start), targetEndDate: Self.day(finish)))
+                                                                startDate: Self.day(start), targetEndDate: Self.day(finish),
+                                                                builderUserUuids: builders.isEmpty ? nil : builders.sorted()))
                                 dismiss()
                             } catch {
                                 self.error = error.asAPIError

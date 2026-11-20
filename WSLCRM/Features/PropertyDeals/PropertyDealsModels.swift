@@ -84,7 +84,7 @@ struct PDAccess: Sendable, Equatable {
     var me: PDMe
 
     enum Module: String, Sendable {
-        case deals, properties, buyers, tasks, suppliers, compliance, approvals, ai, settings, reports
+        case deals, properties, buyers, tasks, suppliers, compliance, approvals, ai, settings, reports, leads
     }
 
     func can(_ action: Action, _ module: Module) -> Bool {
@@ -226,6 +226,8 @@ struct PDDeal: Decodable, Sendable, Identifiable, Hashable {
     var tenure: String?
     var notes: String?
     var createdAt: Date?
+    /// The home the deal is about (nil until one is added).
+    var propertyUuid: String?
 
     var id: String { uuid }
 }
@@ -432,6 +434,8 @@ struct PDApproval: Decodable, Sendable, Identifiable, Hashable {
     var runSources: JSONValue?
     /// The agent's structured output, e.g. `{ summary, blockers }` (inbox, from Phase 5).
     var runOutput: JSONValue?
+    /// What the agent did step by step: `[{ tool, refused?, reason? }]` (or JSON text).
+    var runSteps: JSONValue?
     var fromJobshout: Bool?
     /// Inbox only: whether I may decide it (not my own request, manager rule, not already approved by me).
     var canDecide: Bool?

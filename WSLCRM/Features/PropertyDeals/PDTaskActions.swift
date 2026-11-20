@@ -5,11 +5,21 @@ import SwiftUI
 @MainActor
 @Observable
 final class PDTaskActions {
-    struct CompleteRequest: Identifiable { let task: PDTaskRef; let needsEvidence: Bool; var id: String { task.uuid } }
+    struct CompleteRequest: Identifiable {
+        let task: PDTaskRef
+        let needsEvidence: Bool
+        /// Closing needs someone else's sign-off (the task's approval rule): it is sent for approval.
+        var approvalRule: String?
+        var id: String { task.uuid }
+        var needsApproval: Bool { approvalRule != nil }
+    }
     struct SnoozeRequest: Identifiable { let task: PDTaskRef; var id: String { task.uuid } }
+    struct TaskRequest: Identifiable { let task: PDTaskRef; var id: String { task.uuid } }
 
     var completing: CompleteRequest?
     var snoozing: SnoozeRequest?
+    var assigning: TaskRequest?
+    var loggingContact: TaskRequest?
     /// One-line result shown to the user ("Queued — will sync…", a server refusal…).
     var message: String?
     var isWorking = false
@@ -17,8 +27,69 @@ final class PDTaskActions {
     /// Called after a write is accepted or queued, so the screen can reload.
     @ObservationIgnored var onChange: () async -> Void = {}
 
-    func askToComplete(_ task: PDTaskRef, compliance: Bool) {
-        completing = CompleteRequest(task: task, needsEvidence: compliance)
+    func askToComplete(_ task: PDTaskRef, compliance: Bool, approvalRule: String? = nil, access: PDAccess? = nil) {
+        completing = CompleteRequest(task: task, needsEvidence: compliance,
+                                     approvalRule: Self.needsApproval(rule: approvalRule, access: access) ? approvalRule : nil)
+    }
+
+    /// As the server decides: two people always; a manager rule unless I may manage approvals; an
+    /// operator rule unless I may decide approvals myself.
+    nonisolated static func needsApproval(rule: String?, access: PDAccess?) -> Bool {
+        switch rule {
+        case "two_person": true
+        case "manager": !(access?.can(.manage, .approvals) ?? false)
+        case "any_operator": !(access?.can(.update, .approvals) ?? false)
+        default: false
+        }
+    }
+
+    nonisolated static func ruleWords(_ rule: String?) -> String {
+        switch rule {
+        case "two_person": "two people must approve it"
+        case "manager": "a manager must approve it"
+        default: "an operator must approve it"
+        }
+    }
+
+    /// `POST /tasks/{id}/request-completion`: close a task that needs someone else's sign-off.
+    func requestCompletion(_ request: CompleteRequest, note: String?, raw: PDRaw) async {
+        isWorking = true
+        defer { isWorking = false }
+        var body: [String: JSONValue] = [:]
+        if let note { body["evidence"] = .object(["note": .string(note)]) }
+        do {
+            try await raw.send(.post, "/tasks/\(request.task.uuid)/request-completion", body, idempotent: true)
+            message = "Sent for approval: \(Self.ruleWords(request.approvalRule))."
+            await onChange()
+        } catch {
+            message = error.asAPIError.localizedDescription
+        }
+    }
+
+    /// `PUT /tasks/{id}` with a new owner.
+    func assign(_ task: PDTaskRef, to member: PDTeamMember, raw: PDRaw) async {
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            try await raw.send(.put, "/tasks/\(task.uuid)", ["owner_user_uuid": .string(member.uuid)])
+            message = "Assigned to \(member.name)."
+            await onChange()
+        } catch {
+            message = error.asAPIError.localizedDescription
+        }
+    }
+
+    /// `POST /tasks/{id}/contact-log`: a call, WhatsApp or email made outside the app.
+    func logContact(_ task: PDTaskRef, body: [String: JSONValue], raw: PDRaw) async {
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            try await raw.send(.post, "/tasks/\(task.uuid)/contact-log", body, idempotent: true)
+            message = "Logged in the deal's chase log."
+            await onChange()
+        } catch {
+            message = error.asAPIError.localizedDescription
+        }
     }
 
     func askToSnooze(_ task: PDTaskRef) {
@@ -37,7 +108,8 @@ final class PDTaskActions {
                       queuedMessage: "Snoozed on this phone. It will sync when you're back online.")
     }
 
-    /// Phase 5 of the backend adds `POST /tasks/{uuid}/agent-run`; until then it answers 404.
+    /// Runs the task's agent and says honestly how it went (as the web does): a draft waiting in
+    /// Approvals, done, cancelled, nothing to send, or still working after a minute and a half.
     func letAIDoIt(_ task: PDTaskRef, api: PropertyDealsAPI, isOnline: Bool) async {
         guard isOnline else {
             message = "Handing a task to AI needs a connection."
@@ -45,9 +117,31 @@ final class PDTaskActions {
         }
         isWorking = true
         defer { isWorking = false }
+        let raw = PDRaw(client: api.client)
         do {
-            try await api.startAgentRun(taskUuid: task.uuid)
-            message = "AI is working on “\(task.title)”. Its draft will wait for approval."
+            let run = PDRaw.record(try await raw.send(.post, "/tasks/\(task.uuid)/agent-run", [:], idempotent: true))
+            var finished: Record?
+            if let runUuid = run?.string("uuid") {
+                for _ in 0..<60 {
+                    try await Task.sleep(for: .milliseconds(1500))
+                    let current = try await raw.record("/agent-runs/\(runUuid)")
+                    if let status = current.string("status"), !["queued", "running"].contains(status) { finished = current; break }
+                }
+            }
+            if finished?.string("status") == "failed" {
+                message = "AI couldn't finish" + (finished?.string("error").map { ": \($0)" } ?? ".")
+            } else if finished?.string("status") == "cancelled" {
+                message = "The AI run was cancelled. The task is back with a person."
+            } else {
+                let status = try? await raw.record("/tasks/\(task.uuid)").string("pd_status")
+                switch status {
+                case "awaiting_approval": message = "Draft ready for “\(task.title)”. Check Approvals."
+                case "done": message = "Done. The AI finished “\(task.title)”."
+                default:
+                    message = finished == nil ? "AI is still working on “\(task.title)”. Its draft will appear in Approvals when it's ready."
+                        : "AI found nothing to send. The task is back with you."
+                }
+            }
             await onChange()
         } catch let error as APIError {
             if case .notFound = error {
@@ -58,7 +152,7 @@ final class PDTaskActions {
                 message = error.localizedDescription
             }
         } catch {
-            message = error.localizedDescription
+            message = error.asAPIError.localizedDescription
         }
     }
 
@@ -88,6 +182,7 @@ extension View {
 
 private struct PDTaskActionSheets: ViewModifier {
     @Bindable var actions: PDTaskActions
+    @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @Environment(SyncCenter.self) private var sync
 
@@ -96,7 +191,25 @@ private struct PDTaskActionSheets: ViewModifier {
             .sheet(item: $actions.completing) { request in
                 PDCompleteSheet(request: request) { note in
                     actions.completing = nil
-                    Task { await actions.complete(request.task, note: note, session: session, sync: sync) }
+                    Task {
+                        if request.needsApproval {
+                            await actions.requestCompletion(request, note: note, raw: services.pdRaw)
+                        } else {
+                            await actions.complete(request.task, note: note, session: session, sync: sync)
+                        }
+                    }
+                }
+            }
+            .sheet(item: $actions.assigning) { request in
+                PDAssignSheet(task: request.task) { member in
+                    actions.assigning = nil
+                    Task { await actions.assign(request.task, to: member, raw: services.pdRaw) }
+                }
+            }
+            .sheet(item: $actions.loggingContact) { request in
+                PDLogContactSheet(task: request.task) { body in
+                    actions.loggingContact = nil
+                    Task { await actions.logContact(request.task, body: body, raw: services.pdRaw) }
                 }
             }
             .sheet(item: $actions.snoozing) { request in
@@ -133,17 +246,19 @@ private struct PDCompleteSheet: View {
                 } header: {
                     Text(request.needsEvidence ? "Evidence" : "Note")
                 } footer: {
-                    if request.needsEvidence {
+                    if request.needsApproval {
+                        Text("Closing this needs someone else's sign-off: \(PDTaskActions.ruleWords(request.approvalRule)). It is sent to Approvals.")
+                    } else if request.needsEvidence {
                         Text("This is a compliance task. It can only be closed with evidence, and your name is recorded.")
                     }
                 }
             }
-            .navigationTitle("Mark done")
+            .navigationTitle(request.needsApproval ? "Send for approval" : "Mark done")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { onDone(note.trimmedOrNil) }
+                    Button(request.needsApproval ? "Send" : "Done") { onDone(note.trimmedOrNil) }
                         .disabled(request.needsEvidence && note.trimmedOrNil == nil)
                         .accessibilityIdentifier("pd.complete.confirm")
                 }
@@ -229,5 +344,97 @@ private struct PDSnoozeSheet: View {
             return calendar.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow) ?? tomorrow
         case .custom: return custom
         }
+    }
+}
+
+/// Give the task to someone else in the workspace.
+private struct PDAssignSheet: View {
+    let task: PDTaskRef
+    let onAssign: (PDTeamMember) -> Void
+    @Environment(\.services) private var services
+    @Environment(\.dismiss) private var dismiss
+    @State private var state: LoadState<[PDTeamMember]> = .idle
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section { Text(task.title).font(.wsHeadline) }
+                switch state {
+                case .idle, .loading: SkeletonRow()
+                case .failed(let error): InlineErrorRow(error: error) { Task { await load() } }
+                case .loaded(let members):
+                    if members.isEmpty { Text("No active members in this workspace.").foregroundStyle(.secondaryText) }
+                    ForEach(members) { member in
+                        Button(member.name) { onAssign(member) }
+                            .frame(minHeight: 44)
+                            .accessibilityIdentifier("pd.assign.\(member.uuid)")
+                    }
+                }
+            }
+            .navigationTitle("Assign to")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+            .task { await load() }
+        }
+    }
+
+    private func load() async {
+        do { state = .loaded(try await services.pdRaw.activeMembers()) } catch { state = .failed(error.asAPIError) }
+    }
+}
+
+/// A call, WhatsApp, text, email or letter made outside the app, for the deal's chase log.
+private struct PDLogContactSheet: View {
+    let task: PDTaskRef
+    let onLog: ([String: JSONValue]) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var channel = "phone"
+    @State private var outcome = ""
+    @State private var who = ""
+    @State private var note = ""
+
+    static let channels = [Choice("phone", "Phone call"), Choice("whatsapp", "WhatsApp"), Choice("sms", "Text"),
+                           Choice("email", "Email"), Choice("letter", "Letter")]
+    static let outcomes = [Choice("spoke", "Spoke to them"), Choice("no_answer", "No answer"),
+                           Choice("left_message", "Left a message"), Choice("sent", "Sent")]
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section { Text(task.title).font(.wsHeadline) }
+                Section {
+                    Picker("How", selection: $channel) { ForEach(Self.channels) { Text($0.label).tag($0.value) } }
+                    Picker("Outcome", selection: $outcome) {
+                        Text("Not said").tag("")
+                        ForEach(Self.outcomes) { Text($0.label).tag($0.value) }
+                    }
+                    TextField("Who", text: $who)
+                    TextField("Note", text: $note, axis: .vertical).lineLimit(3...6)
+                } footer: {
+                    Text("Calls, WhatsApps and emails made outside the system go in the deal's chase log.")
+                }
+            }
+            .navigationTitle("Log a contact")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Log it") { onLog(PDContactLogForm.body(channel: channel, outcome: outcome, who: who, note: note)) }
+                        .accessibilityIdentifier("pd.logContact.save")
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+}
+
+/// The contact-log body (`POST /tasks/{id}/contact-log`).
+enum PDContactLogForm {
+    static func body(channel: String, outcome: String, who: String, note: String) -> [String: JSONValue] {
+        var body: [String: JSONValue] = ["channel": .string(channel)]
+        body["outcome"] = outcome.isEmpty ? nil : .string(outcome)
+        body["to_name"] = .text(who)
+        body["note"] = .text(note)
+        return body
     }
 }
