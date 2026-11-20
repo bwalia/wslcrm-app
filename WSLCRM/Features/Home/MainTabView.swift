@@ -123,6 +123,16 @@ struct MainTabView: View {
             router.clear()
         case .open:
             router.clear()
+            // A chat message: the conversation, on Home (chat has no hub of its own).
+            if case .chat(let channel) = link.target {
+                guard NativeModules.destination(forKey: AppMenu.aiChatKey) != nil,
+                      session.permissions.menuKeys.contains(AppMenu.aiChatKey) else { return }
+                selection = .home
+                var path = NavigationPath()
+                path.append(NativeScreenRoute(ChatScreens.conversation(channel)))
+                homePath = path
+                return
+            }
             let policy = NavigationPolicy(session: session)
             let hub: NavigationPolicy.Home = link.target.isPA ? .propertyPA : .propertyDeals
             guard hub == .propertyPA ? policy.showsPropertyPA : policy.showsPropertyDeals else { return }
@@ -153,7 +163,7 @@ struct MainTabView: View {
         case .task(let uuid): path.append(PDTaskRoute(uuid: uuid))
         case .approval(let uuid): path.append(PDApprovalRoute(uuid: uuid))
         case .deal(let uuid): path.append(PDDealRoute(uuid: uuid))
-        case .today, .paCard, .paBrief: break
+        case .today, .paCard, .paBrief, .chat: break
         }
         return path
     }

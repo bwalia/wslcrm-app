@@ -479,4 +479,13 @@ final class ChatModuleTests: XCTestCase {
         XCTAssertEqual(ChatLinks.resolve(URL(string: "https://www.gov.uk/vat-rates")!, dashboardHost: host, menu: menu),
                        .external)
     }
+
+    func testAChatPushOpensItsConversation() {
+        let push: [AnyHashable: Any] = ["type": "chat_message", "channel_uuid": "ch-1", "message_uuid": "m-9"]
+        XCTAssertEqual(AppDeepLink(userInfo: push)?.target, .chat("ch-1"))
+        XCTAssertNil(AppDeepLink(userInfo: ["type": "chat_message"]), "no channel: nothing to open")
+        XCTAssertEqual(AppDeepLink(url: URL(string: "wslcrm://chat/ch-2?namespace_id=ns")!)?.target, .chat("ch-2"))
+        XCTAssertEqual(AppDeepLink(url: URL(string: "wslcrm://chat/ch-2?namespace_id=ns")!)?.namespaceId, "ns")
+        XCTAssertEqual(ChatScreens.conversation("ch-1"), "chat.home?channel=ch-1")
+    }
 }

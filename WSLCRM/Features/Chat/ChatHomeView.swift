@@ -131,6 +131,8 @@ final class ChatHomeModel {
 /// "AI Navigator" (`/dashboard/chat`): the AI assistant, then the workspace's channels and direct
 /// messages, as the web's rail. Every conversation opens natively.
 struct ChatHomeView: View {
+    /// A conversation to open as soon as the list is ready (a push tap).
+    var openChannelUUID: String?
     @Environment(SessionStore.self) private var session
     @Environment(\.services) private var services
     @State private var model = ChatHomeModel()
@@ -147,6 +149,18 @@ struct ChatHomeView: View {
     private var hub: ChatHub { ChatHub.shared }
 
     private var api: ChatAPI { ChatAPI(client: services.client) }
+
+    /// Opens the conversation a push pointed at: from the list when it's there, else fetched.
+    private func openRequestedChannel() async {
+        guard let uuid = openChannelUUID, openChannel == nil else { return }
+        if let known = model.channels.first(where: { $0.uuid == uuid }) {
+            openChannel = known
+        } else if let fetched = try? await api.channel(uuid) {
+            openChannel = fetched
+        } else {
+            notice = "That conversation couldn't be opened. It may have been deleted or you may have left it."
+        }
+    }
 
     var body: some View {
         let groups = model.groups(matching: filter)
@@ -241,6 +255,7 @@ struct ChatHomeView: View {
                 .accessibilityIdentifier("chat.menu")
             }
         }
+        .task(id: openChannelUUID) { await openRequestedChannel() }
         .navigationDestination(item: $openChannel) { channel in
             ChatConversationView(channel: channel, api: api, me: session.user, home: model)
         }

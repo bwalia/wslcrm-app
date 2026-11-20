@@ -344,27 +344,21 @@ final class VaultStore {
 
     /// A call that carries the vault key (`X-Vault-Key`, form-encoded body).
     ///
-    /// OpsAPI answers a wrong vault key with 401, which the app's client otherwise reads as "your sign-in
-    /// has ended" and signs the person out. So these calls carry the sign-in token themselves (fresh
-    /// from the client, which renews it first when it's about to expire) and a 401 here only ever means
-    /// the vault key was wrong.
+    /// OpsAPI answers a wrong vault key with 401. These calls tell the client that a 401 here is about
+    /// the vault key, not the sign-in (`unauthorizedEndsSession = false`), so a wrong key never signs
+    /// the person out. The client still renews a sign-in that's about to expire before sending.
     private func keyed(_ method: HTTPMethod, _ path: String, key override: String? = nil,
                        fields: [(String, String)] = [], query: [String: String?] = [:]) async throws -> JSONValue {
         guard let vaultKey = override ?? key else {
             throw ResourceService.problem(400, "Unlock the vault first.")
         }
-        var token = KeychainTokenStore().load()?.accessToken
-        if token == nil || JWT.isExpiring(token ?? "", within: 120, now: Date()) {
-            _ = try await api.get("/api/v2/vault")
-            token = KeychainTokenStore().load()?.accessToken
-        }
         var items = QueryBuilder()
         for (name, value) in query.sorted(by: { $0.key < $1.key }) { items.add(name, value) }
-        var endpoint = Endpoint(method, path, query: items.items, requiresAuth: false, requiresNamespace: true)
+        var endpoint = Endpoint(method, path, query: items.items, requiresAuth: true, requiresNamespace: true)
+        endpoint.unauthorizedEndsSession = false
         if let target = api.target { endpoint.namespaceOverride = target.uuid }
         if !fields.isEmpty || method == .post || method == .put { endpoint = endpoint.withForm(fields) }
         endpoint.headers["X-Vault-Key"] = vaultKey
-        if let token { endpoint.headers["Authorization"] = "Bearer \(token)" }
         do {
             let (data, _) = try await api.client.sendRaw(endpoint)
             return data.isEmpty ? .null : ((try? ResourceService.decode(data)) ?? .null)

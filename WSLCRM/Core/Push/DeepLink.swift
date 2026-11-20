@@ -22,6 +22,8 @@ struct AppDeepLink: Equatable, Sendable, Identifiable {
         case handoff(String)
         /// A voice note has been worked through: open the confirm screen.
         case paCapture(String)
+        /// A new chat message (`type: chat_message`, `channel_uuid`): open that conversation.
+        case chat(String)
 
         var isPA: Bool {
             switch self {
@@ -46,14 +48,26 @@ struct AppDeepLink: Equatable, Sendable, Identifiable {
 
     /// From a notification's `userInfo`. Nil for pushes that aren't routable.
     init?(userInfo: [AnyHashable: Any]) {
+        // Chat pushes (opsapi routes/chat-messages.lua): `{ type: "chat_message", channel_uuid, message_uuid }`.
+        if userInfo["type"] as? String == "chat_message",
+           let channel = userInfo["channel_uuid"] as? String, !channel.isEmpty {
+            self.init(namespaceId: userInfo["namespace_id"] as? String, target: .chat(channel))
+            return
+        }
         let route = userInfo["route"] as? String
         let uuid = userInfo["uuid"] as? String
         guard let target = Self.target(route: route, uuid: uuid) else { return nil }
         self.init(namespaceId: userInfo["namespace_id"] as? String, target: target)
     }
 
-    /// From `wslcrm://pd/<route>/<uuid>?namespace_id=<uuid>`.
+    /// From `wslcrm://pd/<route>/<uuid>?namespace_id=<uuid>`, or `wslcrm://chat/<channel uuid>`.
     init?(url: URL) {
+        if url.scheme == "wslcrm", url.host == "chat", let channel = url.pathComponents.filter({ $0 != "/" }).first {
+            let namespace = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first { $0.name == "namespace_id" }?.value
+            self.init(namespaceId: namespace, target: .chat(channel))
+            return
+        }
         guard url.scheme == "wslcrm", url.host == "pd" || url.host == "pa" else { return nil }
         let parts = url.pathComponents.filter { $0 != "/" }
         guard let target = Self.target(route: parts.first, uuid: parts.dropFirst().first) else { return nil }
