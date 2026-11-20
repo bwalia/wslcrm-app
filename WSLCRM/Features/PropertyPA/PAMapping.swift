@@ -181,11 +181,12 @@ enum PAMapping {
                              oldValue: row.oldValue, newValue: row.newValue, display: display(row.newValue, field: row.field),
                              kind: row.isInferred == true ? .inferred : (row.kind == "proposed" ? .proposed : .stated),
                              by: row.isInferred == true ? sheet.author : nil, confidence: row.confidence, material: row.material,
-                             status: PAProposedUpdate.Status(rawValue: row.status ?? "") ?? .proposed, quote: row.sourceQuote)
+                             status: PAProposedUpdate.Status(rawValue: row.status ?? "") ?? .proposed, quote: row.sourceQuote,
+                             targetTable: row.targetTable)
         }
         if let next = sheet.proposals.first(where: { $0.targetTable == "next_action" }) {
             var action = nextAction(from: PAServerProposedUpdate(uuid: next.uuid, targetTable: next.targetTable, newValue: next.newValue,
-                                                                 material: next.material))
+                                                                 material: next.material, status: next.status))
             action.owner = next.owner?.name.map { PACard.Person(uuid: next.owner?.userUuid, name: $0) }
             capture.nextAction = action
         }
@@ -213,7 +214,7 @@ enum PAMapping {
                          oldValue: u.oldValue, newValue: u.newValue, display: display(u.newValue, field: u.field),
                          kind: u.isInferred == true ? .inferred : .stated, by: nil, confidence: u.confidence,
                          material: u.material, status: PAProposedUpdate.Status(rawValue: u.status ?? "") ?? .proposed,
-                         quote: u.sourceQuote)
+                         quote: u.sourceQuote, targetTable: u.targetTable)
     }
 
     static func nextAction(from u: PAServerProposedUpdate) -> PACapture.NextAction {
@@ -225,7 +226,8 @@ enum PAMapping {
             if case .string(let d)? = o["due_at"] { due = APIDate.parse(d) }
             if case .string(let r)? = o["reason"] { reason = r }
         }
-        return PACapture.NextAction(uuid: u.uuid, title: title, dueAt: due, owner: nil, reason: reason, material: u.material)
+        return PACapture.NextAction(uuid: u.uuid, title: title, dueAt: due, owner: nil, reason: reason, material: u.material,
+                                    value: u.newValue, status: u.status)
     }
 
     static let fieldLabels: [String: String] = [
@@ -283,7 +285,21 @@ enum PAMapping {
                   to: nil, opportunityUuid: h.opportunityUuid, dealUuid: h.dealUuid, title: nil, question: h.question,
                   recommendation: h.paRecommendation, contextFacts: [],
                   status: PAHandoff.Status(rawValue: h.status == "replied" ? "replied" : (h.status ?? "open")) ?? .open,
-                  reply: h.reply, repliedAt: h.repliedAt)
+                  reply: h.reply, repliedAt: h.repliedAt, contextText: contextText(h.context))
+    }
+
+    /// The handoff's context as the web shows it: "seller minimum: 235000 · decision makers: Sarah, Tom".
+    static func contextText(_ context: JSONValue?) -> String? {
+        guard case .object(let o)? = context, !o.isEmpty else { return nil }
+        return o.keys.sorted().compactMap { key -> String? in
+            guard let value = o[key], value != .null else { return nil }
+            let text: String = if case .number(let n) = value, key.contains("minimum") || key.contains("price") {
+                Formatters.money(Decimal(n), currency: "GBP") ?? value.displayString
+            } else {
+                value.displayString
+            }
+            return "\(Formatters.humanize(key)): \(text)"
+        }.joined(separator: " · ")
     }
 
     /// Members with a manager or owner role, from `/namespace/members` (shape varies: be lenient).
@@ -357,8 +373,14 @@ extension PAMapping {
         today.mode = budgeted ? "minutes" : "full"
         let waits = server.budget?.waits.count ?? 0
         if budgeted, let budget = server.budget {
+            // The web names who waits ("Sarah Collins — 22 Station Road" → "Sarah Collins").
+            let names = (server.budget?.waits ?? []).compactMap { wait -> String? in
+                guard let title = wait.title, !title.isEmpty else { return nil }
+                return title.components(separatedBy: " — ").first
+            }
+            let waiting = names.isEmpty ? "; \(waits) can wait." : "; \(waits) can wait: \(names.joined(separator: ", "))."
             today.brief = .init(text: "\(today.cards.count) \(today.cards.count == 1 ? "thing fits" : "things fit") in \(budget.minutes ?? 0) minutes"
-                                + (waits > 0 ? "; \(waits) can wait." : "."))
+                                + (waits > 0 ? waiting : "."))
         }
         return today
     }
@@ -384,7 +406,7 @@ extension PAMapping {
         add("promises", "Promises", p.promises.map { fact($0) })
         add("objections", "Likely objections", p.objections.map { fact($0) })
         add("questions", "Questions to establish", p.questions.compactMap { $0.question.map { PAFact(text: $0, kind: .proposed) } })
-        add("playbook", "Playbook", p.playbook.map {
+        add("playbook", "Playbook", p.playbook.filter { $0.key != "grounded_or_silent" }.map {
             PAFact(text: [$0.title, $0.rule].compactMap { $0 }.joined(separator: ": "), kind: .stated,
                    source: source(ref: $0.ref, label: "Rule"))
         })
@@ -428,14 +450,31 @@ extension PAMapping {
             for (index, value) in rows.enumerated() {
                 guard case .object(let o) = value else { continue }
                 let id = s(o, "uuid", "opportunity_uuid", "ref") ?? "\(key)-\(index)"
-                let opportunity = kind == .relationshipRisk ? (s(o, "opportunity_uuid") ?? s(o, "uuid")) : s(o, "opportunity_uuid")
+                // Relationship risks and overdue actions are opportunity rows (`uuid`); deal risks are deals.
+                let opportunity = [.relationshipRisk, .task].contains(kind) ? (s(o, "opportunity_uuid") ?? s(o, "uuid"))
+                                                                            : s(o, "opportunity_uuid")
+                let deal = s(o, "deal_uuid") ?? (kind == .dealRisk ? s(o, "uuid") : nil)
                 let who = s(o, "from_name", "owner_name", "person_name")
+                var action = s(o, "question", "text", "title", "name") ?? Formatters.humanize(key)
+                var why = s(o, "reason", "why_now", "pa_recommendation")
+                switch kind {
+                case .negotiation:
+                    if let title = s(o, "title"), let text = s(o, "text") { action = "\(title): \(text)" }
+                case .task:
+                    if let title = s(o, "title"), let next = s(o, "action") { action = "\(title): \(next)" }
+                    if let due = s(o, "due_at").flatMap(APIDate.parse) { why = "Was due \(Formatters.dateTime(due) ?? "")" }
+                case .dealRisk:
+                    if let money = n(o, "money_at_risk"), money > 0 {
+                        why = "\(Formatters.money(Decimal(money), currency: "GBP") ?? "") at risk"
+                    }
+                default:
+                    break
+                }
                 cards.append(PACard(uuid: "\(key):\(id)", rank: cards.count + 1, kind: kind,
                                     person: who.map { PACard.Person(name: $0) },
-                                    opportunityUuid: opportunity, dealUuid: s(o, "deal_uuid"),
+                                    opportunityUuid: opportunity, dealUuid: deal,
                                     handoffUuid: kind == .handoff ? s(o, "uuid") : nil,
-                                    action: s(o, "question", "text", "title", "name") ?? Formatters.humanize(key),
-                                    whyNow: s(o, "reason", "why_now", "pa_recommendation"),
+                                    action: action, whyNow: why,
                                     score: n(o, "score")))
             }
         }
@@ -443,6 +482,7 @@ extension PAMapping {
         today.cards = cards
         today.mode = "manager"
         if let summary = s(root, "summary") { today.brief = .init(text: summary) }
+        if let handled = n(root, "handled") { today.handledCount = Int(handled) }
         return today
     }
 

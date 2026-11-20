@@ -237,7 +237,7 @@ struct ReviewQueueView: View {
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var state: LoadState<[KanbanTask]> = .idle
-    @State private var approvals: [AIRun] = []
+    @State private var approvals: [TaskAIRun] = []
     @State private var requests: [AIRunRequest] = []
     @State private var timesheets: [Timesheet] = []
 
@@ -285,7 +285,7 @@ struct ReviewQueueView: View {
                         Section("AI runs waiting for approval") {
                             ForEach(approvals) { run in
                                 NavigationLink(value: WorkScreen.aiRun(uuid: run.uuid).route) {
-                                    AIRunRow(run: run)
+                                    TaskAIRunRow(run: run)
                                 }
                                 .accessibilityIdentifier("review.approval.\(run.uuid)")
                             }

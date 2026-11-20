@@ -63,6 +63,202 @@ struct ReasonBody: Encodable, Sendable {
     var reason: String?
 }
 
+/// `PUT /job-items/:uuid`: a partial update (nil fields are left out of the JSON).
+struct UpdateJobItemBody: Encodable, Sendable, Equatable {
+    var itemType: String?
+    /// `""` clears the link (the server's `nullable`).
+    var partUuid: String?
+    var phaseUuid: String?
+    var description: String?
+    var quantity: Decimal?
+    var unitPrice: Decimal?
+    var taxRate: Decimal?
+    var isBillable: Bool?
+}
+
+/// `POST /jobs/:uuid/comments`.
+struct JobCommentBody: Encodable, Sendable, Equatable {
+    var message: String
+}
+
+/// A job phase or a job type's phase template (same fields). On a phase, `notes` is the office's note;
+/// the checklist keeps each item's tick (`done`) when its words are unchanged.
+struct JobPhaseBody: Encodable, Sendable, Equatable {
+    struct ChecklistEntry: Encodable, Sendable, Equatable {
+        var label: String
+        var done: Bool
+    }
+
+    var name: String
+    var description: String
+    /// `""` clears it on an edit; nil leaves it out when adding.
+    var estimatedHours: String?
+    var requiresVisit: Bool
+    var requiresSignoff: Bool
+    var checklist: Checklist
+    var notes: String?
+
+    /// A job phase sends ticked items; a template sends plain labels.
+    enum Checklist: Encodable, Sendable, Equatable {
+        case phase([ChecklistEntry])
+        case template([String])
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            switch self {
+            case .phase(let entries): try container.encode(entries)
+            case .template(let labels): try container.encode(labels)
+            }
+        }
+    }
+
+    /// One item a line, blank lines dropped; ticks kept for items whose words didn't change.
+    static func checklist(from text: String, previous: [ChecklistItem]) -> [ChecklistEntry] {
+        let ticked = Dictionary(previous.map { ($0.label, $0.done) }, uniquingKeysWith: { first, _ in first })
+        return text.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .map { ChecklistEntry(label: $0, done: ticked[$0] ?? false) }
+    }
+}
+
+/// `POST /jobs/:uuid/visits` and `PUT /visits/:uuid`. Dates go as ISO-8601 UTC (the API drops offsets).
+/// On an edit, `""` clears the engineer, phase or rate.
+struct VisitBookingBody: Encodable, Sendable, Equatable {
+    var scheduledStart: Date
+    var scheduledEnd: Date?
+    var engineerUserUuid: String?
+    var phaseUuid: String?
+    var instructions: String?
+    var isBillable: Bool
+    var hourlyRate: String?
+}
+
+/// `{ visit, conflicts, warnings }` after booking or changing a visit.
+struct VisitSaveResult: Decodable, Sendable {
+    struct Conflict: Decodable, Sendable, Hashable {
+        let jobNumber: String?
+        let scheduledStart: Date?
+    }
+
+    let conflicts: [Conflict]
+    let warnings: [String]
+
+    enum CodingKeys: String, CodingKey { case conflicts, warnings }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        conflicts = c.decodeLossyArray(Conflict.self, forKey: .conflicts)
+        warnings = c.decodeLossyArray(String.self, forKey: .warnings)
+    }
+
+    /// "FS-0012 at 20 Nov, 09:00" for each overlapping booking.
+    var conflictLines: [String] {
+        conflicts.map { "\($0.jobNumber ?? "Another job") at \(Formatters.dateTime($0.scheduledStart) ?? "")" }
+    }
+}
+
+/// What the invoice is made with: labour VAT, a rate for labour that has none, due date and notes.
+struct JobInvoiceOptions: Encodable, Sendable, Equatable {
+    var labourTaxRate: Decimal?
+    var hourlyRate: Decimal?
+    var dueDate: CalendarDay?
+    var notes: String?
+
+    var previewQuery: [URLQueryItem] {
+        var items: [URLQueryItem] = []
+        if let labourTaxRate { items.append(URLQueryItem(name: "labour_tax_rate", value: "\(labourTaxRate)")) }
+        if let hourlyRate { items.append(URLQueryItem(name: "hourly_rate", value: "\(hourlyRate)")) }
+        return items
+    }
+}
+
+/// A job type with its phase templates (`GET /job-types/:uuid`; the list has no `phases`).
+struct JobTypeDetail: Identifiable, Hashable, Sendable, Decodable {
+    struct Template: Identifiable, Hashable, Sendable, Decodable {
+        let uuid: String
+        var id: String { uuid }
+        var name: String
+        var description: String?
+        var sortOrder: Int
+        var requiresVisit: Bool
+        var requiresSignoff: Bool
+        var estimatedHours: Decimal?
+        var checklist: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case uuid, name, description, sortOrder, requiresVisit, requiresSignoff, estimatedHours, checklist
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            uuid = try c.decode(String.self, forKey: .uuid)
+            name = c.decodeFlexibleString(forKey: .name) ?? ""
+            description = c.decodeFlexibleString(forKey: .description)
+            sortOrder = c.decodeFlexibleInt(forKey: .sortOrder) ?? 0
+            requiresVisit = c.decodeFlexibleBool(forKey: .requiresVisit) ?? true
+            requiresSignoff = c.decodeFlexibleBool(forKey: .requiresSignoff) ?? false
+            estimatedHours = c.decodeFlexibleDecimal(forKey: .estimatedHours)
+            checklist = c.decodeLossyArray(String.self, forKey: .checklist)
+        }
+    }
+
+    let uuid: String
+    var id: String { uuid }
+    var name: String
+    var description: String?
+    var color: String?
+    var defaultHourlyRate: Decimal?
+    var isActive: Bool
+    var phaseCount: Int?
+    var jobCount: Int?
+    var phases: [Template]
+
+    enum CodingKeys: String, CodingKey {
+        case uuid, name, description, color, defaultHourlyRate, isActive, phaseCount, jobCount, phases
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        uuid = try c.decode(String.self, forKey: .uuid)
+        name = c.decodeFlexibleString(forKey: .name) ?? ""
+        description = c.decodeFlexibleString(forKey: .description)
+        color = c.decodeFlexibleString(forKey: .color)
+        defaultHourlyRate = c.decodeFlexibleDecimal(forKey: .defaultHourlyRate)
+        isActive = c.decodeFlexibleBool(forKey: .isActive) ?? true
+        phaseCount = c.decodeFlexibleInt(forKey: .phaseCount)
+        jobCount = c.decodeFlexibleInt(forKey: .jobCount)
+        phases = c.decodeLossyArray(Template.self, forKey: .phases).sorted { $0.sortOrder < $1.sortOrder }
+    }
+}
+
+/// `POST /job-types` (with optional starting `phases`) and `PUT /job-types/:uuid`.
+struct JobTypeBody: Encodable, Sendable, Equatable {
+    struct PhaseName: Encodable, Sendable, Equatable { var name: String }
+
+    var name: String
+    var description: String
+    var color: String?
+    /// `""` clears it on an edit.
+    var defaultHourlyRate: String?
+    var isActive: Bool?
+    var phases: [PhaseName]?
+}
+
+/// `POST /visits/:uuid/log-timesheet` → `{ timesheet_uuid, hours }`.
+struct TimesheetLogResult: Decodable, Sendable {
+    let timesheetUuid: String?
+    let hours: Decimal?
+
+    enum CodingKeys: String, CodingKey { case timesheetUuid, hours }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        timesheetUuid = c.decodeFlexibleString(forKey: .timesheetUuid)
+        hours = c.decodeFlexibleDecimal(forKey: .hours)
+    }
+}
+
 struct ServiceRequestStatusBody: Encodable, Sendable {
     var status: String
     var resolutionNotes: String?
@@ -112,10 +308,17 @@ struct AddJobItemBody: Encodable, Sendable, Equatable {
     var days: Decimal?
     var supplier: String?
     var partNumber: String?
+    /// The full item form: VAT, whether it is charged, and the catalogue part it came from.
+    var taxRate: Decimal?
+    var isBillable: Bool?
+    var partUuid: String?
 
     init(itemType: String, description: String, quantity: Decimal, unitPrice: Decimal? = nil, visitUuid: String? = nil,
          phaseUuid: String? = nil, labourCategory: String? = nil, days: Decimal? = nil, supplier: String? = nil,
-         partNumber: String? = nil) {
+         partNumber: String? = nil, taxRate: Decimal? = nil, isBillable: Bool? = nil, partUuid: String? = nil) {
+        self.taxRate = taxRate
+        self.isBillable = isBillable
+        self.partUuid = partUuid
         self.itemType = itemType
         self.description = description
         self.quantity = quantity
@@ -166,19 +369,65 @@ struct JobListQuery: Sendable, Equatable {
     var mine = false
     var overdue = false
     var productUuid: String?
+    /// low / normal / high / urgent; nil: any.
+    var priority: String?
+    var jobTypeUuid: String?
+    /// Completed jobs not yet invoiced.
+    var uninvoiced = false
+    var sort: Sort = .updated
     var page = 1
     var perPage = 25
+
+    /// The orders the server sorts by (`order_by` + `order_dir`).
+    enum Sort: String, CaseIterable, Sendable {
+        case updated, newest, oldest, dueSoonest, number, priority, status
+
+        var label: String {
+            switch self {
+            case .updated: "Recently changed"
+            case .newest: "Newest first"
+            case .oldest: "Oldest first"
+            case .dueSoonest: "Due soonest"
+            case .number: "Job number"
+            case .priority: "Priority"
+            case .status: "Status"
+            }
+        }
+
+        var orderBy: String {
+            switch self {
+            case .updated: "updated_at"
+            case .newest, .oldest: "created_at"
+            case .dueSoonest: "due_date"
+            case .number: "job_number"
+            case .priority: "priority"
+            case .status: "status"
+            }
+        }
+
+        var orderDir: String {
+            switch self {
+            case .oldest, .dueSoonest, .number: "asc"
+            default: "desc"
+            }
+        }
+    }
 
     var queryItems: [URLQueryItem] {
         var q = QueryBuilder()
         q.add("page", page)
         q.add("per_page", perPage)
-        q.add("status", status.rawValue)
+        // The quick filters look across every status, as the dashboard's do.
+        q.add("status", uninvoiced ? JobListQuery.StatusFilter.all.rawValue : status.rawValue)
         q.add("search", search.trimmingCharacters(in: .whitespaces))
         if mine { q.add("mine", "true") }
         if overdue { q.add("overdue", true) }
+        if uninvoiced { q.add("uninvoiced", true) }
+        q.add("priority", priority)
+        q.add("job_type_uuid", jobTypeUuid)
         q.add("product_uuid", productUuid)
-        q.add("order_by", "updated_at")
+        q.add("order_by", sort.orderBy)
+        q.add("order_dir", sort.orderDir)
         return q.items
     }
 }
@@ -191,12 +440,14 @@ struct VisitListQuery: Sendable, Equatable {
     var page = 1
     var perPage = 100
     var jobUuid: String?
+    /// A dispatcher's filter: one engineer's uuid, or "unassigned". Ignored with `mine`.
+    var engineerUuid: String?
 
     var queryItems: [URLQueryItem] {
         var q = QueryBuilder()
         q.add("page", page)
         q.add("per_page", min(perPage, 200))
-        if mine { q.add("mine", "true") }
+        if mine { q.add("mine", "true") } else { q.add("engineer_uuid", engineerUuid) }
         q.add("job_uuid", jobUuid)
         q.add("status", status)
         q.add("from", from)
@@ -275,14 +526,150 @@ struct FieldServiceAPI: Sendable {
         try await cachedData(.get("\(Self.base)/visits/\(uuid)"), cacheKey: "visit/\(uuid)")
     }
 
+    /// `POST /visits/:uuid/log-timesheet` — puts a completed visit's labour on the engineer's timesheet.
+    func logTimesheet(visitUuid: String) async throws -> TimesheetLogResult {
+        let envelope: Envelope.Standard<TimesheetLogResult> = try await client.send(
+            .post("\(Self.base)/visits/\(visitUuid)/log-timesheet", json: EmptyBody()))
+        return envelope.data
+    }
+
+    /// `PUT /job-items/:uuid` — only the fields sent change. Managers edit any line; an engineer
+    /// only the lines they logged.
+    func updateItem(itemUuid: String, body: UpdateJobItemBody) async throws -> JobItem {
+        let envelope: Envelope.Standard<JobItem> = try await client.send(
+            .put("\(Self.base)/job-items/\(itemUuid)", json: body))
+        return envelope.data
+    }
+
+    func deleteItem(itemUuid: String) async throws {
+        try await client.sendDiscardingBody(.delete("\(Self.base)/job-items/\(itemUuid)"))
+    }
+
+    // MARK: Job management (the dashboard's job page)
+
+    /// `DELETE /jobs/:uuid` — removes the job and its visits. The server refuses an invoiced job.
+    func deleteJob(_ uuid: String) async throws {
+        try await client.sendDiscardingBody(.delete("\(Self.base)/jobs/\(uuid)"))
+    }
+
+    /// `POST /jobs/:uuid/comments` — a note on the job's timeline.
+    func addJobComment(jobUuid: String, message: String) async throws {
+        try await client.sendDiscardingBody(.post("\(Self.base)/jobs/\(jobUuid)/comments",
+                                                  json: JobCommentBody(message: message)))
+    }
+
+    /// `POST /jobs/:uuid/phases` / `PUT /job-phases/:uuid`.
+    func savePhase(jobUuid: String, phaseUuid: String?, body: JobPhaseBody) async throws {
+        if let phaseUuid {
+            try await client.sendDiscardingBody(.put("\(Self.base)/job-phases/\(phaseUuid)", json: body))
+        } else {
+            try await client.sendDiscardingBody(.post("\(Self.base)/jobs/\(jobUuid)/phases", json: body))
+        }
+    }
+
+    /// `DELETE /job-phases/:uuid` — not once it is completed (reopen it first).
+    func deletePhase(_ uuid: String) async throws {
+        try await client.sendDiscardingBody(.delete("\(Self.base)/job-phases/\(uuid)"))
+    }
+
+    /// `POST /jobs/:uuid/visits` or `PUT /visits/:uuid` (reschedule / reassign) → `{ visit, conflicts, warnings }`.
+    func saveVisit(jobUuid: String, visitUuid: String?, body: VisitBookingBody) async throws -> VisitSaveResult {
+        let endpoint: Endpoint = if let visitUuid {
+            .put("\(Self.base)/visits/\(visitUuid)", json: body)
+        } else {
+            .post("\(Self.base)/jobs/\(jobUuid)/visits", json: body)
+        }
+        let envelope: Envelope.Standard<VisitSaveResult> = try await client.send(endpoint)
+        return envelope.data
+    }
+
+    /// `DELETE /visits/:uuid` — not once it is invoiced, on a timesheet, or the engineer is on site.
+    func deleteVisit(_ uuid: String) async throws {
+        try await client.sendDiscardingBody(.delete("\(Self.base)/visits/\(uuid)"))
+    }
+
+    /// `POST /visits/:uuid/cancel` (dispatchers).
+    func cancelVisit(_ uuid: String, reason: String?) async throws {
+        try await client.sendDiscardingBody(.post("\(Self.base)/visits/\(uuid)/cancel", json: ReasonBody(reason: reason)))
+    }
+
+    /// `GET /jobs/:uuid/invoice-preview` with the labour VAT and a fallback rate for unpriced labour.
+    func invoicePreview(jobUuid: String, options: JobInvoiceOptions) async throws -> JobInvoicePreview {
+        let envelope: Envelope.Standard<JobInvoicePreview> = try await client.send(
+            .get("\(Self.base)/jobs/\(jobUuid)/invoice-preview", query: options.previewQuery))
+        return envelope.data
+    }
+
+    /// `POST /jobs/:uuid/invoice` — a draft invoice for the job's uninvoiced labour and items.
+    func createInvoice(jobUuid: String, options: JobInvoiceOptions) async throws -> JobInvoiceResult {
+        let envelope: Envelope.Standard<JobInvoiceResult> = try await client.send(
+            .post("\(Self.base)/jobs/\(jobUuid)/invoice", json: options))
+        return envelope.data
+    }
+
+    // MARK: Service requests (delete)
+
+    func deleteServiceRequest(_ uuid: String) async throws {
+        try await client.sendDiscardingBody(.delete("\(Self.base)/service-requests/\(uuid)"))
+    }
+
+    // MARK: Job types and their phase templates (fs_job_types)
+
+    func jobTypes(includeInactive: Bool) async throws -> [JobTypeDetail] {
+        var q = QueryBuilder()
+        if includeInactive { q.add("include_inactive", "true") }
+        let envelope: Envelope.Standard<LossyArray<JobTypeDetail>> =
+            try await client.send(.get("\(Self.base)/job-types", query: q.items))
+        return envelope.data.elements
+    }
+
+    func jobType(_ uuid: String) async throws -> JobTypeDetail {
+        let envelope: Envelope.Standard<JobTypeDetail> = try await client.send(.get("\(Self.base)/job-types/\(uuid)"))
+        return envelope.data
+    }
+
+    func createJobType(_ body: JobTypeBody) async throws -> JobTypeDetail {
+        let envelope: Envelope.Standard<JobTypeDetail> = try await client.send(.post("\(Self.base)/job-types", json: body))
+        return envelope.data
+    }
+
+    func updateJobType(_ uuid: String, _ body: JobTypeBody) async throws {
+        try await client.sendDiscardingBody(.put("\(Self.base)/job-types/\(uuid)", json: body))
+    }
+
+    func deleteJobType(_ uuid: String) async throws {
+        try await client.sendDiscardingBody(.delete("\(Self.base)/job-types/\(uuid)"))
+    }
+
+    /// `POST /job-types/:uuid/phases` / `PUT /phase-templates/:uuid`.
+    func savePhaseTemplate(jobTypeUuid: String, templateUuid: String?, body: JobPhaseBody) async throws {
+        if let templateUuid {
+            try await client.sendDiscardingBody(.put("\(Self.base)/phase-templates/\(templateUuid)", json: body))
+        } else {
+            try await client.sendDiscardingBody(.post("\(Self.base)/job-types/\(jobTypeUuid)/phases", json: body))
+        }
+    }
+
+    func deletePhaseTemplate(_ uuid: String) async throws {
+        try await client.sendDiscardingBody(.delete("\(Self.base)/phase-templates/\(uuid)"))
+    }
+
+    func reorderPhaseTemplates(jobTypeUuid: String, order: [String]) async throws {
+        try await client.sendDiscardingBody(.put("\(Self.base)/job-types/\(jobTypeUuid)/phases/reorder",
+                                                 json: ReorderPhasesBody(order: order)))
+    }
+
     // MARK: Service requests
 
     func serviceRequests(status: String?, search: String, page: Int, perPage: Int = 25,
-                         productUuid: String? = nil) async throws -> Page<ServiceRequest> {
+                         productUuid: String? = nil, priority: String? = nil,
+                         slaBreached: Bool = false) async throws -> Page<ServiceRequest> {
         var q = QueryBuilder()
         q.add("page", page)
         q.add("per_page", perPage)
         q.add("product_uuid", productUuid)
+        q.add("priority", priority)
+        if slaBreached { q.add("sla", "breached") }
         // `status=all` returns zero rows on this endpoint — omit it instead.
         if let status, status != "all" { q.add("status", status) }
         q.add("search", search.trimmingCharacters(in: .whitespaces))

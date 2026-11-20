@@ -102,6 +102,13 @@ struct ServerError: Sendable, Equatable {
         default:
             break
         }
+        // Plugin routes (helper/plugin-sdk.lua): `{ error: "Validation failed", details: { title: "is required" } }`.
+        // Kept as "title is required" so a form can say it with the field's own label.
+        if case .object(let details) = top["details"] {
+            for (field, value) in details where result.fieldErrors[field] == nil {
+                if let message = value.stringValue { result.fieldErrors[field] = "\(field) \(message)" }
+            }
+        }
         if case .object(let context) = result.context,
            let field = context["field"]?.stringValue,
            let reason = context["reason"]?.stringValue,

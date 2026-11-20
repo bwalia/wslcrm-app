@@ -1,97 +1,6 @@
 import SwiftUI
 
-// MARK: - Deals list
-
-/// Active deals filtered to Red, Amber or Mine. Read-mostly: moving stages and editing happen on
-/// the web dashboard.
-struct PDDealsListView: View {
-    @Environment(\.services) private var services
-    @Environment(SessionStore.self) private var session
-    @State private var filter: PropertyDealsAPI.DealFilter
-    @State private var state: LoadState<Page<PDDeal>> = .idle
-    @State private var cachedAt: Date?
-
-    init(initialFilter: PropertyDealsAPI.DealFilter = .red) {
-        _filter = State(initialValue: initialFilter)
-    }
-
-    var body: some View {
-        List {
-            Section {
-                Picker("Show", selection: $filter) {
-                    ForEach(PropertyDealsAPI.DealFilter.allCases) { Text(Self.title($0)).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
-                .accessibilityIdentifier("pd.deals.filter")
-            }
-            if let cachedAt { CachedDataNotice(savedAt: cachedAt) }
-            switch state {
-            case .idle, .loading:
-                ForEach(0..<4, id: \.self) { _ in SkeletonRow() }
-            case .failed(let error):
-                InlineErrorRow(error: error) { Task { await load() } }
-            case .loaded(let page) where page.items.isEmpty:
-                ContentUnavailableView(Self.emptyTitle(filter), systemImage: "house",
-                                       description: Text(Self.emptyDescription(filter)))
-                    .listRowBackground(Color.clear)
-            case .loaded(let page):
-                Section {
-                    ForEach(page.items) { deal in
-                        NavigationLink(value: PDDealRoute(uuid: deal.uuid)) {
-                            PDDealRow(deal: deal, fallbackCurrency: session.propertyDeals?.me.settings?.currency)
-                        }
-                        .accessibilityIdentifier("pd.deals.row.\(deal.uuid)")
-                    }
-                } footer: {
-                    if page.total > page.items.count {
-                        Text("Showing \(page.items.count) of \(page.total). The full list is on the web dashboard.")
-                    }
-                }
-            }
-        }
-        .navigationTitle("Deals")
-        .refreshable { await load() }
-        .task(id: filter) { await load() }
-    }
-
-    private func load() async {
-        guard let userUuid = session.user?.uuid else { return }
-        if state.value == nil { state = .loading }
-        do {
-            let fetched = try await services.propertyDeals.deals(filter, me: userUuid, page: 1, perPage: 50)
-            state = .loaded(fetched.value)
-            cachedAt = fetched.cachedAt
-        } catch {
-            state = .failed(error.asAPIError)
-        }
-    }
-
-    static func title(_ filter: PropertyDealsAPI.DealFilter) -> String {
-        switch filter {
-        case .red: "Late"
-        case .amber: "At risk"
-        case .mine: "Mine"
-        }
-    }
-
-    static func emptyTitle(_ filter: PropertyDealsAPI.DealFilter) -> String {
-        switch filter {
-        case .red: "No deals running late"
-        case .amber: "No deals at risk"
-        case .mine: "No deals of yours"
-        }
-    }
-
-    static func emptyDescription(_ filter: PropertyDealsAPI.DealFilter) -> String {
-        switch filter {
-        case .red: "Deals turn red when completion is forecast past the target, or a blocking task is overdue."
-        case .amber: "Deals turn amber when they're close to slipping."
-        case .mine: "Active deals you own show here."
-        }
-    }
-}
+// MARK: - Deals list (PDDealsList.swift)
 
 struct PDDealRow: View {
     let deal: PDDeal
@@ -112,7 +21,8 @@ struct PDDealRow: View {
                     .foregroundStyle(Tone.danger.textColor)
             }
             if let target = PDDates.day(deal.targetCompletionDate) {
-                Text("Completion target \(target)").font(.wsFootnote).foregroundStyle(.secondaryText)
+                Text("Completion target \(target)" + (PDDates.day(deal.predictedCompletionDate).map { " · forecast \($0)" } ?? ""))
+                    .font(.wsFootnote).foregroundStyle(.secondaryText)
             }
         }
         .padding(.vertical, 4)
@@ -122,8 +32,10 @@ struct PDDealRow: View {
 
 // MARK: - Deal view
 
-/// One deal, read-mostly: stage, health and money at risk, target dates, blockers, next tasks,
-/// compliance and the people on it. `GET /deals/{id}/overview`, cached for offline reading.
+/// One deal: stage, health and money at risk, target dates, blockers, next tasks, compliance and the
+/// people on it (`GET /deals/{id}/overview`, cached for offline reading). Edit it, move it to another
+/// stage (the gate is checked first), and open everything else on it: all tasks, enquiries, the
+/// chase log, documents, compliance, matching buyers, AI research and the timeline.
 struct PDDealView: View {
     let dealUuid: String
 
@@ -133,6 +45,11 @@ struct PDDealView: View {
     @State private var cachedAt: Date?
     @State private var startingRenovation = false
     @State private var renovationsVersion = 0
+    @State private var editing = false
+    @State private var moving: PDMoveTarget?
+    @State private var notice: String?
+    @State private var renovations: [PDRenovation] = []
+    @State private var renovationsLoaded = false
 
     var body: some View {
         Group {
@@ -144,7 +61,30 @@ struct PDDealView: View {
         }
         .navigationTitle(state.value?.deal.name ?? "Deal")
         .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .top, spacing: 0) { PDNoticeBar(notice: notice, error: nil) }
+        .toolbar {
+            if let overview = state.value, canUpdate {
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button("Edit deal", systemImage: "pencil") { editing = true }
+                            .accessibilityIdentifier("pd.deal.edit")
+                        Button("Move to another stage", systemImage: "arrow.right.circle") { moving = moveTarget(overview) }
+                            .accessibilityIdentifier("pd.deal.move")
+                    } label: {
+                        Label("Change", systemImage: "ellipsis.circle")
+                    }
+                    .accessibilityIdentifier("pd.deal.menu")
+                }
+            }
+        }
+        .sheet(isPresented: $editing) {
+            PDEditDealSheet(dealUuid: dealUuid) { notice = "Deal saved."; Task { await load() } }
+        }
+        .sheet(item: $moving) { target in
+            PDMoveStageSheet(target: target) { stage in notice = "Moved to \(stage)."; Task { await load() } }
+        }
         .task { await load() }
+        .task(id: renovationsVersion) { await loadRenovations() }
         .sheet(isPresented: $startingRenovation) {
             PDStartRenovationSheet(dealName: state.value?.deal.name) { body in
                 var body = body
@@ -168,9 +108,10 @@ struct PDDealView: View {
             complianceSection(overview)
             partiesSection(overview)
             chasesSection(overview)
-            PDDealRenovationSection(dealUuid: dealUuid, reloadToken: renovationsVersion) { startingRenovation = true }
+            PDDealRenovationSection(renovations: renovations, loaded: renovationsLoaded) { startingRenovation = true }
+            moreSection(overview)
         }
-        .refreshable { await load() }
+        .refreshable { await load(); await loadRenovations() }
     }
 
     private func healthSection(_ overview: PDDealOverview, currency: String?) -> some View {
@@ -181,6 +122,13 @@ struct PDDealView: View {
                     Text(overview.deal.name).font(.wsTitle3.weight(.semibold)).accessibilityAddTraits(.isHeader)
                     Spacer()
                     health.health.badge.accessibilityIdentifier("pd.deal.health")
+                }
+                Text([overview.deal.dealType.map(Formatters.humanize),
+                      [overview.deal.addressLine1, overview.deal.town, overview.deal.postcode].compactMap { $0 }
+                        .joined(separator: ", ").trimmedOrNil ?? "No property yet"].compactMap { $0 }.joined(separator: " · "))
+                    .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                if overview.deal.status != "active" {
+                    StatusBadge(text: Formatters.humanize(overview.deal.status), systemImage: "pause.circle", tone: .warning)
                 }
                 if let money = health.moneyAtRisk, money > 0 {
                     Text("\(Formatters.money(money, currency: currency) ?? "") at risk")
@@ -203,6 +151,19 @@ struct PDDealView: View {
             DetailRow(label: "Now", value: Formatters.humanize(overview.stage.current ?? overview.deal.stageKey), systemImage: "flag.fill")
             if let next = overview.stage.next {
                 DetailRow(label: "Next", value: Formatters.humanize(next), systemImage: "flag")
+                if canUpdate {
+                    Button {
+                        var target = moveTarget(overview)
+                        target = PDMoveTarget(dealUuid: target.dealUuid, dealName: target.dealName, current: target.current,
+                                              stages: target.stages.filter { $0.key == next })
+                        moving = target
+                    } label: {
+                        Label("Move to \(overview.stage.stages?.first { $0.key == next }?.name ?? Formatters.humanize(next))",
+                              systemImage: "arrow.right.circle.fill")
+                    }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("pd.deal.next")
+                }
             }
             if let stages = overview.stage.stages, !stages.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -235,7 +196,8 @@ struct PDDealView: View {
                 DetailRow(label: "Late penalty", value: "\(Formatters.money(penalty, currency: currency) ?? "")/day\(cap)",
                           systemImage: "exclamationmark.arrow.circlepath")
             }
-            DetailRow(label: "Agreed price", value: Formatters.money(deal.agreedPrice, currency: currency), systemImage: "banknote")
+            DetailRow(label: deal.agreedPrice == nil ? "Offer" : "Agreed price",
+                      value: Formatters.money(deal.agreedPrice ?? deal.offerAmount, currency: currency), systemImage: "banknote")
         }
     }
 
@@ -344,6 +306,48 @@ struct PDDealView: View {
         }
     }
 
+    private var canUpdate: Bool { session.propertyDeals?.can(.update, .deals) ?? false }
+
+    private func moveTarget(_ overview: PDDealOverview) -> PDMoveTarget {
+        PDMoveTarget(dealUuid: dealUuid, dealName: overview.deal.name, current: overview.deal.stageKey,
+                     stages: (overview.stage.stages ?? []).map {
+                         PDMoveTarget.Stage(key: $0.key, name: $0.name ?? Formatters.humanize($0.key))
+                     })
+    }
+
+    /// Everything else on the deal, as on the web's tabs.
+    @ViewBuilder
+    private func moreSection(_ overview: PDDealOverview) -> some View {
+        let openEnquiries = (overview.enquiries ?? []).filter { $0.status == "open" }.count
+        let documents = (overview.documents ?? []).reduce(0) { $0 + $1.count }
+        Section("More on this deal") {
+            link("All tasks", "checklist", "pd.deal.tasks", count: overview.tasks.counts?.total)
+            link("Enquiries and blockers", "questionmark.bubble", "pd.deal.enquiries", count: openEnquiries)
+            link("Chase log", "paperplane", "pd.deal.chases")
+            link("Documents", "doc.on.doc", "pd.deal.documents", count: documents)
+            link("Compliance", "checkmark.shield", "pd.deal.compliance")
+            if let property = overview.deal.propertyUuid {
+                NavigationLink(value: NativeScreenRoute("pd.property.matches", property)) {
+                    Label("Matching buyers", systemImage: "person.2")
+                }
+                .accessibilityIdentifier("pd.deal.more.buyers")
+            }
+            link("AI research and the area", "sparkles", "pd.deal.research")
+            link("Timeline", "clock.arrow.circlepath", "pd.deal.timeline")
+        }
+    }
+
+    private func link(_ title: String, _ icon: String, _ screen: String, count: Int? = nil) -> some View {
+        NavigationLink(value: NativeScreenRoute(screen, dealUuid)) {
+            HStack {
+                Label(title, systemImage: icon)
+                Spacer()
+                if let count, count > 0 { Text("\(count)").foregroundStyle(.secondaryText).monospacedDigit() }
+            }
+        }
+        .accessibilityIdentifier("\(screen).link")
+    }
+
     private func stagesAccessibility(_ stages: [PDDealOverview.StageState]) -> String {
         stages.map { "\($0.name ?? Formatters.humanize($0.key)): \(Formatters.humanize($0.state))" }.joined(separator: ", ")
     }
@@ -357,6 +361,13 @@ struct PDDealView: View {
         case "expired": StatusBadge(text: "Expired", systemImage: "clock.badge.exclamationmark", tone: .danger)
         default: StatusBadge(text: "Not started", systemImage: "shield", tone: .warning)
         }
+    }
+
+    private func loadRenovations() async {
+        if let fetched = try? await services.propertyDeals.renovations(dealUuid: dealUuid, status: "all") {
+            renovations = fetched.value
+        }
+        renovationsLoaded = true
     }
 
     private func load() async {

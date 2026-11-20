@@ -5,12 +5,12 @@ import Foundation
 // itself (questions, permission requests, messages, cancel, retry). `/api/v2/ai-runner`.
 // Errors arrive as `{ success: false, error, details?, conflict? }`.
 
-enum AIRunStatus: String, Sendable, Hashable, CaseIterable {
+enum TaskAIRunStatus: String, Sendable, Hashable, CaseIterable {
     case pendingApproval = "pending_approval", queued, claimed, starting, running
     case waitingPermission = "waiting_permission", needsInput = "needs_input", cancelling
     case succeeded, failed, cancelled, lost, unknown
 
-    init(raw: String?) { self = raw.flatMap(AIRunStatus.init(rawValue:)) ?? .unknown }
+    init(raw: String?) { self = raw.flatMap(TaskAIRunStatus.init(rawValue:)) ?? .unknown }
 
     var label: String {
         switch self {
@@ -61,10 +61,10 @@ enum AIRunStatus: String, Sendable, Hashable, CaseIterable {
     var isActive: Bool { [.claimed, .starting, .running, .waitingPermission, .needsInput, .cancelling].contains(self) }
 }
 
-struct AIRun: Decodable, Sendable, Identifiable, Hashable {
+struct TaskAIRun: Decodable, Sendable, Identifiable, Hashable {
     var uuid: String
     var taskUuid: String?
-    var status: AIRunStatus
+    var status: TaskAIRunStatus
     var attempt: Int
     var profile: String?
     var model: String?
@@ -109,7 +109,7 @@ struct AIRun: Decodable, Sendable, Identifiable, Hashable {
         func text(_ key: CodingKeys) -> String? { (try? c.decodeIfPresent(String.self, forKey: key)) ?? nil }
         uuid = try c.decode(String.self, forKey: .uuid)
         taskUuid = text(.taskUuid)
-        status = AIRunStatus(raw: text(.status))
+        status = TaskAIRunStatus(raw: text(.status))
         attempt = c.decodeFlexibleInt(forKey: .attempt) ?? 1
         profile = text(.profile)
         model = text(.model)
@@ -254,8 +254,8 @@ struct AIRunEvent: Decodable, Sendable, Identifiable, Hashable {
 }
 
 /// `GET /runs/:uuid`: the run with its conversation, requests and log.
-struct AIRunDetail: Decodable, Sendable {
-    var run: AIRun
+struct TaskAIRunDetail: Decodable, Sendable {
+    var run: TaskAIRun
     var events: [AIRunEvent]
     var requests: [AIRunRequest]
     var turns: [AIRunTurn]
@@ -266,7 +266,7 @@ struct AIRunDetail: Decodable, Sendable {
     enum CodingKeys: String, CodingKey { case events, requests, turns, canDecide, canApprove, canMessage }
 
     init(from decoder: Decoder) throws {
-        run = try AIRun(from: decoder)
+        run = try TaskAIRun(from: decoder)
         let c = try decoder.container(keyedBy: CodingKeys.self)
         events = c.decodeLossyArray(AIRunEvent.self, forKey: .events)
         requests = c.decodeLossyArray(AIRunRequest.self, forKey: .requests)
@@ -713,7 +713,7 @@ struct ProjectAISettings: Sendable, Hashable {
     }
 }
 
-struct AIRunnerAPI: Sendable {
+struct TaskAIRunnerAPI: Sendable {
     let client: APIClient
 
     static let base = "/api/v2/ai-runner"
@@ -736,8 +736,8 @@ struct AIRunnerAPI: Sendable {
         return envelope.data
     }
 
-    func runs(taskUuid: String) async throws -> [AIRun] {
-        let envelope: Envelope.Standard<LossyArray<AIRun>> =
+    func runs(taskUuid: String) async throws -> [TaskAIRun] {
+        let envelope: Envelope.Standard<LossyArray<TaskAIRun>> =
             try await client.send(.get("\(Self.base)/tasks/\(taskUuid)/runs", query: [URLQueryItem(name: "per_page", value: "50")]))
         return envelope.data.elements
     }
@@ -749,8 +749,8 @@ struct AIRunnerAPI: Sendable {
     }
 
     /// Starts a run. The key is reused only when the same start is retried after no answer.
-    func start(taskUuid: String, _ body: AIRunStartBody, idempotencyKey: String) async throws -> AIRun {
-        let envelope: Envelope.Standard<AIRun> = try await client.send(
+    func start(taskUuid: String, _ body: AIRunStartBody, idempotencyKey: String) async throws -> TaskAIRun {
+        let envelope: Envelope.Standard<TaskAIRun> = try await client.send(
             Endpoint.post("\(Self.base)/tasks/\(taskUuid)/runs", json: body).withIdempotencyKey(idempotencyKey))
         return envelope.data
     }
@@ -761,8 +761,8 @@ struct AIRunnerAPI: Sendable {
         try await client.sendDiscardingBody(.post("\(Self.base)/tasks/\(taskUuid)/prs/\(prUuid)/review", json: body))
     }
 
-    func run(_ uuid: String) async throws -> AIRunDetail {
-        let envelope: Envelope.Standard<AIRunDetail> = try await client.send(.get("\(Self.base)/runs/\(uuid)"))
+    func run(_ uuid: String) async throws -> TaskAIRunDetail {
+        let envelope: Envelope.Standard<TaskAIRunDetail> = try await client.send(.get("\(Self.base)/runs/\(uuid)"))
         return envelope.data
     }
 
@@ -771,9 +771,9 @@ struct AIRunnerAPI: Sendable {
     }
 
     @discardableResult
-    func retry(_ uuid: String, confirmSimilar: Bool) async throws -> AIRun {
+    func retry(_ uuid: String, confirmSimilar: Bool) async throws -> TaskAIRun {
         let body = confirmSimilar ? ["confirm_similar": true] : [String: Bool]()
-        let envelope: Envelope.Standard<AIRun> = try await client.send(
+        let envelope: Envelope.Standard<TaskAIRun> = try await client.send(
             Endpoint.post("\(Self.base)/runs/\(uuid)/retry", json: body).withIdempotencyKey(UUID().uuidString))
         return envelope.data
     }
@@ -800,10 +800,10 @@ struct AIRunnerAPI: Sendable {
     }
 
     /// What waits on the caller: agents' permission requests and runs waiting for approval.
-    func waiting() async throws -> (requests: [AIRunRequest], approvals: [AIRun]) {
+    func waiting() async throws -> (requests: [AIRunRequest], approvals: [TaskAIRun]) {
         struct Waiting: Decodable, Sendable {
             let requests: LossyArray<AIRunRequest>
-            let approvals: LossyArray<AIRun>
+            let approvals: LossyArray<TaskAIRun>
         }
         let envelope: Envelope.Standard<Waiting> = try await client.send(.get("\(Self.base)/waiting"))
         return (envelope.data.requests.elements, envelope.data.approvals.elements)
@@ -827,5 +827,5 @@ struct AIRunnerAPI: Sendable {
 
 extension KanbanAPI {
     /// The AI runner's routes, through the same signed-in client.
-    var ai: AIRunnerAPI { AIRunnerAPI(client: client) }
+    var ai: TaskAIRunnerAPI { TaskAIRunnerAPI(client: client) }
 }

@@ -99,15 +99,13 @@ struct PATodayView: View {
             if let cachedAt { CachedDataNotice(savedAt: cachedAt) }
             if !manager { capturesSection }
 
-            let visible = visibleCards(today.cards)
+            let all = visibleCards(today.cards)
+            // As on the web: with the whole day, cards with nothing pressing (score 0) wait at the bottom.
+            let quiet = manager || today.mode != "full" ? [] : all.filter { $0.score == 0 }
+            let visible = all.filter { card in !quiet.contains { $0.id == card.id } }
             Section {
                 ForEach(Array(visible.enumerated()), id: \.element.id) { index, card in
-                    PACardView(card: card, isTop: index == 0, manager: manager,
-                               onWhy: { why = card },
-                               onCall: { calledCard = card },
-                               onAsk: { asking = AskSheet(context: context(for: card)) },
-                               onDone: { queue(card, .done) },
-                               onLater: { laterCard = card })
+                    cardView(card, isTop: index == 0)
                 }
                 if visible.isEmpty {
                     ContentUnavailableView(manager ? "Nothing needs you" : "You're clear",
@@ -118,6 +116,14 @@ struct PATodayView: View {
             } header: {
                 Text(manager ? "Exceptions (\(visible.count))" : "Next (\(visible.count))")
                     .accessibilityIdentifier("pa.today.cards")
+            }
+            if !quiet.isEmpty {
+                Section {
+                    DisclosureGroup("Nothing pressing today (\(quiet.count))") {
+                        ForEach(quiet) { card in cardView(card, isTop: false) }
+                    }
+                    .accessibilityIdentifier("pa.today.quiet")
+                }
             }
             if manager, let handled = today.handledCount, handled > 0 {
                 Section {
@@ -131,12 +137,22 @@ struct PATodayView: View {
         .safeAreaPadding(.bottom, manager ? 0 : 72)
     }
 
+    private func cardView(_ card: PACard, isTop: Bool) -> some View {
+        PACardView(card: card, isTop: isTop, manager: manager, canCapture: session.permissions.paCanCapture,
+                   onWhy: { why = card },
+                   onCall: { calledCard = card },
+                   onAsk: { asking = AskSheet(context: context(for: card)) },
+                   onDone: { queue(card, .done) },
+                   onLater: { laterCard = card })
+    }
+
     private var modePicker: some View {
         Section {
             Picker("Time", selection: $mode) {
-                Text("Full day").tag(PropertyPAAPI.TodayMode.full)
+                Text("All day").tag(PropertyPAAPI.TodayMode.full)
                 Text("30 min").tag(PropertyPAAPI.TodayMode.minutes(30))
                 Text("1 hour").tag(PropertyPAAPI.TodayMode.minutes(60))
+                Text("2 hours").tag(PropertyPAAPI.TodayMode.minutes(120))
             }
             .pickerStyle(.segmented)
             .accessibilityIdentifier("pa.today.mode")
@@ -278,6 +294,7 @@ struct PACardView: View {
     let card: PACard
     let isTop: Bool
     let manager: Bool
+    var canCapture = false
     let onWhy: () -> Void
     let onCall: () -> Void
     let onAsk: () -> Void
@@ -294,6 +311,9 @@ struct PACardView: View {
                         .foregroundStyle(Tone.brand.textColor)
                         .background(Tone.brand.color.opacity(0.14), in: Capsule())
                         .accessibilityLabel("Number \(rank)")
+                }
+                if !manager, card.kind == .opportunity || card.kind == .call {
+                    Text(card.kind == .opportunity ? "Buyer" : "Seller").font(.wsCaption.weight(.semibold)).foregroundStyle(.secondaryText)
                 }
                 Text(card.title.isEmpty ? PAMapping.groupLabel(card.kind ?? .unknown) : card.title).font(.wsHeadline)
                     .accessibilityIdentifier("pa.card.\(card.uuid)")
@@ -322,11 +342,21 @@ struct PACardView: View {
     @ViewBuilder
     private var buttons: some View {
         if manager, let handoff = card.handoffUuid {
-            NavigationLink(value: PAHandoffRoute(uuid: handoff)) {
-                Label("Decide", systemImage: "checkmark.seal")
+            HStack(spacing: 8) {
+                NavigationLink(value: PAHandoffRoute(uuid: handoff)) {
+                    Label("Decide", systemImage: "checkmark.seal")
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("pa.card.decide")
+                if let opportunity = card.opportunityUuid {
+                    NavigationLink(value: NativeScreenRoute("pa.opportunity", opportunity)) {
+                        Label("Open deal", systemImage: "arrow.up.right.square")
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("pa.card.open")
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .accessibilityIdentifier("pa.card.decide")
+            .font(.wsSubheadline.weight(.semibold))
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -336,6 +366,18 @@ struct PACardView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .accessibilityIdentifier("pa.card.prepare")
+                        NavigationLink(value: NativeScreenRoute("pa.opportunity", opportunity)) {
+                            Label("Open", systemImage: "arrow.up.right.square")
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("pa.card.open")
+                        if canCapture, !manager {
+                            NavigationLink(value: NativeScreenRoute("pa.capture", opportunity)) {
+                                Label("Capture", systemImage: "square.and.pencil")
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("pa.card.capture")
+                        }
                     }
                     if let phone = card.person?.phone, let url = PDContact.phoneURL(phone) {
                         Link(destination: url) { Label("Call", systemImage: "phone.fill") }
@@ -369,8 +411,8 @@ struct PACardView: View {
                 .font(.wsSubheadline.weight(.semibold))
             }
         }
-        if isTop, !manager, card.score != nil {
-            Button("Why is this #1?", systemImage: "questionmark.circle") { onWhy() }
+        if !manager, card.score != nil {
+            Button(card.rank.map { "Why #\($0)?" } ?? "Why here?", systemImage: "questionmark.circle") { onWhy() }
                 .font(.wsFootnote)
                 .buttonStyle(.borderless)
                 .accessibilityIdentifier("pa.card.why")
@@ -421,7 +463,7 @@ struct PAWhySheet: View {
                     }
                 }
             }
-            .navigationTitle("Why is this #1?")
+            .navigationTitle(card.rank.map { "Why #\($0)?" } ?? "Why here?")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .task { await load() }

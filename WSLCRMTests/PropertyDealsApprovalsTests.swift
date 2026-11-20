@@ -174,13 +174,14 @@ final class PropertyDealsApprovalsTests: XCTestCase {
 
     func testCurrentApprovalReadsFreshAndIsNilOnceDecided() async throws {
         let reads = Counter()
-        let api = await api { _ in
-            reads.increment("inbox")
+        let api = await api { request in
+            reads.increment(request.url?.query?.contains("all=true") == true ? "all" : "inbox")
             return .json(200, #"{ "success": true, "data": [] }"#)
         }
         let current = try await api.currentApproval("a1")
-        XCTAssertNil(current, "no longer waiting for me: someone decided it")
-        XCTAssertEqual(reads.value("inbox"), 1)
+        XCTAssertNil(current, "no longer pending: someone decided it")
+        XCTAssertEqual(reads.value("inbox"), 1, "mine first")
+        XCTAssertEqual(reads.value("all"), 1, "then every pending one (the list can show ones I can't decide)")
     }
 
     // MARK: Push registration

@@ -73,7 +73,7 @@ enum WorkScreen: Hashable, Sendable {
         case .epics(let project): AnyView(EpicsView(projectUuid: project))
         case .epic(let uuid, let project): AnyView(EpicDetailView(uuid: uuid, projectUuid: project))
         case .analytics(let project): AnyView(ProjectAnalyticsView(projectUuid: project))
-        case .aiRun(let uuid): AnyView(AIRunDetailView(uuid: uuid))
+        case .aiRun(let uuid): AnyView(TaskAIRunDetailView(uuid: uuid))
         case .waiting: AnyView(ReviewQueueView())
         }
     }

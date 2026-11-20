@@ -101,3 +101,21 @@ web dashboard is shown. OpsAPI's `/auth/hmrc/initiate?redirect_url=wslcrm://hmrc
 A group's screen id may carry one parameter after a colon (`tax.file:2025-26`, `tax.vat:client=<uuid>`,
 `tax.income:rental|2025-26`), so one hand-built screen can open another for a record or a year with
 `NavigationLink(value: NativeScreenRoute("…"))`, without registering a new route type in a shared file.
+
+## One record on a hand-built screen, and plugin pages
+
+- **A screen for one record** is still pushed by value: `NativeScreenRoute("pd.buyer", uuid)` makes the
+  id `pd.buyer:<uuid>`; the group's `screen:` closure splits it with `NativeScreenRoute.parts(id)`.
+  No new `navigationDestination` is needed (`ModuleGroup+Industry.swift`).
+- **Several groups as one**: `ModuleGroup.joining(id:_:)` merges parts (the industry area is field
+  service, Property Deals, Property PA, health, the AI runner and plugins) behind one line in
+  `ModuleCatalog.groups`; `IndustryModuleTests` checks no two parts claim a key.
+- **Descriptors built at run time**: `RuntimeDescriptors.register(_:)` makes a descriptor the server
+  described (or one per parent record, as health does for a patient's care records) resolvable by id,
+  so `ResourceRoute` / `ResourceListRoute` open it with the kit's own screens.
+- **Plugin pages** (`/dashboard/plugins/<code>/<key>`): `GET /api/v2/plugins/:code/resources/:key`
+  describes a plugin's generated list (`sdk.crud`: fields, columns, filters, search, sort, rights), and
+  `PluginPageScreen` draws it natively from that description — helpdesk tickets, bank holidays, and any
+  plugin installed later (`MenuDestination.of` falls back to it for an unmapped plugin path). A plugin's
+  own HTML page (manifest `pages`) has no description, so it needs a hand-built screen registered in
+  `PluginPages.nativePages` (helpdesk overview, Portfolio Lab).

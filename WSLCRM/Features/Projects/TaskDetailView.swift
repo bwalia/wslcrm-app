@@ -23,7 +23,7 @@ struct TaskDetailView: View {
     @State private var aiEnabled = false
     @State private var aiChecked = false
     @State private var aiWork: TaskAIWork?
-    @State private var aiRuns: [AIRun] = []
+    @State private var aiRuns: [TaskAIRun] = []
     @State private var sheet: TaskSheet?
     @State private var assigneeDraft: [WorkspacePerson] = []
     @State private var labelDraft: [KanbanLabel] = []

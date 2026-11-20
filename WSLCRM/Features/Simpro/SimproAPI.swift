@@ -10,6 +10,13 @@ struct SimproAPI: Sendable {
         var serviceOverdue = false
         var fgasOnly = false
         var conditionMin: Int?
+        /// hvac, heating, ventilation, electrical, controls; nil: all.
+        var discipline: String?
+
+        static let disciplines: [(value: String, label: String)] = [
+            ("hvac", "HVAC"), ("heating", "Heating"), ("ventilation", "Ventilation"), ("electrical", "Electrical"),
+            ("controls", "Controls"),
+        ]
     }
 
     func assets(search: String, filter: AssetFilter, page: Int, perPage: Int = 25) async throws -> Page<CustomerAsset> {
@@ -19,6 +26,7 @@ struct SimproAPI: Sendable {
         if filter.serviceOverdue { query.append(URLQueryItem(name: "service_overdue", value: "true")) }
         if filter.fgasOnly { query.append(URLQueryItem(name: "fgas_only", value: "true")) }
         if let min = filter.conditionMin { query.append(URLQueryItem(name: "condition_min", value: String(min))) }
+        if let discipline = filter.discipline { query.append(URLQueryItem(name: "discipline", value: discipline)) }
         let envelope: Envelope.Standard<LossyArray<CustomerAsset>> =
             try await client.send(.get("\(Self.base)/assets", query: query))
         return Page(items: envelope.data.elements,
@@ -60,5 +68,45 @@ struct SimproAPI: Sendable {
     func simproStatus() async throws -> SimproStatus {
         let envelope: Envelope.Standard<SimproStatus> = try await client.send(.get("\(Self.base)/simpro/status"))
         return envelope.data
+    }
+
+    // MARK: Running a sync (simpro_sync.manage)
+
+    /// The body of a pull or push: which record types (all of them when nil).
+    struct SyncBody: Encodable, Sendable, Equatable {
+        var entities: String?
+    }
+
+    func testSimpro() async throws -> SimproTestResult {
+        let envelope: Envelope.Standard<SimproTestResult> = try await client.send(
+            .post("\(Self.base)/simpro/test", json: EmptyBody()))
+        return envelope.data
+    }
+
+    func pullSimpro(entities: String? = nil) async throws -> SimproSyncResult {
+        var endpoint = Endpoint.post("\(Self.base)/simpro/pull", json: SyncBody(entities: entities))
+        endpoint.timeout = 300
+        let envelope: Envelope.Standard<SimproSyncResult> = try await client.send(endpoint)
+        return envelope.data
+    }
+
+    func pushSimpro(entities: String? = nil) async throws -> SimproSyncResult {
+        var endpoint = Endpoint.post("\(Self.base)/simpro/push", json: SyncBody(entities: entities))
+        endpoint.timeout = 300
+        let envelope: Envelope.Standard<SimproSyncResult> = try await client.send(endpoint)
+        return envelope.data
+    }
+
+    /// The sync audit trail, newest first. `status`: ok, conflict, error, skipped (nil: all).
+    func simproLog(status: String?, page: Int, perPage: Int = 25) async throws -> Page<SimproLogEntry> {
+        var q = QueryBuilder()
+        q.add("page", page)
+        q.add("per_page", perPage)
+        q.add("status", status)
+        let envelope: Envelope.Standard<LossyArray<SimproLogEntry>> =
+            try await client.send(.get("\(Self.base)/simpro/log", query: q.items))
+        return Page(items: envelope.data.elements, page: envelope.meta?.page ?? page,
+                    perPage: envelope.meta?.perPage ?? perPage,
+                    total: envelope.meta?.total ?? envelope.data.elements.count)
     }
 }

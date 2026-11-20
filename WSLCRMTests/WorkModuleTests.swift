@@ -429,7 +429,7 @@ final class WorkModuleTests: XCTestCase {
     }
 
     func testAIRunDetailAndWaitingDecode() throws {
-        let detail = try decode(Envelope.Standard<AIRunDetail>.self, """
+        let detail = try decode(Envelope.Standard<TaskAIRunDetail>.self, """
         {"success":true,"data":{"uuid":"run1","status":"needs_input","attempt":2,"question":"Which branch?",
          "task_snapshot":{"title":"Fix login","task_number":14},"cost_estimate":"0.0123","tokens_in":10,"tokens_out":"20",
          "events":[{"seq":1,"type":"log","text":"Cloning"}],
@@ -485,7 +485,7 @@ final class WorkModuleTests: XCTestCase {
             return .json(201, #"{"success":true,"data":{"uuid":"run1","status":"pending_approval","attempt":1}}"#)
         }, tokenStore: InMemoryTokenStore(AuthTokens(accessToken: "a", refreshToken: "r")))
         await client.setNamespace("ns")
-        let run = try await AIRunnerAPI(client: client).start(
+        let run = try await TaskAIRunnerAPI(client: client).start(
             taskUuid: "t1", AIRunStartBody(runnerUuid: "r1", profile: "claude", repoPath: "/src/app", confirmSimilar: true),
             idempotencyKey: "key-1")
         XCTAssertEqual(run.status, .pendingApproval)

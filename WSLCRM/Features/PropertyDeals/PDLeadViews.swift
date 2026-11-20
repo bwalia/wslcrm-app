@@ -139,6 +139,12 @@ struct PDLeadView: View {
     @State private var loggingReply = false
     @State private var capturingNews = false
     @State private var lastLogged: PDLeadReply?
+    @State private var raw: Record?
+    @State private var editingDetails = false
+    @State private var followUp: PDFollowUpTarget?
+    @State private var createdDeal: PDDealRoute?
+    @State private var notice: String?
+    @State private var actionError: APIError?
 
     var body: some View {
         Group {
@@ -165,7 +171,23 @@ struct PDLeadView: View {
                 await loadActivity()
             }
         }
+        .sheet(isPresented: $editingDetails) {
+            if let raw {
+                PDLeadDetailsSheet(lead: raw) { notice = "Deal details saved."; Task { await load() } }
+            }
+        }
+        .sheet(item: $followUp) { target in
+            PDFollowUpSheet(leadUuid: leadUuid, signal: target.signal) {
+                notice = "Drafting. It will be waiting in Approvals in a moment."
+                Task { await loadActivity() }
+            }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) { PDNoticeBar(notice: notice, error: actionError) }
+        .navigationDestination(item: $createdDeal) { PDDealView(dealUuid: $0.uuid) }
     }
+
+    private var canFollowUp: Bool { session.propertyDeals?.can(.create, .tasks) ?? false }
+    private var canEditLead: Bool { session.propertyDeals?.can(.update, .leads) ?? false }
 
     private var canUpdate: Bool { session.propertyDeals?.can(.update, .deals) ?? false }
 
@@ -201,12 +223,36 @@ struct PDLeadView: View {
 
             if let lastLogged { loggedResult(lastLogged) }
 
+            if let raw {
+                PDLeadPropertySection(lead: raw, canEdit: canEditLead,
+                                      canStartWorkflow: session.propertyDeals?.can(.create, .deals) ?? false,
+                                      edit: { editingDetails = true },
+                                      startWorkflow: { Task { await startWorkflow(raw) } })
+            }
+
+            if canFollowUp {
+                Section {
+                    Button("Draft a personal follow-up", systemImage: "sparkles") { followUp = PDFollowUpTarget(signal: nil) }
+                        .accessibilityIdentifier("pd.lead.followUp")
+                    NavigationLink(value: PDApprovalsRoute()) { Label("Approvals", systemImage: "checkmark.seal") }
+                } footer: {
+                    Text("The AI writes it in your voice, using their news; a person approves it before it is sent.")
+                }
+            }
+
             Section {
                 if replies.isEmpty {
                     Text("No replies yet. Emails from them are matched automatically; log a WhatsApp, text or call here.")
                         .font(.wsFootnote).foregroundStyle(.secondaryText)
                 }
-                ForEach(replies) { PDReplyRow(reply: $0) }
+                ForEach(replies) { reply in
+                    if let task = reply.hotTaskUuid {
+                        NavigationLink(value: PDTaskRoute(uuid: task)) { PDReplyRow(reply: reply) }
+                            .accessibilityHint("Opens the call-now task")
+                    } else {
+                        PDReplyRow(reply: reply)
+                    }
+                }
                 if canUpdate {
                     Button("Log a reply", systemImage: "plus.bubble") { loggingReply = true }
                         .accessibilityIdentifier("pd.lead.logReply")
@@ -220,7 +266,25 @@ struct PDLeadView: View {
                     Text("No news yet. Companies House is checked daily for companies they form, filings and new charges.")
                         .font(.wsFootnote).foregroundStyle(.secondaryText)
                 }
-                ForEach(signals) { PDSignalRow(signal: $0) }
+                ForEach(signals) { signal in
+                    PDSignalRow(signal: signal)
+                        .swipeActions {
+                            if signal.source == "manual", canEditLead {
+                                Button("Delete", role: .destructive) { Task { await deleteSignal(signal) } }
+                            }
+                            if signal.usedAt == nil, canFollowUp {
+                                Button("Follow up") { followUp = PDFollowUpTarget(signal: signal) }.tint(.indigo)
+                            }
+                        }
+                        .contextMenu {
+                            if signal.usedAt == nil, canFollowUp {
+                                Button("Follow up about this", systemImage: "sparkles") { followUp = PDFollowUpTarget(signal: signal) }
+                            }
+                            if signal.source == "manual", canEditLead {
+                                Button("Delete", systemImage: "trash", role: .destructive) { Task { await deleteSignal(signal) } }
+                            }
+                        }
+                }
                 if canUpdate {
                     Button("Add something you saw", systemImage: "newspaper") { capturingNews = true }
                         .accessibilityIdentifier("pd.lead.captureNews")
@@ -264,7 +328,33 @@ struct PDLeadView: View {
         } catch {
             if state.value == nil { state = .failed(error.asAPIError) }
         }
+        raw = (try? await services.pdRaw.record("/leads/\(leadUuid)")) ?? raw
         await loadActivity()
+    }
+
+    private func startWorkflow(_ lead: Record) async {
+        let dealType = lead.string("details.lead_kind") == "buyer_investor" ? "sell" : "buy"
+        do {
+            let deal = PDRaw.record(try await services.pdRaw.send(.post, "/deals", ["lead_uuid": .string(leadUuid),
+                                                                                  "deal_type": .string(dealType)], idempotent: true))
+            notice = "Property workflow started."
+            actionError = nil
+            if let uuid = deal?.string("uuid") { createdDeal = PDDealRoute(uuid: uuid) }
+            await load()
+        } catch {
+            actionError = error.asAPIError
+        }
+    }
+
+    private func deleteSignal(_ signal: PDLeadSignal) async {
+        do {
+            try await services.pdRaw.send(.delete, "/signals/\(signal.uuid)")
+            notice = "Removed from the news."
+            actionError = nil
+            await loadActivity()
+        } catch {
+            actionError = error.asAPIError
+        }
     }
 
     private func loadActivity() async {
@@ -333,6 +423,7 @@ struct PDSignalRow: View {
             HStack(spacing: 6) {
                 Text(signal.fromCompaniesHouse ? "Companies House" : Self.label(signal.kind))
                 if let at = signal.occurredAt ?? signal.createdAt { Text("· \(Formatters.relative(at) ?? "")") }
+                if let used = signal.usedAt { Text("· used \(Formatters.relative(used) ?? "")") }
             }
             .font(.wsCaption).foregroundStyle(.secondaryText)
             if let raw = signal.url, let url = URL(string: raw), ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
@@ -489,4 +580,10 @@ struct PDCaptureNewsSheet: View {
             }
         }
     }
+}
+
+/// What a follow-up is about: the lead in general, or one news item.
+struct PDFollowUpTarget: Identifiable {
+    let signal: PDLeadSignal?
+    var id: String { signal?.uuid ?? "general" }
 }

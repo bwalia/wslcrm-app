@@ -175,6 +175,13 @@ final class NativeModulesTests: XCTestCase {
         print("Not native yet (\(NativeModules.notYetNative.count)):", NativeModules.notYetNative.sorted())
     }
 
+    /// Every module the server offers has a native screen. A new server module fails this until it
+    /// is built natively (never answered with a web page): add it to `NativeModules.serverKeys` and
+    /// give it a screen in its area's module group.
+    func testEveryServerModuleIsNative() {
+        XCTAssertEqual(NativeModules.notYetNative.sorted(), [], "modules with no native screen yet")
+    }
+
     func testEveryMappedKeyIsARealServerKey() {
         let known = Set(NativeModules.serverKeys)
         let mapped = Set(NativeModules.screens.keys).union(ModuleCatalog.resourceKeys.keys).union(ModuleCatalog.screenKeys.keys)

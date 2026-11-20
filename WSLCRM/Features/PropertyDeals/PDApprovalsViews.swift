@@ -6,11 +6,21 @@ import SwiftUI
 /// from the cached copy; deciding needs a connection.
 struct PDApprovalsListView: View {
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @State private var state: LoadState<[PDApproval]> = .idle
     @State private var cachedAt: Date?
+    /// The web's "Show ones I can't decide": every pending approval, not just mine.
+    @State private var showAll = false
+    @State private var page = 1
+    @State private var total = 0
+    @State private var loadingMore = false
 
     var body: some View {
         List {
+            Section {
+                Toggle("Show ones I can’t decide", isOn: $showAll)
+                    .accessibilityIdentifier("pd.approvals.showAll")
+            }
             if let cachedAt { CachedDataNotice(savedAt: cachedAt) }
             switch state {
             case .idle, .loading:
@@ -30,6 +40,18 @@ struct PDApprovalsListView: View {
                         }
                         .accessibilityIdentifier("pd.approvals.row.\(approval.uuid)")
                     }
+                    if approvals.count < total {
+                        Button {
+                            Task { await loadMore() }
+                        } label: {
+                            if loadingMore { ProgressView() } else { Text("Show more (\(total - approvals.count) more waiting)") }
+                        }
+                        .frame(minHeight: 44)
+                        .disabled(loadingMore)
+                        .accessibilityIdentifier("pd.approvals.more")
+                    }
+                } header: {
+                    Text(total == 1 ? "1 waiting" : "\(total) waiting")
                 } footer: {
                     Text("Nothing is sent until a named person approves it.")
                 }
@@ -37,17 +59,32 @@ struct PDApprovalsListView: View {
         }
         .navigationTitle("Approvals")
         .refreshable { await load() }
-        .task { await load() }
+        .task(id: showAll) { await load() }
+        .onAppear { if state.value != nil { Task { await load() } } }
     }
 
     private func load() async {
         if state.value == nil { state = .loading }
         do {
-            let fetched = try await services.propertyDeals.approvalsInbox()
-            state = .loaded(fetched.value)
+            let fetched = try await services.propertyDeals.approvalsPage(all: showAll, page: 1)
+            state = .loaded(fetched.value.items)
+            total = fetched.value.total
+            page = 1
             cachedAt = fetched.cachedAt
         } catch {
-            state = .failed(error.asAPIError)
+            if state.value == nil { state = .failed(error.asAPIError) }
+        }
+    }
+
+    private func loadMore() async {
+        guard let current = state.value else { return }
+        loadingMore = true
+        defer { loadingMore = false }
+        if let fetched = try? await services.propertyDeals.approvalsPage(all: showAll, page: page + 1) {
+            let known = Set(current.map(\.uuid))
+            state = .loaded(current + fetched.value.items.filter { !known.contains($0.uuid) })
+            total = fetched.value.total
+            page += 1
         }
     }
 }
@@ -67,6 +104,9 @@ struct PDApprovalRow: View {
             .foregroundStyle(.secondaryText)
             HStack(spacing: 8) {
                 StatusBadge(text: approval.rule.label, systemImage: approval.rule.symbol, tone: .neutral)
+                if approval.canDecide == false {
+                    StatusBadge(text: "Not yours to decide", systemImage: "person.badge.clock", tone: .neutral)
+                }
                 if let created = approval.createdAt {
                     Text(created, format: .relative(presentation: .named))
                         .font(.wsFootnote)
@@ -91,6 +131,7 @@ struct PDApprovalDetailView: View {
 
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @Environment(SessionStore.self) private var session
     @Environment(ConnectivityMonitor.self) private var connectivity
 
@@ -265,6 +306,15 @@ struct PDApprovalDetailView: View {
 
     @ViewBuilder
     private func sourcesSection(_ approval: PDApproval) -> some View {
+        let steps = PDApprovalSteps.list(approval.runSteps)
+        if !steps.isEmpty {
+            Section("What the agent looked at (\(steps.count))") {
+                ForEach(steps, id: \.self) { step in
+                    Label(step.text, systemImage: step.refused ? "hand.raised" : "doc.text.magnifyingglass")
+                        .foregroundStyle(step.refused ? Tone.danger.textColor : .primary)
+                }
+            }
+        }
         let sources = PDApprovalSource.list(from: approval.runSources)
         if !sources.isEmpty {
             Section("What the agent used") {
@@ -355,6 +405,25 @@ struct PDApprovalDetailView: View {
                             .multilineTextAlignment(.center)
                             .accessibilityElement(children: .combine)
                             .accessibilityIdentifier("pd.approval.execution")
+                        if execution.failed, session.propertyDeals?.can(.manage, .approvals) ?? false {
+                            Button("Try sending it again", systemImage: "arrow.clockwise") { Task { await retry(approval) } }
+                                .buttonStyle(.bordered)
+                                .disabled(isSending)
+                                .accessibilityIdentifier("pd.approval.retry")
+                        }
+                    }
+                    if let message {
+                        Label(message, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Tone.danger.textColor)
+                    }
+                    if let link = PDApprovalExecution.manualLink(approval) {
+                        // WhatsApp (and a text without an SMS gateway): the approved words, ready to send.
+                        Button(link.scheme == "sms" ? "Open Messages to send it" : "Open WhatsApp to send it",
+                               systemImage: "paperplane.circle.fill") { openURL(link) }
+                            .buttonStyle(.borderedProminent)
+                            .accessibilityIdentifier("pd.approval.manualLink")
+                        Text("Press send there, then mark the follow-up task done.")
+                            .font(.wsFootnote).foregroundStyle(.secondaryText)
                     }
                 case .rejected:
                     Image(systemName: "xmark.seal.fill")
@@ -397,7 +466,11 @@ struct PDApprovalDetailView: View {
     private func load() async {
         if state.value == nil { state = .loading }
         do {
-            let fetched = try await services.propertyDeals.approvalsInbox()
+            var fetched = try await services.propertyDeals.approvalsInbox()
+            if !fetched.value.contains(where: { $0.uuid == approvalUuid }),
+               let found = try? await services.propertyDeals.currentApproval(approvalUuid) {
+                fetched = Fetched(value: [found], cachedAt: nil)
+            }
             guard let approval = fetched.value.first(where: { $0.uuid == approvalUuid }) else {
                 state = .failed(.notFound(ServerError(status: 404, message: "This approval isn't waiting for you any more. Someone may have decided it already.",
                                                      fieldErrors: [:], rawBody: "")))
@@ -407,6 +480,22 @@ struct PDApprovalDetailView: View {
             cachedAt = fetched.cachedAt
         } catch {
             state = .failed(error.asAPIError)
+        }
+    }
+
+    /// `POST /approvals/{id}/retry`: run a failed approved action again (managers).
+    private func retry(_ approval: PDApproval) async {
+        isSending = true
+        defer { isSending = false }
+        do {
+            let answer = try await services.pdRaw.send(.post, "/approvals/\(approval.uuid)/retry", [:])
+            if let data = answer.flatMap({ try? JSONEncoder().encode($0) }),
+               let envelope = try? JSONDecoder.opsAPI().decode(Envelope.Standard<PDApproval>.self, from: data) {
+                state = .loaded(envelope.data)
+            }
+            message = nil
+        } catch {
+            message = Self.describe(error.asAPIError)
         }
     }
 
@@ -663,6 +752,14 @@ struct PDApprovalExecution: Equatable {
     let text: String
     let failed: Bool
 
+    /// A click-to-send link the server returns for WhatsApp (and texts with no SMS gateway).
+    static func manualLink(_ approval: PDApproval) -> URL? {
+        guard approval.status == .executed, case .object(let result)? = approval.executionResult,
+              let text = result["manual_link"]?.stringValue,
+              text.hasPrefix("https://wa.me/") || text.hasPrefix("sms:") else { return nil }
+        return URL(string: text)
+    }
+
     init?(_ approval: PDApproval) {
         let result: [String: JSONValue]
         if case .object(let object) = approval.executionResult { result = object } else { result = [:] }
@@ -680,6 +777,29 @@ struct PDApprovalExecution: Equatable {
             failed = false
         default:
             return nil
+        }
+    }
+}
+
+/// The agent's steps for "what it looked at": each tool it read, or was refused.
+struct PDApprovalSteps: Hashable {
+    let text: String
+    let refused: Bool
+
+    static func list(_ value: JSONValue?) -> [PDApprovalSteps] {
+        var items: [JSONValue] = []
+        switch value {
+        case .array(let array)?: items = array
+        case .string(let text)?:
+            if let data = text.data(using: .utf8), case .array(let array)? = try? ResourceService.decode(data) { items = array }
+        default: break
+        }
+        return items.compactMap { item in
+            guard case .object(let step) = item, let tool = step["tool"]?.stringValue else { return nil }
+            let refused = step["refused"]?.boolValue == true
+            return PDApprovalSteps(text: refused ? "Refused: \(Formatters.humanize(tool)) (\(step["reason"]?.stringValue ?? "not allowed"))"
+                                                 : "Read \(Formatters.humanize(tool).lowercased())",
+                                   refused: refused)
         }
     }
 }

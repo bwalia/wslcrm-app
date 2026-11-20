@@ -20,7 +20,8 @@ enum MenuDestination: Hashable {
 
     /// nil when the app has no screen for the item yet: it isn't offered (never a web page).
     static func of(_ item: AppMenu.Item) -> MenuDestination? {
-        NativeModules.destination(forKey: item.key)
+        // A plugin's generated page the app has no screen of its own for still opens natively.
+        NativeModules.destination(forKey: item.key) ?? PluginPages.destination(forPath: item.path)
     }
 }
 
@@ -65,8 +66,8 @@ enum NativeModules {
     /// Server menu keys the app replaces with something of its own (the Home tab is the dashboard).
     static let replaced: Set<String> = ["dashboard", "apps"]
 
-    /// The backlog: server modules with no native screen yet, hidden until they have one.
-    /// Shrinks to empty; never "solved" with a web page.
+    /// Server modules with no native screen: empty since 2026-11-20, and kept empty by
+    /// `NativeModulesTests.testEveryServerModuleIsNative`. Never "solved" with a web page.
     static var notYetNative: Set<String> {
         Set(serverKeys.filter { destination(forKey: $0) == nil && !replaced.contains($0) })
     }

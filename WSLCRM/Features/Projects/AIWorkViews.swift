@@ -7,7 +7,7 @@ import SwiftUI
 struct TaskAIPanel: View {
     let task: KanbanTask
     let work: TaskAIWork?
-    let runs: [AIRun]
+    let runs: [TaskAIRun]
     let canStart: Bool
     let canReview: Bool
     let start: () -> Void
@@ -83,7 +83,7 @@ struct TaskAIPanel: View {
             Section("AI runs") {
                 ForEach(runs.prefix(10)) { run in
                     NavigationLink(value: WorkScreen.aiRun(uuid: run.uuid).route) {
-                        AIRunRow(run: run, showsTask: false)
+                        TaskAIRunRow(run: run, showsTask: false)
                     }
                     .accessibilityIdentifier("task.ai.run.\(run.uuid)")
                 }
@@ -98,7 +98,7 @@ private struct WorkRecordRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                let status = AIRunStatus(raw: work.status == "running" ? "running" : work.status)
+                let status = TaskAIRunStatus(raw: work.status == "running" ? "running" : work.status)
                 StatusBadge(text: status == .unknown ? Formatters.humanize(work.status) : status.label,
                             systemImage: status.systemImage, tone: status.tone)
                 if let kind = work.executorKind { Text(Formatters.humanize(kind)).font(.wsCaption).foregroundStyle(.secondaryText) }
@@ -124,8 +124,8 @@ private struct WorkRecordRow: View {
     }
 }
 
-struct AIRunRow: View {
-    let run: AIRun
+struct TaskAIRunRow: View {
+    let run: TaskAIRun
     var showsTask = true
 
     var body: some View {
@@ -155,7 +155,7 @@ private extension Array {
 
 struct StartAIRunSheet: View {
     let task: KanbanTask
-    let onStarted: (AIRun) async -> Void
+    let onStarted: (TaskAIRun) async -> Void
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
     @State private var preview: AIRunPreview?
@@ -416,10 +416,10 @@ struct StartAIRunSheet: View {
 
 // MARK: - One run
 
-struct AIRunDetailView: View {
+struct TaskAIRunDetailView: View {
     let uuid: String
     @Environment(\.services) private var services
-    @State private var state: LoadState<AIRunDetail> = .idle
+    @State private var state: LoadState<TaskAIRunDetail> = .idle
     @State private var message = ""
     @State private var confirm: PendingConfirmation?
     @State private var prompt: PendingPrompt?
@@ -453,7 +453,7 @@ struct AIRunDetailView: View {
     }
 
     @ViewBuilder
-    private func content(_ detail: AIRunDetail) -> some View {
+    private func content(_ detail: TaskAIRunDetail) -> some View {
         let run = detail.run
         List {
             Section {
@@ -567,7 +567,7 @@ struct AIRunDetailView: View {
     }
 
     @ViewBuilder
-    private func actions(_ detail: AIRunDetail) -> some View {
+    private func actions(_ detail: TaskAIRunDetail) -> some View {
         let run = detail.run
         if (run.status == .pendingApproval && detail.canApprove) || (!run.status.isEnded && run.status != .cancelling && detail.canMessage)
             || (run.status.isEnded && detail.canMessage) {
@@ -631,7 +631,7 @@ struct AIRunDetailView: View {
         }
     }
 
-    private func send(_ run: AIRun) async {
+    private func send(_ run: TaskAIRun) async {
         let text = message.trimmingCharacters(in: .whitespacesAndNewlines)
         await act("Sent to the AI.") {
             try await services.kanban.ai.send(run.uuid, message: text)
@@ -639,7 +639,7 @@ struct AIRunDetailView: View {
         }
     }
 
-    private func retry(_ run: AIRun, confirmSimilar: Bool) async {
+    private func retry(_ run: TaskAIRun, confirmSimilar: Bool) async {
         busy = true
         defer { busy = false }
         do {
