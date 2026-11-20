@@ -711,6 +711,21 @@ class Seeder:
 # Setup: people, workspace, customers, sites, equipment, stock, job types
 # ---------------------------------------------------------------------------------------------
 
+def ensure_member(ns_id: int, user_id: int, role: str) -> None:
+    """Make the user an active member of the namespace holding `role`, if they are not one already."""
+    if not sql_value(f"SELECT 1 FROM namespace_roles WHERE namespace_id = {ns_id} AND role_name = {lit(role)}"):
+        die(f"namespace {ns_id} has no {role} role")
+    sql(f"""
+        INSERT INTO namespace_members (uuid, namespace_id, user_id, status, is_owner, joined_at, created_at, updated_at)
+        SELECT gen_random_uuid()::text, {ns_id}, {user_id}, 'active', false, NOW(), NOW(), NOW()
+        WHERE NOT EXISTS (SELECT 1 FROM namespace_members WHERE namespace_id = {ns_id} AND user_id = {user_id});
+        INSERT INTO namespace_user_roles (uuid, namespace_member_id, namespace_role_id, created_at, updated_at)
+        SELECT gen_random_uuid()::text, m.id, r.id, NOW(), NOW()
+        FROM namespace_members m JOIN namespace_roles r ON r.namespace_id = m.namespace_id AND r.role_name = {lit(role)}
+        WHERE m.namespace_id = {ns_id} AND m.user_id = {user_id}
+          AND NOT EXISTS (SELECT 1 FROM namespace_user_roles x WHERE x.namespace_member_id = m.id);""")
+
+
 def setup_reference_data(s: Seeder) -> None:
     print("1. Owner and workspace")
     owner_email = staff_email(OWNER["username"])
@@ -726,6 +741,9 @@ def setup_reference_data(s: Seeder) -> None:
         s.identifiers[key] = username
 
     ns = sql(f"SELECT uuid, id FROM namespaces WHERE slug = {lit(NAMESPACE['slug'])}")
+    # A namespace that was already there (e.g. `workstation` on int) belongs to someone else: the seed
+    # joins its people to it rather than owning it, and leaves the namespace's own history alone.
+    adopted = bool(ns)
     if not ns:
         created = s.call("owner", "POST", "/api/v2/user/namespaces", NAMESPACE)
         uuid = (created.get("namespace") or created.get("data") or created)["uuid"]
@@ -736,7 +754,8 @@ def setup_reference_data(s: Seeder) -> None:
             s.call("owner", "POST", "/api/v2/namespace/leave", {}, ok=(200, 201, 400, 403, 404))
         ns = sql(f"SELECT uuid, id FROM namespaces WHERE slug = {lit(NAMESPACE['slug'])}")
     s.ns_uuid, s.ns_id = ns[0][0], int(ns[0][1])
-    sql(f"UPDATE namespaces SET created_at = NOW() - interval '6 years' WHERE id = {s.ns_id}")
+    if not adopted:
+        sql(f"UPDATE namespaces SET created_at = NOW() - interval '6 years' WHERE id = {s.ns_id}")
 
     print("2. Staff")
     for key, first, last, username, role in STAFF:
@@ -752,19 +771,29 @@ def setup_reference_data(s: Seeder) -> None:
         if not row:
             die(f"user {username} was not created")
         s.users[key] = {"uuid": row[0][0], "id": int(row[0][1])}
+    # Staff who already exist (seeded into another workspace) are skipped by POST /api/v2/users above,
+    # so they are joined here. In an adopted namespace the DBS owner joins as admin, not owner.
+    owner_role = "admin" if adopted else "owner"
+    for key, role in [("owner", owner_role)] + [(k, r) for k, _, _, _, r in STAFF]:
+        ensure_member(s.ns_id, s.users[key]["id"], role)
 
     print("3. Store of serviced equipment")
+    # Store slugs are global, so a second seeded workspace gets its own suffixed slug. Look the store
+    # up by namespace, never by slug alone, or one workspace's jobs would point at another's plant.
     sql(f"""
         INSERT INTO stores (uuid, user_id, namespace_id, name, slug, description, status, currency, tax_rate,
                             city, country, created_at, updated_at)
         SELECT gen_random_uuid()::text, {s.users['owner']['id']}, {s.ns_id}, 'DBS Limited — serviced equipment',
-               'dbs-limited-equipment', 'Customer plant maintained under contract or call-out', 'active', 'GBP', 0.2,
+               {lit('dbs-limited-equipment-' + NAMESPACE['slug'])},
+               'Customer plant maintained under contract or call-out', 'active', 'GBP', 0.2,
                'London', 'United Kingdom', NOW(), NOW()
-        WHERE NOT EXISTS (SELECT 1 FROM stores WHERE slug = 'dbs-limited-equipment');""")
-    store = sql_value("SELECT uuid FROM stores WHERE slug = 'dbs-limited-equipment'")
+        WHERE NOT EXISTS (SELECT 1 FROM stores WHERE namespace_id = {s.ns_id}
+                          AND name = 'DBS Limited — serviced equipment');""")
+    store_id = int(sql_value(f"SELECT id FROM stores WHERE namespace_id = {s.ns_id} "
+                             f"AND name = 'DBS Limited — serviced equipment' ORDER BY id LIMIT 1"))
+    store = sql_value(f"SELECT uuid FROM stores WHERE id = {store_id}")
     for key, (sku, name, description) in ASSETS.items():
-        uuid = sql_value(f"SELECT p.uuid FROM storeproducts p JOIN stores st ON st.id = p.store_id "
-                         f"WHERE st.slug = 'dbs-limited-equipment' AND p.sku = {lit(sku)}")
+        uuid = sql_value(f"SELECT uuid FROM storeproducts WHERE store_id = {store_id} AND sku = {lit(sku)}")
         if not uuid:
             uuid = s.call("owner", "POST", "/api/v2/products",
                           {"store_id": store, "name": name, "sku": sku, "price": 1, "compare_price": 1,
@@ -777,7 +806,9 @@ def setup_reference_data(s: Seeder) -> None:
         if not uuid:
             uuid = s.call("claire", "POST", "/api/v2/customers", fields)["uuid"]
         s.customers[key] = uuid
-    sql(f"UPDATE customers SET created_at = NOW() - interval '3 years' WHERE namespace_id = {s.ns_id}")
+    seeded_customers = ", ".join(lit(u) for u in s.customers.values())
+    sql(f"UPDATE customers SET created_at = NOW() - interval '3 years' "
+        f"WHERE namespace_id = {s.ns_id} AND uuid IN ({seeded_customers})")
     for key, (customer, name, line1, city, county, postcode, contact, phone, notes, _, _) in SITES.items():
         fields = {"customer_uuid": s.customers[customer], "name": name, "address_line1": line1, "city": city,
                   "county": county, "postal_code": postcode, "country": "United Kingdom", "contact_name": contact,
@@ -791,7 +822,8 @@ def setup_reference_data(s: Seeder) -> None:
         else:
             uuid = s.call("claire", "POST", "/api/v2/field-service/sites", fields)["uuid"]
         s.sites[key] = uuid
-    sql(f"UPDATE fs_sites SET created_at = NOW() - interval '2 years' WHERE namespace_id = {s.ns_id}")
+    sql(f"UPDATE fs_sites SET created_at = NOW() - interval '2 years' WHERE namespace_id = {s.ns_id} "
+        f"AND customer_id IN (SELECT id FROM customers WHERE uuid IN ({seeded_customers}))")
 
     print("5. Van and warehouse stock")
     for sku, (name, category, cost, price, stock, reorder) in PARTS.items():
