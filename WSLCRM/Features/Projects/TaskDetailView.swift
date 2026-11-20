@@ -21,6 +21,7 @@ struct TaskDetailView: View {
     @State private var timeSummary: TaskTimeSummary?
     @State private var runningTimer: RunningTimer?
     @State private var aiEnabled = false
+    @State private var aiChecked = false
     @State private var aiWork: TaskAIWork?
     @State private var aiRuns: [AIRun] = []
     @State private var sheet: TaskSheet?
@@ -907,7 +908,10 @@ struct TaskDetailView: View {
             columns = (full.columns ?? []).sorted { $0.position < $1.position }
         }
         let ai = services.kanban.ai
-        aiEnabled = await ai.isEnabled()
+        if !aiChecked {
+            aiEnabled = await ai.isEnabled()
+            aiChecked = true
+        }
         if aiEnabled, session.permissions.can(.read, moduleName: "ai_runs") {
             async let work = ai.work(taskUuid: task.uuid)
             async let runs = ai.runs(taskUuid: task.uuid)
