@@ -13,6 +13,7 @@ struct LeadDetailView: View {
     @State private var state: LoadState<Lead> = .idle
     @State private var timeline: [LeadTimelineItem] = []
     @State private var bundle: LeadSettingsBundle?
+    @State private var formResponses: [WebFormRecordResponse] = []
     @State private var sheet: Sheet?
     @State private var busy = false
     @State private var actionError: APIError?
@@ -61,6 +62,10 @@ struct LeadDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .task { bundle = try? await services.leads.settings() }
+        .task(id: leadUuid) {
+            formResponses = await WebFormRecordResponsesSection.load(services: services, session: session,
+                                                                     entityType: "lead", entityUUID: leadUuid)
+        }
         .refreshable { await load() }
         .toolbar {
             if let lead = state.value, canWork(lead), session.permissions.can(.update, .crmLeads), lead.stage != .converted {
@@ -116,6 +121,8 @@ struct LeadDetailView: View {
             details(lead)
             qualification(lead)
             LeadShopSections(metadata: lead.metadata)
+            // The lead's answers to the workspace's forms (as on the web's lead page).
+            WebFormRecordResponsesSection(items: formResponses)
             if !timeline.isEmpty { history }
             if canWork(lead), session.permissions.can(.delete, .crmLeads), lead.stage != .converted {
                 Section {

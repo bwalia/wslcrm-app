@@ -244,12 +244,18 @@ struct WebFormDomainView: View {
 /// "Form responses" for a customer's or lead's page: the responses that created or matched that record,
 /// newest first. Shows nothing without the forms module or when there are none. (For other areas to place.)
 struct WebFormRecordResponsesSection: View {
-    /// customer, lead, user or invitation.
-    let entityType: String
-    let entityUUID: String
-    @Environment(\.services) private var services
-    @Environment(SessionStore.self) private var session
-    @State private var items: [WebFormRecordResponse] = []
+    /// Loaded by the record's page (`load`): a List row that shows nothing never appears, so the
+    /// section can't load itself.
+    let items: [WebFormRecordResponse]
+
+    /// The responses about one record (`entityType`: customer, lead, user or invitation); empty when
+    /// the person can't read forms or there are none.
+    @MainActor
+    static func load(services: Services, session: SessionStore, entityType: String,
+                     entityUUID: String) async -> [WebFormRecordResponse] {
+        guard session.permissions.can(.read, moduleName: WebFormsAPI.module) else { return [] }
+        return (try? await services.webForms.responses(forRecord: entityType, uuid: entityUUID)) ?? []
+    }
 
     var body: some View {
         Group {
@@ -272,10 +278,6 @@ struct WebFormRecordResponsesSection: View {
                     }
                 }
             }
-        }
-        .task(id: entityUUID) {
-            guard session.permissions.can(.read, moduleName: WebFormsAPI.module) else { return }
-            items = (try? await services.webForms.responses(forRecord: entityType, uuid: entityUUID)) ?? []
         }
     }
 }

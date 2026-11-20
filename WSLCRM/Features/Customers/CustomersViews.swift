@@ -119,6 +119,7 @@ struct CustomerDetailView: View {
     @State private var editing = false
     @State private var deleteError: APIError?
     @State private var notice: String?
+    @State private var formResponses: [WebFormRecordResponse] = []
 
     var body: some View {
         Group {
@@ -133,6 +134,10 @@ struct CustomerDetailView: View {
         }
         .navigationTitle("Customer")
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: customerUuid) {
+            formResponses = await WebFormRecordResponsesSection.load(services: services, session: session,
+                                                                     entityType: "customer", entityUUID: customerUuid)
+        }
         .task { await load() }
         .refreshable { await load() }
         .toolbar {
@@ -204,6 +209,8 @@ struct CustomerDetailView: View {
             if let notes = customer.notes, !notes.isEmpty {
                 Section("Notes") { Text(notes).textSelection(.enabled) }
             }
+            // What this customer told us in the workspace's forms (as on the web's customer page).
+            WebFormRecordResponsesSection(items: formResponses)
             if session.permissions.can(.delete, .customers) {
                 Section {
                     DeleteButton(title: "Delete customer",
