@@ -267,6 +267,10 @@ struct PACapture: Decodable, Sendable, Identifiable {
         var owner: PACard.Person?
         var reason: String?
         var material: Bool?
+        /// The proposed value as the server sent it (a correction keeps its other keys).
+        var value: JSONValue? = nil
+        var status: String? = nil
+        var isDecided: Bool { status != nil && status != "proposed" }
     }
 }
 
@@ -291,9 +295,14 @@ struct PAProposedUpdate: Decodable, Sendable, Hashable, Identifiable {
     /// The words from the note this change rests on (the server refuses an uninferred change
     /// without them).
     var quote: String?
+    /// The record kind it changes: events and offers are kept or rejected, never edited (as on the web).
+    var targetTable: String? = nil
 
     var id: String { uuid }
     var isMaterial: Bool { material ?? false }
+    var isEditable: Bool { targetTable != "pa_events" && targetTable != "pa_offers" }
+    /// Already confirmed, corrected or rejected (by this person or someone else).
+    var isDecided: Bool { status != nil && status != .proposed && status != .unknown }
     var isInferred: Bool { kind == .inferred }
     var shownValue: String { display ?? newValue?.displayString ?? "—" }
 }
@@ -331,6 +340,8 @@ struct PAHandoff: Decodable, Sendable, Identifiable, Hashable {
     var status: Status?
     var reply: String?
     var repliedAt: Date?
+    /// The facts the asker sent with the question, as "Seller minimum: 235000 · Decision makers: Sarah".
+    var contextText: String? = nil
 
     var id: String { uuid }
     var isOpen: Bool { status == .open || status == nil }
@@ -365,7 +376,7 @@ struct PAKnowledgeRule: Decodable, Sendable, Identifiable, Hashable {
 
 struct PATeachBody: Encodable, Sendable, Equatable {
     enum Scope: String, Encodable, Sendable, CaseIterable, Identifiable {
-        case personal, company
+        case personal, team, company
         var id: String { rawValue }
     }
 

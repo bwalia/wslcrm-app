@@ -228,6 +228,7 @@ struct PACaptureSheet: View {
 struct PACaptureView: View {
     let captureUuid: String
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var state: LoadState<PACapture> = .idle
     @State private var personUuid: String?
@@ -236,6 +237,9 @@ struct PACaptureView: View {
     @State private var rejected: Set<String> = []
     @State private var corrections: [String: String] = [:]
     @State private var editing: PAProposedUpdate?
+    /// The next action as corrected (title, due, reason), sent as its new value.
+    @State private var nextCorrection: JSONValue?
+    @State private var editingNext: PACapture.NextAction?
     @State private var sending = false
     @State private var error: APIError?
     @State private var done: PACapture?
@@ -265,7 +269,16 @@ struct PACaptureView: View {
                 ticked.insert(update.uuid)
             }
         }
+        .sheet(item: $editingNext) { next in
+            PANextActionCorrectionSheet(next: next, current: nextCorrection) { value in
+                nextCorrection = value
+                ticked.insert(next.uuid)
+            }
+        }
     }
+
+    /// Confirming needs `property_pa_updates.update` (the decide route); others can read the sheet.
+    private var canDecide: Bool { session.permissions.pa(.update, "updates") }
 
     private func form(_ capture: PACapture) -> some View {
         let updates = capture.updates
@@ -294,46 +307,99 @@ struct PACaptureView: View {
                     Text(transcript).font(.wsCallout).foregroundStyle(.secondaryText)
                 }
             }
-            Section {
-                ForEach(updates) { update in
-                    PAUpdateRow(update: update, ticked: ticked.contains(update.uuid), rejected: rejected.contains(update.uuid),
-                                correction: corrections[update.uuid],
-                                onTick: { toggle(update) }, onChange: { editing = update },
-                                onReject: { reject(update) })
+            if let failure = capture.error {
+                Section {
+                    Label("The PA couldn't finish: \(failure)", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(Tone.danger.textColor)
+                        .accessibilityIdentifier("pa.confirm.failed")
                 }
-            } header: {
-                Text("What changes")
-            } footer: {
-                Text("Fields marked MUST CHECK (prices, offers, decision makers, next action time) are only saved once you tick them.")
+            } else if updates.isEmpty, capture.nextAction == nil {
+                Section {
+                    Label("The PA found nothing to change. The note is on the timeline.", systemImage: "checkmark.circle")
+                        .foregroundStyle(.secondaryText)
+                        .accessibilityIdentifier("pa.confirm.nothing")
+                }
+            }
+            if !updates.isEmpty {
+                Section {
+                    ForEach(updates) { update in
+                        PAUpdateRow(update: update, ticked: ticked.contains(update.uuid), rejected: rejected.contains(update.uuid),
+                                    correction: corrections[update.uuid], canDecide: canDecide,
+                                    onTick: { toggle(update) }, onChange: { editing = update },
+                                    onReject: { reject(update) })
+                    }
+                } header: {
+                    Text("What changes")
+                } footer: {
+                    Text("Fields marked MUST CHECK (prices, offers, decision makers, next action time) are only saved once you tick them.")
+                }
             }
             if let next = capture.nextAction {
                 Section("Next action") {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(next.title).font(.wsHeadline)
-                        if let due = next.dueAt { Text(Formatters.dateTime(due) ?? "").font(.wsSubheadline) }
+                        Text(nextTitle(next)).font(.wsHeadline)
+                        if let due = nextDue(next) { Text(Formatters.dateTime(due) ?? "").font(.wsSubheadline) }
                         if let owner = next.owner { Text("Owner: \(owner.name)").font(.wsSubheadline).foregroundStyle(.secondaryText) }
-                        if let reason = next.reason { Text("Why: \(reason)").font(.wsSubheadline).foregroundStyle(.secondaryText) }
+                        if let reason = nextReason(next) { Text("Why: \(reason)").font(.wsSubheadline).foregroundStyle(.secondaryText) }
+                        if next.isDecided {
+                            Text(Formatters.humanize(next.status)).font(.wsCaption.weight(.semibold)).foregroundStyle(Tone.success.textColor)
+                        }
                     }
                     .accessibilityElement(children: .combine)
                     .accessibilityIdentifier("pa.confirm.next")
-                    Toggle("Create it", isOn: Binding(get: { ticked.contains(next.uuid) },
-                                                      set: { if $0 { ticked.insert(next.uuid) } else { ticked.remove(next.uuid) } }))
-                        .accessibilityIdentifier("pa.confirm.next.toggle")
+                    if !next.isDecided, canDecide {
+                        Toggle("Create it", isOn: Binding(get: { ticked.contains(next.uuid) },
+                                                          set: { if $0 { ticked.insert(next.uuid) } else { ticked.remove(next.uuid) } }))
+                            .accessibilityIdentifier("pa.confirm.next.toggle")
+                        Button("Change the next action") { editingNext = next }
+                            .accessibilityIdentifier("pa.confirm.next.change")
+                    }
                 }
             }
             if let error { Section { InlineErrorRow(error: error) } }
-            Section {
-                Button { Task { await confirm(capture) } } label: {
-                    if sending { ProgressView().frame(maxWidth: .infinity) } else { Text(confirmTitle(capture)).frame(maxWidth: .infinity) }
+            if !openUpdates(capture).isEmpty || capture.nextAction.map({ !$0.isDecided }) == true {
+                if canDecide {
+                    Section {
+                        Button { tickAll(capture) } label: {
+                            Label("Tick everything I haven't removed", systemImage: "checkmark.square")
+                        }
+                        .accessibilityIdentifier("pa.confirm.tickAll")
+                        Button { Task { await confirm(capture) } } label: {
+                            if sending { ProgressView().frame(maxWidth: .infinity) } else { Text(confirmTitle(capture)).frame(maxWidth: .infinity) }
+                        }
+                        .buttonStyle(.large(.brand))
+                        .disabled(!canConfirm(capture) || sending)
+                        .listRowSeparator(.hidden)
+                        .accessibilityIdentifier("pa.confirm.save")
+                    } footer: {
+                        if let blocker = blocker(capture) { Text(blocker).accessibilityIdentifier("pa.confirm.blocker") }
+                    }
+                } else {
+                    Section {
+                        Label("Someone with access to confirm PA changes decides these.", systemImage: "lock")
+                            .foregroundStyle(.secondaryText)
+                            .accessibilityIdentifier("pa.confirm.noAccess")
+                    }
                 }
-                .buttonStyle(.large(.brand))
-                .disabled(!canConfirm(capture) || sending)
-                .listRowSeparator(.hidden)
-                .accessibilityIdentifier("pa.confirm.save")
-            } footer: {
-                if let blocker = blocker(capture) { Text(blocker).accessibilityIdentifier("pa.confirm.blocker") }
             }
         }
+    }
+
+    private func openUpdates(_ capture: PACapture) -> [PAProposedUpdate] { capture.updates.filter { !$0.isDecided } }
+
+    /// The next action as it will be saved: the correction when there is one.
+    private func nextField(_ key: String) -> String? {
+        if case .object(let o)? = nextCorrection, case .string(let v)? = o[key] { return v }
+        return nil
+    }
+    private func nextTitle(_ next: PACapture.NextAction) -> String { nextField("title") ?? next.title }
+    private func nextReason(_ next: PACapture.NextAction) -> String? { nextField("reason") ?? next.reason }
+    private func nextDue(_ next: PACapture.NextAction) -> Date? { nextField("due_at").flatMap(APIDate.parse) ?? next.dueAt }
+
+    /// [Confirm] on the web: everything still open that wasn't removed.
+    private func tickAll(_ capture: PACapture) {
+        for update in openUpdates(capture) where !rejected.contains(update.uuid) { ticked.insert(update.uuid) }
+        if let next = capture.nextAction, !next.isDecided { ticked.insert(next.uuid) }
     }
 
     private func confirmed(_ capture: PACapture) -> some View {
@@ -357,7 +423,7 @@ struct PACaptureView: View {
         if capture.resolved?.ambiguous.contains(where: { $0.field == "person" }) == true, personUuid == nil {
             return "Choose who it was about."
         }
-        let unchecked = capture.updates.filter { $0.isMaterial && !ticked.contains($0.uuid) && !rejected.contains($0.uuid) }
+        let unchecked = openUpdates(capture).filter { $0.isMaterial && !ticked.contains($0.uuid) && !rejected.contains($0.uuid) }
         if !unchecked.isEmpty {
             return "Tick or remove: \(unchecked.map(\.label).joined(separator: ", "))."
         }
@@ -367,7 +433,8 @@ struct PACaptureView: View {
     private func canConfirm(_ capture: PACapture) -> Bool { blocker(capture) == nil }
 
     private func confirmTitle(_ capture: PACapture) -> String {
-        let count = capture.updates.filter { ticked.contains($0.uuid) }.count + (capture.nextAction.map { ticked.contains($0.uuid) ? 1 : 0 } ?? 0)
+        let count = openUpdates(capture).filter { ticked.contains($0.uuid) }.count
+            + (capture.nextAction.map { !$0.isDecided && ticked.contains($0.uuid) ? 1 : 0 } ?? 0)
         return count == 0 ? "Confirm" : "Confirm \(count) change\(count == 1 ? "" : "s")"
     }
 
@@ -385,9 +452,9 @@ struct PACaptureView: View {
     /// The body: confirmed / corrected / rejected per update. Unticked non-material fields are
     /// left as proposed (the PA asks again next time); nothing is confirmed by default.
     static func body(for capture: PACapture, ticked: Set<String>, rejected: Set<String>, corrections: [String: String],
-                     personUuid: String?) -> PAConfirmBody {
+                     personUuid: String?, nextCorrection: JSONValue? = nil) -> PAConfirmBody {
         var decisions: [PAConfirmBody.Decision] = []
-        for update in capture.updates {
+        for update in capture.updates where !update.isDecided {
             if rejected.contains(update.uuid) {
                 decisions.append(.init(updateUuid: update.uuid, action: .reject))
             } else if let correction = corrections[update.uuid] {
@@ -396,14 +463,31 @@ struct PACaptureView: View {
                 decisions.append(.init(updateUuid: update.uuid, action: .confirm))
             }
         }
-        if let next = capture.nextAction {
-            decisions.append(.init(updateUuid: next.uuid, action: ticked.contains(next.uuid) ? .confirm : .reject))
+        if let next = capture.nextAction, !next.isDecided {
+            if !ticked.contains(next.uuid) {
+                decisions.append(.init(updateUuid: next.uuid, action: .reject))
+            } else if let nextCorrection {
+                decisions.append(.init(updateUuid: next.uuid, action: .correct, value: nextCorrection))
+            } else {
+                decisions.append(.init(updateUuid: next.uuid, action: .confirm))
+            }
         }
         return PAConfirmBody(personUuid: personUuid, decisions: decisions)
     }
 
+    /// A corrected next action keeps the PA's other keys (owner, opportunity), as the web sends it.
+    static func correctedNextAction(_ original: JSONValue?, title: String, due: Date?, reason: String) -> JSONValue {
+        var o: [String: JSONValue] = if case .object(let existing)? = original { existing } else { [:] }
+        o["title"] = .string(title.trimmingCharacters(in: .whitespacesAndNewlines))
+        o["reason"] = .string(reason.trimmingCharacters(in: .whitespacesAndNewlines))
+        if let due { o["due_at"] = .string(APIDate.string(from: due)) }
+        return .object(o)
+    }
+
     /// A corrected value keeps the original's type: "£230,000" for a number becomes 230000.
     static func correctedValue(_ text: String, like original: JSONValue?) -> JSONValue {
+        // Decision makers: "Sarah (owner), Tom" → [{name, role}, {name}].
+        if case .array = original { return PAText.parseDecisionMakers(text) }
         if case .number = original {
             let digits = text.filter { $0.isNumber || $0 == "." || $0 == "-" }
             var number = Double(digits) ?? 0
@@ -430,7 +514,7 @@ struct PACaptureView: View {
             let capture = try await services.propertyPA.capture(captureUuid)
             if state.value == nil || state.value?.status != capture.status {
                 // Next action proposed by the PA starts ticked (the person can untick it).
-                if let next = capture.nextAction { ticked.insert(next.uuid) }
+                if let next = capture.nextAction, !next.isDecided { ticked.insert(next.uuid) }
                 personUuid = personUuid ?? capture.resolved?.person?.uuid
             }
             state = .loaded(capture)
@@ -443,7 +527,8 @@ struct PACaptureView: View {
         sending = true
         defer { sending = false }
         do {
-            let body = Self.body(for: capture, ticked: ticked, rejected: rejected, corrections: corrections, personUuid: personUuid)
+            let body = Self.body(for: capture, ticked: ticked, rejected: rejected, corrections: corrections, personUuid: personUuid,
+                                 nextCorrection: nextCorrection)
             done = try await services.propertyPA.confirm(captureUuid: capture.uuid, body)
             error = nil
         } catch {
@@ -457,11 +542,42 @@ struct PAUpdateRow: View {
     let ticked: Bool
     let rejected: Bool
     let correction: String?
+    var canDecide = true
     let onTick: () -> Void
     let onChange: () -> Void
     let onReject: () -> Void
 
     var body: some View {
+        if update.isDecided || !canDecide { decided } else { open }
+    }
+
+    /// Already decided (or the person can't decide): the value and what happened, no buttons.
+    private var decided: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(update.label).font(.wsSubheadline).foregroundStyle(.secondaryText)
+                if update.isMaterial {
+                    Text("MUST CHECK").font(.wsCaption2.weight(.bold)).foregroundStyle(Tone.danger.textColor)
+                }
+            }
+            Text(update.shownValue).font(.wsHeadline).strikethrough(update.status == .rejected).italic(update.isInferred)
+            if let quote = update.quote, !quote.isEmpty {
+                Text("“\(quote)”").font(.wsCaption).foregroundStyle(.secondaryText).lineLimit(3)
+            }
+            if update.isDecided, let status = update.status {
+                StatusBadge(text: Formatters.humanize(status.rawValue),
+                            systemImage: status == .rejected ? "xmark.circle" : "checkmark.circle",
+                            tone: status == .rejected ? .neutral : .success)
+            } else if update.isInferred {
+                PAUnconfirmedBadge(by: update.by)
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("pa.confirm.update.\(update.uuid)")
+    }
+
+    private var open: some View {
         HStack(alignment: .top, spacing: 12) {
             Button(action: onTick) {
                 Image(systemName: ticked ? "checkmark.square.fill" : (rejected ? "xmark.square" : "square"))
@@ -499,7 +615,9 @@ struct PAUpdateRow: View {
                     }
                 }
                 HStack(spacing: 16) {
-                    Button("Change", action: onChange).font(.wsFootnote).accessibilityIdentifier("pa.update.change.\(update.uuid)")
+                    if update.isEditable {
+                        Button("Change", action: onChange).font(.wsFootnote).accessibilityIdentifier("pa.update.change.\(update.uuid)")
+                    }
                     Button("Remove", role: .destructive, action: onReject).font(.wsFootnote)
                 }
                 .buttonStyle(.borderless)
@@ -539,5 +657,72 @@ struct PACorrectionSheet: View {
             }
         }
         .presentationDetents([.medium])
+    }
+}
+
+/// Correct the PA's next action: what, when and why (the web's three boxes).
+struct PANextActionCorrectionSheet: View {
+    let next: PACapture.NextAction
+    let current: JSONValue?
+    let save: (JSONValue) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var due = Date()
+    @State private var hasDue = false
+    @State private var reason = ""
+    @State private var prepared = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("What") {
+                    TextField("Next action", text: $title, axis: .vertical)
+                        .lineLimit(1...3)
+                        .accessibilityIdentifier("pa.next.title")
+                }
+                Section("When") {
+                    Toggle("Has a due time", isOn: $hasDue)
+                    if hasDue {
+                        DatePicker("Due", selection: $due)
+                            .accessibilityIdentifier("pa.next.due")
+                    }
+                }
+                Section("Why") {
+                    TextField("Reason", text: $reason, axis: .vertical)
+                        .lineLimit(1...4)
+                        .accessibilityIdentifier("pa.next.reason")
+                }
+            }
+            .navigationTitle("Change the next action")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Use this") {
+                        save(PACaptureView.correctedNextAction(next.value, title: title, due: hasDue ? due : nil, reason: reason))
+                        dismiss()
+                    }
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityIdentifier("pa.next.save")
+                }
+            }
+            .onAppear(perform: prepare)
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func prepare() {
+        guard !prepared else { return }
+        prepared = true
+        func field(_ key: String) -> String? {
+            if case .object(let o)? = current ?? next.value, case .string(let v)? = o[key] { return v }
+            return nil
+        }
+        title = field("title") ?? next.title
+        reason = field("reason") ?? next.reason ?? ""
+        if let date = field("due_at").flatMap(APIDate.parse) ?? next.dueAt {
+            due = date
+            hasDue = true
+        }
     }
 }
