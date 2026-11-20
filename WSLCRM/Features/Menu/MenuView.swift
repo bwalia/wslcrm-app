@@ -31,6 +31,7 @@ struct AppsView: View {
                             VStack(spacing: 0) {
                                 ForEach(Array(group.entries.enumerated()), id: \.element.id) { index, entry in
                                     AppEntryLink(entry: entry) { AppRow(entry: entry) }
+                                        .contextMenu { PinToTabBarButton(pin: .app(entry.key)) }
                                     if index < group.entries.count - 1 {
                                         Divider().padding(.leading, 60)
                                     }

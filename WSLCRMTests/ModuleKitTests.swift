@@ -310,3 +310,50 @@ final class HomeDigestTests: XCTestCase {
         XCTAssertNil(digest.activity[.propertyPA], "nothing from the PA unless it has something for them")
     }
 }
+
+/// The tab bar: Home and Apps always, the person's pins in between.
+@MainActor
+final class TabBarPinsTests: XCTestCase {
+    private func menu(_ keys: [String]) -> AppMenu {
+        AppMenu(sections: [.init(key: nil, title: nil, items: keys.map {
+            AppMenu.Item(key: $0, name: $0 == "crm" ? "CRM" : "Purchase orders", icon: nil, path: "/dashboard/x")
+        })], secondary: [])
+    }
+
+    func testPinsAreStoredAndRestored() {
+        for pin in [TabPin.hub(.shop), .app("crm"), .app("plugin:property_deals:today")] {
+            XCTAssertEqual(TabPin(storageKey: pin.storageKey), pin)
+        }
+        XCTAssertNil(TabPin(storageKey: "nonsense"))
+    }
+
+    func testTheBarShowsPinsTheyCanStillOpenOrTheirBusiestWork() {
+        let owner = PermissionSet(isAdmin: false, isOwner: true, grants: [:], menuKeys: ["shop", "projects", "crm"])
+        let policy = NavigationPolicy(permissions: owner, isEngineerRole: false, activity: [.tasks: 3])
+        let catalog = AppCatalog(menu: menu(["crm", "purchase_orders"]))
+        XCTAssertEqual(TabBarLayout.slots(policy: policy, catalog: catalog, pins: nil).map(\.pin), [.hub(.tasks), .hub(.shop)],
+                       "automatic: their work areas, busiest first")
+        let pinned = TabBarLayout.slots(policy: policy, catalog: catalog,
+                                        pins: [.app("crm"), .hub(.fieldService), .app("gone"), .hub(.shop), .app("purchase_orders")])
+        XCTAssertEqual(pinned.map(\.pin), [.app("crm"), .hub(.shop), .app("purchase_orders")],
+                       "pins they can't open here are skipped; never more than three")
+        XCTAssertEqual(pinned.first?.title, "CRM")
+    }
+
+    func testPinningFromAutomaticKeepsTheBarFull() {
+        let defaults = UserDefaults(suiteName: "tabbar-\(UUID().uuidString)")!
+        let preferences = HomePreferences(defaults: defaults)
+        preferences.activate(user: "u1", workspace: "w1")
+        preferences.togglePin(.app("crm"), current: [.hub(.tasks), .hub(.shop), .hub(.fieldService)])
+        XCTAssertEqual(preferences.pins, [.hub(.tasks), .hub(.shop), .app("crm")], "the new pin replaces the last place")
+        preferences.togglePin(.hub(.shop), current: preferences.pins ?? [])
+        XCTAssertEqual(preferences.pins, [.hub(.tasks), .app("crm")])
+
+        let again = HomePreferences(defaults: defaults)
+        again.activate(user: "u1", workspace: "w1")
+        XCTAssertEqual(again.pins, [.hub(.tasks), .app("crm")], "kept for this person and workspace")
+        again.activate(user: "u1", workspace: "other")
+        XCTAssertNil(again.pins, "another workspace has its own bar")
+        XCTAssertEqual(TabBarLayout.shortTitle("Property deals settings and more"), "Property deals")
+    }
+}

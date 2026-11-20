@@ -155,6 +155,8 @@ final class HomePreferences {
     private(set) var activity: [NavigationPolicy.Home: Int] = [:]
     private(set) var order: [NavigationPolicy.Home]?
     private(set) var hidden: Set<NavigationPolicy.Home> = []
+    /// What the person pinned to the tab bar between Home and Apps (nil: automatic).
+    private(set) var pins: [TabPin]?
     private var scope: String?
     private let defaults: UserDefaults
 
@@ -168,6 +170,31 @@ final class HomePreferences {
         activity = Self.decodeActivity(defaults.dictionary(forKey: "\(key).activity"))
         order = (defaults.stringArray(forKey: "\(key).order")).map { $0.compactMap(NavigationPolicy.Home.init(key:)) }
         hidden = Set((defaults.stringArray(forKey: "\(key).hidden") ?? []).compactMap(NavigationPolicy.Home.init(key:)))
+        pins = defaults.stringArray(forKey: "\(key).pins").map { $0.compactMap(TabPin.init(storageKey:)) }
+    }
+
+    /// Pins shortcuts to the tab bar (nil: back to automatic).
+    func setPins(_ newPins: [TabPin]?) {
+        guard let scope else { return }
+        let trimmed = newPins.map { Array($0.prefix(TabPin.limit)) }
+        pins = (trimmed?.isEmpty ?? true) ? nil : trimmed
+        if let pins {
+            defaults.set(pins.map(\.storageKey), forKey: "\(scope).pins")
+        } else {
+            defaults.removeObject(forKey: "\(scope).pins")
+        }
+    }
+
+    /// Pins one more shortcut (replacing the last when the bar is full) or unpins it.
+    func togglePin(_ pin: TabPin, current: [TabPin]) {
+        var next = pins ?? current
+        if let index = next.firstIndex(of: pin) {
+            next.remove(at: index)
+        } else {
+            if next.count >= TabPin.limit { next.removeLast() }
+            next.append(pin)
+        }
+        setPins(next)
     }
 
     /// Remembers today's work for the next launch. The very first time (nothing remembered yet)
@@ -238,7 +265,7 @@ struct EditHomeSheet: View {
                 } header: {
                     Text("Your work areas")
                 } footer: {
-                    Text("Drag to change the order. The first three are on the tab bar; everything is always in Apps.")
+                    Text("Drag to change the order. Until you pin your own shortcuts (Settings › Tab bar), the first three are on the tab bar; everything is always in Apps.")
                 }
                 Section {
                     Button("Order them by what needs me") {

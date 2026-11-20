@@ -230,6 +230,7 @@ struct HomeView: View {
                         }
                         .frame(maxWidth: .infinity)
                     }
+                    .contextMenu { PinToTabBarButton(pin: .app(entry.key)) }
                 }
             }
             .brandCard(padding: 16)

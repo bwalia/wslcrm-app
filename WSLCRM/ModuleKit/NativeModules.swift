@@ -118,3 +118,41 @@ struct MenuDestinationLink<Label: View>: View {
         }
     }
 }
+
+extension MenuDestination {
+    /// The destination's screen as the root of its own tab (a pinned shortcut).
+    @MainActor @ViewBuilder
+    var rootView: some View {
+        switch self {
+        case .screen(let screen): screen.view
+        case .area(let area): area.rootView
+        case .purchaseOrders: PurchaseOrdersListView(route: PurchaseOrdersRoute())
+        case .propertyDealsApprovals: PDApprovalsListView()
+        case .propertyDealsRenovations: PDRenovationsListView()
+        case .propertyPA(let manager): PATodayView(manager: manager)
+        case .resource(let route): ResourceListView(route: route)
+        case .native(let route): NativeScreenView(route: route)
+        }
+    }
+}
+
+extension FieldServiceArea {
+    /// The area's first screen (the same as `withAppDestinations` pushes).
+    @MainActor @ViewBuilder
+    var rootView: some View {
+        switch self {
+        case .requests: ServiceRequestsListView()
+        case .jobs: JobsListView()
+        case .assets: AssetSearchView()
+        case .sites: SitesListView()
+        case .invoices: InvoicesListView()
+        case .customerAssets: CustomerAssetsListView()
+        case .reports: ReportsListView()
+        case .simpro: SimproSyncStatusView()
+        case .projects: ProjectsListView()
+        case .timesheets: TimesheetsView()
+        case .myTasks: MyTasksView()
+        case .reviewQueue: ReviewQueueView()
+        }
+    }
+}

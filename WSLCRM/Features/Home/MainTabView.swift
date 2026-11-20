@@ -3,7 +3,8 @@ import SwiftUI
 /// The signed-in app: three kinds of tab, always in the same places.
 ///
 /// - **Home** — the dashboard: greeting, your work, today's numbers, quick actions, your apps.
-/// - **Work hubs** — up to three, the person's own first (PA, My Work, Field Service, Deals, …).
+/// - **Shortcuts** — up to three the person pinned (Settings › Tab bar, or press and hold an app),
+///   or, until they pin any, their busiest work areas.
 /// - **Apps** — everything else in the workspace, every entry a native screen.
 ///
 /// The profile, workspace switch, sync queue, settings and sign out live behind the avatar on
@@ -17,13 +18,17 @@ struct MainTabView: View {
     @State private var showingPendingChanges = false
     @State private var homePath = NavigationPath()
     @State private var hubPaths: [NavigationPolicy.Home: NavigationPath] = [:]
+    @State private var appPaths: [String: NavigationPath] = [:]
 
     var body: some View {
-        let hubs = NavigationPolicy(session: session).tabs
+        let policy = NavigationPolicy(session: session)
+        let slots = TabBarLayout.slots(policy: policy, catalog: AppCatalog(menu: session.menu),
+                                       pins: HomePreferences.shared.pins)
         TabView(selection: $selection) {
             NavigationStack(path: $homePath) {
-                HomeView(hubs: hubs, open: { selection = $0 })
+                HomeView(hubs: policy.ordered, open: { open($0, slots: slots) })
                     .withAppDestinations()
+                    .navigationDestination(for: HubScreenRoute.self) { $0.hub.rootView }
                     .safeAreaInset(edge: .top, spacing: 0) { syncBanner }
             }
             .tabItem { Label("Home", systemImage: "house") }
@@ -31,14 +36,11 @@ struct MainTabView: View {
             // Only for what needs the person: changes the server refused.
             .badge(sync.failedCount)
 
-            ForEach(hubs, id: \.self) { hub in
-                NavigationStack(path: hubPath(hub)) {
-                    hub.rootView
-                        .withAppDestinations()
-                        .safeAreaInset(edge: .top, spacing: 0) { syncBanner }
-                }
-                .tabItem { Label(hub.title, systemImage: hub.systemImage) }
-                .tag(AppTab.hub(hub))
+            // Up to three in between: the person's pins, or their busiest work areas.
+            ForEach(slots) { slot in
+                tabContent(slot)
+                    .tabItem { Label(slot.title, systemImage: slot.systemImage) }
+                    .tag(slot.tab)
             }
 
             NavigationStack {
@@ -58,6 +60,45 @@ struct MainTabView: View {
         }
         .onChange(of: session.workspace?.uuid) { activatePreferences() }
         .onChange(of: router.pending) { openPendingLink() }
+        // A shortcut that was unpinned while open: back to Home rather than an empty selection.
+        .onChange(of: slots.map(\.tab)) { _, tabs in
+            if case .home = selection { return }
+            if case .apps = selection { return }
+            if !tabs.contains(selection) { selection = .home }
+        }
+    }
+
+    @ViewBuilder
+    private func tabContent(_ slot: TabSlot) -> some View {
+        switch slot.pin {
+        case .hub(let hub):
+            NavigationStack(path: hubPath(hub)) {
+                hub.rootView
+                    .withAppDestinations()
+                    .safeAreaInset(edge: .top, spacing: 0) { syncBanner }
+            }
+        case .app(let key):
+            NavigationStack(path: appPath(key)) {
+                Group {
+                    if let destination = NativeModules.destination(forKey: key) { destination.rootView }
+                }
+                .withAppDestinations()
+                .safeAreaInset(edge: .top, spacing: 0) { syncBanner }
+            }
+        }
+    }
+
+    /// Opens a work area from Home: its tab when it has one, else on Home's own stack.
+    private func open(_ tab: AppTab, slots: [TabSlot]) {
+        if slots.contains(where: { $0.tab == tab }) || tab == .apps || tab == .home {
+            selection = tab
+        } else if case .hub(let hub) = tab {
+            homePath.append(HubScreenRoute(hub: hub))
+        }
+    }
+
+    private func appPath(_ key: String) -> Binding<NavigationPath> {
+        Binding(get: { appPaths[key] ?? NavigationPath() }, set: { appPaths[key] = $0 })
     }
 
     /// This person's work-area order for this workspace (Edit Home, and what was waiting last time).
@@ -85,7 +126,9 @@ struct MainTabView: View {
             let policy = NavigationPolicy(session: session)
             let hub: NavigationPolicy.Home = link.target.isPA ? .propertyPA : .propertyDeals
             guard hub == .propertyPA ? policy.showsPropertyPA : policy.showsPropertyDeals else { return }
-            if policy.tabs.contains(hub) {
+            let slots = TabBarLayout.slots(policy: policy, catalog: AppCatalog(menu: session.menu),
+                                           pins: HomePreferences.shared.pins)
+            if slots.contains(where: { $0.pin == .hub(hub) }) {
                 selection = .hub(hub)
                 hubPaths[hub] = Self.path(for: link.target, startingAtHub: nil)
             } else {

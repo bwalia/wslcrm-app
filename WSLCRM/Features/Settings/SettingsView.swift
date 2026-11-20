@@ -7,6 +7,18 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section {
+                NavigationLink {
+                    TabBarSettingsView()
+                } label: {
+                    Label("Tab bar", systemImage: "dock.rectangle")
+                }
+                .accessibilityIdentifier("settings.tabBar")
+            } header: {
+                Text("Personalise")
+            } footer: {
+                Text("Pin the shortcuts you use most between Home and Apps.")
+            }
+            Section {
                 if session.biometrics.availableKind != .none {
                     Toggle("Unlock with \(session.biometrics.displayName)", isOn: $biometricEnabled)
                         .onChange(of: biometricEnabled) { _, enabled in

@@ -4,6 +4,8 @@ import SwiftUI
 enum AppTab: Hashable {
     case home
     case hub(NavigationPolicy.Home)
+    /// An app the person pinned to the tab bar (server menu key).
+    case app(String)
     case apps
 }
 
