@@ -133,7 +133,7 @@ private struct MktCampDetailContent: View {
                 }
             }
             .padding(.vertical, 4)
-            NavigationLink(value: NativeScreenRoute(Marketing.Screen.guide)) {
+            NavigationLink(value: EngageArea.route(Marketing.Screen.guide, "write-email")) {
                 Label("How do I write and send this email?", systemImage: "questionmark.circle")
             }
             .accessibilityIdentifier("mkt.campaign.help")

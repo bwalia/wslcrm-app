@@ -107,7 +107,7 @@ struct MktTemplatesListView: View {
                                     : "Your saved email and text message templates. Open one to change it in the studio.")
                         if !embedded {
                             Spacer(minLength: 8)
-                            NavigationLink(value: NativeScreenRoute(Marketing.Screen.guide)) {
+                            NavigationLink(value: EngageArea.route(Marketing.Screen.guide, "templates")) {
                                 Label("Help", systemImage: "questionmark.circle").font(.wsSubheadline)
                             }
                             .accessibilityIdentifier("mkt.studio.help")

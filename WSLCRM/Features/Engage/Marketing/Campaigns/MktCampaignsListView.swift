@@ -27,7 +27,7 @@ struct MktCampaignsListView: View {
             Section {
                 EngageIntro(text: "Emails and text messages to your lists. Only people who said yes get marketing, "
                             + "and every send counts opens, clicks and sales.", systemImage: "paperplane")
-                NavigationLink(value: NativeScreenRoute(Marketing.Screen.guide)) {
+                NavigationLink(value: EngageArea.route(Marketing.Screen.guide, "write-email")) {
                     Label("How do I write and send an email?", systemImage: "questionmark.circle")
                 }
                 .accessibilityIdentifier("mkt.campaigns.help")
