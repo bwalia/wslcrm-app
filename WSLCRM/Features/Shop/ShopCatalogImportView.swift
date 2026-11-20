@@ -56,7 +56,11 @@ struct ShopCatalogImportFile: Equatable, Sendable {
     static func csv(_ text: String) -> ShopCatalogImportFile {
         var file = ShopCatalogImportFile()
         let rows = parseCSV(text).filter { !$0.allSatisfy { $0.shopTrimmed.isEmpty } }
-        guard let header = rows.first?.map({ $0.shopTrimmed.lowercased() }) else {
+        // Column names are matched in lower case; a spec column keeps its label as written ("spec:GPU").
+        guard let header = rows.first?.map({ column -> String in
+            let name = column.shopTrimmed
+            return name.lowercased().hasPrefix("spec:") ? "spec:" + name.dropFirst(5) : name.lowercased()
+        }) else {
             file.problems = ["The file is empty."]
             return file
         }
