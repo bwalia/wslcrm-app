@@ -98,6 +98,17 @@ struct Invoice: Identifiable, Hashable, Sendable {
     /// Detail only.
     var lineItems: [InvoiceLineItem]
     var payments: [InvoicePayment]
+    /// The number the customer sees (PDF, email); the internal `invoice_number` when not set.
+    var customerInvoiceNumber: String?
+    /// The customer's purchase order number.
+    var poNumber: String?
+    var paymentMethodUuid: String?
+    /// "How to pay" as printed: the invoice's own method, else the workspace's default bank account.
+    var paymentMethod: PaymentMethodInfo?
+    var customerAddress: String?
+
+    /// What the customer sees as the invoice's number.
+    var displayNumber: String { customerInvoiceNumber?.trimmedOrNil ?? invoiceNumber }
 
     /// `discount_amount` from the API is always 0; the real discount is derived from the totals.
     var discountAmount: Decimal { max(0, subtotal + taxAmount - totalAmount) }
@@ -126,7 +137,8 @@ extension Invoice: Decodable {
     enum CodingKeys: String, CodingKey {
         case id, uuid, invoiceNumber, status, customerName, customerEmail, issueDate, dueDate, currency, subtotal
         case taxAmount, totalAmount, amountPaid, balanceDue, notes, paymentTermsDays, sentAt, paidAt, voidedAt
-        case createdAt, lineItems, payments
+        case createdAt, lineItems, payments, customerInvoiceNumber, poNumber, paymentMethodUuid, paymentMethod
+        case customerAddress
     }
 
     init(from decoder: Decoder) throws {
@@ -155,6 +167,191 @@ extension Invoice: Decodable {
         createdAt = c.decodeDate(forKey: .createdAt)
         lineItems = c.decodeLossyArray(InvoiceLineItem.self, forKey: .lineItems).sorted { $0.sortOrder < $1.sortOrder }
         payments = c.decodeLossyArray(InvoicePayment.self, forKey: .payments)
+        customerInvoiceNumber = c.decodeFlexibleString(forKey: .customerInvoiceNumber)?.trimmedOrNil
+        poNumber = c.decodeFlexibleString(forKey: .poNumber)?.trimmedOrNil
+        paymentMethodUuid = (try? c.decodeIfPresent(String.self, forKey: .paymentMethodUuid))?.trimmedOrNil
+        paymentMethod = try? c.decodeIfPresent(PaymentMethodInfo.self, forKey: .paymentMethod)
+        customerAddress = (try? c.decodeIfPresent(String.self, forKey: .customerAddress))?.trimmedOrNil
+    }
+}
+
+/// A way to be paid ("Getting paid"): bank details or instructions, as printed on documents.
+struct PaymentMethodInfo: Decodable, Sendable, Hashable, Identifiable {
+    var id: String { uuid ?? label }
+    var uuid: String?
+    var kind: String
+    var label: String
+    var accountName: String?
+    var bankName: String?
+    var sortCode: String?
+    var accountNumber: String?
+    var iban: String?
+    var swiftBic: String?
+    var instructions: String?
+    var isDefault: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case uuid, kind, label, accountName, bankName, sortCode, accountNumber, iban, swiftBic, instructions, isDefault
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        uuid = try? c.decodeIfPresent(String.self, forKey: .uuid)
+        kind = (try? c.decodeIfPresent(String.self, forKey: .kind)) ?? "other"
+        label = (try? c.decodeIfPresent(String.self, forKey: .label)) ?? Formatters.humanize(kind)
+        accountName = (try? c.decodeIfPresent(String.self, forKey: .accountName))?.trimmedOrNil
+        bankName = (try? c.decodeIfPresent(String.self, forKey: .bankName))?.trimmedOrNil
+        sortCode = c.decodeFlexibleString(forKey: .sortCode)?.trimmedOrNil
+        accountNumber = c.decodeFlexibleString(forKey: .accountNumber)?.trimmedOrNil
+        iban = (try? c.decodeIfPresent(String.self, forKey: .iban))?.trimmedOrNil
+        swiftBic = (try? c.decodeIfPresent(String.self, forKey: .swiftBic))?.trimmedOrNil
+        instructions = (try? c.decodeIfPresent(String.self, forKey: .instructions))?.trimmedOrNil
+        isDefault = c.decodeFlexibleBool(forKey: .isDefault) ?? false
+    }
+
+    /// The lines printed under "How to pay".
+    var rows: [(String, String)] {
+        [("Account name", accountName), ("Bank", bankName), ("Sort code", sortCode), ("Account number", accountNumber),
+         ("IBAN", iban), ("BIC / SWIFT", swiftBic)].compactMap { label, value in value.map { (label, $0) } }
+    }
+
+    var heading: String { kind == "bank_transfer" ? "Bank transfer — \(label)" : label }
+}
+
+/// `GET /api/v2/invoices/customer-billable`: a customer's approved, un-invoiced hours in a period.
+struct CustomerBillablePreview: Decodable, Sendable {
+    var currency: String
+    var entries: [Entry]
+    var count: Int
+    var totalHours: Decimal
+    var totalAmount: Decimal
+    var missingRate: Bool
+
+    struct Entry: Decodable, Sendable, Identifiable, Hashable {
+        var id: String { "\(entryId)" }
+        var entryId: Int
+        var entryDate: CalendarDay?
+        var description: String?
+        var taskReference: String?
+        var projectReference: String?
+        var hours: Decimal
+        var rate: Decimal
+        var amount: Decimal
+        var hasRate: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case entryId, entryDate, description, taskReference, projectReference, hours, rate, amount, hasRate
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            entryId = c.decodeFlexibleInt(forKey: .entryId) ?? 0
+            entryDate = c.decodeDay(forKey: .entryDate)
+            description = (try? c.decodeIfPresent(String.self, forKey: .description))?.trimmedOrNil
+            taskReference = (try? c.decodeIfPresent(String.self, forKey: .taskReference))?.trimmedOrNil
+            projectReference = (try? c.decodeIfPresent(String.self, forKey: .projectReference))?.trimmedOrNil
+            hours = c.decodeFlexibleDecimal(forKey: .hours) ?? 0
+            rate = c.decodeFlexibleDecimal(forKey: .rate) ?? 0
+            amount = c.decodeFlexibleDecimal(forKey: .amount) ?? 0
+            hasRate = c.decodeFlexibleBool(forKey: .hasRate) ?? (rate > 0)
+        }
+
+        var work: String { taskReference ?? projectReference ?? description ?? "Work" }
+    }
+
+    private struct Totals: Decodable {
+        var count: FlexibleInt?
+        var totalHours: FlexibleDecimal?
+        var totalAmount: FlexibleDecimal?
+        var missingRate: FlexibleBool?
+    }
+
+    enum CodingKeys: String, CodingKey { case currency, entries, totals }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? "GBP"
+        entries = c.decodeLossyArray(Entry.self, forKey: .entries)
+        let totals = try? c.decodeIfPresent(Totals.self, forKey: .totals)
+        count = totals?.count?.value ?? entries.count
+        totalHours = totals?.totalHours?.value ?? entries.reduce(0) { $0 + $1.hours }
+        totalAmount = totals?.totalAmount?.value ?? entries.reduce(0) { $0 + $1.amount }
+        missingRate = totals?.missingRate?.value ?? entries.contains { !$0.hasRate }
+    }
+
+    var canInvoice: Bool { count > 0 && !missingRate }
+}
+
+/// A customer to bill (`GET /api/v2/timesheets/lookups/customers`).
+struct BillableCustomer: Decodable, Sendable, Identifiable, Hashable {
+    var id: String { uuid }
+    var uuid: String
+    var firstName: String?
+    var lastName: String?
+    var email: String?
+
+    var name: String {
+        [firstName, lastName].compactMap { $0?.trimmedOrNil }.joined(separator: " ").trimmedOrNil ?? email ?? "Unnamed"
+    }
+}
+
+/// `GET /api/v2/vat/invoices/:uuid/check`: what a valid UK VAT invoice must show and this one is missing.
+struct VatInvoiceCheck: Decodable, Sendable {
+    var ok: Bool
+    var missing: [String]
+    var simplifiedAllowed: Bool
+    var reverseChargeText: String?
+    var breakdown: [Rate]
+    var supplierVrn: String?
+
+    struct Rate: Decodable, Sendable, Hashable {
+        var vatCode: String
+        var label: String
+        var net: Decimal
+        var vat: Decimal
+
+        enum CodingKeys: String, CodingKey { case vatCode, label, net, vat }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            vatCode = (try? c.decodeIfPresent(String.self, forKey: .vatCode)) ?? ""
+            label = (try? c.decodeIfPresent(String.self, forKey: .label)) ?? vatCode
+            net = c.decodeFlexibleDecimal(forKey: .net) ?? 0
+            vat = c.decodeFlexibleDecimal(forKey: .vat) ?? 0
+        }
+    }
+
+    enum CodingKeys: String, CodingKey { case ok, missing, simplifiedAllowed, reverseChargeText, breakdown, supplierVrn }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        ok = c.decodeFlexibleBool(forKey: .ok) ?? false
+        missing = c.decodeLossyArray(String.self, forKey: .missing)
+        simplifiedAllowed = c.decodeFlexibleBool(forKey: .simplifiedAllowed) ?? false
+        reverseChargeText = (try? c.decodeIfPresent(String.self, forKey: .reverseChargeText))?.trimmedOrNil
+        breakdown = c.decodeLossyArray(Rate.self, forKey: .breakdown)
+        supplierVrn = (try? c.decodeIfPresent(String.self, forKey: .supplierVrn))?.trimmedOrNil
+    }
+}
+
+/// The Peppol BIS 3.0 checks of the invoice as an e-invoice.
+struct EinvoiceCheck: Decodable, Sendable {
+    var valid: Bool
+    var errors: [Problem]
+    var warnings: [String]
+
+    struct Problem: Decodable, Sendable, Hashable {
+        var rule: String
+        var message: String
+    }
+
+    enum CodingKeys: String, CodingKey { case valid, errors, warnings }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        valid = c.decodeFlexibleBool(forKey: .valid) ?? false
+        errors = c.decodeLossyArray(Problem.self, forKey: .errors)
+        warnings = c.decodeLossyArray(String.self, forKey: .warnings)
     }
 }
 
@@ -205,6 +402,13 @@ struct InvoiceHeaderBody: Encodable, Sendable, Equatable {
     var notes: String?
     var paymentTermsDays: Int?
     var lineItems: [LineItemBody]?
+    /// The customer's purchase order number ("" clears it).
+    var poNumber: String?
+    /// "How to pay" ("" = the workspace's default bank account).
+    var paymentMethodUuid: String?
+    /// The number the customer sees; drafts only ("" = the internal number).
+    var customerInvoiceNumber: String?
+    var customerAddress: String?
 }
 
 struct LineItemBody: Encodable, Sendable, Equatable, Hashable {

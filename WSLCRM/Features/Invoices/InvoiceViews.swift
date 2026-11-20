@@ -22,64 +22,47 @@ struct InvoicesListView: View {
     @Environment(SessionStore.self) private var session
     @State private var stats: InvoiceStats?
     @State private var creating = false
+    @State private var billingHours = false
+    @State private var filtering = false
     @State private var filter: InvoiceStatus?
+    @State private var issuedFrom: Date?
+    @State private var issuedTo: Date?
+    @State private var opened: InvoiceRoute?
 
     var body: some View {
         ModelHost(make: { [api = services.invoices, filterBox = FilterBox()] in
             InvoiceListHolder(filter: filterBox, list: PagedListModel<Invoice> { search, page in
-                try await api.invoices(search: search, status: filterBox.status, page: page)
+                try await api.invoices(search: search, status: filterBox.status, issuedFrom: filterBox.from, issuedTo: filterBox.to,
+                                       page: page)
             })
         }) { holder in
-            PagedList(model: holder.list, searchPrompt: "Number, customer or email", emptyTitle: "No invoices", emptySystemImage: "doc.text") { invoice in
-                NavigationLink {
-                    InvoiceDetailView(invoiceUuid: invoice.id) { updated in
-                        if let updated { holder.list.replace(updated) } else { holder.list.remove(id: invoice.id) }
-                    }
-                } label: {
-                    InvoiceRow(invoice: invoice)
-                }
-            }
-            .safeAreaInset(edge: .top) {
-                if let stats {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            StatTile(title: "Outstanding", value: Formatters.money(stats.totalOutstanding, currency: nil) ?? "", systemImage: "hourglass")
-                            StatTile(title: "Overdue", value: "\(stats.overdueCount)", systemImage: "exclamationmark.triangle")
-                            StatTile(title: "Paid", value: Formatters.money(stats.totalPaid, currency: nil) ?? "", systemImage: "checkmark.seal")
-                        }
-                        .frame(height: 76)
-                        .padding(.horizontal)
-                    }
-                    .padding(.vertical, 6)
-                    .background(.bar)
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Picker("Status", selection: $filter) {
-                        Text("All").tag(InvoiceStatus?.none)
-                        ForEach([InvoiceStatus.draft, .sent, .paid, .void], id: \.self) { Text(Formatters.humanize($0.rawValue)).tag(Optional($0)) }
-                    }
-                    .pickerStyle(.menu)
-                }
-            }
-            .onChange(of: filter) { _, newValue in
-                holder.filter.status = newValue
-                Task { await holder.list.load() }
-            }
-            .sheet(isPresented: $creating) {
-                InvoiceCreateSheet { body in
-                    let created = try await services.invoices.create(body)
-                    await holder.list.load()
-                    return created
-                }
-            }
+            InvoicesListBody(holder: holder, stats: $stats, creating: $creating, billingHours: $billingHours,
+                             filtering: $filtering, filter: $filter, issuedFrom: $issuedFrom, issuedTo: $issuedTo, opened: $opened)
         }
         .navigationTitle("Invoices")
         .toolbar {
-            if session.permissions.can(.create, .invoices) {
+            if session.permissions.can(.create, .invoices) || session.permissions.can(.read, moduleName: "tax_rates_config") {
                 ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        if session.permissions.can(.create, .invoices) {
+                            Button("Bill hours from timesheets", systemImage: "clock.badge.checkmark") { billingHours = true }
+                                .accessibilityIdentifier("invoices.fromTimesheets")
+                        }
+                        if session.permissions.can(.read, moduleName: "tax_rates_config") {
+                            NavigationLink(value: ResourceListRoute(ModuleCatalog.invoiceTaxRates.id)) {
+                                Label("Tax rates", systemImage: "percent")
+                            }
+                        }
+                    } label: {
+                        Label("More", systemImage: "ellipsis.circle")
+                    }
+                    .accessibilityIdentifier("invoices.more")
+                }
+            }
+            if session.permissions.can(.create, .invoices) {
+                ToolbarItem(placement: .primaryAction) {
                     Button("New invoice", systemImage: "plus") { creating = true }
+                        .accessibilityIdentifier("invoices.new")
                 }
             }
         }
@@ -89,6 +72,8 @@ struct InvoicesListView: View {
     @MainActor
     final class FilterBox {
         var status: InvoiceStatus?
+        var from: CalendarDay?
+        var to: CalendarDay?
     }
 
     @MainActor
@@ -103,13 +88,137 @@ struct InvoicesListView: View {
     }
 }
 
+/// The list itself, its stats strip, filters and sheets (kept apart so the compiler checks it in pieces).
+private struct InvoicesListBody: View {
+    let holder: InvoicesListView.InvoiceListHolder
+    @Binding var stats: InvoiceStats?
+    @Binding var creating: Bool
+    @Binding var billingHours: Bool
+    @Binding var filtering: Bool
+    @Binding var filter: InvoiceStatus?
+    @Binding var issuedFrom: Date?
+    @Binding var issuedTo: Date?
+    @Binding var opened: InvoiceRoute?
+    @Environment(\.services) private var services
+
+    var body: some View {
+        list
+            .safeAreaInset(edge: .top) { statsStrip }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        filtering = true
+                    } label: {
+                        Label("Filter", systemImage: isFiltered ? "line.3.horizontal.decrease.circle.fill"
+                                                                : "line.3.horizontal.decrease.circle")
+                    }
+                    .accessibilityIdentifier("invoices.filter")
+                }
+            }
+            .onChange(of: filter) { _, newValue in
+                holder.filter.status = newValue
+                reload()
+            }
+            .onChange(of: issuedFrom) { _, newValue in
+                holder.filter.from = newValue.map { CalendarDay(date: $0) }
+                reload()
+            }
+            .onChange(of: issuedTo) { _, newValue in
+                holder.filter.to = newValue.map { CalendarDay(date: $0) }
+                reload()
+            }
+            .modifier(InvoicesListSheets(holder: holder, stats: $stats, creating: $creating, billingHours: $billingHours,
+                                         filtering: $filtering, filter: $filter, issuedFrom: $issuedFrom, issuedTo: $issuedTo,
+                                         opened: $opened))
+    }
+
+    private var isFiltered: Bool { filter != nil || issuedFrom != nil || issuedTo != nil }
+
+    private func reload() { Task { await holder.list.load() } }
+
+    private var list: some View {
+        PagedList(model: holder.list, searchPrompt: "Number, customer or email", emptyTitle: "No invoices",
+                  emptySystemImage: "doc.text",
+                  emptyDescription: isFiltered ? "No invoices match these filters." : "Tap + to make your first invoice.") { invoice in
+            NavigationLink {
+                InvoiceDetailView(invoiceUuid: invoice.id) { updated in
+                    if let updated { holder.list.replace(updated) } else { holder.list.remove(id: invoice.id) }
+                }
+            } label: {
+                InvoiceRow(invoice: invoice)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var statsStrip: some View {
+        if let stats {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    StatTile(title: "Invoiced", value: money(stats.totalInvoiced), systemImage: "doc.text")
+                    StatTile(title: "Outstanding", value: money(stats.totalOutstanding), systemImage: "hourglass")
+                    StatTile(title: "Overdue (\(stats.overdueCount))", value: money(stats.totalOverdue),
+                             systemImage: "exclamationmark.triangle")
+                    StatTile(title: "Paid", value: money(stats.totalPaid), systemImage: "checkmark.seal")
+                }
+                .frame(height: 76)
+                .padding(.horizontal)
+            }
+            .padding(.vertical, 6)
+            .background(.bar)
+        }
+    }
+
+    private func money(_ value: Decimal) -> String { Formatters.money(value, currency: nil) ?? "" }
+}
+
+private struct InvoicesListSheets: ViewModifier {
+    let holder: InvoicesListView.InvoiceListHolder
+    @Binding var stats: InvoiceStats?
+    @Binding var creating: Bool
+    @Binding var billingHours: Bool
+    @Binding var filtering: Bool
+    @Binding var filter: InvoiceStatus?
+    @Binding var issuedFrom: Date?
+    @Binding var issuedTo: Date?
+    @Binding var opened: InvoiceRoute?
+    @Environment(\.services) private var services
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $filtering) {
+                InvoiceFilterSheet(status: $filter, issuedFrom: $issuedFrom, issuedTo: $issuedTo)
+                    .presentationDetents([.medium, .large])
+            }
+            .sheet(isPresented: $creating) {
+                InvoiceCreateSheet { body in
+                    let created = try await services.invoices.create(body)
+                    await holder.list.load()
+                    stats = try? await services.invoices.stats()
+                    return created
+                }
+            }
+            .sheet(isPresented: $billingHours) {
+                InvoiceFromTimesheetsSheet { invoice in
+                    await holder.list.load()
+                    stats = try? await services.invoices.stats()
+                    opened = InvoiceRoute(uuid: invoice.id)
+                }
+            }
+            .navigationDestination(item: $opened) { route in InvoiceDetailView(invoiceUuid: route.uuid) }
+    }
+}
+
 struct InvoiceRow: View {
     let invoice: Invoice
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(invoice.invoiceNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
+                Text(invoice.displayNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
+                if invoice.displayNumber != invoice.invoiceNumber {
+                    Text(invoice.invoiceNumber).font(.wsCaption.monospacedDigit()).foregroundStyle(.secondaryText)
+                }
                 Spacer()
                 invoice.displayStatus.badge
             }
@@ -152,6 +261,11 @@ struct InvoiceDetailView: View {
     @State private var confirmDelete = false
     @State private var pdfURL: URL?
     @State private var emailing = false
+    @State private var editingHeader = false
+    @State private var notice: String?
+    @State private var vat: VatInvoiceCheck?
+    @State private var einvoice: EinvoiceCheck?
+    @State private var einvoiceURL: URL?
 
     var body: some View {
         Group {
@@ -164,7 +278,7 @@ struct InvoiceDetailView: View {
                 content(invoice)
             }
         }
-        .navigationTitle(state.value?.invoiceNumber ?? "Invoice")
+        .navigationTitle(state.value?.displayNumber ?? "Invoice")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .refreshable { await load() }
@@ -174,7 +288,15 @@ struct InvoiceDetailView: View {
                     if let pdfURL {
                         ShareLink(item: pdfURL) { Label("Share PDF", systemImage: "square.and.arrow.up") }
                     } else {
-                        Button("PDF", systemImage: "doc.richtext") { pdfURL = InvoicePDFRenderer.render(invoice) }
+                        Button("PDF", systemImage: "doc.richtext") {
+                            pdfURL = InvoicePDFRenderer.render(invoice, company: session.workspace?.name)
+                        }
+                        .accessibilityIdentifier("invoice.pdf")
+                    }
+                }
+                if session.permissions.can(.update, .invoices) && invoice.canEditHeader {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Edit") { editingHeader = true }.accessibilityIdentifier("invoice.edit")
                     }
                 }
             }
@@ -193,7 +315,16 @@ struct InvoiceDetailView: View {
         }
         .sheet(isPresented: $emailing) {
             if let invoice = state.value {
-                EmailInvoiceSheet(invoice: invoice) { Task { await load() } }
+                EmailInvoiceSheet(invoice: invoice, company: session.workspace?.name) { Task { await load() } }
+            }
+        }
+        .sheet(isPresented: $editingHeader) {
+            if let invoice = state.value {
+                InvoiceEditSheet(invoice: invoice) { body in
+                    let saved = await mutate { try await services.invoices.updateHeader(invoiceUuid, body) }
+                    if saved { notice = "Invoice saved." }
+                    return saved
+                }
             }
         }
         .sheet(isPresented: $recordingPayment) {
@@ -246,6 +377,15 @@ struct InvoiceDetailView: View {
                         .font(.wsSubheadline).foregroundStyle(.secondaryText)
                 }
                 .padding(.vertical, 4)
+                if invoice.displayNumber != invoice.invoiceNumber {
+                    DetailRow(label: "Internal number", value: invoice.invoiceNumber)
+                }
+                DetailRow(label: "Customer PO", value: invoice.poNumber)
+                DetailRow(label: "Payment terms", value: invoice.paymentTermsDays.map { "\($0) days" })
+                if let address = invoice.customerAddress { MapsLinkRow(address: address) }
+            }
+            if let notice {
+                Section { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
             }
 
             if canUpdate && (invoice.canSend || invoice.canVoid) || (permissions.can(.create, .payments) && invoice.canRecordPayment) {
@@ -344,11 +484,100 @@ struct InvoiceDetailView: View {
                 }
             }
 
+            if let method = invoice.paymentMethod, invoice.status != .paid, invoice.status != .void {
+                Section {
+                    Text(method.heading).font(.wsHeadline)
+                    ForEach(method.rows, id: \.0) { row in CopyableRow(label: row.0, value: row.1) }
+                    if let instructions = method.instructions { Text(instructions).font(.wsSubheadline) }
+                    CopyableRow(label: "Reference", value: invoice.displayNumber)
+                } header: {
+                    Text("How to pay")
+                } footer: {
+                    Text("As printed on the invoice. Change it with Edit › How to pay.")
+                }
+            }
+
             if let notes = invoice.notes, !notes.isEmpty {
                 Section("Notes") { Text(notes) }
             }
+            if let vat { vatSection(vat) }
         }
         .listStyle(.insetGrouped)
+    }
+
+    /// "VAT invoice check": what a valid UK VAT invoice must show and this one is missing, and the e-invoice.
+    @ViewBuilder
+    private func vatSection(_ vat: VatInvoiceCheck) -> some View {
+        Section {
+            Label(vat.ok ? "This is a valid VAT invoice" : "Before sending this as a VAT invoice",
+                  systemImage: vat.ok ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(vat.ok ? Tone.success.textColor : Tone.warning.textColor)
+            ForEach(vat.missing, id: \.self) { Text("• Add: \($0)").font(.wsSubheadline) }
+            if vat.simplifiedAllowed && !vat.ok {
+                Text("Up to £250 including VAT, a simplified invoice is fine (no customer details needed).")
+                    .font(.wsSubheadline).foregroundStyle(.secondaryText)
+            }
+            if let text = vat.reverseChargeText {
+                Text("Show this wording on the invoice: \(text)").font(.wsSubheadline)
+            }
+            ForEach(vat.breakdown, id: \.self) { rate in
+                LabeledContent(rate.label) {
+                    Text("net \(Formatters.money(rate.net, currency: "GBP") ?? "") · VAT \(Formatters.money(rate.vat, currency: "GBP") ?? "")")
+                        .font(.wsSubheadline.monospacedDigit())
+                }
+            }
+            if vat.supplierVrn == nil {
+                Text("Add the workspace's VAT registration under Tax › VAT so it prints on invoices.")
+                    .font(.wsSubheadline).foregroundStyle(.secondaryText)
+            }
+            HStack {
+                Button("Check e-invoice") { Task { await checkEinvoice() } }
+                Spacer()
+                if let einvoiceURL {
+                    ShareLink(item: einvoiceURL) { Label("Share XML", systemImage: "square.and.arrow.up") }
+                } else {
+                    Button("Get e-invoice XML") { Task { await downloadEinvoice() } }
+                }
+            }
+            .buttonStyle(.borderless)
+            .frame(minHeight: 44)
+            if let einvoice {
+                Text(einvoice.valid ? "Passes the Peppol BIS 3.0 checks." : "Fix these before sending it as an e-invoice:")
+                    .font(.wsSubheadline.weight(.semibold))
+                    .foregroundStyle(einvoice.valid ? Tone.success.textColor : Tone.warning.textColor)
+                ForEach(einvoice.errors, id: \.self) { Text("• \($0.message) (\($0.rule))").font(.wsCaption) }
+                ForEach(einvoice.warnings, id: \.self) { Text($0).font(.wsCaption).foregroundStyle(.secondaryText) }
+            }
+        } header: {
+            Text("VAT invoice check")
+        }
+    }
+
+    private func checkEinvoice() async {
+        do {
+            einvoice = try await services.invoices.einvoiceCheck(invoiceUuid)
+            actionError = nil
+        } catch {
+            actionError = error.asAPIError
+        }
+    }
+
+    private func downloadEinvoice() async {
+        do {
+            let data = try await services.invoices.einvoiceXML(invoiceUuid)
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(state.value?.displayNumber ?? "invoice")-einvoice.xml")
+            try data.write(to: url, options: .atomic)
+            einvoiceURL = url
+            actionError = nil
+        } catch {
+            let apiError = error.asAPIError
+            if apiError.serverError?.status == 409 {
+                actionError = ResourceService.problem(409, "Issue the invoice first: send it, then the e-invoice can be made.")
+            } else {
+                actionError = apiError
+            }
+        }
     }
 
     private func load() async {
@@ -357,6 +586,8 @@ struct InvoiceDetailView: View {
             let invoice = try await services.invoices.invoice(invoiceUuid)
             state = .loaded(invoice)
             pdfURL = nil
+            einvoiceURL = nil
+            vat = try? await services.invoices.vatCheck(invoiceUuid)
         } catch {
             if state.value == nil { state = .failed(error.asAPIError) } else { actionError = error.asAPIError }
         }
@@ -464,6 +695,7 @@ struct PaymentSheet: View {
     @State private var method = "bank_transfer"
     @State private var reference = ""
     @State private var date = Date()
+    @State private var notes = ""
     @State private var saving = false
 
     private let methods = ["bank_transfer", "credit_card", "cash", "check", "paypal", "other"]
@@ -485,6 +717,7 @@ struct PaymentSheet: View {
                     }
                     TextField("Reference", text: $reference)
                     DatePicker("Date", selection: $date, displayedComponents: .date)
+                    TextField("Notes (optional)", text: $notes, axis: .vertical)
                 } footer: {
                     Text("Balance due: \(Formatters.money(invoice.balanceDue, currency: invoice.currency) ?? "")")
                 }
@@ -499,12 +732,12 @@ struct PaymentSheet: View {
                         Task {
                             let ok = await save(PaymentBody(amount: amount, paymentMethod: method,
                                                             referenceNumber: reference.isEmpty ? nil : reference,
-                                                            paymentDate: CalendarDay(date: date), notes: nil))
+                                                            paymentDate: CalendarDay(date: date), notes: notes.trimmedOrNil))
                             saving = false
                             if ok { dismiss() }
                         }
                     }
-                    .disabled(amount <= 0 || saving)
+                    .disabled(amount <= 0 || amount > invoice.balanceDue || saving)
                 }
             }
         }
@@ -593,10 +826,11 @@ struct InvoiceCreateSheet: View {
 /// The API has no PDF download, so invoices are rendered on device for sharing.
 enum InvoicePDFRenderer {
     @MainActor
-    static func render(_ invoice: Invoice) -> URL? {
+    static func render(_ invoice: Invoice, company: String? = nil) -> URL? {
         let page = CGRect(x: 0, y: 0, width: 595, height: 842) // A4 at 72 dpi
         let renderer = UIGraphicsPDFRenderer(bounds: page)
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(invoice.invoiceNumber.isEmpty ? "invoice" : invoice.invoiceNumber).pdf")
+        let number = invoice.displayNumber
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(number.isEmpty ? "invoice" : number).pdf")
         let money = { (value: Decimal) in Formatters.money(value, currency: invoice.currency) ?? "" }
 
         do {
@@ -614,14 +848,21 @@ enum InvoicePDFRenderer {
                 }
 
                 _ = draw("INVOICE", x: 48, font: .boldSystemFont(ofSize: 28))
-                _ = draw(invoice.invoiceNumber, x: 287, font: .monospacedSystemFont(ofSize: 14, weight: .semibold), width: 260, alignment: .right)
+                _ = draw(number, x: 287, font: .monospacedSystemFont(ofSize: 14, weight: .semibold), width: 260, alignment: .right)
+                if let company = company?.trimmedOrNil {
+                    y += 34
+                    _ = draw(company, x: 48, font: .systemFont(ofSize: 12), color: .darkGray)
+                    y += 10
+                }
                 y += 44
                 _ = draw("Bill to", x: 48, font: .systemFont(ofSize: 10), color: .darkGray)
                 let issued = invoice.issueDate.flatMap { Formatters.day($0.date()) } ?? ""
                 let due = invoice.dueDate.flatMap { Formatters.day($0.date()) } ?? ""
-                _ = draw("Issued \(issued)\nDue \(due)", x: 287, font: .systemFont(ofSize: 11), width: 260, alignment: .right)
+                _ = draw((["Issued \(issued)", "Due \(due)"] + (invoice.poNumber.map { ["Your PO \($0)"] } ?? [])).joined(separator: "\n"),
+                         x: 287, font: .systemFont(ofSize: 11), width: 260, alignment: .right)
                 y += 14
-                y += draw([invoice.customerName, invoice.customerEmail].compactMap { $0 }.joined(separator: "\n"), x: 48, font: .systemFont(ofSize: 12))
+                y += draw([invoice.customerName, invoice.customerAddress, invoice.customerEmail].compactMap { $0 }.joined(separator: "\n"),
+                          x: 48, font: .systemFont(ofSize: 12))
                 y += 30
 
                 _ = draw("Description", x: 48, font: .boldSystemFont(ofSize: 11))
@@ -650,7 +891,19 @@ enum InvoicePDFRenderer {
                 }
                 if let notes = invoice.notes, !notes.isEmpty {
                     y += 20
-                    _ = draw(notes, x: 48, font: .systemFont(ofSize: 10), color: .darkGray, width: 499)
+                    y += draw(notes, x: 48, font: .systemFont(ofSize: 10), color: .darkGray, width: 499)
+                }
+                if let method = invoice.paymentMethod, invoice.status != .paid, invoice.status != .void {
+                    if y > 700 {
+                        context.beginPage()
+                        y = 48
+                    }
+                    y += 24
+                    _ = draw("How to pay", x: 48, font: .boldSystemFont(ofSize: 11))
+                    y += 16
+                    let lines = [method.heading] + method.rows.map { "\($0.0): \($0.1)" } + (method.instructions.map { [$0] } ?? [])
+                        + ["Reference: \(number)"]
+                    _ = draw(lines.joined(separator: "\n"), x: 48, font: .systemFont(ofSize: 10), width: 499)
                 }
             }
             return url
@@ -665,6 +918,7 @@ enum InvoicePDFRenderer {
 /// produces — the server has no renderer, so the client supplies it.
 struct EmailInvoiceSheet: View {
     let invoice: Invoice
+    var company: String?
     var onSent: () -> Void = {}
 
     @Environment(\.services) private var services
@@ -675,8 +929,9 @@ struct EmailInvoiceSheet: View {
     @State private var sentTo: String?
     @State private var error: APIError?
 
-    init(invoice: Invoice, onSent: @escaping () -> Void = {}) {
+    init(invoice: Invoice, company: String? = nil, onSent: @escaping () -> Void = {}) {
         self.invoice = invoice
+        self.company = company
         self.onSent = onSent
         _recipient = State(initialValue: invoice.customerEmail ?? "")
     }
@@ -685,7 +940,7 @@ struct EmailInvoiceSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    LabeledContent("Invoice", value: invoice.invoiceNumber)
+                    LabeledContent("Invoice", value: invoice.displayNumber)
                     LabeledContent("Customer", value: invoice.customerName ?? "—")
                     LabeledContent("Total", value: Formatters.money(invoice.totalAmount, currency: invoice.currency) ?? "")
                 }
@@ -730,7 +985,7 @@ struct EmailInvoiceSheet: View {
         error = nil
         Task {
             defer { sending = false }
-            guard let url = InvoicePDFRenderer.render(invoice), let pdf = try? Data(contentsOf: url) else {
+            guard let url = InvoicePDFRenderer.render(invoice, company: company), let pdf = try? Data(contentsOf: url) else {
                 error = .validation(ServerError(status: 0, message: "The invoice PDF could not be built.",
                                                 fieldErrors: [:], rawBody: ""))
                 return
