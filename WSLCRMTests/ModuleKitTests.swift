@@ -122,6 +122,12 @@ final class ModuleKitTests: XCTestCase {
         XCTAssertEqual(body["po_bill_to"], .object(["city": .string("York"), "postcode": .string("LS1 1AA")]))
     }
 
+    func testServerMessagesUseTheFieldsLabel() {
+        let days = FieldSpec("quote_valid_days", "Quotes valid for (days)", .integer)
+        XCTAssertEqual(FormCoding.readable("quote_valid_days must be a whole number from 1 to 365", field: days),
+                       "Quotes valid for (days) must be a whole number from 1 to 365")
+    }
+
     func testAPickedRecordSendsItsID() {
         let supplier = FieldSpec("supplier_uuid", "Supplier",
                                  .reference(ReferenceSpec(list: "/x", displayKey: "supplier_name")))

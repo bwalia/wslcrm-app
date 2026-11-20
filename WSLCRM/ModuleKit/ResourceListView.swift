@@ -58,6 +58,8 @@ private struct ResourceListContent: View {
     @State private var confirming: ActionSpec?
     @State private var notice: String?
     @State private var actionError: APIError?
+    /// Coming back from a record may mean it changed there: the list reloads.
+    @State private var hasAppeared = false
 
     init(descriptor: ResourceDescriptor, query: [String: String], title: String?, service: ResourceService) {
         self.descriptor = descriptor
@@ -83,6 +85,10 @@ private struct ResourceListContent: View {
         }
         .navigationTitle(title ?? descriptor.title)
         .safeAreaInset(edge: .top, spacing: 0) { actionResult }
+        .onAppear {
+            if hasAppeared { Task { await model.load() } }
+            hasAppeared = true
+        }
         .toolbar {
             if !descriptor.list.filters.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) { filterMenu }
@@ -257,7 +263,7 @@ struct FieldBadge: View {
         let label: String = if case .choice(let choices) = field.kind {
             choices.first { $0.value == value }?.label ?? Formatters.humanize(value)
         } else {
-            Formatters.humanize(value)
+            style.label(for: value)
         }
         StatusBadge(text: label, systemImage: style.symbol(for: value), tone: style.tone(for: value))
     }

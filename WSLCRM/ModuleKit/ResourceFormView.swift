@@ -125,6 +125,12 @@ enum FormCoding {
         return body
     }
 
+    /// A server message about `quote_valid_days`, said with the field's own label.
+    static func readable(_ message: String, field: FieldSpec) -> String {
+        let named = message.replacingOccurrences(of: field.saveKey, with: field.label)
+        return named.prefix(1).uppercased() + named.dropFirst()
+    }
+
     /// `customer.name` → `{"customer": {"name": …}}`.
     static func setPath(_ body: inout [String: JSONValue], _ path: String, _ value: JSONValue) {
         let parts = path.split(separator: ".").map(String.init)
@@ -149,23 +155,37 @@ struct ResourceFormView: View {
     @State private var error: APIError?
     @State private var saving = false
     @State private var prepared = false
+    @State private var scrollTarget: String?
+    private static let errorAnchor = "form.error"
 
     var body: some View {
-        Form {
-            if let error { Section { InlineErrorRow(error: error) } }
-            ForEach(descriptor.form?.sections ?? []) { section in
-                let editable = section.fields.filter { !$0.readOnly && $0.kind.isEditable }
-                if !editable.isEmpty {
-                    Section {
-                        ForEach(editable) { field in
-                            FieldEditor(field: field, value: binding(for: field), problem: problems[field.key])
+        ScrollViewReader { proxy in
+            Form {
+                if let error {
+                    Section { InlineErrorRow(error: error) }
+                        .id(Self.errorAnchor)
+                }
+                ForEach(descriptor.form?.sections ?? []) { section in
+                    let editable = section.fields.filter { !$0.readOnly && $0.kind.isEditable }
+                    if !editable.isEmpty {
+                        Section {
+                            ForEach(editable) { field in
+                                FieldEditor(field: field, value: binding(for: field), problem: problems[field.key])
+                                    .id(field.key)
+                            }
+                        } header: {
+                            if let title = section.title { Text(title) }
+                        } footer: {
+                            if let footer = section.footer { Text(footer) }
                         }
-                    } header: {
-                        if let title = section.title { Text(title) }
-                    } footer: {
-                        if let footer = section.footer { Text(footer) }
                     }
                 }
+            }
+            // A problem the person can't see is a save that "did nothing": bring it into view.
+            .onChange(of: scrollTarget) { _, target in
+                guard let target else { return }
+                withAnimation { proxy.scrollTo(target, anchor: .top) }
+                scrollTarget = nil
             }
         }
         .navigationTitle(existing == nil ? "New \(descriptor.noun)" : "Edit \(descriptor.noun)")
@@ -203,7 +223,10 @@ struct ResourceFormView: View {
             if let problem = FormCoding.problem(field, values[field.key] ?? .text("")) { found[field.key] = problem }
         }
         problems = found
-        guard found.isEmpty else { return }
+        guard found.isEmpty else {
+            scrollTarget = fields.first { found[$0.key] != nil }?.key
+            return
+        }
         saving = true
         defer { saving = false }
         let body = FormCoding.body(fields: fields, values: values, original: original, isNew: existing == nil,
@@ -219,10 +242,14 @@ struct ResourceFormView: View {
             if let server = apiError.serverError {
                 for field in fields {
                     if let message = server.fieldErrors[field.saveKey] ?? server.fieldErrors[field.key] {
-                        problems[field.key] = message
+                        problems[field.key] = FormCoding.readable(message, field: field)
+                    } else if server.message.contains(field.saveKey) {
+                        // "quote_valid_days must be …": put it on that field, in its own words.
+                        problems[field.key] = FormCoding.readable(server.message, field: field)
                     }
                 }
             }
+            scrollTarget = fields.first { problems[$0.key] != nil }?.key ?? Self.errorAnchor
         }
     }
 }
@@ -286,6 +313,7 @@ struct FieldEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             control
+                .accessibilityIdentifier("field.\(field.key)")
             if let help = field.help, problem == nil {
                 Text(help).font(.wsFootnote).foregroundStyle(.secondaryText)
             }
@@ -293,9 +321,9 @@ struct FieldEditor: View {
                 Label(problem, systemImage: "exclamationmark.circle")
                     .font(.wsFootnote)
                     .foregroundStyle(Tone.danger.textColor)
+                    .accessibilityIdentifier("field.\(field.key).problem")
             }
         }
-        .accessibilityIdentifier("field.\(field.key)")
     }
 
     @ViewBuilder

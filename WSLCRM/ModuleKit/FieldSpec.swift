@@ -17,6 +17,10 @@ struct StatusStyle: Hashable, Sendable {
     var tones: [String: Tone]
     var symbols: [String: String] = [:]
     var fallback: Tone = .neutral
+    /// Plain words for values that don't read well humanised (`void` → "Cancelled").
+    var labels: [String: String] = [:]
+
+    func label(for value: String) -> String { labels[value.lowercased()] ?? Formatters.humanize(value) }
 
     func tone(for value: String) -> Tone { tones[value.lowercased()] ?? fallback }
 
@@ -176,8 +180,8 @@ enum FieldFormatter {
             return Formatters.dateTime(APIDate.parse(raw)) ?? raw
         case .bool:
             return record.bool(field.key).map { $0 ? "Yes" : "No" }
-        case .status:
-            return record.string(field.key).map { Formatters.humanize($0) }
+        case .status(let style):
+            return record.string(field.key).map { style.label(for: $0) }
         case .choice(let choices):
             guard let raw = record.string(field.key) else { return nil }
             return choices.first { $0.value == raw }?.label ?? Formatters.humanize(raw)

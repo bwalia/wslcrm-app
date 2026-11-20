@@ -48,7 +48,7 @@ extension ModuleCatalog {
                           help: "Leave empty to use it for every supplier."),
             ]),
             SectionSpec("Message", [
-                FieldSpec("subject", "Subject"),
+                FieldSpec("subject", "Subject", required: true),
                 FieldSpec("body", "Wording", .multiline, required: true),
             ]),
             SectionSpec(nil, [
@@ -62,7 +62,8 @@ extension ModuleCatalog {
     // MARK: Credits
 
     static let creditStatus = StatusStyle(tones: ["available": .success, "reserved": .warning, "used": .neutral,
-                                                  "void": .danger])
+                                                  "void": .danger],
+                                          labels: ["reserved": "Held for an order", "void": "Cancelled"])
 
     static let shopCredits = ResourceDescriptor(
         id: "shop.credits", title: "Credits", noun: "credit", systemImage: "gift",
@@ -117,7 +118,8 @@ extension ModuleCatalog {
     static let priceChangeStatus = StatusStyle(tones: [
         "pending": .warning, "applied": .success, "approved": .success, "rejected": .neutral,
         "superseded": .neutral, "blocked_below_cost": .danger,
-    ])
+    ], labels: ["pending": "Waiting for you", "rejected": "Kept the old price", "superseded": "Replaced by a newer one",
+                "blocked_below_cost": "Below cost"])
 
     static let shopPriceChanges = ResourceDescriptor(
         id: "shop.price_changes", title: "Price changes", noun: "price change", systemImage: "scalemass",
@@ -159,7 +161,8 @@ extension ModuleCatalog {
     // MARK: VIP membership
 
     static let memberStatus = StatusStyle(tones: ["active": .success, "past_due": .warning, "canceled": .neutral,
-                                                  "expired": .neutral])
+                                                  "expired": .neutral],
+                                          labels: ["past_due": "Payment late", "canceled": "Cancelled"])
 
     static let shopMembers = ResourceDescriptor(
         id: "shop.members", title: "VIP members", noun: "member", systemImage: "crown",
@@ -362,7 +365,7 @@ extension ModuleCatalog {
     static let purchaseInvoiceStatus = StatusStyle(tones: [
         "unpaid": .warning, "part_paid": .warning, "overdue": .danger, "paid": .success, "proforma": .info,
         "credit": .neutral,
-    ])
+    ], labels: ["part_paid": "Part paid", "proforma": "Pro forma", "credit": "Credit note"])
 
     static let purchaseInvoices = ResourceDescriptor(
         id: "shop.purchase_invoices", title: "Purchase invoices", noun: "purchase invoice", systemImage: "doc.text.below.ecg",

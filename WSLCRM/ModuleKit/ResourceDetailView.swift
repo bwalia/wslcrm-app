@@ -206,11 +206,19 @@ private struct ResourceDetailContent: View {
         busy = true
         defer { busy = false }
         do {
-            _ = try await service.run(action, on: record, inputs: inputs,
-                                      requiresNamespace: descriptor.api.requiresNamespace)
+            let response = try await service.run(action, on: record, inputs: inputs,
+                                                 requiresNamespace: descriptor.api.requiresNamespace)
             actionError = nil
             notice = action.done ?? "\(action.title): done."
             if action.method == .delete { dismiss(); return true }
+            // The server usually answers with the changed record: show it straight away (the only
+            // way to refresh a resource that can't be fetched on its own).
+            if let response,
+               let updated = ResourceService.parseRecord(response, itemKey: descriptor.api.itemKey,
+                                                         idKeys: descriptor.api.idKeys),
+               updated.id == record.id {
+                self.record = updated
+            }
             await load()
             return true
         } catch {
