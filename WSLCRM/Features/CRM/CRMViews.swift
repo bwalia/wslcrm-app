@@ -110,10 +110,18 @@ struct StatTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label(title, systemImage: systemImage)
+            // Icon above the words: side by side, a narrow tile broke words mid-way ("Ope / n").
+            Image(systemName: systemImage)
+                .font(.wsCaption.weight(.semibold))
+                .foregroundStyle(Color(.label))
+                .accessibilityHidden(true)
+            Text(title)
                 .font(.wsCaption.weight(.semibold))
                 // `.secondary` is 60% of label colour: it fails the contrast audit on this card.
                 .foregroundStyle(Color(.label))
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
             Text(value)
                 .font(.wsTitle2.bold().monospacedDigit())
                 .minimumScaleFactor(0.6)

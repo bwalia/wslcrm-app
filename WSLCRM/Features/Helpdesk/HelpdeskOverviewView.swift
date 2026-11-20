@@ -142,7 +142,7 @@ struct HelpdeskOverviewView: View {
         case .failed(let error):
             InlineErrorRow(error: error) { Task { await refresh() } }
         case .loaded(let counts):
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 260 : 100), spacing: 10)],
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 260 : 140), spacing: 10)],
                       spacing: 10) {
                 StatTile(title: "Open", value: "\(counts["open"] ?? 0)", systemImage: "tray.full")
                 StatTile(title: "Pending", value: "\(counts["pending"] ?? 0)", systemImage: "hourglass")

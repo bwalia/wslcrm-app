@@ -151,7 +151,6 @@ private struct AcademyCoursesContent: View {
         .searchable(text: $model.query.search, prompt: "Search courses")
         .refreshable { await reload() }
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: notice) }
-        .overlay { overlay }
         .toolbar { toolbar }
         .task(id: model.query) {
             if hasAppeared { try? await Task.sleep(for: .milliseconds(350)) }
@@ -308,6 +307,11 @@ private struct AcademyCoursesContent: View {
     private var coursesSection: some View {
         Section {
             if let error = model.pageError { InlineErrorRow(error: error) { Task { await model.load() } } }
+            // Loading, failed or empty: a row in this section (over the whole list it covered the
+            // other sections).
+            if model.courses.isEmpty {
+                overlay.frame(maxWidth: .infinity).padding(.vertical, 8)
+            }
             ForEach(model.courses) { course in
                 NavigationLink {
                     AcademyCourseDetailView(uuid: course.uuid, seed: course, isReviewer: access.isReviewer)

@@ -97,7 +97,7 @@ private struct LeadStatsStrip: View {
     let stats: LeadStats
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 10)], spacing: 10) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 10)], spacing: 10) {
             StatTile(title: "Open leads", value: "\(stats.openLeads)", systemImage: "person.crop.circle.badge.plus")
             StatTile(title: "Pipeline value", value: Formatters.money(stats.openValue, currency: stats.currency ?? LeadsAPI.defaultCurrency) ?? "",
                      systemImage: "sterlingsign.circle")
