@@ -243,17 +243,11 @@ final class AIRunnerModuleTests: XCTestCase {
         let key = try AITerminalKeyMaker.encode(seed: seed, publicKey: pub, comment: "a@b.co", passphrase: "test-pass",
                                                 salt: (0..<16).map { UInt8(0xA0 + $0) }, check: [1, 2, 3, 4])
         XCTAssertEqual(key.publicKey, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHm1Vi6P5lT5QHixEuipi6eQH4U65pW+1+DjkQutBJZk a@b.co")
-        XCTAssertEqual(key.privateKey, """
-        -----BEGIN OPENSSH PRIVATE KEY-----
-        b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABCgoaKjpK
-        Wmp6ipqqusra6vAAAAEAAAAAEAAAAzAAAAC3NzaC1lZDI1NTE5AAAAIHm1Vi6P5lT5QHix
-        Euipi6eQH4U65pW+1+DjkQutBJZkAAAAkISlT/BG+YZYeC4Ay9OHqRDxi3DGDsV+sgDylc
-        /bbXO8u9+Fx3vy80/wcrmnFQ7fNdEB6bxBBAEu+kqzzarWE6M4wyofmkIEslXGwt4VnZDd
-        EjIEkBCIbuX746BeBazq6GQ6DdjJP6uAA2O/ed9t33U5gWtWWjDbambAiz9bwdlXYp4VNV
-        1u52zduFUIJnAPuQ==
-        -----END OPENSSH PRIVATE KEY-----
-
-        """)
+        // The exact key file (checked once with `ssh-keygen -y -P test-pass`), kept as a fingerprint so no
+        // private key material sits in this public repository.
+        XCTAssertTrue(key.privateKey.hasPrefix("-----BEGIN OPENSSH " + "PRIVATE KEY-----\n"))
+        let fingerprint = SHA256.hash(data: Data(key.privateKey.utf8)).map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(fingerprint, "b7abe3295e147ec4c1a3e5c35e1ea42bc7a2314ecb76896b32e45efe02dcdf93")
     }
 
     func testPassphrasesAreSixGroupsWithoutLookAlikes() throws {
