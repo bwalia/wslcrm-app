@@ -92,7 +92,6 @@
 		5C4172A1CCC046CAB232F62D /* FieldServiceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 059EE2215D00695A60A148B8 /* FieldServiceModels.swift */; };
 		5D9B44D5E9BD51A6489D03B8 /* APIDateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 022EDAAF325FA736E728E9C9 /* APIDateTests.swift */; };
 		5E4C206DDBB5AAF56AD6F6FF /* JobsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24D514275F54F4356155819A /* JobsListView.swift */; };
-		5F9C01E807371F9EC559F16C /* ModuleCatalog+Shop.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29A6F38B70205AA060484F7B /* ModuleCatalog+Shop.swift */; };
 		5FFB50E0F664BD038A30ECC7 /* invoice_detail.json in Resources */ = {isa = PBXBuildFile; fileRef = 0076134B5E492D152B6AE883 /* invoice_detail.json */; };
 		602DE156A8479E76C14EA497 /* JetBrainsMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 729DBF113D4FFE974F01E4E8 /* JetBrainsMono-Regular.ttf */; };
 		609BB89D2567BCD6BA07950D /* KanbanAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B17E373E80B3EA9F6F93907 /* KanbanAPI.swift */; };
@@ -215,6 +214,7 @@
 		D10E8705FBE4FA50CE5B3C92 /* AssetsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CB35B95A5E25B0869B18B9E /* AssetsViews.swift */; };
 		D18DC34C749C9C616BC3A353 /* Brand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 483E885911A5AB21B7084AA1 /* Brand.swift */; };
 		D32A7766A1DF1330A801337B /* LeadsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7C37C72963C3278675718CC /* LeadsTests.swift */; };
+		D3314F5A51818B7BA8FAAB65 /* ModuleGroup+Shop.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BAA59A1ADEF49D4727A01ED /* ModuleGroup+Shop.swift */; };
 		D3A9E935E80FE10569B671FC /* TaskDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9278ED24A14C59926FB18B2 /* TaskDetailView.swift */; };
 		D3C96D8EB20335D6C4813586 /* PurchaseOrderModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CB7AA9907F2291B9D9572D8 /* PurchaseOrderModels.swift */; };
 		D4108D41C31465EACD1A58ED /* BoardViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDC79C4840836C0930774A97 /* BoardViews.swift */; };
@@ -329,7 +329,6 @@
 		27F97A6E93068073693813D9 /* ResourceDescriptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceDescriptor.swift; sourceTree = "<group>"; };
 		294EF2AB393C9534B35756DB /* KanbanModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KanbanModels.swift; sourceTree = "<group>"; };
 		2984B65D70C547D31D8B1DBB /* PhaseDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhaseDetailView.swift; sourceTree = "<group>"; };
-		29A6F38B70205AA060484F7B /* ModuleCatalog+Shop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ModuleCatalog+Shop.swift"; sourceTree = "<group>"; };
 		2CB35B95A5E25B0869B18B9E /* AssetsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetsViews.swift; sourceTree = "<group>"; };
 		2CDFCF89BDED1A9BABB88273 /* CRMModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CRMModels.swift; sourceTree = "<group>"; };
 		2E3904FF9FB898B8C53A9F75 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
@@ -361,6 +360,7 @@
 		465090F1C7F6C1367E90674B /* AgentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentViews.swift; sourceTree = "<group>"; };
 		471527B5261F7C4E8E091BF0 /* crm_accounts_list.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = crm_accounts_list.json; sourceTree = "<group>"; };
 		483E885911A5AB21B7084AA1 /* Brand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Brand.swift; sourceTree = "<group>"; };
+		4BAA59A1ADEF49D4727A01ED /* ModuleGroup+Shop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ModuleGroup+Shop.swift"; sourceTree = "<group>"; };
 		4C00AE57BFC9B9BA59DDF59B /* PAFactViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PAFactViews.swift; sourceTree = "<group>"; };
 		4C9CA730958B9F676B41784F /* ResourceFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceFormView.swift; sourceTree = "<group>"; };
 		4D98E3467561FD355F6D1FBF /* NativeSVG.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSVG.swift; sourceTree = "<group>"; };
@@ -1051,7 +1051,7 @@
 		C031C4C7BB434D8C3CF847ED /* Catalog */ = {
 			isa = PBXGroup;
 			children = (
-				29A6F38B70205AA060484F7B /* ModuleCatalog+Shop.swift */,
+				4BAA59A1ADEF49D4727A01ED /* ModuleGroup+Shop.swift */,
 			);
 			path = Catalog;
 			sourceTree = "<group>";
@@ -1416,8 +1416,8 @@
 				4A7A6B03BCAE28A8FD6FBE06 /* LoginView.swift in Sources */,
 				CEDDBB48E31964356720DC4D /* MainTabView.swift in Sources */,
 				D9D5569B5065E31DA07744F0 /* MenuView.swift in Sources */,
-				5F9C01E807371F9EC559F16C /* ModuleCatalog+Shop.swift in Sources */,
 				8A238FB712BAFF7314ECB834 /* ModuleCatalog.swift in Sources */,
+				D3314F5A51818B7BA8FAAB65 /* ModuleGroup+Shop.swift in Sources */,
 				4AACED68F1059C1FB65B740C /* MutationQueue.swift in Sources */,
 				C1FF95AA0ACF7D99887692FA /* MyWorkRefresh.swift in Sources */,
 				D90721F268E9E59D06333A90 /* MyWorkView.swift in Sources */,

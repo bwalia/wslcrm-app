@@ -15,6 +15,8 @@ enum MenuDestination: Hashable {
     case propertyPA(manager: Bool)
     /// A module kit list (`ModuleCatalog`).
     case resource(ResourceListRoute)
+    /// A module group's hand-built screen.
+    case native(NativeScreenRoute)
 
     /// nil when the app has no screen for the item yet: it isn't offered (never a web page).
     static func of(_ item: AppMenu.Item) -> MenuDestination? {
@@ -24,18 +26,18 @@ enum MenuDestination: Hashable {
 
 /// Which native screen each server menu item (`GET /api/v2/user/menu`, `menu_items.key`) opens.
 ///
-/// Every key the server can send is either mapped here or listed in `notYetNative` (the backlog,
-/// hidden from people until its screen exists). `NativeModulesTests` fails when a server key is in
-/// neither list, so a new web module can't silently go missing from the app — or be "fixed" with a
-/// web page.
+/// A key opens a screen from `screens` below (the app's original modules) or from a module group
+/// (`ModuleCatalog.groups`: a described list or a hand-built screen). Anything else is on the
+/// backlog (`notYetNative`) and hidden from people until its screen exists — never a web page.
 enum NativeModules {
     static func destination(forKey key: String) -> MenuDestination? {
         if let destination = screens[key] { return destination }
-        if let id = resources[key] { return .resource(ResourceListRoute(id)) }
+        if let id = ModuleCatalog.screenKeys[key] { return .native(NativeScreenRoute(id)) }
+        if let id = ModuleCatalog.resourceKeys[key] { return .resource(ResourceListRoute(id)) }
         return nil
     }
 
-    /// Hand-built screens.
+    /// The app's original hand-built screens.
     static let screens: [String: MenuDestination] = [
         "crm": .screen(.crm),
         "crm_leads": .screen(.leads),
@@ -60,40 +62,41 @@ enum NativeModules {
         "plugin:property_pa:manager": .propertyPA(manager: true),
     ]
 
-    /// Module kit lists, by menu key → descriptor id.
-    static let resources: [String: String] = [
-        "purchase_invoices": "shop.purchase_invoices",
-    ]
-
     /// Server menu keys the app replaces with something of its own (the Home tab is the dashboard).
     static let replaced: Set<String> = ["dashboard", "apps"]
 
-    /// The backlog: modules whose native screens are still being built. They are hidden until then.
+    /// The backlog: server modules with no native screen yet, hidden until they have one.
     /// Shrinks to empty; never "solved" with a web page.
-    static let notYetNative: Set<String> = [
-        "academy", "accounting", "activity", "api-keys", "ats", "billing", "billing_licenses",
-        "billing_subscriptions", "care_home", "chat", "cms", "delivery", "document_templates", "domains",
-        "employees", "field_service_contracts", "field_service_parts", "field_service_visits", "forms",
-        "hospitals", "namespace", "namespaces", "notifications", "patients", "plugins", "pos", "reports",
-        "roles", "services", "settings", "shop_analytics", "sso", "stores", "tax", "tax_agent",
-        "tax_bank_accounts", "tax_categories", "tax_file", "tax_filing_requests", "tax_hmrc",
-        "tax_income_types", "tax_my_income", "tax_reports", "tax_statements", "tax_transactions", "tax_vat",
-        "tax_vat_clients", "users", "vault", "webhooks",
-        "plugin:ai_runner:machines", "plugin:ai_runner:runners", "plugin:ai_runner:runs",
-        "plugin:ai_runner:settings", "plugin:ai_runner:work-log", "plugin:ai_runner:work-log-team",
-        "plugin:helpdesk:overview", "plugin:helpdesk:tickets",
-        "plugin:opsapi_marketing:campaigns", "plugin:opsapi_marketing:conversations",
+    static var notYetNative: Set<String> {
+        Set(serverKeys.filter { destination(forKey: $0) == nil && !replaced.contains($0) })
+    }
+
+    /// Every `menu_items.key` on a full OpsAPI (PROJECT_CODE=all), 2026-11-20. A module added to the
+    /// server later shows up in `NativeModulesTests` until it has a screen here.
+    static let serverKeys: [String] = [
+        "dashboard", "academy", "accounting", "plugin:ai_runner:machines", "plugin:ai_runner:runners",
+        "plugin:ai_runner:runs", "plugin:ai_runner:settings", "plugin:ai_runner:work-log",
+        "plugin:ai_runner:work-log-team", "apps", "ats", "billing", "billing_licenses", "billing_subscriptions",
+        "care_home", "chat", "cms", "crm", "customers", "delivery", "domains", "employees", "field_service_jobs",
+        "field_service_assets", "field_service_contracts", "field_service_parts", "field_service_reports",
+        "field_service_requests", "field_service_simpro", "field_service_visits", "forms", "hospitals", "invoices",
+        "crm_leads", "my_tasks", "namespace", "activity", "api-keys", "plugins", "namespaces", "sso", "vault",
+        "webhooks", "plugin:opsapi_marketing:campaigns", "plugin:opsapi_marketing:conversations",
         "plugin:opsapi_marketing:guide", "plugin:opsapi_marketing:lists", "plugin:opsapi_marketing:overview",
         "plugin:opsapi_marketing:pixels", "plugin:opsapi_marketing:settings", "plugin:opsapi_marketing:studio",
-        "plugin:opsapi_marketing:suppressions", "plugin:opsapi_marketing:templates",
-        "plugin:opsapi_marketing:unsubscribed",
+        "plugin:opsapi_marketing:unsubscribed", "orders", "patients", "plugin:helpdesk:overview",
+        "plugin:helpdesk:tickets", "plugin:opsapi_marketing:suppressions", "plugin:opsapi_marketing:templates",
         "plugin:portfoliolab:clients", "plugin:portfoliolab:dashboard", "plugin:portfoliolab:drafts",
-        "plugin:portfoliolab:setup",
-        "plugin:property_deals:buyers", "plugin:property_deals:compliance", "plugin:property_deals:deals",
-        "plugin:property_deals:holidays", "plugin:property_deals:map", "plugin:property_deals:reports",
-        "plugin:property_deals:settings", "plugin:property_deals:suppliers",
-        "plugin:property_pa:capture", "plugin:property_pa:insights", "plugin:property_pa:knowledge",
-        "plugin:property_pa:opportunities",
+        "plugin:portfoliolab:setup", "plugin:property_deals:holidays", "pos", "products", "projects",
+        "plugin:property_deals:approvals", "plugin:property_deals:buyers", "plugin:property_deals:compliance",
+        "plugin:property_deals:deals", "plugin:property_deals:map", "plugin:property_deals:renovations",
+        "plugin:property_deals:reports", "plugin:property_deals:settings", "plugin:property_deals:suppliers",
+        "plugin:property_deals:today", "plugin:property_pa:capture", "plugin:property_pa:insights",
+        "plugin:property_pa:knowledge", "plugin:property_pa:manager", "plugin:property_pa:opportunities",
+        "plugin:property_pa:today", "purchase_invoices", "purchase_orders", "reports", "roles", "services",
+        "settings", "shop", "shop_analytics", "stores", "tax", "tax_agent", "tax_bank_accounts", "tax_categories",
+        "tax_file", "tax_filing_requests", "tax_my_income", "tax_income_types", "tax_reports", "tax_hmrc",
+        "tax_statements", "tax_transactions", "tax_vat", "tax_vat_clients", "document_templates", "timesheets", "users",
     ]
 }
 
@@ -111,6 +114,7 @@ struct MenuDestinationLink<Label: View>: View {
         case .propertyDealsRenovations: NavigationLink(value: PDRenovationsRoute()) { label }
         case .propertyPA(let manager): NavigationLink(value: PATodayRoute(manager: manager)) { label }
         case .resource(let route): NavigationLink(value: route) { label }
+        case .native(let route): NavigationLink(value: route) { label }
         }
     }
 }

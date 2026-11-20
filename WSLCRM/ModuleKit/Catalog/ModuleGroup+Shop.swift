@@ -2,6 +2,14 @@ import Foundation
 
 /// The shop's back office pages that are lists, records and settings (`/api/v2/shop/admin`, RBAC `shop`).
 /// Orders, quotes, products, suppliers and deals have hand-built screens (Features/Shop).
+extension ModuleGroup {
+    static let shop = ModuleGroup(
+        id: "shop",
+        descriptors: ModuleCatalog.shop,
+        reports: ModuleCatalog.shopReports,
+        resources: ["purchase_invoices": ModuleCatalog.purchaseInvoices.id])
+}
+
 extension ModuleCatalog {
     static let shopBase = "/api/v2/shop/admin"
 

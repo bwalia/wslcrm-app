@@ -164,47 +164,38 @@ final class ModuleKitTests: XCTestCase {
 }
 
 /// Every module the server can put in the menu opens a native screen, or is on the visible backlog.
+@MainActor
 final class NativeModulesTests: XCTestCase {
-    /// `menu_items.key` on a full OpsAPI (PROJECT_CODE=all), 2026-11-20.
-    static let serverMenuKeys: [String] = [
-        "dashboard", "academy", "accounting", "plugin:ai_runner:machines", "plugin:ai_runner:runners",
-        "plugin:ai_runner:runs", "plugin:ai_runner:settings", "plugin:ai_runner:work-log",
-        "plugin:ai_runner:work-log-team", "apps", "ats", "billing", "billing_licenses", "billing_subscriptions",
-        "care_home", "chat", "cms", "crm", "customers", "delivery", "domains", "employees", "field_service_jobs",
-        "field_service_assets", "field_service_contracts", "field_service_parts", "field_service_reports",
-        "field_service_requests", "field_service_simpro", "field_service_visits", "forms", "hospitals", "invoices",
-        "crm_leads", "my_tasks", "namespace", "activity", "api-keys", "plugins", "namespaces", "sso", "vault",
-        "webhooks", "plugin:opsapi_marketing:campaigns", "plugin:opsapi_marketing:conversations",
-        "plugin:opsapi_marketing:guide", "plugin:opsapi_marketing:lists", "plugin:opsapi_marketing:overview",
-        "plugin:opsapi_marketing:pixels", "plugin:opsapi_marketing:settings", "plugin:opsapi_marketing:studio",
-        "plugin:opsapi_marketing:unsubscribed", "orders", "patients", "plugin:helpdesk:overview",
-        "plugin:helpdesk:tickets", "plugin:opsapi_marketing:suppressions", "plugin:opsapi_marketing:templates",
-        "plugin:portfoliolab:clients", "plugin:portfoliolab:dashboard", "plugin:portfoliolab:drafts",
-        "plugin:portfoliolab:setup", "plugin:property_deals:holidays", "pos", "products", "projects",
-        "plugin:property_deals:approvals", "plugin:property_deals:buyers", "plugin:property_deals:compliance",
-        "plugin:property_deals:deals", "plugin:property_deals:map", "plugin:property_deals:renovations",
-        "plugin:property_deals:reports", "plugin:property_deals:settings", "plugin:property_deals:suppliers",
-        "plugin:property_deals:today", "plugin:property_pa:capture", "plugin:property_pa:insights",
-        "plugin:property_pa:knowledge", "plugin:property_pa:manager", "plugin:property_pa:opportunities",
-        "plugin:property_pa:today", "purchase_invoices", "purchase_orders", "reports", "roles", "services",
-        "settings", "shop", "shop_analytics", "stores", "tax", "tax_agent", "tax_bank_accounts", "tax_categories",
-        "tax_file", "tax_filing_requests", "tax_my_income", "tax_income_types", "tax_reports", "tax_hmrc",
-        "tax_statements", "tax_transactions", "tax_vat", "tax_vat_clients", "document_templates", "timesheets", "users",
-    ]
-
-    func testEveryServerModuleIsNativeOrOnTheBacklog() {
-        var missing: [String] = []
-        for key in Self.serverMenuKeys {
-            let native = NativeModules.destination(forKey: key) != nil
-            let known = native || NativeModules.notYetNative.contains(key) || NativeModules.replaced.contains(key)
-            if !known { missing.append(key) }
+    func testTheBacklogIsWhatHasNoScreenYet() {
+        for key in NativeModules.notYetNative {
+            XCTAssertNil(NativeModules.destination(forKey: key), key)
+            XCTAssertFalse(NativeModules.replaced.contains(key), key)
         }
-        XCTAssertEqual(missing, [], "a server module with no native screen and not on the backlog")
+        // The progress report in the test log: what is still to build natively.
+        print("Not native yet (\(NativeModules.notYetNative.count)):", NativeModules.notYetNative.sorted())
     }
 
-    func testTheBacklogOnlyHoldsWhatIsntNativeYet() {
-        let both = NativeModules.notYetNative.filter { NativeModules.destination(forKey: $0) != nil }
-        XCTAssertEqual(both.sorted(), [], "built: take it off NativeModules.notYetNative")
+    func testEveryMappedKeyIsARealServerKey() {
+        let known = Set(NativeModules.serverKeys)
+        let mapped = Set(NativeModules.screens.keys).union(ModuleCatalog.resourceKeys.keys).union(ModuleCatalog.screenKeys.keys)
+        XCTAssertEqual(mapped.subtracting(known).sorted(), [], "a typo, or a new server key to add to serverKeys")
+    }
+
+    func testEveryHandBuiltScreenResolves() {
+        for (key, id) in ModuleCatalog.screenKeys {
+            XCTAssertNotNil(ModuleCatalog.screen(id), "\(key) → screen \(id)")
+        }
+    }
+
+    func testAKeyBelongsToOneGroup() {
+        var owner: [String: String] = [:]
+        for group in ModuleCatalog.groups {
+            for key in Array(group.resources.keys) + Array(group.screens.keys) {
+                XCTAssertNil(owner[key], "\(key) is in both \(owner[key] ?? "") and \(group.id)")
+                XCTAssertNil(NativeModules.screens[key], "\(key) is already an original screen")
+                owner[key] = group.id
+            }
+        }
     }
 
     func testEveryCatalogueEntryIsWellFormed() {
@@ -227,7 +218,7 @@ final class NativeModulesTests: XCTestCase {
                 if case .resource(let id) = link.target { XCTAssertNotNil(ModuleCatalog.descriptor(id), id) }
             }
         }
-        for (key, id) in NativeModules.resources {
+        for (key, id) in ModuleCatalog.resourceKeys {
             XCTAssertNotNil(ModuleCatalog.descriptor(id), "\(key) → \(id)")
         }
     }

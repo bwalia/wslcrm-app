@@ -457,6 +457,12 @@ while every kanban task route checks project membership by user uuid — so a ke
 and an agent must run as a bot user account. That, and the six other server changes this design
 wants, are listed at the end of `PROMPT-work-management.md`.
 
+## Native only
+
+Every screen is SwiftUI: the app shows no web pages and has no web views. `scripts/check-native-only.sh`
+fails CI if one comes back. New modules are built with the module kit or as hand-built screens in a
+module group — see [docs/NATIVE_MODULES.md](docs/NATIVE_MODULES.md).
+
 ## Architecture
 
 ```
