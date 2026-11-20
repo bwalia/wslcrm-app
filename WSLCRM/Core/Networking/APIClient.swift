@@ -152,7 +152,7 @@ actor APIClient {
                 continue
             }
 
-            if response.statusCode == 401, endpoint.requiresAuth {
+            if response.statusCode == 401, endpoint.requiresAuth, endpoint.unauthorizedEndsSession {
                 let refreshed = try await refreshedTokens(replacing: tokenUsed)
                 (data, response) = try await perform(endpoint, accessToken: refreshed.accessToken)
                 if response.statusCode == 401 {

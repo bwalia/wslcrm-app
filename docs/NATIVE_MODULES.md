@@ -81,3 +81,17 @@ field name; test a descriptor's parsing with a real response shape (`ModuleKitTe
 - Swift 6 strict concurrency; run `xcodegen generate` after adding files.
 - Every group ships with unit tests: descriptor shapes parse real responses, actions and forms
   encode the bodies the server expects.
+
+## The one page the app doesn't draw: HMRC's sign-in
+
+HMRC requires taxpayers (and agents) to sign in and give permission on HMRC's own Government Gateway page.
+The app opens that page in Apple's system sign-in sheet (`ASWebAuthenticationSession`), for that one step
+only, in one file: `Features/Tax/HMRCSignIn.swift`. It is not a web view inside the app, and nothing of the
+web dashboard is shown. OpsAPI's `/auth/hmrc/initiate?redirect_url=wslcrm://hmrc` sends the person back to
+`wslcrm://hmrc/<settings|file|vat>?hmrc_connected=true` (or `?hmrc_error=<code>`), which closes the sheet.
+
+## Screen ids with a parameter
+
+A group's screen id may carry one parameter after a colon (`tax.file:2025-26`, `tax.vat:client=<uuid>`,
+`tax.income:rental|2025-26`), so one hand-built screen can open another for a record or a year with
+`NavigationLink(value: NativeScreenRoute("…"))`, without registering a new route type in a shared file.
