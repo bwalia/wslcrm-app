@@ -36,6 +36,11 @@ extension ModuleGroup {
 
 …and one line in `ModuleCatalog.groups`. Nothing else is shared, so areas are built side by side.
 
+A group can also own screens that no menu key opens directly, only other screens. The work group
+(`ModuleGroup+Work.swift`) does this: project settings, sprints, epics, analytics, labels and AI
+runs are reached from Projects and My tasks with `NavigationLink(value: WorkScreen.….route)`, which
+carries its parameters in the `NativeScreenRoute` id (`work.sprints?project=…&sprint=…`).
+
 ## The module kit (prefer it)
 
 Most pages are lists of records with a detail screen, a form, and some actions. Describe them with

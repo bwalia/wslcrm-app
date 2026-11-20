@@ -28,8 +28,9 @@ struct TimesheetsAPI: Sendable {
 
     func summary(from: Date? = nil, to: Date? = nil) async throws -> TimesheetSummary {
         var query = QueryBuilder()
-        query.add("date_from", from)
-        query.add("date_to", to)
+        // The server reads `start_date`/`end_date` (the dashboard's `date_from` is ignored).
+        query.add("start_date", from.map { CalendarDay(date: $0).isoString })
+        query.add("end_date", to.map { CalendarDay(date: $0).isoString })
         let envelope: Envelope.Standard<TimesheetSummaryPayload> =
             try await client.send(.get("\(Self.base)/summary", query: query.items))
         return envelope.data.summary
@@ -51,6 +52,27 @@ struct TimesheetsAPI: Sendable {
 
     func delete(_ uuid: String) async throws {
         try await client.sendDiscardingBody(.delete("\(Self.base)/\(uuid)"))
+    }
+
+    // MARK: Entries and invoicing
+
+    func addEntry(timesheetUuid: String, _ body: TimesheetEntryBody) async throws {
+        try await client.sendDiscardingBody(.post("\(Self.base)/\(timesheetUuid)/entries", json: body))
+    }
+
+    func updateEntry(_ uuid: String, _ body: TimesheetEntryBody) async throws {
+        try await client.sendDiscardingBody(.put("\(Self.base)/entries/\(uuid)", json: body))
+    }
+
+    func deleteEntry(_ uuid: String) async throws {
+        try await client.sendDiscardingBody(.delete("\(Self.base)/entries/\(uuid)"))
+    }
+
+    /// Makes a draft invoice from an approved timesheet's billable hours (`invoices.create`).
+    func generateInvoice(timesheetUuid: String) async throws -> TimesheetInvoice {
+        let envelope: Envelope.Standard<TimesheetInvoice> =
+            try await client.send(.post("/api/v2/invoices/from-timesheet", json: ["timesheet_uuid": timesheetUuid]))
+        return envelope.data
     }
 
     // MARK: Approving other people's

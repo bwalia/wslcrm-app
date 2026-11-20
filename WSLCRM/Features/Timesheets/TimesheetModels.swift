@@ -85,6 +85,7 @@ struct Timesheet: Decodable, Sendable, Identifiable, Hashable {
     var rejectionReason: String?
     var approvalComments: String?
     var entries: [TimesheetEntry]?
+    var approvalHistory: [TimesheetApproval] = []
     var createdAt: Date?
 
     var id: String { uuid }
@@ -118,6 +119,7 @@ struct Timesheet: Decodable, Sendable, Identifiable, Hashable {
         case totalHours, billableHours, hourlyRate, isBillable, clientName, customerUuid
         case task, taskUuid, projectName, projectUuid, notes
         case submittedAt, approvedAt, rejectedAt, rejectionReason, approvalComments, entries, createdAt
+        case approvalHistory
     }
 
     init(from decoder: Decoder) throws {
@@ -136,7 +138,7 @@ struct Timesheet: Decodable, Sendable, Identifiable, Hashable {
         totalHours = c.decodeFlexibleDouble(forKey: .totalHours) ?? 0
         billableHours = c.decodeFlexibleDouble(forKey: .billableHours) ?? 0
         hourlyRate = c.decodeFlexibleDouble(forKey: .hourlyRate)
-        isBillable = (try? c.decodeIfPresent(Bool.self, forKey: .isBillable)) ?? false
+        isBillable = c.decodeFlexibleBool(forKey: .isBillable) ?? false
         clientName = try? c.decodeIfPresent(String.self, forKey: .clientName)
         customerUuid = try? c.decodeIfPresent(String.self, forKey: .customerUuid)
         task = try? c.decodeIfPresent(String.self, forKey: .task)
@@ -150,6 +152,7 @@ struct Timesheet: Decodable, Sendable, Identifiable, Hashable {
         rejectionReason = try? c.decodeIfPresent(String.self, forKey: .rejectionReason)
         approvalComments = try? c.decodeIfPresent(String.self, forKey: .approvalComments)
         entries = try? c.decodeIfPresent(LossyArray<TimesheetEntry>.self, forKey: .entries)?.elements
+        approvalHistory = c.decodeLossyArray(TimesheetApproval.self, forKey: .approvalHistory)
         createdAt = try? c.decodeIfPresent(Date.self, forKey: .createdAt)
     }
 }
@@ -160,25 +163,65 @@ struct TimesheetEntry: Decodable, Sendable, Identifiable, Hashable {
     var hours: Double = 0
     var description: String?
     var projectReference: String?
+    var taskReference: String?
     var isBillable: Bool = false
     var category: String?
 
     var id: String { uuid }
 
     enum CodingKeys: String, CodingKey {
-        case uuid, date, hours, description, projectReference, isBillable, category
+        case uuid, date, entryDate, hours, description, projectReference, taskReference, isBillable, category
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         uuid = (try? c.decode(String.self, forKey: .uuid)) ?? UUID().uuidString
-        date = try? c.decodeIfPresent(Date.self, forKey: .date)
+        // The entries list says `date`; a freshly added entry only says `entry_date`.
+        date = (try? c.decodeIfPresent(Date.self, forKey: .date)) ?? (try? c.decodeIfPresent(Date.self, forKey: .entryDate)) ?? nil
         hours = c.decodeFlexibleDouble(forKey: .hours) ?? 0
         description = try? c.decodeIfPresent(String.self, forKey: .description)
         projectReference = try? c.decodeIfPresent(String.self, forKey: .projectReference)
-        isBillable = (try? c.decodeIfPresent(Bool.self, forKey: .isBillable)) ?? false
+        taskReference = try? c.decodeIfPresent(String.self, forKey: .taskReference)
+        isBillable = c.decodeFlexibleBool(forKey: .isBillable) ?? false
         category = try? c.decodeIfPresent(String.self, forKey: .category)
     }
+}
+
+/// One approve or reject decision on a timesheet (`approval_history`).
+struct TimesheetApproval: Decodable, Sendable, Hashable, Identifiable {
+    var action: String
+    var comments: String?
+    var approverName: String?
+    var createdAt: Date?
+    var id: String { "\(action)-\(createdAt.map(APIDate.string(from:)) ?? UUID().uuidString)" }
+
+    enum CodingKeys: String, CodingKey { case action, comments, approverName, approverEmail, createdAt }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        action = (try? c.decode(String.self, forKey: .action)) ?? "approved"
+        comments = try? c.decodeIfPresent(String.self, forKey: .comments)
+        approverName = ((try? c.decodeIfPresent(String.self, forKey: .approverName)) ?? nil)
+            ?? ((try? c.decodeIfPresent(String.self, forKey: .approverEmail)) ?? nil)
+        createdAt = try? c.decodeIfPresent(Date.self, forKey: .createdAt)
+    }
+}
+
+/// `POST /timesheets/:uuid/entries` and `PUT /timesheets/entries/:uuid`. The server needs a
+/// description; the date is a calendar day.
+struct TimesheetEntryBody: Encodable, Sendable {
+    var date: String?
+    var hours: Double?
+    var description: String?
+    var projectReference: String?
+    var category: String?
+    var isBillable: Bool?
+}
+
+/// The invoice made from an approved timesheet.
+struct TimesheetInvoice: Decodable, Sendable, Hashable {
+    var uuid: String
+    var invoiceNumber: String?
 }
 
 /// `GET /api/v2/timesheets/summary` wraps the totals a level in, beside per-project and
@@ -239,6 +282,9 @@ struct TimesheetTaskOption: Decodable, Sendable, Identifiable, Hashable {
     var title: String
     var projectUuid: String?
     var projectName: String?
+    /// The project's billing customer, which a picked task fills in.
+    var customerUuid: String?
+    var customerName: String?
 
     var id: String { taskUuid }
 }
@@ -248,7 +294,9 @@ struct TimesheetTaskOption: Decodable, Sendable, Identifiable, Hashable {
 /// The server computes the hours from `start_time`/`end_time` when both are sent, and otherwise
 /// takes `total_hours`. It ignores a field called `hours`, which is easy to send and get zero for.
 struct CreateTimesheetBody: Encodable, Sendable {
-    var workDate: Date?
+    /// A calendar day (`YYYY-MM-DD`): a timestamp would land on the wrong day after midnight in
+    /// a British summer.
+    var workDate: String?
     var startTime: String?
     var endTime: String?
     var totalHours: Double?

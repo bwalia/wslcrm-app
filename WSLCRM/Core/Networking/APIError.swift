@@ -223,3 +223,12 @@ extension APIError: LocalizedError {
         }
     }
 }
+
+extension APIError {
+    /// What to tell a person: the server's own words when it gave some, else a plain explanation.
+    var plainMessage: String {
+        if let message = serverError?.message, !message.isEmpty, message != "Permission denied" { return message }
+        if case .forbidden = self { return "You don't have permission to do that." }
+        return errorDescription ?? "Something went wrong. Try again."
+    }
+}

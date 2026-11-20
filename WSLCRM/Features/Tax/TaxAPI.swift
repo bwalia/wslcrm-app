@@ -226,8 +226,6 @@ extension APIError {
         return try? JSONDecoder().decode(JSONValue.self, from: data)
     }
 
-    /// What to tell a person, in plain words.
-    var plainMessage: String { localizedDescription }
 }
 
 /// Money in pounds, as the tax screens show it.

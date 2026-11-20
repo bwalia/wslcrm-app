@@ -110,7 +110,7 @@ private struct ApprovalQueueList: View {
 private struct StatusFilterBar: View {
     @Binding var selection: TimesheetStatus?
 
-    private let options: [TimesheetStatus?] = [nil, .draft, .submitted, .approved, .rejected]
+    private let options: [TimesheetStatus?] = [nil, .draft, .submitted, .approved, .rejected, .void]
 
     var body: some View {
         ScrollView(.horizontal) {
@@ -146,6 +146,7 @@ struct TimesheetSummaryStrip: View {
             WorkSummaryTile(title: "Hours", value: Formatters.hours(Decimal(summary.totalHours)) ?? "0")
             WorkSummaryTile(title: "Billable", value: Formatters.hours(Decimal(summary.billableHours)) ?? "0")
             WorkSummaryTile(title: "Awaiting", value: String(summary.pendingCount))
+            WorkSummaryTile(title: "Approved", value: String(summary.approvedCount))
         }
         .padding(.horizontal)
         .padding(.bottom, 8)
@@ -209,8 +210,13 @@ struct TimesheetDetailView: View {
     let uuid: String
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
+    @Environment(\.dismiss) private var dismiss
     @State private var state: LoadState<Timesheet> = .idle
     @State private var deciding: Decision?
+    @State private var entryForm: EntryFormTarget?
+    @State private var confirm: PendingConfirmation?
+    @State private var notice: WorkNotice?
+    @State private var invoice: InvoiceRoute?
     @State private var busy = false
 
     enum Decision: String, Identifiable {
@@ -239,83 +245,165 @@ struct TimesheetDetailView: View {
                 await decide(decision, text: text)
             }
         }
+        .sheet(item: $entryForm) { target in
+            TimesheetEntrySheet(target: target) { body in
+                await run(target.entry == nil ? "Entry added." : "Entry saved.") {
+                    if let entry = target.entry {
+                        try await services.timesheets.updateEntry(entry.uuid, body)
+                    } else {
+                        try await services.timesheets.addEntry(timesheetUuid: uuid, body)
+                    }
+                }
+            }
+        }
+        .navigationDestination(item: $invoice) { InvoiceDetailView(invoiceUuid: $0.uuid) }
+        .workConfirmation($confirm)
+        .workNotice($notice)
     }
 
     @ViewBuilder
     private func content(_ sheet: Timesheet) -> some View {
+        let isMine = sheet.userUuid == nil || sheet.userUuid == session.user?.uuid
+        let editable = sheet.status.isEditable
         List {
             Section {
-                DetailRow(label: "Status", value: sheet.status.label)
+                HStack(spacing: 8) {
+                    WorkSummaryTile(title: "Hours", value: Formatters.hours(Decimal(sheet.totalHours)) ?? "0")
+                    WorkSummaryTile(title: "Billable", value: Formatters.hours(Decimal(sheet.billableHours)) ?? "0")
+                    WorkSummaryTile(title: "Entries", value: String(sheet.entries?.count ?? 0))
+                }
+                StatusBadge(text: sheet.status.label, systemImage: sheet.status.systemImage, tone: sheet.status.tone)
+            }
+
+            if let reason = sheet.rejectionReason, !reason.isEmpty, sheet.status == .rejected {
+                Section("Sent back because") {
+                    Text(reason).foregroundStyle(Tone.danger.textColor)
+                        .accessibilityIdentifier("timesheet.rejectionReason")
+                }
+            }
+
+            Section("Work") {
                 if let date = sheet.workDate ?? sheet.periodStart {
                     DetailRow(label: "Work date", value: Formatters.day(date) ?? "—")
                 }
-                if let start = sheet.startTime, let end = sheet.endTime {
-                    DetailRow(label: "Worked", value: "\(start) – \(end)")
+                if let start = sheet.periodStart, let end = sheet.periodEnd, sheet.workDate == nil {
+                    DetailRow(label: "Period", value: "\(Formatters.day(start) ?? "") – \(Formatters.day(end) ?? "")")
                 }
-                DetailRow(label: "Hours", value: Formatters.hours(Decimal(sheet.totalHours)) ?? "0")
-                if sheet.billableHours > 0 {
-                    DetailRow(label: "Billable", value: Formatters.hours(Decimal(sheet.billableHours)) ?? "0")
+                if let start = sheet.startTime, let end = sheet.endTime {
+                    DetailRow(label: "Worked", value: "\(start.prefix(5)) – \(end.prefix(5))")
+                }
+                DetailRow(label: "Customer", value: sheet.clientName)
+                DetailRow(label: "Task", value: sheet.task)
+                DetailRow(label: "Project", value: sheet.projectName)
+                DetailRow(label: "Billable", value: sheet.isBillable ? "Yes" : "No")
+                if let rate = sheet.hourlyRate {
+                    DetailRow(label: "Hourly rate", value: Formatters.money(Decimal(rate), currency: "GBP"))
                 }
                 if let amount = sheet.amount {
                     DetailRow(label: "Amount", value: Formatters.money(Decimal(amount), currency: "GBP") ?? "—")
                 }
-            }
-
-            if !sheet.subtitle.isEmpty || sheet.isMachineTime {
-                Section("Work") {
-                    if let client = sheet.clientName { DetailRow(label: "Customer", value: client) }
-                    if let task = sheet.task { DetailRow(label: "Task", value: task) }
-                    if let project = sheet.projectName { DetailRow(label: "Project", value: project) }
-                    LabeledContent("Logged by") { ActorChip(actor: sheet.actor) }
-                }
+                LabeledContent("Logged by") { ActorChip(actor: sheet.actor) }
+                DetailRow(label: "Submitted", value: Formatters.dateTime(sheet.submittedAt))
+                DetailRow(label: "Approved", value: Formatters.dateTime(sheet.approvedAt))
             }
 
             if let notes = sheet.notes, !notes.isEmpty {
                 Section("Notes") { Text(notes) }
             }
 
-            if let reason = sheet.rejectionReason, !reason.isEmpty {
-                Section("Sent back") {
-                    Text(reason).foregroundStyle(Tone.danger.textColor)
-                        .accessibilityIdentifier("timesheet.rejectionReason")
+            Section {
+                let entries = sheet.entries ?? []
+                if entries.isEmpty {
+                    Text("No time entries yet.").foregroundStyle(.secondaryText)
+                }
+                ForEach(entries) { entry in
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text(Formatters.day(entry.date) ?? "—").font(.wsSubheadline.weight(.semibold))
+                            Spacer()
+                            Text(Formatters.hours(Decimal(entry.hours)) ?? "0").font(.wsSubheadline)
+                        }
+                        if let description = entry.description, !description.isEmpty {
+                            Text(description).font(.wsFootnote)
+                        }
+                        let tags = [entry.projectReference, entry.category, entry.isBillable ? "billable" : "not billable"].compactMap { $0 }
+                        Text(tags.joined(separator: " · ")).font(.wsCaption).foregroundStyle(.secondaryText)
+                    }
+                    .accessibilityIdentifier("timesheet.entry.\(entry.uuid)")
+                    .swipeActions {
+                        if editable, isMine {
+                            Button("Delete", systemImage: "trash", role: .destructive) {
+                                confirm = PendingConfirmation(title: "Delete this entry?", button: "Delete entry") {
+                                    await run("Entry deleted.") { try await services.timesheets.deleteEntry(entry.uuid) }
+                                }
+                            }
+                            Button("Edit", systemImage: "pencil") { entryForm = EntryFormTarget(entry: entry) }.tint(.blue)
+                        }
+                    }
+                }
+                if editable, isMine {
+                    Button("Add an entry", systemImage: "plus") { entryForm = EntryFormTarget(entry: nil) }
+                        .accessibilityIdentifier("timesheet.addEntry")
+                }
+            } header: {
+                Text("Time entries")
+            } footer: {
+                if editable {
+                    Text("Each entry is one chunk of work. The hours add up to the timesheet's total. Entries can only change while it's a draft; submitting locks them.")
                 }
             }
 
-            if let entries = sheet.entries, !entries.isEmpty {
-                Section("Entries") {
-                    ForEach(entries) { entry in
+            let entries = sheet.entries ?? []
+            if entries.count > 1 {
+                Section("Hours by project") {
+                    ForEach(Self.totals(entries, by: \.projectReference, empty: "No project"), id: \.0) { name, hours in
+                        LabeledContent(name, value: Formatters.hours(Decimal(hours)) ?? "0")
+                    }
+                }
+                Section("Hours by category") {
+                    ForEach(Self.totals(entries, by: \.category, empty: "Uncategorised"), id: \.0) { name, hours in
+                        LabeledContent(name, value: Formatters.hours(Decimal(hours)) ?? "0")
+                    }
+                }
+            }
+
+            if !sheet.approvalHistory.isEmpty {
+                Section("History") {
+                    ForEach(sheet.approvalHistory) { item in
                         VStack(alignment: .leading, spacing: 2) {
-                            HStack {
-                                Text(Formatters.day(entry.date) ?? "—").font(.wsSubheadline.weight(.semibold))
-                                Spacer()
-                                Text(Formatters.hours(Decimal(entry.hours)) ?? "0").font(.wsSubheadline)
-                            }
-                            if let description = entry.description, !description.isEmpty {
-                                Text(description).font(.wsFootnote).foregroundStyle(.secondaryText)
-                            }
+                            Text("\(item.action == "rejected" ? "Sent back" : "Approved") by \(item.approverName ?? "someone")")
+                                .font(.wsSubheadline)
+                            if let comments = item.comments, !comments.isEmpty { Text(comments).font(.wsCaption) }
+                            if let at = item.createdAt { Text(Formatters.dateTime(at) ?? "").font(.wsCaption).foregroundStyle(.secondaryText) }
                         }
                     }
                 }
             }
 
-            Section { actions(sheet) }
+            Section { actions(sheet, isMine: isMine) }
         }
         .disabled(busy)
+        .refreshable { await load() }
+    }
+
+    static func totals(_ entries: [TimesheetEntry], by key: KeyPath<TimesheetEntry, String?>, empty: String) -> [(String, Double)] {
+        var out: [String: Double] = [:]
+        for entry in entries { out[(entry[keyPath: key]?.trimmedOrNil) ?? empty, default: 0] += entry.hours }
+        return out.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
     }
 
     @ViewBuilder
-    private func actions(_ sheet: Timesheet) -> some View {
-        let isMine = sheet.userUuid == nil || sheet.userUuid == session.user?.uuid
+    private func actions(_ sheet: Timesheet, isMine: Bool) -> some View {
         if isMine, sheet.status.canSubmit {
             Button("Submit for approval") {
-                Task { await run { try await services.timesheets.submit(uuid) } }
+                Task { await run("Sent for approval.") { try await services.timesheets.submit(uuid) } }
             }
             .buttonStyle(LargeButtonStyle(tone: .info))
             .accessibilityIdentifier("timesheet.submit")
         }
-        if isMine, sheet.status.canReopen {
-            Button("Reopen as draft") {
-                Task { await run { try await services.timesheets.reopen(uuid) } }
+        if sheet.status.canReopen {
+            Button("Reopen as a draft") {
+                Task { await run("Reopened as a draft. You can change it and submit it again.") { try await services.timesheets.reopen(uuid) } }
             }
             .accessibilityIdentifier("timesheet.reopen")
         }
@@ -329,16 +417,40 @@ struct TimesheetDetailView: View {
             Text("Somebody else approves your time.")
                 .font(.wsFootnote).foregroundStyle(.secondaryText)
         }
+        if sheet.status == .approved, session.permissions.can(.create, .invoices) {
+            Button("Make an invoice from the billable hours", systemImage: "doc.text") {
+                Task { await makeInvoice() }
+            }
+            .accessibilityIdentifier("timesheet.invoice")
+        }
+        if sheet.status.isEditable, isMine {
+            Button("Delete this timesheet", role: .destructive) {
+                confirm = PendingConfirmation(title: "Delete this timesheet?", message: "Its entries go with it.",
+                                              button: "Delete timesheet") {
+                    do {
+                        try await services.timesheets.delete(uuid)
+                        notice = .done("Timesheet deleted.")
+                        try? await Task.sleep(for: .milliseconds(800))
+                        dismiss()
+                    } catch {
+                        notice = .failed(error.asAPIError.plainMessage)
+                    }
+                }
+            }
+            .accessibilityIdentifier("timesheet.delete")
+        }
     }
 
     private func load() async {
         if state.value == nil { state = .loading }
         do { state = .loaded(try await services.timesheets.timesheet(uuid)) }
-        catch { state = .failed(error.asAPIError) }
+        catch {
+            if state.value == nil { state = .failed(error.asAPIError) } else { notice = .failed(error.asAPIError.plainMessage) }
+        }
     }
 
     private func decide(_ decision: Decision, text: String) async {
-        await run {
+        await run(decision == .approve ? "Timesheet approved." : "Timesheet sent back with your reason.") {
             switch decision {
             case .approve: try await services.timesheets.approve(uuid, comments: text.isEmpty ? nil : text)
             case .reject: try await services.timesheets.reject(uuid, reason: text)
@@ -346,14 +458,102 @@ struct TimesheetDetailView: View {
         }
     }
 
-    private func run(_ work: () async throws -> Void) async {
+    private func makeInvoice() async {
+        busy = true
+        defer { busy = false }
+        do {
+            let made = try await services.timesheets.generateInvoice(timesheetUuid: uuid)
+            notice = .done("Invoice \(made.invoiceNumber ?? "") created from the billable hours.")
+            invoice = InvoiceRoute(uuid: made.uuid)
+        } catch {
+            notice = .failed(error.asAPIError.plainMessage)
+        }
+    }
+
+    private func run(_ done: String, _ work: () async throws -> Void) async {
         busy = true
         defer { busy = false }
         do {
             try await work()
-            await load()
+            notice = .done(done)
         } catch {
-            state = .failed(error.asAPIError)
+            notice = .failed(error.asAPIError.plainMessage)
+        }
+        await load()
+    }
+}
+
+struct EntryFormTarget: Identifiable {
+    let entry: TimesheetEntry?
+    var id: String { entry?.uuid ?? "new" }
+}
+
+/// Adding or changing one chunk of work on a draft timesheet.
+private struct TimesheetEntrySheet: View {
+    let target: EntryFormTarget
+    let onSave: (TimesheetEntryBody) async -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var date = Date()
+    @State private var hours = 1.0
+    @State private var description = ""
+    @State private var project = ""
+    @State private var category = ""
+    @State private var billable = true
+    @State private var busy = false
+    @State private var filled = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    DatePicker("Date", selection: $date, displayedComponents: .date)
+                    Stepper(value: $hours, in: 0.25...24, step: 0.25) {
+                        LabeledContent("Hours", value: Formatters.hours(Decimal(hours)) ?? "")
+                    }
+                    .accessibilityIdentifier("timesheet.entry.hours")
+                    TextField("What did you work on?", text: $description, axis: .vertical)
+                        .lineLimit(1...4)
+                        .accessibilityIdentifier("timesheet.entry.description")
+                } footer: {
+                    if description.trimmingCharacters(in: .whitespaces).isEmpty {
+                        Text("Say what you worked on — the server needs it.")
+                    }
+                }
+                Section {
+                    TextField("Project reference, e.g. PROJ-001", text: $project)
+                    TextField("Category, e.g. Development", text: $category)
+                    Toggle("Billable", isOn: $billable).accessibilityIdentifier("timesheet.entry.billable")
+                } footer: {
+                    Text("Billable hours are what the client is charged for. Leave it off for internal time.")
+                }
+            }
+            .navigationTitle(target.entry == nil ? "Add an entry" : "Edit entry")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        busy = true
+                        let body = TimesheetEntryBody(date: CalendarDay.string(date), hours: hours,
+                                                      description: description.trimmingCharacters(in: .whitespacesAndNewlines),
+                                                      projectReference: project.trimmedOrNil, category: category.trimmedOrNil,
+                                                      isBillable: billable)
+                        Task { await onSave(body); dismiss() }
+                    }
+                    .disabled(busy || description.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .accessibilityIdentifier("timesheet.entry.save")
+                }
+            }
+            .onAppear {
+                guard !filled, let entry = target.entry else { return }
+                filled = true
+                if let day = KanbanTask.localDay(entry.date) { date = day }
+                hours = max(0.25, entry.hours)
+                description = entry.description ?? ""
+                project = entry.projectReference ?? ""
+                category = entry.category ?? ""
+                billable = entry.isBillable
+            }
         }
     }
 }
@@ -401,14 +601,15 @@ struct LogTimeSheet: View {
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
     @State private var workDate = Date()
-    @State private var startTime = Calendar.current.date(bySettingHour: 8, minute: 0, second: 0, of: Date()) ?? Date()
-    @State private var endTime = Calendar.current.date(bySettingHour: 16, minute: 30, second: 0, of: Date()) ?? Date()
+    @State private var startTime = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? Date()
+    @State private var endTime = Calendar.current.date(bySettingHour: 17, minute: 0, second: 0, of: Date()) ?? Date()
     @State private var isBillable = true
+    @State private var rate = ""
     @State private var notes = ""
     @State private var customer: TimesheetCustomerOption?
     @State private var task: TimesheetTaskOption?
-    @State private var customers: [TimesheetCustomerOption] = []
-    @State private var tasks: [TimesheetTaskOption] = []
+    @State private var pickingCustomer = false
+    @State private var pickingTask = false
     @State private var busy = false
     @State private var error: APIError?
 
@@ -424,32 +625,44 @@ struct LogTimeSheet: View {
                         .accessibilityIdentifier("timesheet.endTime")
                     LabeledContent("Hours", value: Formatters.hours(Decimal(hours)) ?? "0")
                         .accessibilityIdentifier("timesheet.hours")
-                    Toggle("Billable", isOn: $isBillable)
-                        .accessibilityIdentifier("timesheet.billable")
                 } header: {
                     Text("When")
                 } footer: {
-                    Text("The hours come from the times you worked, which is what the server records. A shift ending before it starts is treated as crossing midnight.")
+                    Text("A shift ending before it starts is treated as crossing midnight.")
                 }
 
                 Section("What") {
-                    Picker("Customer", selection: $customer) {
-                        Text("None").tag(TimesheetCustomerOption?.none)
-                        ForEach(customers) { option in
-                            Text(option.name).tag(TimesheetCustomerOption?.some(option))
-                        }
-                    }
-                    .accessibilityIdentifier("timesheet.customer")
-                    Picker("Task", selection: $task) {
-                        Text("None").tag(TimesheetTaskOption?.none)
-                        ForEach(tasks) { option in
-                            Text(option.title).tag(TimesheetTaskOption?.some(option))
-                        }
+                    Button {
+                        pickingTask = true
+                    } label: {
+                        LabeledContent("Task", value: task?.title ?? "None")
                     }
                     .accessibilityIdentifier("timesheet.task")
-                    TextField("Notes", text: $notes, axis: .vertical)
+                    if let project = task?.projectName {
+                        Text("Project: \(project)").font(.wsCaption).foregroundStyle(.secondaryText)
+                    }
+                    Button {
+                        pickingCustomer = true
+                    } label: {
+                        LabeledContent("Customer", value: customer?.name ?? "None")
+                    }
+                    .accessibilityIdentifier("timesheet.customer")
+                    TextField("Notes (optional)", text: $notes, axis: .vertical)
                         .lineLimit(2...5)
                         .accessibilityIdentifier("timesheet.notes")
+                }
+
+                Section {
+                    Toggle("Billable to the customer", isOn: $isBillable)
+                        .accessibilityIdentifier("timesheet.billable")
+                    TextField("Hourly rate, e.g. 75 (optional)", text: $rate)
+                        .keyboardType(.decimalPad)
+                        .accessibilityIdentifier("timesheet.rate")
+                    if let amount {
+                        LabeledContent("Comes to about", value: Formatters.money(Decimal(amount), currency: "GBP") ?? "")
+                    }
+                } header: {
+                    Text("Charging")
                 }
 
                 if let error {
@@ -462,13 +675,18 @@ struct LogTimeSheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { Task { await save() } }
-                        .disabled(busy)
+                        .disabled(busy || hours <= 0 || (!rate.isEmpty && Double(rate) == nil))
                         .accessibilityIdentifier("timesheet.save")
                 }
             }
-            .task {
-                customers = (try? await services.timesheets.customers()) ?? []
-                tasks = (try? await services.timesheets.tasks()) ?? []
+            .sheet(isPresented: $pickingCustomer) { WorkCustomerPickerSheet(selection: $customer) }
+            .sheet(isPresented: $pickingTask) {
+                TimesheetTaskPickerSheet(selection: $task)
+            }
+            .onChange(of: task) { _, picked in
+                if let picked, let uuid = picked.customerUuid {
+                    customer = TimesheetCustomerOption(uuid: uuid, firstName: picked.customerName, lastName: nil, email: nil)
+                }
             }
         }
     }
@@ -483,6 +701,11 @@ struct LogTimeSheet: View {
         return Double(minutes) / 60
     }
 
+    private var amount: Double? {
+        guard let value = Double(rate), value > 0 else { return nil }
+        return value * hours
+    }
+
     private static let clock: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_GB")
@@ -494,12 +717,13 @@ struct LogTimeSheet: View {
         busy = true
         defer { busy = false }
         // Hours are not a field the create route accepts: it derives them from the clock pair.
-        let body = CreateTimesheetBody(workDate: workDate,
+        let body = CreateTimesheetBody(workDate: CalendarDay.string(workDate),
                                        startTime: Self.clock.string(from: startTime),
                                        endTime: Self.clock.string(from: endTime),
                                        customerUuid: customer?.uuid, clientName: customer?.name,
                                        taskUuid: task?.taskUuid, task: task?.title,
                                        isBillable: isBillable,
+                                       hourlyRate: Double(rate),
                                        notes: notes.isEmpty ? nil : notes)
         do {
             try await services.timesheets.log(body)
@@ -507,6 +731,49 @@ struct LogTimeSheet: View {
             dismiss()
         } catch {
             self.error = error.asAPIError
+        }
+    }
+}
+
+/// Finds a project task to log time against.
+struct TimesheetTaskPickerSheet: View {
+    @Binding var selection: TimesheetTaskOption?
+    @Environment(\.services) private var services
+    @Environment(\.dismiss) private var dismiss
+    @State private var search = ""
+    @State private var results: [TimesheetTaskOption] = []
+    @State private var loading = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Button("No task") { selection = nil; dismiss() }
+                if loading, results.isEmpty { ProgressView() }
+                ForEach(results) { option in
+                    Button {
+                        selection = option
+                        dismiss()
+                    } label: {
+                        VStack(alignment: .leading) {
+                            Text(option.title).foregroundStyle(.primary)
+                            if let project = option.projectName { Text(project).font(.wsCaption).foregroundStyle(.secondaryText) }
+                        }
+                    }
+                    .accessibilityIdentifier("taskPicker.\(option.taskUuid)")
+                }
+                if !loading, results.isEmpty { Text("No tasks found.").foregroundStyle(.secondaryText) }
+            }
+            .searchable(text: $search, prompt: "Search tasks")
+            .navigationTitle("Task")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+            .task(id: search) {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled else { return }
+                loading = true
+                results = (try? await services.timesheets.tasks(matching: search)) ?? []
+                loading = false
+            }
         }
     }
 }
