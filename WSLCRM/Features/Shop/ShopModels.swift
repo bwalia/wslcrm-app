@@ -3,8 +3,8 @@ import Foundation
 // The shop back office (`/api/v2/shop/admin`, RBAC module and menu key `shop`).
 // - Envelope `{ success, data, meta? }`; lists page with `limit` + `offset`, meta `{ total, limit, offset }`.
 // - Money is always integer minor units (pence). Catalogue prices are ex VAT; VAT is worked out server-side.
-// - Bodies are JSON. Product PUTs only touch the keys sent, so the app sends small patches and leaves
-//   option groups and rules (edited in the web dashboard) alone.
+// - Bodies are JSON. Product PUTs only touch the keys sent. Option groups and rules are a full
+//   replace when sent: the app's product editor (`ShopProductEditorView`) always sends all of them.
 
 enum ShopOrderStatus: String, CaseIterable, Sendable {
     case pendingPayment = "pending_payment"
@@ -206,12 +206,23 @@ struct ShopLine: Identifiable, Hashable, Sendable {
     var breakdown: [String]
     /// Kept verbatim so an edited quote re-prices exactly the configuration the customer chose.
     var selections: JSONValue?
+    /// A free-text line staff added (a service, a membership): name, description, price, no product.
+    var custom: Bool = false
+    var description: String? = nil
+    /// "YYYY-MM-DD": the period a custom line covers (a membership month).
+    var periodStart: String? = nil
+    var periodEnd: String? = nil
+    /// 0…1, custom lines only.
+    var vatRate: Double? = nil
+    /// Rule problems staff chose to keep (admin pricing allows an invalid configuration).
+    var violations: [String] = []
 }
 
 extension ShopLine: Decodable {
     enum CodingKeys: String, CodingKey {
         case uuid, productUuid, productSlug, productName, sku, label, qty, unitPriceMinor, listUnitPriceMinor
         case priceOverrideMinor, lineSubtotalMinor, lineVatMinor, lineTotalMinor, valid, breakdown, selections
+        case custom, description, periodStart, periodEnd, vatRate, violations
     }
 
     private struct BreakdownItem: Decodable, Sendable {
@@ -241,31 +252,94 @@ extension ShopLine: Decodable {
             return qty > 1 ? "\(qty) × \(name)" : name
         }
         selections = try? c.decodeIfPresent(JSONValue.self, forKey: .selections)
+        custom = c.decodeFlexibleBool(forKey: .custom) ?? false
+        description = try? c.decodeIfPresent(String.self, forKey: .description)
+        periodStart = try? c.decodeIfPresent(String.self, forKey: .periodStart)
+        periodEnd = try? c.decodeIfPresent(String.self, forKey: .periodEnd)
+        vatRate = c.decodeFlexibleDecimal(forKey: .vatRate).map { NSDecimalNumber(decimal: $0).doubleValue }
+        let rawViolations = (try? c.decodeIfPresent(JSONValue.self, forKey: .violations)) ?? .null
+        if case .array(let items) = rawViolations {
+            violations = items.compactMap { $0.stringValue ?? $0["message"]?.stringValue }
+        }
     }
 }
 
-/// A quote line as `PUT /quotes/:uuid` takes it; the server re-prices every line it is sent.
+/// A quote line as `POST /quotes` and `PUT /quotes/:uuid` take it; the server re-prices every line it is sent.
+/// A product line names the product's slug and its option selections; a custom line (`custom: true`) has a
+/// name, description, unit price and optional period instead (`ShopPricing.custom_line`).
 struct ShopLineInput: Encodable, Sendable, Equatable {
     var uuid: String?
-    var productSlug: String
+    var productSlug: String?
     var qty: Int
-    var selections: JSONValue
+    var selections: JSONValue?
     var priceOverrideMinor: Int?
+    var custom: Bool?
+    var name: String?
+    var description: String?
+    var unitPriceMinor: Int?
+    var periodStart: String?
+    var periodEnd: String?
+    var vatRate: Double?
 
     /// Explicit keys: this is encoded with a plain `JSONEncoder` (see `ShopAPI.updateQuote`) so the
     /// group codes inside `selections` are not rewritten by the snake_case key strategy.
     enum CodingKeys: String, CodingKey {
-        case uuid, qty, selections
+        case uuid, qty, selections, custom, name, description
         case productSlug = "product_slug"
         case priceOverrideMinor = "price_override_minor"
+        case unitPriceMinor = "unit_price_minor"
+        case periodStart = "period_start"
+        case periodEnd = "period_end"
+        case vatRate = "vat_rate"
     }
 
+    init(uuid: String? = nil, productSlug: String? = nil, qty: Int, selections: JSONValue? = nil,
+         priceOverrideMinor: Int? = nil, custom: Bool? = nil, name: String? = nil, description: String? = nil,
+         unitPriceMinor: Int? = nil, periodStart: String? = nil, periodEnd: String? = nil, vatRate: Double? = nil) {
+        self.uuid = uuid
+        self.productSlug = productSlug
+        self.qty = qty
+        self.selections = selections
+        self.priceOverrideMinor = priceOverrideMinor
+        self.custom = custom
+        self.name = name
+        self.description = description
+        self.unitPriceMinor = unitPriceMinor
+        self.periodStart = periodStart
+        self.periodEnd = periodEnd
+        self.vatRate = vatRate
+    }
+
+    /// A saved line sent back as it is (custom lines as custom lines, never as a product with no slug).
     init(_ line: ShopLine) {
-        uuid = line.uuid
-        productSlug = line.productSlug ?? ""
-        qty = line.qty
-        selections = line.selections ?? .object([:])
-        priceOverrideMinor = line.priceOverrideMinor
+        if line.custom || (line.productSlug?.trimmedOrNil == nil && line.productUuid == nil) {
+            self.init(uuid: line.uuid, qty: line.qty, custom: true, name: line.label ?? line.productName,
+                      description: line.description, unitPriceMinor: line.unitPriceMinor,
+                      periodStart: line.periodStart, periodEnd: line.periodEnd, vatRate: line.vatRate)
+        } else {
+            self.init(uuid: line.uuid, productSlug: line.productSlug ?? "", qty: line.qty,
+                      selections: line.selections ?? .object([:]), priceOverrideMinor: line.priceOverrideMinor)
+        }
+    }
+
+    /// Every PUT re-prices the lines from what is sent, so an override left out is an override cleared.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(uuid, forKey: .uuid)
+        try c.encode(qty, forKey: .qty)
+        if custom == true {
+            try c.encode(true, forKey: .custom)
+            try c.encodeIfPresent(name, forKey: .name)
+            try c.encodeIfPresent(description, forKey: .description)
+            try c.encodeIfPresent(unitPriceMinor, forKey: .unitPriceMinor)
+            try c.encodeIfPresent(periodStart, forKey: .periodStart)
+            try c.encodeIfPresent(periodEnd, forKey: .periodEnd)
+            try c.encodeIfPresent(vatRate, forKey: .vatRate)
+        } else {
+            try c.encode(productSlug ?? "", forKey: .productSlug)
+            try c.encode(selections ?? .object([:]), forKey: .selections)
+            try c.encodeIfPresent(priceOverrideMinor, forKey: .priceOverrideMinor)
+        }
     }
 }
 
@@ -393,15 +467,51 @@ struct ShopQuote: Identifiable, Hashable, Sendable {
     var authorisedByName: String? = nil
     /// The private deal (WS-XXXX-XXXX) linking it to supplier requests and POs. Staff only.
     var dealCode: String? = nil
+    /// "Deliver directly to" (`name, company, line1, line2, city, county, postcode, country, email, phone, vat_number`).
+    var deliveryAddress: JSONValue? = nil
+    /// The end customer's own purchase order number.
+    var customerPoNumber: String? = nil
+    /// 0 = the original; n = <original number>-R<n>.
+    var revisionNo: Int = 0
+    var revisionOf: ShopQuoteRef? = nil
+    var supersededBy: ShopQuoteRef? = nil
+    /// The whole chain (original first) when there is more than one.
+    var revisions: [ShopQuoteRevisionRef] = []
+    /// Turned into an order: lines, prices, customer and delivery are locked.
+    var hasOrder: Bool = false
+    /// nil: an older server that doesn't say (treated as editable unless converted).
+    var canEdit: Bool? = nil
+    var canRevise: Bool = false
+    var chatSessionUuid: String? = nil
+    var updatedAt: Date? = nil
+    var orderStatus: String? = nil
 
     var isOrderAuthorisation: Bool { kind == "order" }
+
+    /// Confirmed by the customer, turned into an order or replaced by a revision: what was agreed stays.
+    var isLocked: Bool { status == .converted || canEdit == false }
 
     var isExpired: Bool {
         guard let validUntil else { return false }
         return validUntil < Date() && [.draft, .sent, .accepted].contains(status)
     }
 
-    var linesEditable: Bool { status != .converted }
+    var linesEditable: Bool { !isLocked }
+}
+
+/// Another quote this one points at (`revision_of`, `superseded_by`).
+struct ShopQuoteRef: Hashable, Sendable, Decodable {
+    let uuid: String
+    var quoteNumber: String?
+}
+
+struct ShopQuoteRevisionRef: Identifiable, Hashable, Sendable, Decodable {
+    let uuid: String
+    var id: String { uuid }
+    var quoteNumber: String?
+    var revisionNo: Int?
+    var status: String?
+    var superseded: Bool?
 }
 
 extension ShopQuote: Decodable {
@@ -411,6 +521,8 @@ extension ShopQuote: Decodable {
         case crmLeadId, createdAt
         case kind, documentTitle, tradeDiscountMinor, discountMinor, discountLabel, listSubtotalMinor, deliveryMethod
         case sentAt, authorisedAt, authorisedByName, dealCode
+        case deliveryAddress, customerPoNumber, revisionNo, revisionOf, supersededBy, revisions, hasOrder, canEdit
+        case canRevise, chatSessionUuid, updatedAt, orderStatus, order
     }
 
     init(from decoder: Decoder) throws {
@@ -446,13 +558,32 @@ extension ShopQuote: Decodable {
         authorisedAt = c.decodeDate(forKey: .authorisedAt)
         authorisedByName = try? c.decodeIfPresent(String.self, forKey: .authorisedByName)
         dealCode = try? c.decodeIfPresent(String.self, forKey: .dealCode)
+        deliveryAddress = try? c.decodeIfPresent(JSONValue.self, forKey: .deliveryAddress)
+        customerPoNumber = c.decodeFlexibleString(forKey: .customerPoNumber)
+        revisionNo = c.decodeFlexibleInt(forKey: .revisionNo) ?? 0
+        revisionOf = try? c.decodeIfPresent(ShopQuoteRef.self, forKey: .revisionOf)
+        supersededBy = try? c.decodeIfPresent(ShopQuoteRef.self, forKey: .supersededBy)
+        revisions = c.decodeLossyArray(ShopQuoteRevisionRef.self, forKey: .revisions)
+        hasOrder = c.decodeFlexibleBool(forKey: .hasOrder) ?? false
+        canEdit = c.decodeFlexibleBool(forKey: .canEdit)
+        canRevise = c.decodeFlexibleBool(forKey: .canRevise) ?? false
+        chatSessionUuid = try? c.decodeIfPresent(String.self, forKey: .chatSessionUuid)
+        updatedAt = c.decodeDate(forKey: .updatedAt)
+        orderStatus = try? c.decodeIfPresent(String.self, forKey: .orderStatus)
+        if orderUuid == nil, let order = try? c.decodeIfPresent(JSONValue.self, forKey: .order) {
+            orderUuid = order["uuid"]?.stringValue
+            if orderNumber == nil { orderNumber = order["order_number"]?.stringValue ?? order["number"]?.stringValue }
+        }
     }
 }
 
-/// POST /quotes/:uuid/send — who it went to and whether the PDF was attached.
+/// POST /quotes/:uuid/send — who it went to, whether the PDF was attached, and the quote as it is now.
 struct ShopQuoteSendResult: Decodable, Sendable {
     let to: String?
     let attached: Bool?
+    var test: Bool? = nil
+    var pdfError: String? = nil
+    var quote: ShopQuote? = nil
 }
 
 /// POST /quotes/:uuid/crm-customer.
@@ -464,6 +595,9 @@ struct ShopCRMCustomerResult: Decodable, Sendable {
 }
 
 /// `PUT /quotes/:uuid`. Sending `lines` re-prices them all; a converted quote refuses line edits.
+/// `fields` carries the rest exactly as the server takes them (customer, kind, discount_minor,
+/// discount_label, delivery_method, delivery_address, apply_trade_discount, customer_po_number), so a
+/// `.null` there clears a value.
 struct ShopQuoteUpdate: Encodable, Sendable {
     var status: String?
     var notes: String?
@@ -471,12 +605,35 @@ struct ShopQuoteUpdate: Encodable, Sendable {
     var validUntil: String?
     var shippingMinor: Int?
     var lines: [ShopLineInput]?
+    var fields: [String: JSONValue] = [:]
 
     enum CodingKeys: String, CodingKey {
         case status, notes, lines
         case internalNotes = "internal_notes"
         case validUntil = "valid_until"
         case shippingMinor = "shipping_minor"
+    }
+
+    private struct AnyKey: CodingKey {
+        let stringValue: String
+        init(_ key: String) { stringValue = key }
+        init?(stringValue: String) { self.stringValue = stringValue }
+        var intValue: Int? { nil }
+        init?(intValue: Int) { nil }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(status, forKey: .status)
+        try c.encodeIfPresent(notes, forKey: .notes)
+        try c.encodeIfPresent(internalNotes, forKey: .internalNotes)
+        try c.encodeIfPresent(validUntil, forKey: .validUntil)
+        try c.encodeIfPresent(shippingMinor, forKey: .shippingMinor)
+        try c.encodeIfPresent(lines, forKey: .lines)
+        var extra = encoder.container(keyedBy: AnyKey.self)
+        for (key, value) in fields.sorted(by: { $0.key < $1.key }) {
+            try extra.encode(value, forKey: AnyKey(key))
+        }
     }
 }
 
@@ -556,9 +713,13 @@ struct ShopOption: Identifiable, Hashable, Sendable, Decodable {
     var componentName: String?
     var isActive: Bool
     var isDefault: Bool
+    var description: String? = nil
+    var maxQty: Int? = nil
+    var sortOrder: Int = 0
 
     enum CodingKeys: String, CodingKey {
         case uuid, code, name, priceDeltaMinor, stockQty, available, componentProduct, isActive, isDefault
+        case description, maxQty, sortOrder
     }
 
     init(from decoder: Decoder) throws {
@@ -573,6 +734,9 @@ struct ShopOption: Identifiable, Hashable, Sendable, Decodable {
         componentName = component?.name
         isActive = c.decodeFlexibleBool(forKey: .isActive) ?? true
         isDefault = c.decodeFlexibleBool(forKey: .isDefault) ?? false
+        description = try? c.decodeIfPresent(String.self, forKey: .description)
+        maxQty = c.decodeFlexibleInt(forKey: .maxQty)
+        sortOrder = c.decodeFlexibleInt(forKey: .sortOrder) ?? 0
     }
 
     /// Stock is adjustable on the option itself (or, server-side, on its component product).
@@ -588,8 +752,14 @@ struct ShopOptionGroup: Identifiable, Hashable, Sendable, Decodable {
     var required: Bool
     var isActive: Bool
     var options: [ShopOption]
+    var description: String? = nil
+    var minQty: Int = 0
+    var maxQty: Int? = nil
+    var sortOrder: Int = 0
 
-    enum CodingKeys: String, CodingKey { case uuid, code, name, selection, required, isActive, options }
+    enum CodingKeys: String, CodingKey {
+        case uuid, code, name, selection, required, isActive, options, description, minQty, maxQty, sortOrder
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -599,7 +769,11 @@ struct ShopOptionGroup: Identifiable, Hashable, Sendable, Decodable {
         selection = (try? c.decodeIfPresent(String.self, forKey: .selection)) ?? "single"
         required = c.decodeFlexibleBool(forKey: .required) ?? false
         isActive = c.decodeFlexibleBool(forKey: .isActive) ?? true
-        options = c.decodeLossyArray(ShopOption.self, forKey: .options)
+        options = c.decodeLossyArray(ShopOption.self, forKey: .options).sorted { $0.sortOrder < $1.sortOrder }
+        description = try? c.decodeIfPresent(String.self, forKey: .description)
+        minQty = c.decodeFlexibleInt(forKey: .minQty) ?? 0
+        maxQty = c.decodeFlexibleInt(forKey: .maxQty)
+        sortOrder = c.decodeFlexibleInt(forKey: .sortOrder) ?? 0
     }
 }
 
@@ -662,7 +836,7 @@ extension ShopProduct: Decodable {
             specs = []
         }
         tags = c.decodeLossyArray(String.self, forKey: .tags)
-        optionGroups = c.decodeLossyArray(ShopOptionGroup.self, forKey: .optionGroups)
+        optionGroups = c.decodeLossyArray(ShopOptionGroup.self, forKey: .optionGroups).sorted { $0.sortOrder < $1.sortOrder }
         rules = c.decodeLossyArray(ShopRule.self, forKey: .rules)
         updatedAt = c.decodeDate(forKey: .updatedAt)
     }
@@ -711,9 +885,12 @@ struct ShopCategory: Identifiable, Hashable, Sendable, Decodable {
     var sortOrder: Int
     var isActive: Bool
     var productCount: Int?
+    var imageUrl: String? = nil
+    /// Search text per shop language (`{en: {title, description, intro, target_keyword}}`).
+    var seo: JSONValue? = nil
 
     enum CodingKeys: String, CodingKey {
-        case uuid, slug, name, description, parentUuid, sortOrder, isActive, productCount
+        case uuid, slug, name, description, parentUuid, sortOrder, isActive, productCount, imageUrl, seo
     }
 
     init(from decoder: Decoder) throws {
@@ -726,6 +903,8 @@ struct ShopCategory: Identifiable, Hashable, Sendable, Decodable {
         sortOrder = c.decodeFlexibleInt(forKey: .sortOrder) ?? 0
         isActive = c.decodeFlexibleBool(forKey: .isActive) ?? true
         productCount = c.decodeFlexibleInt(forKey: .productCount)
+        imageUrl = try? c.decodeIfPresent(String.self, forKey: .imageUrl)
+        seo = try? c.decodeIfPresent(JSONValue.self, forKey: .seo)
     }
 }
 

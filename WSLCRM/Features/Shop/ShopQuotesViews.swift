@@ -28,27 +28,89 @@ struct ShopQuoteRow: View {
 
 struct ShopQuotesListView: View {
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @State private var status: ShopQuoteStatus?
+    @State private var filter: ShopQuoteQuickFilter?
+    @State private var kind: ShopQuoteKind?
+
+    private struct Query: Hashable {
+        let status: ShopQuoteStatus?
+        let filter: ShopQuoteQuickFilter?
+        let kind: ShopQuoteKind?
+    }
 
     var body: some View {
-        ModelHost(make: { [shop = services.shop, status] in
-            PagedListModel<ShopQuote> { search, page in try await shop.quotes(search: search, status: status, page: page) }
+        ModelHost(make: { [shop = services.shop, status, filter, kind] in
+            PagedListModel<ShopQuote> { search, page in
+                try await shop.quotes(search: search, status: status, filter: filter, kind: kind, page: page)
+            }
         }) { model in
             PagedList(model: model, searchPrompt: "Quote number, email or company", emptyTitle: "No quotes",
                       emptySystemImage: "doc.text",
-                      emptyDescription: "Quotes requested from the shop, its assistant or staff appear here.") { quote in
+                      emptyDescription: filter?.empty ?? "Quotes requested from the shop, its assistant or staff appear here.") { quote in
                 NavigationLink {
                     ShopQuoteDetailView(summary: quote) { model.replace($0) }
                 } label: {
                     ShopQuoteRow(quote: quote)
                 }
             }
+            .safeAreaInset(edge: .top) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(ShopQuoteQuickFilter.allCases) { option in
+                            Button {
+                                filter = filter == option ? nil : option
+                            } label: {
+                                Text(option.label).font(.wsFootnote.weight(.medium))
+                                    .padding(.horizontal, 12).padding(.vertical, 6)
+                                    .background(filter == option ? Color.accentColor : Color.secondary.opacity(0.12), in: Capsule())
+                                    .foregroundStyle(filter == option ? Color.white : Color.primary)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(filter == option ? .isSelected : [])
+                            .accessibilityIdentifier("shopQuotes.filter.\(option.rawValue)")
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 6)
+                }
+                .background(.bar)
+            }
         }
-        .id(status)
-        .navigationTitle(status?.label ?? "Quotes")
+        .id(Query(status: status, filter: filter, kind: kind))
+        .navigationTitle(filter?.label ?? status?.label ?? "Quotes")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                ShopStatusFilterMenu(selection: $status, options: ShopQuoteStatus.filterable, label: \.label)
+                Menu {
+                    Picker("Status", selection: $status) {
+                        Text("Any status").tag(ShopQuoteStatus?.none)
+                        ForEach(ShopQuoteStatus.filterable, id: \.self) { Text($0.label).tag(ShopQuoteStatus?.some($0)) }
+                    }
+                    Picker("Document", selection: $kind) {
+                        Text("Quotes and orders").tag(ShopQuoteKind?.none)
+                        Text("Order Authorisations").tag(ShopQuoteKind?.some(.order))
+                        Text("Quotes").tag(ShopQuoteKind?.some(.quote))
+                    }
+                } label: {
+                    Label("Filter", systemImage: status == nil && kind == nil ? "line.3.horizontal.decrease.circle"
+                                                                                : "line.3.horizontal.decrease.circle.fill")
+                }
+                .accessibilityIdentifier("shopQuotes.filter")
+            }
+            if session.shopPolicy.canCreate {
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        NavigationLink { ShopQuoteBuilderView(kind: .order) } label: {
+                            Label("Create order", systemImage: "checkmark.rectangle.stack")
+                        }
+                        NavigationLink { ShopQuoteBuilderView(kind: .quote) } label: {
+                            Label("Create quote", systemImage: "doc.text")
+                        }
+                    } label: {
+                        Label("New", systemImage: "plus")
+                    }
+                    .accessibilityIdentifier("shopQuotes.new")
+                }
             }
         }
     }
@@ -64,8 +126,16 @@ struct ShopQuoteDetailView: View {
     @State private var actionError: APIError?
     @State private var busy = false
     @State private var pendingStatus: ShopQuoteStatus?
-    @State private var editingLine: ShopLine?
+    @State private var editingLines = false
     @State private var editingDetails = false
+    @State private var editingCustomer = false
+    @State private var editingTerms = false
+    @State private var editingPO = false
+    @State private var revising = false
+    @State private var sendingElsewhere = false
+    @State private var otherAddress = ""
+    @State private var pdfFile: URL?
+    @State private var downloadingPDF = false
     @State private var confirmingOrder = false
     @State private var confirmingSend = false
     @State private var createdOrder: ShopQuote?
@@ -76,7 +146,17 @@ struct ShopQuoteDetailView: View {
     private var current: ShopQuote { quote ?? summary }
     private var canUpdate: Bool { session.shopPolicy.canUpdate }
     private var title: String { current.documentTitle ?? (current.isOrderAuthorisation ? "Order Authorisation" : "Quote") }
-    private var sendable: Bool { [.draft, .sent, .accepted].contains(current.status) && !current.isExpired }
+    private var sendable: Bool {
+        [.draft, .sent, .accepted].contains(current.status) && !current.isExpired && !current.hasOrder && current.supersededBy == nil
+    }
+    private var editable: Bool { canUpdate && !current.isLocked }
+    private var lockedWhy: String {
+        if let next = current.supersededBy { return "Replaced by \(next.quoteNumber ?? "a revision"): make changes there." }
+        if current.hasOrder || current.status == .converted {
+            return "This has turned into an order, so what the customer agreed stays as it is. Raise a new quote for changes."
+        }
+        return "The customer has confirmed this, so what they agreed stays as it is. Revise it to send them a corrected version to confirm."
+    }
 
     var body: some View {
         List {
@@ -106,6 +186,29 @@ struct ShopQuoteDetailView: View {
                 }
                 .padding(.vertical, 4)
                 if let loadError { InlineErrorRow(error: loadError) { Task { await load() } } }
+            }
+
+            if let notice {
+                Section { Label(notice, systemImage: "checkmark.circle").font(.wsFootnote).foregroundStyle(Tone.success.textColor) }
+            }
+
+            ShopQuoteProgressSection(quote: current)
+
+            if current.isLocked {
+                Section {
+                    Label(lockedWhy, systemImage: "lock").font(.wsFootnote)
+                    if let next = current.supersededBy {
+                        NavigationLink {
+                            ShopQuoteDetailView(uuid: next.uuid)
+                        } label: {
+                            Label("Open \(next.quoteNumber ?? "the revision")", systemImage: "arrow.right.circle")
+                        }
+                    }
+                    if canRevise {
+                        Button { revising = true } label: { Label("Revise", systemImage: "arrow.triangle.branch") }
+                            .accessibilityIdentifier("shopQuote.revise")
+                    }
+                }
             }
 
             if (session.shopPolicy.canCreate && !current.isOrderAuthorisation && current.status != .cancelled)
@@ -145,7 +248,6 @@ struct ShopQuoteDetailView: View {
                         .disabled(busy || current.customer.email == nil)
                         .accessibilityIdentifier("shopQuote.send")
                     }
-                    if let notice { Text(notice).font(.wsFootnote).foregroundStyle(.secondaryText) }
                 } header: {
                     Text(current.isOrderAuthorisation ? "Order Authorisation" : "Order")
                 } footer: {
@@ -174,6 +276,136 @@ struct ShopQuoteDetailView: View {
                 Section { InlineErrorRow(error: actionError) }
             }
 
+            suppliersAndCustomerSections
+
+            termsAndLinesSections
+
+            if current.tradeDiscountMinor > 0 || current.discountMinor > 0 {
+                Section("Discounts (ex VAT)") {
+                    DetailRow(label: "Subtotal before discount", value: ShopMoney.format(current.listSubtotalMinor ?? current.subtotalMinor, currency: current.currency))
+                    if current.tradeDiscountMinor > 0 {
+                        DetailRow(label: "VIP Trade discount", value: "−" + (ShopMoney.format(current.tradeDiscountMinor, currency: current.currency) ?? ""))
+                    }
+                    if current.discountMinor > 0 {
+                        DetailRow(label: current.discountLabel ?? "Discount", value: "−" + (ShopMoney.format(current.discountMinor, currency: current.currency) ?? ""))
+                    }
+                }
+            }
+
+            ShopTotalsSection(subtotal: current.subtotalMinor, vat: current.vatMinor, shipping: current.shippingMinor,
+                              total: current.totalMinor, currency: current.currency)
+
+            Section("Notes") {
+                DetailRow(label: "For the customer", value: current.notes)
+                DetailRow(label: "Internal", value: current.internalNotes)
+                if current.notes?.trimmedOrNil == nil, current.internalNotes?.trimmedOrNil == nil {
+                    Text("No notes").foregroundStyle(.secondaryText)
+                }
+                if canUpdate {
+                    Button {
+                        editingDetails = true
+                    } label: {
+                        Label("Edit validity, shipping & notes", systemImage: "square.and.pencil")
+                    }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("shopQuote.editDetails")
+                }
+            }
+
+            linksSections
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await load() }
+        .refreshable { await load() }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    if canUpdate && sendable {
+                        Button { sendingElsewhere = true } label: { Label("Send to another address", systemImage: "paperplane") }
+                    }
+                    if canRevise {
+                        Button { revising = true } label: { Label("Revise", systemImage: "arrow.triangle.branch") }
+                    }
+                    if editable {
+                        Button { editingLines = true } label: { Label("Edit lines", systemImage: "list.bullet") }
+                        Button { editingCustomer = true } label: { Label("Edit customer", systemImage: "person") }
+                        Button { editingTerms = true } label: { Label("Edit order terms", systemImage: "doc.text") }
+                    }
+                    if canUpdate {
+                        Button { editingPO = true } label: { Label("Customer PO number", systemImage: "number") }
+                    }
+                } label: {
+                    Label("More", systemImage: "ellipsis.circle")
+                }
+                .accessibilityIdentifier("shopQuote.more")
+            }
+        }
+        .alert("Send to another address", isPresented: $sendingElsewhere) {
+            TextField("name@example.com", text: $otherAddress)
+                .keyboardType(.emailAddress).textInputAutocapitalization(.never)
+            Button("Send") { Task { await send(to: otherAddress) } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("They get the same email and link as the customer would.")
+        }
+        .sheet(isPresented: $revising) {
+            NavigationStack {
+                ShopQuoteReviseSheet(quote: current) { revision in
+                    notice = "Revision \(revision.quoteNumber) created as a draft. Check it, then send it to the customer."
+                    createdOrder = revision
+                    Task { await load() }
+                }
+            }
+        }
+        .sheet(isPresented: $editingCustomer) {
+            NavigationStack { ShopQuoteCustomerSheet(quote: current) { await save($0) } }
+        }
+        .sheet(isPresented: $editingTerms) {
+            NavigationStack { ShopQuoteTermsSheet(quote: current) { await save($0) } }
+        }
+        .sheet(isPresented: $editingPO) {
+            NavigationStack { ShopQuotePOSheet(quote: current) { await save($0) } }
+        }
+        .sheet(item: $messaging) { kind in
+            NavigationStack {
+                ShopSupplierMessageSheet(kind: kind) { line in
+                    supplierNotice = line
+                    Task { await load() }
+                }
+            }
+        }
+        .confirmationDialog(pendingStatus?.actionTitle ?? "", isPresented: .init(get: { pendingStatus != nil }, set: { if !$0 { pendingStatus = nil } }),
+                            titleVisibility: .visible, presenting: pendingStatus) { status in
+            Button(status.actionTitle, role: status == .cancelled ? .destructive : nil) {
+                Task { await save(ShopQuoteUpdate(status: status.rawValue)) }
+            }
+        }
+        .confirmationDialog("Create an Order Authorisation from \(current.quoteNumber)?", isPresented: $confirmingOrder,
+                            titleVisibility: .visible) {
+            Button("Create order") { Task { await createOrder() } }
+        } message: {
+            Text("A new order with the same lines and prices, the VIP Trade discount if the customer is a member, and their address as the delivery address. This quote stays as it is.")
+        }
+        .confirmationDialog("Email \(title) \(current.quoteNumber) to \(current.customer.email ?? "the customer")?",
+                            isPresented: $confirmingSend, titleVisibility: .visible) {
+            Button("Send") { Task { await send() } }
+        }
+        .navigationDestination(item: $createdOrder) { order in
+            ShopQuoteDetailView(summary: order, onChange: onChange)
+        }
+        .sheet(isPresented: $editingLines) {
+            NavigationStack { ShopQuoteLinesSheet(quote: current) { await save($0) } }
+        }
+        .sheet(isPresented: $editingDetails) {
+            NavigationStack {
+                ShopQuoteDetailsForm(quote: current) { update in await save(update) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var suppliersAndCustomerSections: some View {
             if session.shopPolicy.canCreate && current.status != .cancelled {
                 Section {
                     Button {
@@ -216,6 +448,11 @@ struct ShopQuoteDetailView: View {
                 if let phone = current.customer.phone { PhoneLinkRow(name: current.customer.name, phone: phone) }
                 if let address = current.customer.formattedAddress { MapsLinkRow(address: address) }
                 DetailRow(label: "VAT number", value: current.customer.vatNumber)
+                if editable {
+                    Button { editingCustomer = true } label: { Label("Edit customer", systemImage: "pencil") }
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("shopQuote.editCustomer")
+                }
                 if session.shopPolicy.canSaveToCRM {
                     Button {
                         Task { await saveToCRM() }
@@ -227,47 +464,40 @@ struct ShopQuoteDetailView: View {
                     .accessibilityIdentifier("shopQuote.saveToCRM")
                 }
             }
-            if current.deliveryMethod != nil {
-                Section("Delivery") {
-                    DetailRow(label: "Method", value: current.deliveryMethod)
+    }
+
+    @ViewBuilder
+    private var termsAndLinesSections: some View {
+            Section("Order terms") {
+                DetailRow(label: "Document", value: title)
+                DetailRow(label: "VIP Trade discount",
+                          value: current.tradeDiscountMinor > 0 ? "\(ShopMoney.format(current.tradeDiscountMinor, currency: current.currency) ?? "") ex VAT" : "None")
+                DetailRow(label: "Extra discount",
+                          value: current.discountMinor > 0
+                              ? "\(ShopMoney.format(current.discountMinor, currency: current.currency) ?? "") ex VAT\(current.discountLabel.map { " (\($0))" } ?? "")"
+                              : "None")
+                DetailRow(label: "Delivery method", value: current.deliveryMethod?.trimmedOrNil ?? "—")
+                DetailRow(label: "Deliver to", value: ShopDeliveryAddressDraft(current.deliveryAddress).summary ?? "—")
+                if editable {
+                    Button { editingTerms = true } label: { Label("Edit order terms", systemImage: "pencil") }
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("shopQuote.editTerms")
                 }
             }
 
             ShopLinesSection(lines: current.lines, currency: current.currency,
-                             onEdit: canUpdate && current.linesEditable ? { editingLine = $0 } : nil)
-
-            if current.tradeDiscountMinor > 0 || current.discountMinor > 0 {
-                Section("Discounts (ex VAT)") {
-                    DetailRow(label: "Subtotal before discount", value: ShopMoney.format(current.listSubtotalMinor ?? current.subtotalMinor, currency: current.currency))
-                    if current.tradeDiscountMinor > 0 {
-                        DetailRow(label: "VIP Trade discount", value: "−" + (ShopMoney.format(current.tradeDiscountMinor, currency: current.currency) ?? ""))
-                    }
-                    if current.discountMinor > 0 {
-                        DetailRow(label: current.discountLabel ?? "Discount", value: "−" + (ShopMoney.format(current.discountMinor, currency: current.currency) ?? ""))
-                    }
+                             onEdit: editable ? { _ in editingLines = true } : nil)
+            if editable {
+                Section {
+                    Button { editingLines = true } label: { Label("Add, change or reorder lines", systemImage: "list.bullet.rectangle") }
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("shopQuote.editLines")
                 }
             }
+    }
 
-            ShopTotalsSection(subtotal: current.subtotalMinor, vat: current.vatMinor, shipping: current.shippingMinor,
-                              total: current.totalMinor, currency: current.currency)
-
-            Section("Notes") {
-                DetailRow(label: "For the customer", value: current.notes)
-                DetailRow(label: "Internal", value: current.internalNotes)
-                if current.notes?.trimmedOrNil == nil, current.internalNotes?.trimmedOrNil == nil {
-                    Text("No notes").foregroundStyle(.secondaryText)
-                }
-                if canUpdate {
-                    Button {
-                        editingDetails = true
-                    } label: {
-                        Label("Edit validity, shipping & notes", systemImage: "square.and.pencil")
-                    }
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("shopQuote.editDetails")
-                }
-            }
-
+    @ViewBuilder
+    private var linksSections: some View {
             Section("Links") {
                 if let link = current.publicUrl.flatMap(URL.init(string:)), link.scheme != nil {
                     ShareLink(item: link, subject: Text("\(title) \(current.quoteNumber)")) {
@@ -282,63 +512,90 @@ struct ShopQuoteDetailView: View {
                         LabeledContent("Order", value: current.orderNumber ?? "View")
                     }
                 }
+                if let link = current.publicUrl {
+                    Button {
+                        UIPasteboard.general.string = link
+                        notice = "Customer link copied."
+                    } label: {
+                        Label("Copy customer link", systemImage: "doc.on.doc")
+                    }
+                }
+                if ShopQuotePDF.url(publicURL: current.publicUrl) != nil {
+                    if let pdfFile {
+                        ShareLink(item: pdfFile) { Label("Share or print the PDF", systemImage: "printer") }
+                    } else {
+                        Button {
+                            Task { await downloadPDF() }
+                        } label: {
+                            Label(downloadingPDF ? "Getting the PDF…" : "Download PDF", systemImage: "arrow.down.doc")
+                        }
+                        .disabled(downloadingPDF)
+                        .accessibilityIdentifier("shopQuote.pdf")
+                    }
+                }
+                DetailRow(label: current.isOrderAuthorisation ? "Order number" : "Quote number", value: current.quoteNumber)
+                HStack {
+                    DetailRow(label: "Customer PO number", value: current.customerPoNumber ?? "—")
+                    if canUpdate {
+                        Button("Edit") { editingPO = true }.accessibilityIdentifier("shopQuote.editPO")
+                    }
+                }
+                if let previous = current.revisionOf {
+                    NavigationLink {
+                        ShopQuoteDetailView(uuid: previous.uuid)
+                    } label: {
+                        LabeledContent("Revises", value: previous.quoteNumber ?? "Earlier version")
+                    }
+                }
                 DetailRow(label: "Source", value: current.source.map(Formatters.humanize))
+                DetailRow(label: "Assistant chat", value: current.chatSessionUuid == nil ? nil : "Started from a chat")
                 DetailRow(label: "CRM lead", value: current.crmLeadId.map { "#\($0)" })
                 DetailRow(label: "Created", value: Formatters.dateTime(current.createdAt))
+                DetailRow(label: "Updated", value: Formatters.dateTime(current.updatedAt))
             }
-        }
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
-        .refreshable { await load() }
-        .toolbar {
-        }
-        .sheet(item: $messaging) { kind in
-            NavigationStack {
-                ShopSupplierMessageSheet(kind: kind) { line in
-                    supplierNotice = line
-                    Task { await load() }
+
+            if current.revisions.count > 1 {
+                Section("Revisions") {
+                    ForEach(current.revisions) { revision in
+                        NavigationLink {
+                            ShopQuoteDetailView(uuid: revision.uuid)
+                        } label: {
+                            LabeledContent(revision.quoteNumber ?? "Revision",
+                                           value: revision.superseded == true ? "Replaced" : Formatters.humanize(revision.status ?? ""))
+                        }
+                        .disabled(revision.uuid == current.uuid)
+                    }
                 }
             }
+    }
+
+    private var canRevise: Bool { canUpdate && session.shopPolicy.canCreate && current.canRevise }
+
+    private func send(to address: String) async {
+        guard ShopEmail.isValid(address) else {
+            actionError = ResourceService.problem(422, "Check the email address and try again.")
+            return
         }
-        .confirmationDialog(pendingStatus?.actionTitle ?? "", isPresented: .init(get: { pendingStatus != nil }, set: { if !$0 { pendingStatus = nil } }),
-                            titleVisibility: .visible, presenting: pendingStatus) { status in
-            Button(status.actionTitle, role: status == .cancelled ? .destructive : nil) {
-                Task { await save(ShopQuoteUpdate(status: status.rawValue)) }
-            }
-        }
-        .confirmationDialog("Create an Order Authorisation from \(current.quoteNumber)?", isPresented: $confirmingOrder,
-                            titleVisibility: .visible) {
-            Button("Create order") { Task { await createOrder() } }
-        } message: {
-            Text("A new order with the same lines and prices, the VIP Trade discount if the customer is a member, and their address as the delivery address. This quote stays as it is.")
-        }
-        .confirmationDialog("Email \(title) \(current.quoteNumber) to \(current.customer.email ?? "the customer")?",
-                            isPresented: $confirmingSend, titleVisibility: .visible) {
-            Button("Send") { Task { await send() } }
-        }
-        .navigationDestination(item: $createdOrder) { order in
-            ShopQuoteDetailView(summary: order, onChange: onChange)
-        }
-        .sheet(item: $editingLine) { line in
-            NavigationStack {
-                ShopQuoteLineForm(line: line, currency: current.currency, canRemove: current.lines.count > 1) { edited in
-                    await save(ShopQuoteUpdate(lines: linesReplacing(line, with: edited)))
-                }
-            }
-        }
-        .sheet(isPresented: $editingDetails) {
-            NavigationStack {
-                ShopQuoteDetailsForm(quote: current) { update in await save(update) }
-            }
+        busy = true
+        defer { busy = false }
+        do {
+            let result = try await services.shop.sendQuote(current.uuid, to: address.shopTrimmed)
+            notice = "Sent to \(result.to ?? address)\((result.attached ?? false) ? " with the PDF attached" : " (link only: the PDF could not be attached)")."
+            actionError = nil
+            if let updated = result.quote { quote = updated } else { await load() }
+        } catch {
+            actionError = error.asAPIError
         }
     }
 
-    /// Every line goes back (the server re-prices the lot); `nil` removes this one.
-    private func linesReplacing(_ line: ShopLine, with edited: ShopLine?) -> [ShopLineInput] {
-        current.lines.compactMap { existing in
-            guard existing.id == line.id else { return ShopLineInput(existing) }
-            return edited.map(ShopLineInput.init)
+    private func downloadPDF() async {
+        downloadingPDF = true
+        defer { downloadingPDF = false }
+        do {
+            pdfFile = try await ShopQuotePDF.download(publicURL: current.publicUrl, number: current.quoteNumber)
+            actionError = nil
+        } catch {
+            actionError = error.asAPIError
         }
     }
 
@@ -362,7 +619,7 @@ struct ShopQuoteDetailView: View {
                 ? "Sent to \(result.to ?? "the customer") with the PDF attached."
                 : "Sent to \(result.to ?? "the customer") (link only: the PDF could not be attached)."
             actionError = nil
-            await load()
+            if let updated = result.quote { quote = updated; onChange?(updated) } else { await load() }
         } catch {
             actionError = error.asAPIError
         }
@@ -428,96 +685,6 @@ extension ShopQuoteDetailView {
     init(uuid: String) {
         self.init(summary: ShopQuote(uuid: uuid, quoteNumber: "…", status: .unknown, customer: ShopCustomer(), lines: [],
                                      subtotalMinor: 0, vatMinor: 0, shippingMinor: 0, totalMinor: 0, currency: "GBP"))
-    }
-}
-
-/// Quantity and an optional unit-price override for one quote line.
-private struct ShopQuoteLineForm: View {
-    let line: ShopLine
-    let currency: String
-    let canRemove: Bool
-    /// Nil removes the line.
-    let save: (ShopLine?) async -> Bool
-    @Environment(\.dismiss) private var dismiss
-    @State private var qty: Int
-    @State private var overriding: Bool
-    @State private var priceText: String
-    @State private var saving = false
-    @State private var failed = false
-    @State private var confirmingRemove = false
-
-    init(line: ShopLine, currency: String, canRemove: Bool, save: @escaping (ShopLine?) async -> Bool) {
-        self.line = line
-        self.currency = currency
-        self.canRemove = canRemove
-        self.save = save
-        _qty = State(initialValue: line.qty)
-        _overriding = State(initialValue: line.priceOverrideMinor != nil)
-        _priceText = State(initialValue: ShopMoney.plain(line.priceOverrideMinor ?? line.listUnitPriceMinor ?? line.unitPriceMinor))
-    }
-
-    private var overrideMinor: Int? { overriding ? ShopMoney.minor(from: priceText) : nil }
-    private var isValid: Bool { qty >= 1 && (!overriding || overrideMinor != nil) }
-
-    var body: some View {
-        Form {
-            Section {
-                Text(line.productName).font(.wsHeadline)
-                if !line.breakdown.isEmpty {
-                    Text(line.breakdown.joined(separator: ", ")).font(.wsFootnote).foregroundStyle(.secondaryText)
-                }
-                Stepper("Quantity: \(qty)", value: $qty, in: 1...999)
-            }
-            Section {
-                Toggle("Override unit price", isOn: $overriding)
-                if overriding {
-                    TextField("Unit price ex VAT", text: $priceText)
-                        .keyboardType(.decimalPad)
-                        .monospacedDigit()
-                }
-                DetailRow(label: "List price", value: ShopMoney.format(line.listUnitPriceMinor ?? line.unitPriceMinor, currency: currency))
-            } footer: {
-                Text("Prices are ex VAT. The server re-prices the quote and adds VAT when you save.")
-            }
-            if failed {
-                Label("Couldn't save. The server may have rejected the change; see the error on the quote.",
-                      systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(Tone.danger.textColor)
-            }
-            if canRemove {
-                Section {
-                    Button("Remove line", role: .destructive) { confirmingRemove = true }
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                }
-            }
-        }
-        .navigationTitle("Edit line")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") {
-                    var edited = line
-                    edited.qty = qty
-                    edited.priceOverrideMinor = overrideMinor
-                    submit(edited)
-                }
-                .disabled(saving || !isValid)
-            }
-        }
-        .confirmationDialog("Remove \(line.productName)?", isPresented: $confirmingRemove, titleVisibility: .visible) {
-            Button("Remove line", role: .destructive) { submit(nil) }
-        }
-    }
-
-    private func submit(_ edited: ShopLine?) {
-        saving = true
-        Task {
-            let ok = await save(edited)
-            saving = false
-            failed = !ok
-            if ok { dismiss() }
-        }
     }
 }
 
@@ -594,5 +761,56 @@ private struct ShopQuoteDetailsForm: View {
         if notes != (quote.notes ?? "") { update.notes = notes }
         if internalNotes != (quote.internalNotes ?? "") { update.internalNotes = internalNotes }
         return update
+    }
+}
+
+/// What happens next with this quote (the dashboard's "Progress" panel), in plain words.
+struct ShopQuoteProgressSection: View {
+    let quote: ShopQuote
+
+    static func nextStep(_ q: ShopQuote) -> (title: String, detail: String, tone: Tone) {
+        let isOrder = q.isOrderAuthorisation
+        let noun = isOrder ? "Order Authorisation" : "quote"
+        if let next = q.supersededBy {
+            return ("Replaced by \(next.quoteNumber ?? "a revision")",
+                    "Work on the latest revision. This one can no longer be authorised or paid.", .neutral)
+        }
+        if q.hasOrder || q.status == .converted {
+            return (q.orderNumber.map { "Order \($0) created" } ?? "Order created",
+                    "The next steps (payment, supplier PO, delivery) happen on the order.", .success)
+        }
+        switch q.status {
+        case .draft:
+            return (isOrder ? "Send for authorisation" : "Email the quote to the customer",
+                    "Check the lines, delivery and the customer’s PO number, then email the \(noun) with the PDF.", .info)
+        case .sent:
+            return ("Waiting for the customer", isOrder
+                    ? "They confirm the order and accept the terms from the link in the email. Resend it if they can’t find it."
+                    : "They can accept and pay from the link in the email.", .progress)
+        case .expired:
+            return ("Expired", "Revise it to give it a new validity date, or raise a new quote if prices have moved.", .warning)
+        case .accepted:
+            return isOrder
+                ? ("Awaiting payment", "Authorised\(q.authorisedByName.map { " by \($0)" } ?? ""). The customer pays by card or bank transfer from their link; the order appears here when they do.", .progress)
+                : ("Create the Order Authorisation", "The customer accepted the quote. Turn it into an Order Authorisation for them to confirm and pay.", .info)
+        case .cancelled:
+            return ("Cancelled", "Nothing more to do. Raise a new quote if the customer comes back.", .neutral)
+        case .converted, .unknown:
+            return (Formatters.humanize(q.status.rawValue), "", .neutral)
+        }
+    }
+
+    var body: some View {
+        let step = Self.nextStep(quote)
+        if quote.status != .unknown {
+            Section("Next step") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(step.title).font(.wsHeadline).foregroundStyle(step.tone.textColor)
+                    if !step.detail.isEmpty { Text(step.detail).font(.wsFootnote).foregroundStyle(.secondaryText) }
+                }
+                .padding(.vertical, 2)
+                .accessibilityElement(children: .combine)
+            }
+        }
     }
 }
