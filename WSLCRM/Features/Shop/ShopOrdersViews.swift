@@ -7,6 +7,7 @@ struct ShopOrderRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(order.orderNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
+                ShopVipMark(email: order.customer?.email ?? order.email)
                 Spacer()
                 order.status.badge
             }

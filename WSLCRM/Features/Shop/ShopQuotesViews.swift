@@ -7,6 +7,7 @@ struct ShopQuoteRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(quote.quoteNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
+                ShopVipMark(email: quote.customer.email)
                 Spacer()
                 quote.status.badge
             }
