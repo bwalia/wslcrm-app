@@ -82,8 +82,9 @@ come with an icon and words.
 - `AccentColor` is the tint (`#E6003F` light, `#FF6088` dark). `AccentColor-Fill` and
   `AccentColor-Text` are the contrast-checked button fill and text colours behind `Tone.brand`,
   which every large primary button uses.
-- A white-label build brings its own: `Config/Brand-DBS.xcconfig` sets
-  `BRAND_ACCENT_COLOR = AccentColor-DBS`, its icon and mark.
+- There are no white-label builds. A business's logo, name and letterhead come from its
+  workspace (`namespaces.logo_url`, `settings.company`) once someone signs in; the tint, icon
+  and home-screen name stay Workstation's.
 - Text is the system font (SF Pro) so Dynamic Type, VoiceOver and Bold Text work. Apple's
   licence keeps SF out of logos and marketing, which is why the brand uses Plus Jakarta Sans.
 

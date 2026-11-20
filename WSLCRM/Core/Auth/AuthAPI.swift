@@ -57,6 +57,14 @@ struct AuthAPI: Sendable {
         return try await client.send(endpoint)
     }
 
+    /// `GET /api/v2/user/namespaces`: each workspace's logo and letterhead (`settings.company`).
+    func workspaceBrands() async throws -> [WorkspaceBrandDetails] {
+        var endpoint = Endpoint.get("/api/v2/user/namespaces")
+        endpoint.requiresNamespace = false
+        let (data, _) = try await client.sendRaw(endpoint)
+        return try decode(WorkspaceBrandList.self, data, endpoint).data
+    }
+
     private func decode<T: Decodable>(_ type: T.Type, _ data: Data, _ endpoint: Endpoint) throws -> T {
         do {
             return try JSONDecoder.opsAPI().decode(T.self, from: data)
@@ -75,4 +83,37 @@ struct AuthAPI: Sendable {
         let sessionToken: String
         let appName: String
     }
+}
+
+
+/// The branding part of a namespace from `GET /api/v2/user/namespaces`.
+struct WorkspaceBrandDetails: Decodable, Sendable {
+    let uuid: String
+    let name: String?
+    let logoUrl: String?
+    let company: WorkspaceBrand.Company?
+
+    private enum CodingKeys: String, CodingKey { case uuid, name, logoUrl, settings }
+    private enum SettingsKeys: String, CodingKey { case company }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        uuid = try c.decode(String.self, forKey: .uuid)
+        name = try? c.decodeIfPresent(String.self, forKey: .name)
+        logoUrl = try? c.decodeIfPresent(String.self, forKey: .logoUrl)
+        // `settings` is free-form JSON (sometimes still a string); only `company` matters here.
+        company = (try? c.nestedContainer(keyedBy: SettingsKeys.self, forKey: .settings))
+            .flatMap { try? $0.decodeIfPresent(WorkspaceBrand.Company.self, forKey: .company) }
+    }
+}
+
+private struct WorkspaceBrandList: Decodable {
+    let data: [WorkspaceBrandDetails]
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        data = c.decodeLossyArray(WorkspaceBrandDetails.self, forKey: .data)
+    }
+
+    private enum CodingKeys: String, CodingKey { case data }
 }

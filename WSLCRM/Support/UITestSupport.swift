@@ -22,6 +22,12 @@ enum UITestSupport {
     /// load), for checking what the app refuses to do offline.
     static let noSignalArgument = "-UITestNoSignal"
 
+    /// `-UITestWorkspaceLogo <url>`: the stub workspace has this logo (and DBS's letterhead), for
+    /// the branding test. Without it the workspace has no logo, so the app is Workstation.
+    static let workspaceLogoArgument = "-UITestWorkspaceLogo"
+    /// `-UITestResetBrand`: forget the business this phone was last signed in to (a fresh install).
+    static let resetBrandArgument = "-UITestResetBrand"
+
     /// Reads one text field out of a multipart body, so the stub can echo what was sent without
     /// pulling in a parser. `nonisolated`: the stub server answers off the main actor.
     nonisolated static func multipartValue(_ name: String, in raw: String) -> String? {
@@ -66,6 +72,11 @@ enum UITestSupport {
                                          queueFile: temp.appendingPathComponent("queue.json"), defaults: defaults,
                                          monitorConnectivity: false)
         if ProcessInfo.processInfo.arguments.contains(noSignalArgument) { environment.connectivity.update(online: false) }
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains(resetBrandArgument) { BrandStore.shared.clear() }
+        if let index = arguments.firstIndex(of: workspaceLogoArgument), index + 1 < arguments.count {
+            UITestStubServer.shared.workspaceLogo = arguments[index + 1]
+        }
         // The "Turn on alerts" card would sit above every Today test; the push tests don't need it.
         UserDefaults.standard.set(!ProcessInfo.processInfo.arguments.contains("-UITestShowPushPrompt"),
                                   forKey: "pdPushPromptDismissed")
@@ -194,6 +205,8 @@ final class UITestStubServer: @unchecked Sendable {
     }
 
     var role: Role = .engineer
+    /// `-UITestWorkspaceLogo`: the workspace's `logo_url` (nil: no logo, the house brand).
+    var workspaceLogo: String?
 
     private let lock = NSLock()
     private var checklist: [[String: Any]] = []
@@ -288,6 +301,9 @@ final class UITestStubServer: @unchecked Sendable {
 
         case ("POST", "/auth/2fa/resend"):
             return (200, ["message": "If the account exists, a new code has been sent"])
+
+        case ("GET", "/api/v2/user/namespaces"):
+            return (200, namespaceList)
 
         case ("GET", "/auth/me"):
             return (200, ["user": user, "namespaces": [namespace], "current_namespace": namespace])
@@ -848,9 +864,22 @@ final class UITestStubServer: @unchecked Sendable {
     }
 
     private var namespace: [String: Any] {
-        ["id": 7, "uuid": Self.namespaceUuid, "name": role.hasPropertyDeals ? "Demo Buyers Ltd" : "DBS Limited",
-         "slug": role.hasPropertyDeals ? "demo-buyers" : "dbs-limited", "is_owner": false,
-         "status": "active", "member_status": "active"]
+        var result: [String: Any] = [
+            "id": 7, "uuid": Self.namespaceUuid, "name": role.hasPropertyDeals ? "Demo Buyers Ltd" : "DBS Limited",
+            "slug": role.hasPropertyDeals ? "demo-buyers" : "dbs-limited", "is_owner": false,
+            "status": "active", "member_status": "active"]
+        if let workspaceLogo { result["logo_url"] = workspaceLogo }
+        return result
+    }
+
+    /// `GET /api/v2/user/namespaces`: the workspace with its letterhead when it has a logo.
+    private var namespaceList: [String: Any] {
+        var entry = namespace
+        if workspaceLogo != nil {
+            entry["settings"] = ["company": ["display_name": "DBS Ltd", "legal_name": "David Blakey Services Limited",
+                                             "company_number": "03806201"]]
+        }
+        return ["data": [entry], "total": 1]
     }
 
     private func meta(_ total: Int) -> [String: Any] {

@@ -62,13 +62,27 @@ The API base URL is a build setting (`API_BASE_URL`) written into Info.plist and
 | Scheme | Configurations | Base URL |
 |---|---|---|
 | `WSLCRM-Int` | `Debug-Int`, `Release-Int` | `https://int-opsapi.workstation.co.uk` (`Config/Int.xcconfig`) |
-| `WSLCRM-DBS-Int` | `Debug-DBS-Int`, `Release-DBS-Int` | the same int host, DBS white-label (`Config/DBS-Int.xcconfig`) |
 | `WSLCRM-Prod` | `Debug-Prod`, `Release-Prod` | supplied at build time |
 | `WSLCRM-Local` | `Debug-Local` | `http://127.0.0.1:4011` (`Config/Local-API.xcconfig`) — Simulator only |
 
-`WSLCRM-DBS-Int` is the demo build: int's data with DBS Ltd branding, so a demo needs no local
-stack. `WSLCRM-Int` is the house-branded Workstation CRM build, and the one TestFlight testers get. Sign in with the
-accounts in `build/dbs-group-demo.env` (see "Seeding the demo into int" below).
+`WSLCRM-Int` is the build TestFlight testers get. Every build is house-branded (Workstation CRM);
+a business's own logo, name and report letterhead come from its workspace on the server, not from
+the build (see "Branding" below). The DBS demo is `WSLCRM-Int` signed in to the seeded **DBS Group**
+workspace with the accounts in `build/dbs-group-demo.env` (see "Seeding the demo into int" below).
+
+### Branding
+
+One app serves every business. Before anyone signs in it is Workstation's. Once someone signs in,
+the app takes their workspace's branding from the server and keeps it on the phone, so the next
+sign-in screen and every app update still show their business:
+
+- **Logo:** `namespaces.logo_url`, set in the web dashboard's workspace settings. An absolute URL,
+  or a path on the dashboard (`/brands/dbs-ltd.svg`). PNG, JPEG or SVG.
+- **Name and report letterhead:** `namespaces.settings.company` (`display_name`, `legal_name`,
+  `company_number`, `vat_number`, `address`, `phone`, `email`, `strapline`).
+
+A workspace without a logo shows Workstation's. The home-screen icon and the name under it are part
+of the app bundle (iOS can't fetch them from a server), so they are always Workstation CRM.
 
 ### Switching environment without a rebuild
 
@@ -270,9 +284,8 @@ House) or assumed, e.g. project values, contract terms after handover, refrigera
 numbers. Assumed values are illustrative, not DBS's figures. People are not taken from the website:
 contacts are role-based with `.example` addresses, and the DBS team is the synthetic one above.
 
-The Local configuration is white-labelled as **DBS Ltd** through `Config/Brand-DBS.xcconfig`: the app
-name and icon, the sign-in mark, and the letterhead and legal footer on report PDFs. Int and Prod keep
-the house brand (`Config/Brand-Default.xcconfig`). In the app:
+Signed in to the DBS workspace, the app shows **DBS Ltd**: the sign-in mark, the name, and the
+letterhead and legal footer on report PDFs, all from the workspace (see "Branding"). In the app:
 
 - **Guided visit → Replace part.** An engineer proposes a replacement rather than logging a line:
   the part comes from the workspace catalogue, the price and VAT come with it, and a photo of the
@@ -329,11 +342,11 @@ re-applied and quotes are only added to a workspace that has none.
 Usernames land in `build/$NAMESPACE_SLUG.env` (mode 600, git-ignored). The server needs
 `TEST_OTP_CODE` set and `OPSAPI_DEPLOY_ENV` to be something other than prod, which is how int is
 configured — the seed signs each person in through the real 2FA flow using that bypass. Build the
-**WSLCRM-DBS-Int** scheme to point the branded app at it, and the screenshot tour takes the same
+**WSLCRM-Int** scheme and sign in to it, and the screenshot tour takes the same
 two variables:
 
 ```bash
-SCHEME=WSLCRM-DBS-Int ENV_FILE=build/dbs-group-demo.env scripts/run-dbs-screenshots.sh
+SCHEME=WSLCRM-Int ENV_FILE=build/dbs-group-demo.env scripts/run-dbs-screenshots.sh
 ```
 
 Screenshots from that run against int — the engineer's day, the manager's board, the service desk

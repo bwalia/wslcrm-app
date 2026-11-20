@@ -32,7 +32,7 @@ rm -rf "$SHOTS" "$OUT_DIR/attachments"
 mkdir -p "$SHOTS" "$OUT_DIR/attachments"
 xcrun xcresulttool export attachments --path "$RESULT" --output-path "$OUT_DIR/attachments" >/dev/null
 
-MARK="$ROOT/WSLCRM/Resources/Assets.xcassets/BrandMark-DBS.imageset/BrandMark-DBS@3x.png"
+MARK="$ROOT/docs/brand/dbs/BrandMark-DBS@3x.png"
 python3 - "$OUT_DIR" "$SHOTS" "$RAW" "$RECORD_START" "$TITLE" "$SUBTITLE" "$MARK" <<'PY'
 """Turns the tour's markers and screenshots into a spec for scripts/tour-video.swift."""
 import json, pathlib, shutil, sys

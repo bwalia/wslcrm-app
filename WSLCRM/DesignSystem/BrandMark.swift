@@ -1,17 +1,25 @@
 import SwiftUI
 
-/// The white-label brand mark: the brand's own artwork when the build sets one
+/// The brand mark: the signed-in workspace's logo when it has one, otherwise the house mark
 /// (BRAND_MARK), otherwise an SF Symbol.
 struct BrandMark: View {
     var size: CGFloat = 44
-    var brand: Brand = .current
+    /// nil follows the workspace (BrandStore); set only in previews and tests.
+    var brand: Brand?
+    @State private var store = BrandStore.shared
     /// Decorative where the brand name is already spelled out beside it (sign-in).
     /// In a navigation bar there is no such label, so the mark names itself instead.
     var isDecorative: Bool = true
 
     var body: some View {
+        let brand = brand ?? store.brand
         Group {
-            if let name = brand.markImageName, UIImage(named: name) != nil {
+            if let file = brand.logoFile, let logo = UIImage(contentsOfFile: file.path) {
+                Image(uiImage: logo)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+            } else if let name = brand.markImageName, UIImage(named: name) != nil {
                 Image(name)
                     .resizable()
                     .scaledToFit()

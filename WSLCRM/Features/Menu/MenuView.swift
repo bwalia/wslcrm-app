@@ -202,7 +202,7 @@ struct ProfileSheet: View {
     }
 
     private var signOutTitle: String {
-        hasUnsynced ? "Sign out with unsynced changes?" : "Sign out of \(Brand.current.name)?"
+        hasUnsynced ? "Sign out with unsynced changes?" : "Sign out of \(BrandStore.shared.brand.name)?"
     }
 }
 

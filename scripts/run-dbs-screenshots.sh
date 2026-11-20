@@ -13,7 +13,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # Defaults are the local stack; SCHEME + ENV_FILE point the same tour at a seeded
-# cluster workspace, e.g. SCHEME=WSLCRM-DBS-Int ENV_FILE=build/dbs-group-demo.env.
+# cluster workspace, e.g. SCHEME=WSLCRM-Int ENV_FILE=build/dbs-group-demo.env.
 SCHEME="${SCHEME:-WSLCRM-Local}"
 ENV_FILE="${ENV_FILE:-$ROOT/build/dbs-limited.env}"
 DEVICE="${DEVICE:-iPhone 17}"
