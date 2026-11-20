@@ -162,6 +162,21 @@ struct Lead: Identifiable, Hashable, Sendable {
     var analysis: LeadAnalysis?
     var meetings: [LeadMeeting]
     var permissions: LeadPermissions?
+    var channel: String?
+    var campaign: String?
+    var ownerEmail: String?
+    var lastContactedAt: Date?
+    var convertedDealValue: Decimal?
+    var referrals: [Referral]
+    /// The server's words for each call outcome (`call_outcomes`).
+    var callOutcomes: [String: String]
+    /// Free-form extras: `duplicate_of`, `value_from`, what the shop and website forms saved (`shop`, `consent`).
+    var metadata: [String: JSONValue]
+
+    /// Another open lead with the same email or phone.
+    var duplicateOf: String? { metadata["duplicate_of"]?.stringValue }
+    /// The value is the AI's estimate, not a person's.
+    var valueFromAI: Bool { metadata["value_from"]?.stringValue == "ai" }
 
     var fullName: String {
         [firstName, lastName ?? ""].joined(separator: " ").trimmingCharacters(in: .whitespaces)
@@ -178,7 +193,8 @@ extension Lead: Decodable {
         case stageLabel, isOpen, ownerUserUuid, ownerName, nextActionType, nextActionAt, nextActionNote
         case firstContactedAt, contactAttempts, estimatedValue, currency, expectedCloseDate, nurtureUntil, lostReason
         case qualification, aiStatus, aiScore, aiSummary, createdAt, convertedDealUuid, convertedDealName
-        case analysis, meetings, permissions
+        case analysis, meetings, permissions, channel, campaign, ownerEmail, lastContactedAt, convertedDealValue
+        case referrals, callOutcomes
     }
 
     init(from decoder: Decoder) throws {
@@ -219,6 +235,31 @@ extension Lead: Decodable {
         analysis = try? c.decodeIfPresent(LeadAnalysis.self, forKey: .analysis)
         meetings = (try? c.decodeIfPresent(LossyArray<LeadMeeting>.self, forKey: .meetings))?.elements ?? []
         permissions = try? c.decodeIfPresent(LeadPermissions.self, forKey: .permissions)
+        channel = c.string(.channel)
+        campaign = c.string(.campaign)
+        ownerEmail = c.string(.ownerEmail)
+        lastContactedAt = c.decodeDate(forKey: .lastContactedAt)
+        convertedDealValue = c.decodeFlexibleDecimal(forKey: .convertedDealValue)
+        referrals = (try? c.decodeIfPresent(LossyArray<Referral>.self, forKey: .referrals))?.elements ?? []
+        callOutcomes = c.lenientStringMap(forKey: .callOutcomes)
+        // Maps keyed by the server's own names (`metadata`, `qualification`, `call_outcomes`) are read from the raw
+        // JSON by `LeadsAPI.lead` (`withRawMaps`): the snake_case key strategy would rename their keys.
+        metadata = [:]
+    }
+}
+
+extension Lead {
+    /// Puts back the maps whose keys are data, not field names (`decision_maker`, `duplicate_of`, `no_answer`),
+    /// from the lead as the server sent it.
+    mutating func withRawMaps(_ raw: JSONValue?) {
+        guard case .object(let fields)? = raw else { return }
+        if case .object(let meta)? = fields["metadata"] { metadata = meta }
+        if case .object(let answers)? = fields["qualification"] {
+            qualification = answers.compactMapValues { $0.stringValue }
+        }
+        if case .object(let outcomes)? = fields["call_outcomes"] {
+            callOutcomes = outcomes.compactMapValues { $0.stringValue }
+        }
     }
 }
 
@@ -229,6 +270,8 @@ struct LeadAnalysis: Decodable, Sendable, Hashable {
     var result: Result?
     var error: String?
     var finishedAt: Date?
+    var model: String?
+    var providerName: String?
 
     var isRunning: Bool { status == "pending" || status == "running" }
 
@@ -245,11 +288,57 @@ struct LeadAnalysis: Decodable, Sendable, Hashable {
         var nextBestAction: NextAction?
         var questions: [String]
         var firstReply: FirstReply?
+        var origin: String?
+        var valueSource: String?
+        /// Warnings the AI raised (`spam`, `vulnerable`, `existing_customer`, `out_of_scope`).
+        var flags: [String]
+        var partnerSuggestions: [Suggestion]
+        var research: Research?
 
         struct NextAction: Decodable, Sendable, Hashable {
+            /// `call_now | call | email | book_meeting | qualify | send_quote | refer_to_partner | nurture | disqualify`.
+            var action: String?
             var label: String?
             var reason: String?
             var when: String?
+        }
+
+        struct Suggestion: Decodable, Sendable, Hashable {
+            var partnerUuid: String
+            var partnerName: String?
+            var fit: Int?
+            var reason: String?
+
+            enum CodingKeys: String, CodingKey { case partnerUuid, partnerName, fit, reason }
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                partnerUuid = try c.decode(String.self, forKey: .partnerUuid)
+                partnerName = c.string(.partnerName)
+                fit = c.decodeFlexibleInt(forKey: .fit)
+                reason = c.string(.reason)
+            }
+        }
+
+        /// A web price search behind the deal size, shown only to the person it ran for.
+        struct Research: Decodable, Sendable, Hashable {
+            var hidden: Bool
+            var message: String?
+            var sources: [Source]
+
+            struct Source: Decodable, Sendable, Hashable {
+                var url: String
+                var title: String?
+            }
+
+            enum CodingKeys: String, CodingKey { case hidden, message, sources }
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                hidden = c.decodeFlexibleBool(forKey: .hidden) ?? false
+                message = c.string(.message)
+                sources = (try? c.decodeIfPresent(LossyArray<Source>.self, forKey: .sources))?.elements ?? []
+            }
         }
 
         struct FirstReply: Decodable, Sendable, Hashable {
@@ -260,7 +349,7 @@ struct LeadAnalysis: Decodable, Sendable, Hashable {
 
         enum CodingKeys: String, CodingKey {
             case summary, wants, urgency, estimatedValue, valueLow, valueHigh, valueBasis, score, scoreReasons
-            case nextBestAction, questions, firstReply
+            case nextBestAction, questions, firstReply, origin, valueSource, flags, partnerSuggestions, research
         }
 
         init(from decoder: Decoder) throws {
@@ -277,10 +366,16 @@ struct LeadAnalysis: Decodable, Sendable, Hashable {
             nextBestAction = try? c.decodeIfPresent(NextAction.self, forKey: .nextBestAction)
             questions = (try? c.decodeIfPresent(LossyArray<String>.self, forKey: .questions))?.elements ?? []
             firstReply = try? c.decodeIfPresent(FirstReply.self, forKey: .firstReply)
+            origin = c.string(.origin)
+            valueSource = c.string(.valueSource)
+            let raw = (try? c.decodeIfPresent([String: JSONValue].self, forKey: .flags)) ?? [:]
+            flags = raw.filter { $0.value.boolValue == true }.map(\.key).sorted()
+            partnerSuggestions = (try? c.decodeIfPresent(LossyArray<Suggestion>.self, forKey: .partnerSuggestions))?.elements ?? []
+            research = try? c.decodeIfPresent(Research.self, forKey: .research)
         }
     }
 
-    enum CodingKeys: String, CodingKey { case status, result, error, finishedAt }
+    enum CodingKeys: String, CodingKey { case status, result, error, finishedAt, model, providerName }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -288,6 +383,8 @@ struct LeadAnalysis: Decodable, Sendable, Hashable {
         result = try? c.decodeIfPresent(Result.self, forKey: .result)
         error = c.string(.error)
         finishedAt = c.decodeDate(forKey: .finishedAt)
+        model = c.string(.model)
+        providerName = c.string(.providerName)
     }
 }
 
@@ -306,6 +403,10 @@ struct LeadMeeting: Identifiable, Hashable, Sendable {
     var typeLabel: String?
     var inviteError: String?
     var inviteSent: Bool
+    var inviteEnabled: Bool
+    var type: String?
+    var description: String?
+    var attendeeCount: Int
 
     var isPlanned: Bool { status == "planned" }
 }
@@ -313,6 +414,7 @@ struct LeadMeeting: Identifiable, Hashable, Sendable {
 extension LeadMeeting: Decodable {
     enum CodingKeys: String, CodingKey {
         case uuid, subject, status, outcome, startsAt, durationMinutes, location, meetingUrl, typeLabel, invite
+        case type, description, attendees
     }
 
     private struct Invite: Decodable { var enabled: Bool?; var upToDate: Bool?; var error: String? }
@@ -331,6 +433,10 @@ extension LeadMeeting: Decodable {
         let invite = try? c.decodeIfPresent(Invite.self, forKey: .invite)
         inviteError = invite?.error
         inviteSent = (invite?.enabled ?? false) && (invite?.upToDate ?? false)
+        inviteEnabled = invite?.enabled ?? false
+        type = c.string(.type)
+        description = c.string(.description)
+        attendeeCount = ((try? c.decodeIfPresent([JSONValue].self, forKey: .attendees)) ?? []).count
     }
 }
 
@@ -349,6 +455,9 @@ struct LeadCard: Identifiable, Hashable, Sendable {
     var aiSummary: String?
     var nextActionType: String?
     var nextActionAt: Date?
+    var email: String?
+    var phone: String?
+    var source: String?
 
     var isOverdue: Bool { (nextActionAt.map { $0 < Date() }) ?? false }
 }
@@ -356,7 +465,7 @@ struct LeadCard: Identifiable, Hashable, Sendable {
 extension LeadCard: Decodable {
     enum CodingKeys: String, CodingKey {
         case uuid, firstName, lastName, companyName, status, stage, ownerName, estimatedValue, currency, aiScore, aiSummary
-        case nextActionType, nextActionAt
+        case nextActionType, nextActionAt, email, phone, source
     }
 
     init(from decoder: Decoder) throws {
@@ -374,6 +483,9 @@ extension LeadCard: Decodable {
         aiSummary = c.string(.aiSummary)
         nextActionType = c.string(.nextActionType)
         nextActionAt = c.decodeDate(forKey: .nextActionAt)
+        email = c.string(.email)
+        phone = c.string(.phone)
+        source = c.string(.source)
     }
 }
 
@@ -503,6 +615,13 @@ struct LeadBody: Encodable, Sendable {
     var notes: String?
     var estimatedValue: Decimal?
     var source: String?
+    var channel: String?
+    var campaign: String?
+    var priority: String?
+    /// New leads only: a manager giving it to someone else.
+    var ownerUserUuid: String?
+    /// New leads only: leave it in the queue instead of taking it.
+    var unassigned: Bool?
 }
 
 struct LeadCallBody: Encodable, Sendable {
@@ -546,9 +665,16 @@ struct LeadMeetingBody: Encodable, Sendable {
     var meetingUrl: String?
     var title: String?
     var notes: String?
+    /// Booking only: extra people invited, and whether invites go out.
+    var guests: [Guest]?
+    var sendInvite: Bool?
+
+    struct Guest: Encodable, Sendable, Equatable { var email: String }
 }
 
 struct LeadConvertBody: Encodable, Sendable {
     var name: String?
     var value: Decimal?
+    var currency: String?
+    var expectedCloseDate: String?
 }

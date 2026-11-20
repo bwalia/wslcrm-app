@@ -46,7 +46,63 @@ struct LeadsAPI: Sendable {
 
     func mySteps() async throws -> LeadMySteps { try await data(.get("\(Self.base)/my-steps")) }
 
-    func lead(_ uuid: String) async throws -> Lead { try await data(.get("\(Self.base)/\(uuid)")) }
+    /// The full lead. Maps keyed by data (`metadata`, `qualification`) are read from the raw JSON too.
+    func lead(_ uuid: String) async throws -> Lead {
+        let endpoint = Endpoint.get("\(Self.base)/\(uuid)")
+        let (data, _) = try await client.sendRaw(endpoint)
+        do {
+            var lead = try JSONDecoder.opsAPI().decode(Envelope.Standard<Lead>.self, from: data).data
+            lead.withRawMaps((try? JSONDecoder().decode(JSONValue.self, from: data))?["data"])
+            return lead
+        } catch {
+            throw APIError.decoding(endpoint: endpoint.path, description: String(describing: error),
+                                    body: String(decoding: data.prefix(500), as: UTF8.self))
+        }
+    }
+
+    /// Every lead the person can see, filtered and sorted.
+    func list(_ query: LeadListQuery, page: Int, perPage: Int = 25) async throws -> Page<LeadCard> {
+        var items = query.items
+        items.append(URLQueryItem(name: "page", value: String(page)))
+        items.append(URLQueryItem(name: "per_page", value: String(perPage)))
+        let envelope: Envelope.Standard<LossyArray<LeadCard>> = try await client.send(.get(Self.base, query: items))
+        return Page(items: envelope.data.elements, page: envelope.meta?.page ?? page,
+                    perPage: envelope.meta?.perPage ?? perPage, total: envelope.meta?.total ?? envelope.data.elements.count)
+    }
+
+    func stats() async throws -> LeadStats { try await data(.get("\(Self.base)/stats")) }
+
+    /// `from` and `to` are days (YYYY-MM-DD).
+    func funnel(from: String, to: String) async throws -> LeadFunnel {
+        try await data(.get("\(Self.base)/funnel", query: [URLQueryItem(name: "from", value: from),
+                                                          URLQueryItem(name: "to", value: to)]))
+    }
+
+    func settings() async throws -> LeadSettingsBundle { try await data(.get("\(Self.base)/settings")) }
+
+    /// Managers only (`crm_leads` manage).
+    func saveSettings(_ settings: LeadSettings) async throws -> LeadSettings {
+        try await data(.put("\(Self.base)/settings", json: settings))
+    }
+
+    func rules() async throws -> [LeadAssignmentRule] {
+        let list: LossyArray<LeadAssignmentRule> = try await data(.get("\(Self.base)/assignment-rules"))
+        return list.elements
+    }
+
+    func createRule(_ body: LeadAssignmentRuleBody) async throws {
+        try await client.sendDiscardingBody(.post("\(Self.base)/assignment-rules", json: body))
+    }
+
+    func deleteRule(_ uuid: String) async throws {
+        try await client.sendDiscardingBody(.delete("\(Self.base)/assignment-rules/\(uuid)"))
+    }
+
+    /// The AI's PDF report for the lead (the latest finished analysis).
+    func report(_ uuid: String) async throws -> Data {
+        let (data, _) = try await client.sendRaw(.get("\(Self.base)/\(uuid)/report"))
+        return data
+    }
 
     func timeline(_ uuid: String) async throws -> [LeadTimelineItem] {
         let list: LossyArray<LeadTimelineItem> = try await data(.get("\(Self.base)/\(uuid)/timeline"))
@@ -89,8 +145,23 @@ struct LeadsAPI: Sendable {
         try await data(.post("\(Self.base)/\(uuid)/steps", json: body))
     }
 
-    func analyse(_ uuid: String) async throws {
-        try await client.sendDiscardingBody(.post("\(Self.base)/\(uuid)/analyse", json: EmptyBody()))
+    /// Queues the AI; answers in words ("The AI is analysing the lead…" or "already running").
+    @discardableResult
+    func analyse(_ uuid: String) async throws -> String? {
+        struct Result: Decodable, Sendable { let message: String? }
+        let result: Result = try await data(.post("\(Self.base)/\(uuid)/analyse", json: EmptyBody()))
+        return result.message
+    }
+
+    /// Emails the lead from the workspace's "Questions and follow-up" account; saved on the timeline.
+    func email(_ uuid: String, _ body: LeadEmailBody) async throws -> String? {
+        struct Result: Decodable, Sendable { let to: String? }
+        let result: Result = try await data(.post("\(Self.base)/\(uuid)/email", json: body))
+        return result.to
+    }
+
+    func qualify(_ uuid: String, _ body: LeadQualifyBody) async throws -> Lead {
+        try await data(.post("\(Self.base)/\(uuid)/qualify", json: body))
     }
 
     func convert(_ uuid: String, _ body: LeadConvertBody) async throws -> LeadConvertResult {
@@ -101,14 +172,22 @@ struct LeadsAPI: Sendable {
         try await data(.post("\(Self.base)/\(uuid)/meetings", json: body))
     }
 
-    func cancelMeeting(_ meetingUuid: String) async throws {
-        try await client.sendDiscardingBody(.post("/api/v2/crm/meetings/\(meetingUuid)/cancel", json: EmptyBody()))
+    /// Moves a meeting; everyone invited gets the updated invite.
+    func updateMeeting(_ meetingUuid: String, _ body: LeadMeetingBody) async throws {
+        try await client.sendDiscardingBody(.put("/api/v2/crm/meetings/\(meetingUuid)", json: body))
     }
 
-    func meetingOutcome(_ meetingUuid: String, held: Bool) async throws {
-        struct Body: Encodable, Sendable { let outcome: String }
+    /// The reason goes in the cancellation everyone receives.
+    func cancelMeeting(_ meetingUuid: String, reason: String? = nil) async throws {
+        struct Body: Encodable, Sendable { let reason: String? }
+        try await client.sendDiscardingBody(.post("/api/v2/crm/meetings/\(meetingUuid)/cancel",
+                                                  json: Body(reason: reason?.trimmedOrNil)))
+    }
+
+    func meetingOutcome(_ meetingUuid: String, held: Bool, notes: String? = nil) async throws {
+        struct Body: Encodable, Sendable { let outcome: String; let notes: String? }
         try await client.sendDiscardingBody(.post("/api/v2/crm/meetings/\(meetingUuid)/outcome",
-                                                  json: Body(outcome: held ? "held" : "no_show")))
+                                                  json: Body(outcome: held ? "held" : "no_show", notes: notes?.trimmedOrNil)))
     }
 
     private func data<T: Decodable & Sendable>(_ endpoint: Endpoint) async throws -> T {
