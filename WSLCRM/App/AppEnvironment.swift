@@ -16,6 +16,8 @@ struct Services: Sendable {
     let shop: ShopAPI
     let propertyDeals: PropertyDealsAPI
     let propertyPA: PropertyPAAPI
+    /// Every module described by a `ResourceDescriptor` (the native module kit).
+    let resources: ResourceService
 
     init(client: APIClient, cache: ResponseCache) {
         self.client = client
@@ -31,6 +33,7 @@ struct Services: Sendable {
         shop = ShopAPI(client: client)
         propertyDeals = PropertyDealsAPI(client: client, cache: cache)
         propertyPA = PropertyPAAPI(client: client, cache: cache)
+        resources = ResourceService(client: client)
     }
 
     /// Used only as the environment default (previews); never talks to a real server.

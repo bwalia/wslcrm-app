@@ -292,14 +292,6 @@ struct ShopQuoteDetailView: View {
         .task { await load() }
         .refreshable { await load() }
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                NavigationLink {
-                    WebPageView(route: WebPageRoute(title: "\(title) \(current.quoteNumber)", path: "/dashboard/shop/quotes/\(current.uuid)"))
-                } label: {
-                    Label("Open on the web", systemImage: "globe")
-                }
-                .accessibilityIdentifier("shopQuote.web")
-            }
         }
         .sheet(item: $messaging) { kind in
             NavigationStack {

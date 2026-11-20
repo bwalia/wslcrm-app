@@ -164,7 +164,7 @@ struct ShopSupplierMessageSheet: View {
                     if !old.isEmpty, !new.isEmpty, old != new { Task { await loadDraft() } }
                 }
             } footer: {
-                Text("Templates are set up on the web under Shop → Templates.")
+                Text("Change the wording under Shop → Message templates.")
             }
         }
 

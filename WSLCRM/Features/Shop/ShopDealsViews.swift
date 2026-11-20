@@ -138,14 +138,6 @@ struct ShopDealDetailView: View {
         .navigationTitle(code)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                NavigationLink {
-                    WebPageView(route: WebPageRoute(title: code, path: "/dashboard/shop/deals/\(code)"))
-                } label: {
-                    Label("Open on the web", systemImage: "globe")
-                }
-                .accessibilityIdentifier("shopDeal.web")
-            }
         }
         .task { await load() }
     }

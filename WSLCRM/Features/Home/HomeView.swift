@@ -5,7 +5,6 @@ import SwiftUI
 struct HomeView: View {
     let hubs: [NavigationPolicy.Home]
     let open: (AppTab) -> Void
-    @Binding var assistant: WebPageRoute?
 
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
@@ -36,7 +35,11 @@ struct HomeView: View {
                 if session.permissions.can(.read, .fsJobs) { todaySection }
                 quickActions(catalog: catalog)
                 if !catalog.nativeEntries.isEmpty { appsSection(catalog: catalog) }
-                if let route = catalog.assistant { AssistantCard { assistant = route } }
+                // The AI Navigator, once its native screen is in this person's menu.
+                if let chat = catalog.entry(forKey: AppMenu.aiChatKey) {
+                    AppEntryLink(entry: chat) { AssistantCardLabel() }
+                        .accessibilityIdentifier("home.assistant")
+                }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 32)
@@ -125,14 +128,16 @@ struct HomeView: View {
         let title: String
         let systemImage: String
         let color: Color
-        let run: () -> Void
+        /// A screen to push instead of running `run`.
+        var destination: MenuDestination?
+        var run: () -> Void = {}
     }
 
     private func actions(catalog: AppCatalog) -> [QuickAction] {
         var actions: [QuickAction] = []
-        if let route = catalog.assistant {
+        if case .menu(let chat)? = catalog.entry(forKey: AppMenu.aiChatKey)?.destination {
             actions.append(QuickAction(id: "ai", title: "Ask AI", systemImage: "sparkles",
-                                       color: Palette.tileColors[1]) { assistant = route })
+                                       color: Palette.tileColors[1], destination: chat))
         }
         if let access = session.propertyDeals, access.can(.create, .deals) || access.can(.create, .properties) {
             actions.append(QuickAction(id: "capture", title: "Capture", systemImage: "camera.viewfinder",
@@ -152,16 +157,12 @@ struct HomeView: View {
             DashboardSectionHeader("Quick actions")
             HStack(alignment: .top, spacing: 8) {
                 ForEach(actions(catalog: catalog)) { action in
-                    Button(action: action.run) {
-                        VStack(spacing: 8) {
-                            AppIconTile(systemImage: action.systemImage, color: action.color, size: 52)
-                            Text(action.title)
-                                .font(.brandCaption)
-                                .foregroundStyle(Color(.label))
-                                .multilineTextAlignment(.center)
-                                .lineLimit(2)
+                    Group {
+                        if let destination = action.destination {
+                            MenuDestinationLink(destination: destination) { quickActionLabel(action) }
+                        } else {
+                            Button(action: action.run) { quickActionLabel(action) }
                         }
-                        .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.pressableCard)
                     .accessibilityIdentifier("home.action.\(action.id)")
@@ -169,6 +170,18 @@ struct HomeView: View {
             }
             .brandCard(padding: 14)
         }
+    }
+
+    private func quickActionLabel(_ action: QuickAction) -> some View {
+        VStack(spacing: 8) {
+            AppIconTile(systemImage: action.systemImage, color: action.color, size: 52)
+            Text(action.title)
+                .font(.brandCaption)
+                .foregroundStyle(Color(.label))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: Your apps
@@ -183,7 +196,7 @@ struct HomeView: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top),
                                      count: typeSize.isAccessibilitySize ? 2 : 4), spacing: 16) {
                 ForEach(entries) { entry in
-                    AppEntryLink(entry: entry, assistant: $assistant) {
+                    AppEntryLink(entry: entry) {
                         VStack(spacing: 8) {
                             AppIconTile(systemImage: entry.systemImage, color: entry.color, size: 56)
                             Text(entry.name)
@@ -381,40 +394,34 @@ private struct HubCard: View {
     }
 }
 
-/// The AI Navigator, offered at the foot of Home.
-private struct AssistantCard: View {
-    let action: () -> Void
-
+/// The AI Navigator, offered at the foot of Home (its native chat screen).
+private struct AssistantCardLabel: View {
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 14) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 48, height: 48)
-                    .background(
-                        LinearGradient(colors: [Color.accentColor, Palette.tileColors[1]],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing),
-                        in: Circle())
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Ask the AI Navigator")
-                        .font(.brandHeadline)
-                        .foregroundStyle(Color(.label))
-                    Text("Questions about customers, jobs, deals — in plain English.")
-                        .font(.brandFootnote)
-                        .foregroundStyle(.secondaryText)
-                        .multilineTextAlignment(.leading)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "arrow.up.right")
+        HStack(spacing: 14) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 48, height: 48)
+                .background(
+                    LinearGradient(colors: [Color.accentColor, Palette.tileColors[1]],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                    in: Circle())
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Ask the AI Navigator")
+                    .font(.brandHeadline)
+                    .foregroundStyle(Color(.label))
+                Text("Questions about customers, jobs, deals — in plain English.")
+                    .font(.brandFootnote)
                     .foregroundStyle(.secondaryText)
-                    .accessibilityHidden(true)
+                    .multilineTextAlignment(.leading)
             }
-            .brandCard(padding: 16)
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .foregroundStyle(.secondaryText)
+                .accessibilityHidden(true)
         }
-        .buttonStyle(.pressableCard)
-        .accessibilityIdentifier("home.assistant")
+        .brandCard(padding: 16)
     }
 }
 

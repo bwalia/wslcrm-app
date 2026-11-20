@@ -2,7 +2,6 @@ import Foundation
 import Observation
 import SwiftUI
 import UIKit
-import WebKit
 
 /// The business a person works for, as the app shows it: name, logo and report letterhead.
 ///
@@ -170,9 +169,9 @@ final class BrandStore {
     private func render(_ url: URL) async -> UIImage? {
         guard let data = try? await fetchLogo(url), !data.isEmpty else { return nil }
         if let image = UIImage(data: data) { return image }
-        // The web dashboard's logos are often SVG, which UIKit can't decode: let WebKit draw it.
+        // The web dashboard's logos are often SVG, which UIKit can't decode: draw it natively.
         guard Self.looksLikeSVG(data, url: url) else { return nil }
-        return await SVGRasterizer.render(data)
+        return NativeSVG.render(data)
     }
 
     static func looksLikeSVG(_ data: Data, url: URL) -> Bool {
@@ -196,82 +195,5 @@ final class BrandStore {
         // Cap the size: a logo is a few KB, and this is drawn on every screen.
         guard data.count < 2_000_000 else { throw URLError(.dataLengthExceedsMaximum) }
         return data
-    }
-}
-
-/// Draws an SVG into a bitmap with WebKit (UIKit has no public SVG decoder).
-@MainActor
-enum SVGRasterizer {
-    /// `timeout`: WebKit's first page in a process starts its web content process, which can take
-    /// several seconds on a slow device; this runs in the background, so waiting is fine.
-    static func render(_ svg: Data, side: CGFloat = 240, timeout: Duration = .seconds(30)) async -> UIImage? {
-        let markup = String(decoding: svg, as: UTF8.self)
-        guard markup.lowercased().contains("<svg") else { return nil }
-        let configuration = WKWebViewConfiguration()
-        // Static artwork: no scripts, no network.
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
-        let view = WKWebView(frame: CGRect(x: 0, y: 0, width: side, height: side), configuration: configuration)
-        view.isOpaque = false
-        view.backgroundColor = .clear
-        view.scrollView.backgroundColor = .clear
-        view.scrollView.isScrollEnabled = false
-        let html = """
-        <!doctype html><html><head><meta name="viewport" content="width=\(Int(side)),initial-scale=1">
-        <style>html,body{margin:0;padding:0;background:transparent;width:100%;height:100%;overflow:hidden}
-        svg{display:block;width:100%;height:100%}</style></head><body>\(markup)</body></html>
-        """
-        let loader = Loader(timeout: timeout)
-        view.navigationDelegate = loader
-        view.loadHTMLString(html, baseURL: nil)
-        guard await loader.finished() else { return nil }
-        // WebKit's PDF export draws without the view being on screen (a snapshot needs a window
-        // and comes back blank off screen); the vector page is then drawn into a bitmap.
-        let pdf = WKPDFConfiguration()
-        pdf.rect = CGRect(x: 0, y: 0, width: side, height: side)
-        guard let data = try? await view.pdf(configuration: pdf),
-              let provider = CGDataProvider(data: data as CFData), let document = CGPDFDocument(provider),
-              let page = document.page(at: 1) else { return nil }
-        let box = page.getBoxRect(.mediaBox)
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 3
-        format.opaque = false
-        return UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format).image { context in
-            let cg = context.cgContext
-            // PDF space is bottom-up.
-            cg.translateBy(x: 0, y: side)
-            cg.scaleBy(x: side / max(box.width, 1), y: -side / max(box.height, 1))
-            cg.drawPDFPage(page)
-        }
-    }
-
-    private final class Loader: NSObject, WKNavigationDelegate {
-        private var continuation: CheckedContinuation<Bool, Never>?
-        private var result: Bool?
-        private let timeout: Duration
-
-        init(timeout: Duration) { self.timeout = timeout }
-
-        func finished() async -> Bool {
-            if let result { return result }
-            return await withCheckedContinuation { continuation in
-                self.continuation = continuation
-                Task { @MainActor [weak self] in
-                    try? await Task.sleep(for: self?.timeout ?? .seconds(30))
-                    self?.complete(false)
-                }
-            }
-        }
-
-        private func complete(_ ok: Bool) {
-            if result == nil { result = ok }
-            continuation?.resume(returning: ok)
-            continuation = nil
-        }
-
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { complete(true) }
-        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { complete(false) }
-        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-            complete(false)
-        }
     }
 }

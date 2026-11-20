@@ -136,14 +136,6 @@ struct ShopProductDetailView: View {
         .navigationTitle("Product")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                NavigationLink {
-                    WebPageView(route: WebPageRoute(title: state.value?.summary.name ?? "Product", path: "/dashboard/shop/products/\(uuid)"))
-                } label: {
-                    Label("Open on the web", systemImage: "globe")
-                }
-                .accessibilityIdentifier("shopProduct.web")
-            }
         }
         .task { await load() }
         .sheet(isPresented: $askingSupplier) {

@@ -307,16 +307,6 @@ final class SessionStore {
         }
     }
 
-    /// What a web dashboard page needs to open signed in as this person, in this workspace. nil
-    /// when signed out or when the server has no dashboard next to it.
-    func webSession(forceRefresh: Bool = false) async throws -> WebSession? {
-        guard let user, let workspace, let dashboard = DashboardURL.forAPI(await client.currentBaseURL) else {
-            return nil
-        }
-        let token = try await client.accessTokenForWeb(forceRefresh: forceRefresh)
-        return WebSession(dashboard: dashboard, accessToken: token, user: user, workspace: workspace)
-    }
-
     // MARK: - Sign out
 
     func signOut() async {

@@ -93,22 +93,3 @@ extension NavigationPolicy.Home {
         }
     }
 }
-
-/// The AI Navigator over the app: a sheet with its own Done, so it is clearly a place you visit
-/// and leave, rather than the app turning into a web page.
-struct AssistantSheet: View {
-    let route: WebPageRoute
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            WebPageView(route: route)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") { dismiss() }
-                            .accessibilityIdentifier("assistant.done")
-                    }
-                }
-        }
-    }
-}

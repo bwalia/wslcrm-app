@@ -461,7 +461,9 @@ extension View {
             .navigationDestination(for: PDRenovationsRoute.self) { _ in PDRenovationsListView() }
             .navigationDestination(for: PurchaseOrdersRoute.self) { PurchaseOrdersListView(route: $0) }
             .navigationDestination(for: NativeScreen.self) { $0.view }
-            .navigationDestination(for: WebPageRoute.self) { WebPageView(route: $0) }
+            .navigationDestination(for: ResourceListRoute.self) { ResourceListView(route: $0) }
+            .navigationDestination(for: ResourceRoute.self) { ResourceDetailView(route: $0) }
+            .navigationDestination(for: ResourceReportRoute.self) { ResourceReportView(route: $0) }
             .navigationDestination(for: PurchaseOrderRoute.self) { PurchaseOrderDetailView(uuid: $0.uuid) }
             .navigationDestination(for: FieldServiceArea.self) { area in
                 switch area {

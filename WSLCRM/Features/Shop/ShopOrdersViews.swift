@@ -203,14 +203,6 @@ struct ShopOrderDetailView: View {
         .task { await load() }
         .refreshable { await load() }
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                NavigationLink {
-                    WebPageView(route: WebPageRoute(title: "Order \(current.orderNumber)", path: "/dashboard/shop/orders/\(current.uuid)"))
-                } label: {
-                    Label("Open on the web", systemImage: "globe")
-                }
-                .accessibilityIdentifier("shopOrder.web")
-            }
         }
         .confirmationDialog(pendingStatus?.actionTitle ?? "", isPresented: .init(get: { pendingStatus != nil }, set: { if !$0 { pendingStatus = nil } }),
                             titleVisibility: .visible, presenting: pendingStatus) { status in

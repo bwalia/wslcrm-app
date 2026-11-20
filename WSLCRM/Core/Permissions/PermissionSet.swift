@@ -109,6 +109,13 @@ struct PermissionSet: Sendable, Equatable {
         return actions.contains(action.rawValue) || actions.contains(Action.manage.rawValue)
     }
 
+    /// The same check for a module the app knows only by its server name (module kit screens).
+    func can(_ action: Action, moduleName: String) -> Bool {
+        if isAdmin || isOwner { return true }
+        let actions = grants[moduleName] ?? []
+        return actions.contains(action.rawValue) || actions.contains(Action.manage.rawValue)
+    }
+
     /// Whether a module is available at all (enabled for the workspace and readable).
     func shows(_ feature: Feature) -> Bool {
         if !menuKeys.isEmpty, !feature.menuKeys.isDisjoint(with: menuKeys) { return true }

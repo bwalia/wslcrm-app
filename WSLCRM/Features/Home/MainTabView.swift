@@ -4,7 +4,7 @@ import SwiftUI
 ///
 /// - **Home** — the dashboard: greeting, your work, today's numbers, quick actions, your apps.
 /// - **Work hubs** — up to three, the person's own first (PA, My Work, Field Service, Deals, …).
-/// - **Apps** — everything else in the workspace, native screens first, web pages marked "Web".
+/// - **Apps** — everything else in the workspace, every entry a native screen.
 ///
 /// The profile, workspace switch, sync queue, settings and sign out live behind the avatar on
 /// Home, as in Apple's own apps.
@@ -17,13 +17,12 @@ struct MainTabView: View {
     @State private var showingPendingChanges = false
     @State private var homePath = NavigationPath()
     @State private var hubPaths: [NavigationPolicy.Home: NavigationPath] = [:]
-    @State private var assistant: WebPageRoute?
 
     var body: some View {
         let hubs = NavigationPolicy(session: session).tabs
         TabView(selection: $selection) {
             NavigationStack(path: $homePath) {
-                HomeView(hubs: hubs, open: { selection = $0 }, assistant: $assistant)
+                HomeView(hubs: hubs, open: { selection = $0 })
                     .withAppDestinations()
                     .safeAreaInset(edge: .top, spacing: 0) { syncBanner }
             }
@@ -43,7 +42,7 @@ struct MainTabView: View {
             }
 
             NavigationStack {
-                AppsView(assistant: $assistant)
+                AppsView()
                     .withAppDestinations()
                     .safeAreaInset(edge: .top, spacing: 0) { syncBanner }
             }
@@ -53,7 +52,6 @@ struct MainTabView: View {
         .sheet(isPresented: $showingPendingChanges) {
             NavigationStack { PendingChangesView() }
         }
-        .sheet(item: $assistant) { AssistantSheet(route: $0) }
         .onAppear { openPendingLink() }
         .onChange(of: router.pending) { openPendingLink() }
     }

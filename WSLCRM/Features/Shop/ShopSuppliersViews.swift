@@ -36,7 +36,7 @@ struct ShopSuppliersListView: View {
                 let list = filtered(all)
                 if all.isEmpty {
                     ContentUnavailableView("No suppliers yet", systemImage: "truck.box",
-                                           description: Text("Add your suppliers on the web (Shop → Suppliers). Their price lists can update your prices too."))
+                                           description: Text("Suppliers you buy from appear here. Their price lists can update your prices too."))
                 } else if list.isEmpty {
                     ContentUnavailableView.search(text: search)
                 }
@@ -62,14 +62,6 @@ struct ShopSuppliersListView: View {
         .searchable(text: $search, prompt: "Name, contact, email or phone")
         .navigationTitle("Suppliers")
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                NavigationLink {
-                    WebPageView(route: WebPageRoute(title: "Suppliers", path: "/dashboard/shop/suppliers"))
-                } label: {
-                    Label("Add or set up price lists on the web", systemImage: "plus")
-                }
-                .accessibilityIdentifier("shopSuppliers.web")
-            }
         }
         .task { await load() }
         .refreshable { await load() }
@@ -157,11 +149,6 @@ struct ShopSupplierDetailView: View {
                 DetailRow(label: "Supplier portal", value: current.portalEnabled ? "On" : "Off")
                 DetailRow(label: "Price list", value: current.feedUrl?.trimmedOrNil == nil ? "None" : (current.lastStatus.map(Formatters.humanize) ?? "Set up"))
                 DetailRow(label: "Last updated", value: Formatters.dateTime(current.lastSyncedAt))
-                NavigationLink {
-                    WebPageView(route: WebPageRoute(title: current.name, path: "/dashboard/shop/suppliers"))
-                } label: {
-                    Label("Price list and portal on the web", systemImage: "globe")
-                }
             } header: {
                 Text("Price list")
             }
