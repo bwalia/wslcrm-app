@@ -363,7 +363,7 @@ final class CRMModuleTests: XCTestCase {
         XCTAssertTrue(customer.verifiedEmail)
         XCTAssertEqual(customer.dateOfBirth, CalendarDay(year: 1990, month: 4, day: 1))
         XCTAssertEqual(customer.primaryAddress?.city, "York")
-        XCTAssertEqual(customer.averageOrderValue, 140.17)
+        XCTAssertEqual(customer.averageOrderValue, Decimal(string: "140.17"))
 
         var primary = CustomerBody.AddressBody(customer.primaryAddress!)
         primary.city = "Harrogate"
