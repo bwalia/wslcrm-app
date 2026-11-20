@@ -25,7 +25,8 @@ enum Tone: Sendable {
     /// Fill for a solid button or chip with white text on top: dark enough for 4.5:1 in both
     /// appearances, unlike the system greens/oranges (white on `.green` is about 1.9:1).
     var solidColor: Color {
-        if self == .brand { return Color("\(Brand.current.accentColorName)-Fill") }
+        // The person's theme colour (Settings › Appearance), resolved when drawn.
+        if self == .brand { return Color(uiColor: UIColor { ThemeAccent.current.fillUIColor($0) }) }
         return Color(uiColor: UIColor { traits in
             let dark = traits.userInterfaceStyle == .dark
             switch self {
@@ -48,7 +49,7 @@ enum Tone: Sendable {
     /// The readable version of `color`: at least 4.5:1 against this tone's tinted card in
     /// both light and dark appearance (checked by the accessibility audit in the UI tests).
     var textColor: Color {
-        if self == .brand { return Color("\(Brand.current.accentColorName)-Text") }
+        if self == .brand { return Color(uiColor: UIColor { ThemeAccent.current.textUIColor($0) }) }
         return Color(uiColor: UIColor { traits in
             let dark = traits.userInterfaceStyle == .dark
             switch self {

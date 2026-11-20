@@ -8,6 +8,12 @@ struct SettingsView: View {
         Form {
             Section {
                 NavigationLink {
+                    AppearanceSettingsView()
+                } label: {
+                    Label("Appearance", systemImage: "paintpalette")
+                }
+                .accessibilityIdentifier("settings.appearance")
+                NavigationLink {
                     TabBarSettingsView()
                 } label: {
                     Label("Tab bar", systemImage: "dock.rectangle")
@@ -16,7 +22,7 @@ struct SettingsView: View {
             } header: {
                 Text("Personalise")
             } footer: {
-                Text("Pin the shortcuts you use most between Home and Apps.")
+                Text("Light or dark, your colour, home screen icon and logo; and the shortcuts you use most between Home and Apps.")
             }
             Section {
                 if session.biometrics.availableKind != .none {

@@ -59,6 +59,7 @@
 		384FDF757C84603607B1DEF8 /* JobActionSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F5885FDCA35FA6BCBA44090 /* JobActionSheets.swift */; };
 		3AA8247ABE650618D4DC5C2D /* MenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9102D0D093B77CBEED719CD1 /* MenuTests.swift */; };
 		3AA88E8AEDB6351744933EB2 /* AppMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E588CCF13D92CA34E03CBD4 /* AppMenu.swift */; };
+		3ADA0F23DE14E58F9A60B2B7 /* AppThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D83B517660B2B90E08280BE7 /* AppThemeTests.swift */; };
 		3B6FA3DDA8D33FAF37E6BF08 /* Unbounded-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 69A935F6F45FBF213DD5B428 /* Unbounded-SemiBold.ttf */; };
 		3DBA08CE951C2E6C0E995DCB /* PartProposalSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9431CF6C7709341A754DC2E7 /* PartProposalSheet.swift */; };
 		3DD43CCD6C77613242ED6A1B /* invoices_list.json in Resources */ = {isa = PBXBuildFile; fileRef = CEBEF4D52B4F15304F7B497A /* invoices_list.json */; };
@@ -205,6 +206,7 @@
 		C626698113314731D258A0D7 /* ShopSuppliersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7423483CF6E19EC33F68B3BF /* ShopSuppliersTests.swift */; };
 		C68644F62EC283B2AFD6B21D /* PDPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C8B76E9FAB3865EF96C577C /* PDPresentation.swift */; };
 		C6D67B8CC550BFA0B31B6D5E /* ServerErrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0582F75815E1CE7C44AF8ADF /* ServerErrorTests.swift */; };
+		C75EA919AF128946BEE9A905 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DE3E6AA63591ED52E8D336F /* AppTheme.swift */; };
 		C8B66698F4D011F313B9A378 /* UITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15C75B0AD3C33227C840B315 /* UITestSupport.swift */; };
 		C90843425453C8783D59F19F /* shop_deal_detail.json in Resources */ = {isa = PBXBuildFile; fileRef = FCFF93B9A681FDC4D34BE5A6 /* shop_deal_detail.json */; };
 		C9B011CB2828D3641F9DABAD /* ResponseCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0548E0091F09BD0FA7BA34D4 /* ResponseCache.swift */; };
@@ -307,6 +309,7 @@
 		0C596AB9509DFD3AA99DB5B7 /* PDLeadsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDLeadsAPI.swift; sourceTree = "<group>"; };
 		0CCBA0E3D77A9449151C6994 /* ModuleKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModuleKitTests.swift; sourceTree = "<group>"; };
 		0CF7566A83DDA5A2A795800D /* PACaptureViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PACaptureViews.swift; sourceTree = "<group>"; };
+		0DE3E6AA63591ED52E8D336F /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		0E6D29AAEED281BF3858EEDB /* ResourceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceService.swift; sourceTree = "<group>"; };
 		0F24B350E0571DC46AF2AFC8 /* TaskAgendaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskAgendaTests.swift; sourceTree = "<group>"; };
 		0F5885FDCA35FA6BCBA44090 /* JobActionSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobActionSheets.swift; sourceTree = "<group>"; };
@@ -515,6 +518,7 @@
 		D4D58A7EFA82284F56BC642D /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		D66304B8F73DA99211ECE96D /* SimproDemoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimproDemoTests.swift; sourceTree = "<group>"; };
 		D6926ED4EE5CC11F0FC92342 /* LeadsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeadsModels.swift; sourceTree = "<group>"; };
+		D83B517660B2B90E08280BE7 /* AppThemeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppThemeTests.swift; sourceTree = "<group>"; };
 		D9278ED24A14C59926FB18B2 /* TaskDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskDetailView.swift; sourceTree = "<group>"; };
 		DCCC9184D96F4BD140FED6D0 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		DDC79C4840836C0930774A97 /* BoardViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardViews.swift; sourceTree = "<group>"; };
@@ -752,6 +756,7 @@
 				8D426EB9055EA65FF9F339AB /* Support */,
 				022EDAAF325FA736E728E9C9 /* APIDateTests.swift */,
 				A9E457F7FE442C96BEBEF047 /* APIEndpointTests.swift */,
+				D83B517660B2B90E08280BE7 /* AppThemeTests.swift */,
 				F14E252DC867CA93491BF471 /* EnvelopeDecodingTests.swift */,
 				6D39EB7A15326436A5BD27EC /* FieldServicePR610Tests.swift */,
 				C7C37C72963C3278675718CC /* LeadsTests.swift */,
@@ -846,6 +851,7 @@
 		59C0EF72E0CB1944369F78C3 /* DesignSystem */ = {
 			isa = PBXGroup;
 			children = (
+				0DE3E6AA63591ED52E8D336F /* AppTheme.swift */,
 				C74233BE4FCC3BBFD965D7CE /* BrandFonts.swift */,
 				5F88A8F43540C51E16BACD95 /* BrandMark.swift */,
 				5B7F0676428C6A64D8DD9681 /* Components.swift */,
@@ -1370,6 +1376,7 @@
 				610A8E724CC1F1E7355EEA36 /* AppConfig.swift in Sources */,
 				3E9B19D5FE4949A62617C03E /* AppEnvironment.swift in Sources */,
 				3AA88E8AEDB6351744933EB2 /* AppMenu.swift in Sources */,
+				C75EA919AF128946BEE9A905 /* AppTheme.swift in Sources */,
 				D10E8705FBE4FA50CE5B3C92 /* AssetsViews.swift in Sources */,
 				E197387562DB46DE1D844138 /* AuthAPI.swift in Sources */,
 				8F1D23771658FC9170871206 /* AuthModels.swift in Sources */,
@@ -1530,6 +1537,7 @@
 			files = (
 				5D9B44D5E9BD51A6489D03B8 /* APIDateTests.swift in Sources */,
 				FB4A815A0EB65480F3A2B256 /* APIEndpointTests.swift in Sources */,
+				3ADA0F23DE14E58F9A60B2B7 /* AppThemeTests.swift in Sources */,
 				97E9926AD75DC07DD094ADC3 /* EnvelopeDecodingTests.swift in Sources */,
 				61857FDB64AFF95DA4DDD6F3 /* FieldServicePR610Tests.swift in Sources */,
 				D32A7766A1DF1330A801337B /* LeadsTests.swift in Sources */,
@@ -1617,6 +1625,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APS_ENVIRONMENT = development;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-Ocean AppIcon-Forest AppIcon-Sunset AppIcon-Violet AppIcon-Graphite";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(BRAND_APP_ICON)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "$(BRAND_ACCENT_COLOR)";
 				CODE_SIGN_ENTITLEMENTS = WSLCRM/Resources/WSLCRM.entitlements;
@@ -1741,6 +1750,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APS_ENVIRONMENT = production;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-Ocean AppIcon-Forest AppIcon-Sunset AppIcon-Violet AppIcon-Graphite";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(BRAND_APP_ICON)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "$(BRAND_ACCENT_COLOR)";
 				CODE_SIGN_ENTITLEMENTS = WSLCRM/Resources/WSLCRM.entitlements;
@@ -1991,6 +2001,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APS_ENVIRONMENT = development;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-Ocean AppIcon-Forest AppIcon-Sunset AppIcon-Violet AppIcon-Graphite";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(BRAND_APP_ICON)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "$(BRAND_ACCENT_COLOR)";
 				CODE_SIGN_ENTITLEMENTS = WSLCRM/Resources/WSLCRM.entitlements;
@@ -2204,6 +2215,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APS_ENVIRONMENT = production;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-Ocean AppIcon-Forest AppIcon-Sunset AppIcon-Violet AppIcon-Graphite";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(BRAND_APP_ICON)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "$(BRAND_ACCENT_COLOR)";
 				CODE_SIGN_ENTITLEMENTS = WSLCRM/Resources/WSLCRM.entitlements;
@@ -2239,6 +2251,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APS_ENVIRONMENT = development;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-Ocean AppIcon-Forest AppIcon-Sunset AppIcon-Violet AppIcon-Graphite";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(BRAND_APP_ICON)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "$(BRAND_ACCENT_COLOR)";
 				CODE_SIGN_ENTITLEMENTS = WSLCRM/Resources/WSLCRM.entitlements;
