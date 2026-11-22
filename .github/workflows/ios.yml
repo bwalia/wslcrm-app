@@ -35,7 +35,8 @@ permissions:
 jobs:
   build-and-test:
     runs-on: macos-latest
-    timeout-minutes: 45
+    # Tests ~12 min + the optimised Release build ~20 min since the native-only app grew; headroom for slow runners.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
 
@@ -85,6 +86,7 @@ jobs:
             -project WSLCRM.xcodeproj \
             -scheme WSLCRM-Int \
             -configuration Release-Int \
-            -destination 'generic/platform=iOS Simulator' \
+            -destination "id=${{ steps.sim.outputs.id }}" \
+            ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO \
             -quiet
