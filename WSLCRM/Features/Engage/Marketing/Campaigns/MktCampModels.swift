@@ -441,6 +441,21 @@ enum MktCamp {
         Choice("other", "Other"),
     ]
 
+    /// Only workspace admins send service and other messages (campaigns.lua: anything but marketing needs
+    /// `opsapi_marketing_campaigns.manage`), so everyone else is offered marketing, plus the campaign's own kind.
+    static func messageTypes(canManage: Bool, current: String) -> [Choice] {
+        canManage ? messageTypes : messageTypes.filter { $0.value == "marketing" || $0.value == current }
+    }
+
+    static func canManage(_ permissions: PermissionSet) -> Bool {
+        permissions.can(.manage, moduleName: Marketing.RBAC.campaigns)
+    }
+
+    /// Says up front why only marketing is offered.
+    static let marketingOnlyNote = "Only workspace admins can send service messages (an order update, a booking "
+        + "reminder), so this is a marketing message: it goes only to people who said yes, outside quiet hours, "
+        + "a few times a week at most."
+
     static func messageTypeLabel(_ raw: String) -> String {
         switch raw {
         case "marketing": "marketing"
@@ -450,6 +465,15 @@ enum MktCamp {
     }
 
     static let channels: [Choice] = [Choice("email", "Email"), Choice("sms", "Text message (SMS)")]
+
+    /// A channel in a sentence: "email", "text messages".
+    static func channelWords(_ raw: String) -> String {
+        switch raw {
+        case "email": "email"
+        case "sms": "text messages"
+        default: Formatters.humanize(raw).lowercased()
+        }
+    }
 
     /// The sample email a new draft starts with (the web's STARTER).
     static let starterHTML = [
@@ -779,8 +803,8 @@ struct MktCampStep: Hashable, Sendable, Identifiable {
     static let all: [MktCampStep] = [
         MktCampStep(title: "Connect your email account", short: "Connect email",
                     why: "So your emails come from your own address, like hello@yourbusiness.co.uk. "
-                        + "Workspace → Email is where the account is added; Marketing settings shows which one sends.",
-                    action: "See how email is sent", screen: Marketing.Screen.settings, optional: false,
+                        + "The workspace's email screen is where the account is added; Marketing settings shows which one sends.",
+                    action: "Connect your email", screen: WorkspaceScreen.email, optional: false,
                     ai: "Walk me through connecting my email account so my emails come from my own address.",
                     done: { $0.via == "workspace" }),
         MktCampStep(title: "Add your business name and address", short: "Your address",

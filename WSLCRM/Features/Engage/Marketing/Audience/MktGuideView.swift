@@ -150,7 +150,8 @@ struct MktGuideStep: Identifiable, Hashable, Sendable {
     static let all: [MktGuideStep] = [
         MktGuideStep(title: "Connect your email account",
                      why: "So your emails come from your own address, like hello@yourbusiness.co.uk.",
-                     action: "Show me how", screen: nil, guide: "connect-email", done: { $0.via == "workspace" }),
+                     action: "Connect your email", screen: WorkspaceScreen.email, guide: "connect-email",
+                     done: { $0.via == "workspace" }),
         MktGuideStep(title: "Add your business name and address",
                      why: "The law says every promotional email must show who sent it.",
                      action: "Add address", screen: Marketing.Screen.settings, guide: "business-address",
@@ -218,6 +219,7 @@ private struct MktGuideChecklist: View {
 }
 
 private struct MktGuideStepRow: View {
+    @Environment(SessionStore.self) private var session
     let index: Int
     let step: MktGuideStep
     let done: Bool
@@ -246,7 +248,7 @@ private struct MktGuideStepRow: View {
                 Button("Show me how") { showTopic(step.guide) }
                     .buttonStyle(.bordered)
                 if !done, opensScreens, let screen = step.screen {
-                    NavigationLink(value: NativeScreenRoute(screen)) {
+                    NavigationLink(value: NativeScreenRoute(Marketing.reachable(screen, session.permissions))) {
                         Text(step.action)
                     }
                     .buttonStyle(.borderedProminent)
@@ -271,6 +273,7 @@ private struct MktGuideStepRow: View {
 /// "Next: …" — the one card other marketing screens can show at the top (the web's journey bar).
 struct MktGuideNextStepCard: View {
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @State private var progress: MktGuideProgress?
 
     var body: some View {
@@ -285,7 +288,9 @@ struct MktGuideNextStepCard: View {
                     Text(next.why).font(.wsSubheadline).foregroundStyle(.secondaryText)
                     HStack {
                         if let screen = next.screen {
-                            NavigationLink(value: NativeScreenRoute(screen)) { Text(next.action) }
+                            NavigationLink(value: NativeScreenRoute(Marketing.reachable(screen, session.permissions))) {
+                                Text(next.action)
+                            }
                                 .buttonStyle(.borderedProminent)
                         }
                         NavigationLink {
@@ -329,6 +334,7 @@ struct MktGuideTopic: Identifiable, Hashable, Sendable {
 }
 
 private struct MktGuideBlocks: View {
+    @Environment(SessionStore.self) private var session
     var opensScreens = true
     let blocks: [MktGuideBlock]
     let showTopic: (String) -> Void
@@ -371,7 +377,8 @@ private struct MktGuideBlocks: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
         case .open(let title, let screen):
-            if opensScreens {
+            // The email screen needs namespace.read: the settings link next to it covers everyone else.
+            if opensScreens, Marketing.reachable(screen, session.permissions) == screen {
                 NavigationLink(value: NativeScreenRoute(screen)) {
                     Label(title, systemImage: "arrow.right.circle")
                 }
@@ -464,6 +471,7 @@ enum MktGuideContent {
             .providers,
             .tip("Gmail sends about 500 emails a day, Google Workspace about 2,000. Tell the system your limit under "
                  + "**Emails per day** in Marketing → Settings, and the rest wait for the next day."),
+            .open("Open the email screen", screen: WorkspaceScreen.email),
             .open("Check how your emails are sent", screen: Marketing.Screen.settings),
         ]),
         MktGuideTopic(id: "business-address", title: "Add your business name and address", blocks: [

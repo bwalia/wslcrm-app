@@ -54,6 +54,7 @@ struct CRMDealsListView: View {
     @Environment(SessionStore.self) private var session
     @State private var status: DealStatus?
     @State private var pipelineId: Int?
+    @State private var stage: String?
     @State private var pipelines: [CRMPipeline] = []
     @State private var box = DealFilterBox()
     @State private var creating = false
@@ -62,17 +63,29 @@ struct CRMDealsListView: View {
     final class DealFilterBox {
         var status: DealStatus?
         var pipelineId: Int?
+        var stage: String?
     }
+
+    /// The chosen pipeline's stages, else every pipeline's (the web's defaults when there are none).
+    static func stageChoices(_ pipelines: [CRMPipeline], pipelineId: Int?) -> [String] {
+        let chosen = pipelines.filter { pipelineId == nil || $0.id == pipelineId }
+        var seen = Set<String>()
+        let names = chosen.flatMap { $0.orderedStages.map(\.name) }.filter { seen.insert($0).inserted }
+        return names.isEmpty ? CRMDefaultStages.all : names
+    }
+
+    private var filtered: Bool { status != nil || pipelineId != nil || stage != nil }
 
     var body: some View {
         ModelHost(make: { [crm = services.crm, box] in
-            PagedListModel<CRMDeal> { _, page in
-                try await crm.deals(status: box.status, pipelineId: box.pipelineId, page: page, perPage: 25)
+            PagedListModel<CRMDeal> { search, page in
+                try await crm.deals(search: search, status: box.status, stage: box.stage, pipelineId: box.pipelineId,
+                                    page: page, perPage: 25)
             }
         }) { model in
-            PagedList(model: model, searchPrompt: nil, emptyTitle: "No deals", emptySystemImage: "briefcase",
-                      emptyDescription: status == nil ? "Deals you are working on show here. Tap + to add one."
-                                                      : "No deals match this filter.") { deal in
+            PagedList(model: model, searchPrompt: "Deal or company name", emptyTitle: "No deals", emptySystemImage: "briefcase",
+                      emptyDescription: filtered ? "No deals match this filter."
+                                                 : "Deals you are working on show here. Tap + to add one.") { deal in
                 NavigationLink { CRMDealDetailView(dealUuid: deal.uuid) } label: { DealRow(deal: deal) }
                     .accessibilityIdentifier("crm.deal.\(deal.uuid)")
             }
@@ -82,6 +95,11 @@ struct CRMDealsListView: View {
             }
             .onChange(of: pipelineId) { _, value in
                 box.pipelineId = value
+                if let stage, !Self.stageChoices(pipelines, pipelineId: value).contains(stage) { self.stage = nil }
+                Task { await model.load() }
+            }
+            .onChange(of: stage) { _, value in
+                box.stage = value
                 Task { await model.load() }
             }
             .sheet(isPresented: $creating) {
@@ -109,9 +127,15 @@ struct CRMDealsListView: View {
                             ForEach(pipelines) { Text($0.name).tag(Optional($0.id)) }
                         }
                     }
+                    Picker("Stage", selection: $stage) {
+                        Text("Any stage").tag(String?.none)
+                        ForEach(Self.stageChoices(pipelines, pipelineId: pipelineId), id: \.self) {
+                            Text(Formatters.humanize($0)).tag(Optional($0))
+                        }
+                    }
                 } label: {
-                    Label("Filter", systemImage: status == nil && pipelineId == nil ? "line.3.horizontal.decrease.circle"
-                                                                                    : "line.3.horizontal.decrease.circle.fill")
+                    Label("Filter", systemImage: filtered ? "line.3.horizontal.decrease.circle.fill"
+                                                          : "line.3.horizontal.decrease.circle")
                 }
                 .accessibilityIdentifier("crm.deals.filter")
             }
@@ -704,10 +728,12 @@ struct CRMDealForm: View {
     @State private var pipelines: [CRMPipeline] = []
     @State private var saving = false
     @State private var error: APIError?
+    private let accountName: String?
 
-    init(deal: CRMDeal?, pipeline: CRMPipeline?, presetAccountId: Int? = nil,
+    init(deal: CRMDeal?, pipeline: CRMPipeline?, presetAccountId: Int? = nil, presetAccountName: String? = nil,
          save: @escaping (DealBody) async throws -> CRMDeal) {
         self.deal = deal
+        self.accountName = deal?.accountName ?? presetAccountName
         self.pipeline = pipeline
         self.save = save
         _name = State(initialValue: deal?.name ?? "")
@@ -762,8 +788,8 @@ struct CRMDealForm: View {
                     }
                 }
                 Section("Who") {
-                    CRMAccountPicker(accountId: $accountId)
-                    CRMContactPicker(contactId: $contactId, accountId: accountId)
+                    CRMAccountPicker(accountId: $accountId, name: accountName)
+                    CRMContactPicker(contactId: $contactId, accountId: accountId, name: deal?.contactName)
                 }
                 if let error { Section { InlineErrorRow(error: error) } }
             }

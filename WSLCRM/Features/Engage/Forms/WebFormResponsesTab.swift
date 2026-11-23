@@ -1,7 +1,7 @@
 import QuickLook
 import SwiftUI
 
-/// The Responses tab: newest first, search, status and date filters, refresh, CSV export, and each
+/// The Responses tab: newest first, search, status and date filters, refresh, CSV and PDF export, and each
 /// response with the records it created or matched, its files, Not spam / Spam / Retry / Delete.
 struct WebFormResponsesTab: View {
     let form: WebFormDetail
@@ -16,6 +16,8 @@ struct WebFormResponsesTab: View {
     @State private var showingDates = false
     @State private var exporting = false
     @State private var exported: URL?
+    @State private var pdf: URL?
+    @State private var makingPDF = false
     @State private var notice: EngageNotice?
     @State private var hasAppeared = false
 
@@ -89,6 +91,20 @@ struct WebFormResponsesTab: View {
                 .accessibilityIdentifier("forms.responses.export")
             }
         }
+        HStack {
+            Spacer()
+            if let pdf {
+                ShareLink(item: pdf) { Label("Share the PDF", systemImage: "square.and.arrow.up") }
+                    .buttonStyle(.borderless)
+            } else {
+                Button { Task { await makePDF() } } label: {
+                    HStack { if makingPDF { ProgressView() }; Label("Save as PDF", systemImage: "doc.richtext") }
+                }
+                .buttonStyle(.borderless)
+                .disabled(makingPDF || items.isEmpty)
+                .accessibilityIdentifier("forms.responses.pdf")
+            }
+        }
     }
 
     private var dateText: String {
@@ -127,6 +143,7 @@ struct WebFormResponsesTab: View {
     private func load() async {
         if items.isEmpty { state = .loading }
         exported = nil
+        pdf = nil
         do {
             let page = try await services.webForms.responses(form.uuid, filter: filter, cursor: nil)
             items = page.items
@@ -149,6 +166,26 @@ struct WebFormResponsesTab: View {
             let known = Set(items.map(\.id))
             items += page.items.filter { !known.contains($0.id) }
             next = page.next
+        } catch {
+            notice = .failed(error.asAPIError)
+        }
+    }
+
+    /// Every response the filter shows, in one PDF.
+    private func makePDF() async {
+        makingPDF = true
+        defer { makingPDF = false }
+        do {
+            let all = try await WebFormResponsesPDF.all(services.webForms, form: form.uuid, filter: filter)
+            let count = "\(all.items.count) response\(all.items.count == 1 ? "" : "s")"
+            guard let url = WebFormResponsesPDF.file(
+                title: form.title, subtitle: "\(count) · received \(dateText.lowercased()) · made \(Formatters.dateTime(Date()) ?? "")",
+                entries: WebFormResponsesPDF.entries(fields: all.columns, submissions: all.items),
+                name: WebFormResponsesPDF.filename(form.title, suffix: "responses")) else {
+                throw ResourceService.problem(500, "The PDF couldn't be made. Try again.")
+            }
+            pdf = url
+            notice = .done("The PDF is ready (\(count)): tap “Share the PDF” to keep or send it.")
         } catch {
             notice = .failed(error.asAPIError)
         }
@@ -265,6 +302,7 @@ struct WebFormResponseDetailView: View {
     @State private var confirmingDelete = false
     @State private var openedFile: URL?
     @State private var openingFile: String?
+    @State private var pdf: URL?
 
     private var canUpdate: Bool { session.permissions.can(.update, moduleName: WebFormsAPI.module) }
     private var canDelete: Bool { session.permissions.can(.delete, moduleName: WebFormsAPI.module) }
@@ -327,6 +365,14 @@ struct WebFormResponseDetailView: View {
             }
             if let ms = s.durationMS { DetailRow(label: "Time to fill in", value: "\(Int((ms / 1000).rounded())) s") }
             if let version = s.version { DetailRow(label: "Form version", value: "\(version)") }
+        }
+        Section {
+            if let pdf {
+                ShareLink(item: pdf) { Label("Share the PDF", systemImage: "square.and.arrow.up") }
+            } else {
+                Button { makePDF(s) } label: { Label("Save as PDF", systemImage: "doc.richtext") }
+                    .accessibilityIdentifier("forms.response.pdf")
+            }
         }
         actions(s)
     }
@@ -411,6 +457,14 @@ struct WebFormResponseDetailView: View {
         }
         .disabled(busy != nil)
         .accessibilityIdentifier("forms.response.\(id)")
+    }
+
+    private func makePDF(_ s: WebFormSubmission) {
+        pdf = WebFormResponsesPDF.file(title: form.title, subtitle: "One response",
+                                       entries: WebFormResponsesPDF.entries(fields: [], submissions: [s]),
+                                       name: WebFormResponsesPDF.filename(form.title, suffix: "response"))
+        notice = pdf == nil ? .failed(ResourceService.problem(500, "The PDF couldn't be made. Try again."))
+                            : .done("The PDF is ready: tap “Share the PDF” to keep or send it.")
     }
 
     private func load() async {

@@ -241,7 +241,8 @@ struct MktCampContentSections: View {
                     .lineLimit(1...4)
                     .accessibilityIdentifier("mkt.details.objective")
                 Picker("Kind of message", selection: $model.messageType) {
-                    ForEach(MktCamp.messageTypes) { Text($0.label).tag($0.value) }
+                    ForEach(MktCamp.messageTypes(canManage: MktCamp.canManage(session.permissions),
+                                                 current: model.messageType)) { Text($0.label).tag($0.value) }
                 }
                 .accessibilityIdentifier("mkt.details.type")
                 Picker("Send by", selection: $model.channel) {
@@ -256,8 +257,11 @@ struct MktCampContentSections: View {
             } header: {
                 Text("Details")
             } footer: {
-                Text("Service messages (an order update, a reminder) skip permission and quiet hours, so only workspace "
-                     + "admins can send them. Changing how it’s sent, its kind or approval sends it back to draft.")
+                Text((MktCamp.canManage(session.permissions)
+                      ? "Service messages (an order update, a reminder) skip permission and quiet hours, so only workspace "
+                        + "admins can send them."
+                      : MktCamp.marketingOnlyNote)
+                     + " Changing how it’s sent, its kind or approval sends it back to draft.")
             }
         }
     }

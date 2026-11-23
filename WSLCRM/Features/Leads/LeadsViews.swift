@@ -53,8 +53,16 @@ struct LeadsHomeView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    NavigationLink { PartnersHubView() } label: {
-                        Label("Partners and referrals", systemImage: "person.2.badge.gearshape")
+                    if session.permissions.can(.read, .crmAccounts) {
+                        NavigationLink { PartnersHubView() } label: {
+                            Label("Partners and referrals", systemImage: "person.2.badge.gearshape")
+                        }
+                    } else {
+                        // Partners are kept with the accounts (crm_accounts read on the server).
+                        Button {} label: {
+                            Label("Partners: ask an admin to let you see accounts", systemImage: "lock")
+                        }
+                        .disabled(true)
                     }
                     if bundle?.canEdit == true || session.permissions.can(.manage, .crmLeads) {
                         NavigationLink { LeadSettingsView() } label: { Label("Lead settings", systemImage: "gearshape") }
@@ -109,7 +117,8 @@ private struct LeadStatsStrip: View {
 
 // MARK: - Pipeline
 
-/// Today's steps, then each open stage with its leads. Long-press a lead to move it to another stage.
+/// Today's steps, then each open stage with its leads. Swipe a lead to move it on (or park it), or press and
+/// hold it for every stage. Refreshes itself every 30 seconds while on screen, so new leads show up.
 private struct LeadsPipelinePane: View {
     let bundle: LeadSettingsBundle?
     let stats: LeadStats?
@@ -133,6 +142,7 @@ private struct LeadsPipelinePane: View {
     }
 
     private static let todayLimit = 5
+    static let refreshEvery: Duration = .seconds(30)
     private var currency: String { board.value?.currency ?? LeadsAPI.defaultCurrency }
     private var isManager: Bool { steps?.isManager ?? session.permissions.can(.manage, .crmLeads) }
     private var canMove: Bool { session.permissions.can(.update, .crmLeads) }
@@ -165,6 +175,14 @@ private struct LeadsPipelinePane: View {
         .searchable(text: $search, prompt: "Name, company, email or phone")
         .task(id: search) { await runSearch() }
         .task(id: "\(owner.rawValue)-\(reload)") { await load() }
+        // New leads arrive all day (website, forms, shop): keep the pipeline current while it's on screen.
+        .task(id: owner) {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.refreshEvery)
+                guard !Task.isCancelled else { return }
+                if search.trimmingCharacters(in: .whitespaces).isEmpty, parking == nil { await load() }
+            }
+        }
         .refreshable { await load() }
         .sheet(item: $parking) { target in
             LeadParkSheet(name: target.card.name, stage: target.stage,
@@ -245,12 +263,14 @@ private struct LeadsPipelinePane: View {
                                                              : "New leads appear here."))
                 }
             }
+            let firstShown = open.first { !$0.leads.isEmpty }?.id
             ForEach(open) { column in
                 if !column.leads.isEmpty {
                     Section {
                         ForEach(column.leads) { card in
                             NavigationLink(value: LeadRoute(uuid: card.uuid)) { LeadRow(card: card, currency: currency, showsStage: false) }
                                 .contextMenu { moveMenu(card) }
+                                .swipeActions(edge: .trailing) { swipeMenu(card) }
                         }
                         if column.count > column.leads.count, let stage = column.stage {
                             NavigationLink {
@@ -261,6 +281,10 @@ private struct LeadsPipelinePane: View {
                         }
                     } header: {
                         columnHeader(column, currency: board.currency)
+                    } footer: {
+                        if canMove, column.id == firstShown {
+                            Text("Swipe or press and hold a lead to move it.")
+                        }
                     }
                 }
             }
@@ -271,6 +295,7 @@ private struct LeadsPipelinePane: View {
                             ForEach(column.leads) { card in
                                 NavigationLink(value: LeadRoute(uuid: card.uuid)) { LeadRow(card: card, currency: currency) }
                                     .contextMenu { moveMenu(card) }
+                                    .swipeActions(edge: .trailing) { swipeMenu(card) }
                             }
                         }
                     } label: {
@@ -296,6 +321,28 @@ private struct LeadsPipelinePane: View {
                 Button("Lost", systemImage: LeadStage.lost.systemImage, role: .destructive) {
                     parking = ParkTarget(card: card, stage: .lost)
                 }
+            }
+        }
+    }
+
+    /// The visible version of the long-press menu: the next stage (or Reopen), Nurture and Lost.
+    @ViewBuilder
+    private func swipeMenu(_ card: LeadCard) -> some View {
+        if canMove, card.stage != .converted {
+            if let next = card.stage.nextOpen {
+                Button("Move to \(label(next))", systemImage: next.systemImage) { Task { await move(card, to: next) } }
+                    .tint(Tone.brand.color)
+            } else if card.stage == .nurture || card.stage == .lost {
+                Button("Reopen", systemImage: "arrow.uturn.backward") { Task { await move(card, to: .contacting) } }
+                    .tint(Tone.brand.color)
+            }
+            if card.stage != .nurture {
+                Button("Nurture…", systemImage: LeadStage.nurture.systemImage) { parking = ParkTarget(card: card, stage: .nurture) }
+                    .tint(.gray)
+            }
+            if card.stage != .lost {
+                Button("Lost…", systemImage: LeadStage.lost.systemImage) { parking = ParkTarget(card: card, stage: .lost) }
+                    .tint(Tone.danger.color)
             }
         }
     }
@@ -494,6 +541,8 @@ struct LeadRow: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
                 Text(card.name).font(.wsHeadline)
+                // A VIP Trade member of the shop (one lookup for the rows on screen; needs shop.read).
+                ShopVipMark(email: card.email)
                 Spacer()
                 if let score = card.aiScore {
                     Text("\(score)")

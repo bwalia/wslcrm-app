@@ -34,8 +34,11 @@ struct MktCampTestModeBanner: View {
 struct MktCampJourneySection: View {
     let progress: MktCampProgress?
     @Binding var askAI: MktCampAskAIRequest?
+    @Environment(SessionStore.self) private var session
     /// The full checklist (overview) or just the next step (other pages).
     var full = false
+    /// The web page this is on (`/dashboard/opsapi-marketing/…`): "Ask AI" works on that page.
+    var path = MktCampPages.overview
 
     var body: some View {
         if let progress {
@@ -52,12 +55,12 @@ struct MktCampJourneySection: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.vertical, 4)
-                    NavigationLink(value: NativeScreenRoute(next.screen)) {
+                    NavigationLink(value: NativeScreenRoute(Marketing.reachable(next.screen, session.permissions))) {
                         Label(next.action, systemImage: "arrow.right.circle.fill").font(.wsHeadline)
                     }
                     .accessibilityIdentifier("mkt.journey.next")
                     Button {
-                        askAI = MktCampAskAIRequest(prompt: next.ai, path: "/dashboard/opsapi-marketing/overview")
+                        askAI = MktCampAskAIRequest(prompt: next.ai, path: path)
                     } label: {
                         Label("Ask AI to do it", systemImage: "sparkles")
                     }
@@ -83,9 +86,10 @@ private struct MktCampStepRow: View {
     let step: MktCampStep
     let done: Bool
     let isNext: Bool
+    @Environment(SessionStore.self) private var session
 
     var body: some View {
-        NavigationLink(value: NativeScreenRoute(step.screen)) {
+        NavigationLink(value: NativeScreenRoute(Marketing.reachable(step.screen, session.permissions))) {
             HStack(alignment: .top, spacing: 12) {
                 ZStack {
                     Circle().fill(done ? Tone.success.solidColor : (isNext ? Tone.brand.solidColor : Color.secondary.opacity(0.2)))
@@ -107,6 +111,59 @@ private struct MktCampStepRow: View {
         }
         .accessibilityLabel("\(step.title), \(done ? "done" : (isNext ? "do this next" : "not done yet"))")
         .accessibilityIdentifier("mkt.journey.step.\(index)")
+    }
+}
+
+/// The dashboard's marketing pages, so "Ask AI" works on the page the person is on.
+enum MktCampPages {
+    static let overview = "/dashboard/opsapi-marketing/overview"
+    static let campaigns = "/dashboard/opsapi-marketing/campaigns"
+    static let lists = "/dashboard/opsapi-marketing/lists"
+    static let studio = "/dashboard/opsapi-marketing/studio"
+    static let unsubscribed = "/dashboard/opsapi-marketing/unsubscribed"
+    static let settings = "/dashboard/opsapi-marketing/settings"
+}
+
+/// The step bar for screens that aren't a plain List (lists, studio, unsubscribed, settings): the next step,
+/// one tap to it, and "Ask AI" on this page. Put it in `.safeAreaInset(edge: .top)`; it loads itself and
+/// hides once every step is done.
+struct MktCampJourneyBar: View {
+    let path: String
+    @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
+    @State private var progress: MktCampProgress?
+    @State private var askAI: MktCampAskAIRequest?
+
+    var body: some View {
+        Group {
+            if let progress, let next = MktCampStep.next(for: progress) {
+                HStack(spacing: 10) {
+                    NavigationLink(value: NativeScreenRoute(Marketing.reachable(next.screen, session.permissions))) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Step \(MktCampStep.doneCount(progress) + 1) of \(MktCampStep.requiredCount)")
+                                .font(.wsCaption).foregroundStyle(.secondaryText)
+                            Label("Next: \(next.title)", systemImage: "arrow.right.circle.fill")
+                                .font(.wsSubheadline.weight(.semibold))
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .accessibilityIdentifier("mkt.journeyBar.next")
+                    Button { askAI = MktCampAskAIRequest(prompt: next.ai, path: path) } label: {
+                        Label("Ask AI to do it", systemImage: "sparkles").labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityIdentifier("mkt.journeyBar.ai")
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 4)
+                .background(.bar)
+            }
+        }
+        .task { progress = await services.marketingCampaigns.progress() }
+        .sheet(item: $askAI) { request in
+            NavigationStack {
+                MktCampAskAISheet(request: request) { Task { progress = await services.marketingCampaigns.progress() } }
+            }
+        }
     }
 }
 

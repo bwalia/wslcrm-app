@@ -10,6 +10,12 @@ enum LeadStage: String, Sendable, CaseIterable, Hashable {
 
     static let open: [LeadStage] = [.new, .contacting, .qualified, .meeting]
 
+    /// The next open stage (a swipe on the pipeline). None after Meeting: converting is its own step.
+    var nextOpen: LeadStage? {
+        guard let index = Self.open.firstIndex(of: self), index + 1 < Self.open.count else { return nil }
+        return Self.open[index + 1]
+    }
+
     var label: String {
         switch self {
         case .new: "New"

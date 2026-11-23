@@ -10,10 +10,14 @@ struct LeadDetailView: View {
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @State private var state: LoadState<Lead> = .idle
+    @State private var callFollowUp = LeadCallFollowUp()
     @State private var timeline: [LeadTimelineItem] = []
     @State private var bundle: LeadSettingsBundle?
     @State private var formResponses: [WebFormRecordResponse] = []
+    /// The Property Deals side of the lead (`GET /api/v2/property-deals/leads/:uuid`), for property businesses.
+    @State private var propertyLead: Record?
     @State private var sheet: Sheet?
     @State private var busy = false
     @State private var actionError: APIError?
@@ -22,13 +26,15 @@ struct LeadDetailView: View {
     @State private var loadingReport = false
     @State private var cancellingMeeting: LeadMeeting?
     @State private var cancelReason = ""
+    @State private var showsWholeTimeline = false
 
     enum Sheet: Identifiable {
         case edit, call, step, meeting(LeadMeeting?), outcome(LeadMeeting), park(LeadStage), convert, assign
-        case email(subject: String?, body: String?), qualify, refer(partner: String?)
+        case email(subject: String?, body: String?), qualify, refer(partner: String?), property(Record)
 
         var id: String {
             switch self {
+            case .property: "property"
             case .edit: "edit"
             case .call: "call"
             case .step: "step"
@@ -62,11 +68,16 @@ struct LeadDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .task { bundle = try? await services.leads.settings() }
+        .task(id: showsProperty) { await loadProperty() }
         .task(id: leadUuid) {
             formResponses = await WebFormRecordResponsesSection.load(services: services, session: session,
                                                                      entityType: "lead", entityUUID: leadUuid)
         }
         .refreshable { await load() }
+        // Back from a call made from this page: ask how it went.
+        .onChange(of: scenePhase) { _, phase in
+            if callFollowUp.phaseChanged(to: phase), let lead = state.value, canLogCall(lead) { sheet = .call }
+        }
         .toolbar {
             if let lead = state.value, canWork(lead), session.permissions.can(.update, .crmLeads), lead.stage != .converted {
                 ToolbarItem(placement: .topBarTrailing) { Button("Edit") { sheet = .edit } }
@@ -123,6 +134,13 @@ struct LeadDetailView: View {
             LeadShopSections(metadata: lead.metadata)
             // The lead's answers to the workspace's forms (as on the web's lead page).
             WebFormRecordResponsesSection(items: formResponses)
+            if showsProperty, let propertyLead {
+                PDLeadPropertySection(lead: propertyLead,
+                                      canEdit: session.propertyDeals?.can(.update, .leads) ?? false,
+                                      canStartWorkflow: session.propertyDeals?.can(.create, .deals) ?? false,
+                                      edit: { sheet = .property(propertyLead) },
+                                      startWorkflow: { Task { await startPropertyWorkflow(propertyLead) } })
+            }
             if !timeline.isEmpty { history }
             if canWork(lead), session.permissions.can(.delete, .crmLeads), lead.stage != .converted {
                 Section {
@@ -153,7 +171,10 @@ struct LeadDetailView: View {
     private func header(_ lead: Lead) -> some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
-                Text(lead.displayName).font(.wsTitle2.bold())
+                HStack(alignment: .firstTextBaseline) {
+                    Text(lead.displayName).font(.wsTitle2.bold())
+                    ShopVipMark(email: lead.email)
+                }
                 Text(headline(lead)).font(.wsSubheadline).foregroundStyle(.secondaryText)
                 LeadStageTrack(stage: lead.stage, label: stageLabel)
                 HStack {
@@ -169,7 +190,10 @@ struct LeadDetailView: View {
                     .font(.wsSubheadline).foregroundStyle(.secondaryText)
             }
             .padding(.vertical, 4)
-            if let phone = lead.phone { PhoneLinkRow(name: "Call \(lead.firstName.nonEmpty ?? "them")", phone: phone) }
+            if let phone = lead.phone {
+                Button { dial(lead) } label: { LeadCallLabel(name: "Call \(lead.firstName.nonEmpty ?? "them")", phone: phone) }
+                    .accessibilityIdentifier("lead.call")
+            }
             if let email = lead.email { EmailLinkRow(email: email) }
         }
     }
@@ -589,7 +613,7 @@ struct LeadDetailView: View {
 
     private var history: some View {
         Section("Timeline") {
-            ForEach(timeline.prefix(50)) { item in
+            ForEach(showsWholeTimeline ? Array(timeline) : Array(timeline.prefix(Self.timelinePreview))) { item in
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
                         Text(item.title).font(.wsSubheadline.weight(.semibold))
@@ -602,8 +626,15 @@ struct LeadDetailView: View {
                     if let detail = item.detail { Text(detail).font(.wsSubheadline) }
                 }
             }
+            if !showsWholeTimeline, timeline.count > Self.timelinePreview {
+                Button("Show all \(timeline.count)") { showsWholeTimeline = true }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("lead.timeline.showAll")
+            }
         }
     }
+
+    private static let timelinePreview = 50
 
     // MARK: Sheets
 
@@ -679,6 +710,11 @@ struct LeadDetailView: View {
                 notice = body.move ? "Qualified." : "Saved."
                 await reload(updated)
             }
+        case .property(let record):
+            PDLeadDetailsSheet(lead: record) {
+                notice = "Deal details saved."
+                Task { await loadProperty() }
+            }
         case .refer(let partner):
             ReferSheet(subject: referSubject(lead), dealValue: lead.estimatedValue,
                        currency: lead.currency, suggestions: (lead.analysis?.result?.partnerSuggestions ?? []).map {
@@ -709,12 +745,51 @@ struct LeadDetailView: View {
 
     private func canWork(_ lead: Lead) -> Bool { lead.permissions?.canWork ?? session.permissions.can(.update, .crmLeads) }
 
+    /// The property deal fields, as on the web: only for a property business with Property Deals on and readable.
+    private var showsProperty: Bool {
+        session.propertyDeals?.can(.read, .leads) == true && LeadSettings.isPropertyBusiness(bundle?.settings.businessType)
+    }
+
+    private func loadProperty() async {
+        guard showsProperty else { propertyLead = nil; return }
+        propertyLead = (try? await services.pdRaw.record("/leads/\(leadUuid)")) ?? propertyLead
+    }
+
+    /// As on the Property Deals lead screen: a seller's lead buys, a buyer's sells.
+    private func startPropertyWorkflow(_ record: Record) async {
+        let dealType = record.string("details.lead_kind") == "buyer_investor" ? "sell" : "buy"
+        busy = true
+        defer { busy = false }
+        do {
+            try await services.pdRaw.send(.post, "/deals", ["lead_uuid": .string(leadUuid), "deal_type": .string(dealType)],
+                                          idempotent: true)
+            notice = "Property workflow started. It's under Property Deals › Deals."
+            actionError = nil
+            await loadProperty()
+        } catch {
+            actionError = error.asAPIError
+        }
+    }
+
+    private func canLogCall(_ lead: Lead) -> Bool { canWork(lead) && lead.stage != .converted }
+
+    /// Rings the lead in the Phone app; when the person comes back, "How did the call go?" opens.
+    private func dial(_ lead: Lead) {
+        guard let phone = lead.phone, let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") else { return }
+        openURL(url) { accepted in
+            if !accepted {
+                notice = "This device can't make calls. Their number is \(phone)."
+            } else if canLogCall(lead) {
+                callFollowUp.dial()
+            }
+        }
+    }
+
     /// The AI's suggested next step, done in one tap.
     private func doAI(_ action: String, partner: String?, lead: Lead) {
         switch action {
         case "call_now", "call":
-            if let phone = lead.phone, let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") { openURL(url) }
-            sheet = .call
+            if lead.phone != nil { dial(lead) } else { sheet = .call }
         case "email":
             let reply = lead.analysis?.result?.firstReply
             if lead.email != nil { sheet = .email(subject: reply?.subject, body: reply?.body) } else {
@@ -827,6 +902,58 @@ struct LeadStageTrack: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Stage: \(label(stage))")
+    }
+}
+
+/// The "Call them" row at the top of a lead (looks like the app's phone rows, but is a button so the app
+/// knows a call was made).
+private struct LeadCallLabel: View {
+    let name: String
+    let phone: String
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "phone.fill")
+                .font(.wsTitle3)
+                .frame(width: 44, height: 44)
+                .background(Tone.success.color.opacity(0.15), in: Circle())
+                .foregroundStyle(Tone.success.color)
+            VStack(alignment: .leading) {
+                Text(name).font(.wsHeadline).foregroundStyle(.primary)
+                Text(phone).font(.wsSubheadline).foregroundStyle(.secondaryText)
+            }
+            Spacer()
+        }
+        .frame(minHeight: 56)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(name) \(phone)")
+    }
+}
+
+/// A call made from the app happens in the Phone app. iOS first asks "Call …?" (the app only goes inactive),
+/// so only a trip to the background counts as the call; coming back from it opens "How did the call go?".
+struct LeadCallFollowUp: Equatable {
+    private(set) var dialled = false
+    private(set) var away = false
+
+    mutating func dial() { dialled = true; away = false }
+
+    /// True when the call sheet should open now.
+    // ponytail: a cancelled "Call …?" prompt leaves it armed until the next trip away from the app; add a
+    // time limit if that ever asks about a call nobody made.
+    mutating func phaseChanged(to phase: ScenePhase) -> Bool {
+        guard dialled else { return false }
+        switch phase {
+        case .background:
+            away = true
+            return false
+        case .active where away:
+            self = LeadCallFollowUp()
+            return true
+        default:
+            return false
+        }
     }
 }
 

@@ -48,7 +48,8 @@ struct MktCampAudienceSections: View {
                     .font(.wsFootnote).foregroundStyle(Tone.warning.textColor)
             }
             if let list = model.selectedList, let channel = list.channel, channel != campaignChannel {
-                Label("This list is for \(channel); the campaign sends by \(campaignChannel).",
+                Label("This list is for \(MktCamp.channelWords(channel)), but this campaign sends "
+                      + "\(MktCamp.channelWords(campaignChannel)). Pick a list for \(MktCamp.channelWords(campaignChannel)).",
                       systemImage: "exclamationmark.triangle")
                     .font(.wsFootnote).foregroundStyle(Tone.warning.textColor)
             }

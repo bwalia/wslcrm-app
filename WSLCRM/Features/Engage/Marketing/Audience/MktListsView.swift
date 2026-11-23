@@ -59,6 +59,7 @@ struct MktListsView: View {
         .overlay { overlay }
         .navigationTitle("Mailing lists")
         .searchable(text: $search, prompt: "Find a list")
+        .safeAreaInset(edge: .top, spacing: 0) { MktCampJourneyBar(path: MktCampPages.lists) }
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: notice) }
         .toolbar {
             if canCreate {

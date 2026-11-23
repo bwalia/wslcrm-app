@@ -51,12 +51,8 @@ struct AcademyProfileView: View {
                 TextField("About you: your background and what you teach", text: $profile.bio, axis: .vertical)
                     .lineLimit(4...10)
                     .accessibilityIdentifier("academy.profile.bio")
-                TextField("Photo address, https://…/photo.jpg", text: $profile.avatarUrl)
-                    .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .accessibilityIdentifier("academy.profile.avatar")
-                if let url = URL(string: profile.avatarUrl), profile.avatarUrl.lowercased().hasPrefix("http") {
-                    RichImage(url: url, alt: "Your photo", width: 96)
-                }
+                EngageImageField(url: $profile.avatarUrl, alt: "Your photo", placeholder: "https://…/photo.jpg",
+                                 previewWidth: 96, id: "academy.profile.avatar")
                 TextField("Location, e.g. London, UK", text: $profile.location)
                     .accessibilityIdentifier("academy.profile.location")
                 TextField("Website, https://your-site.com", text: $profile.website)

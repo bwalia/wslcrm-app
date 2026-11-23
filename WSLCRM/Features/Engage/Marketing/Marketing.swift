@@ -8,6 +8,12 @@ enum Marketing {
 
     static func path(_ tail: String) -> String { base + (tail.hasPrefix("/") ? tail : "/" + tail) }
 
+    /// A screen this person can open: the workspace's email screen needs `namespace.read` (namespace-mail.lua);
+    /// without it, Marketing settings shows which account sends and says who can change it.
+    static func reachable(_ screen: String, _ permissions: PermissionSet) -> String {
+        screen == WorkspaceScreen.email && !permissions.can(.read, moduleName: "namespace") ? Screen.settings : screen
+    }
+
     /// The plugin's RBAC modules (`project.lua`), checked as `module.action` by the server.
     enum RBAC {
         static let campaigns = "opsapi_marketing_campaigns"

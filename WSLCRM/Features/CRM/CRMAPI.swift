@@ -66,12 +66,13 @@ struct CRMAPI: Sendable {
 
     // MARK: Deals
 
-    /// No `search` on this endpoint (the server ignores it).
-    func deals(status: DealStatus? = nil, stage: String? = nil, accountId: Int? = nil, pipelineId: Int? = nil,
-               page: Int, perPage: Int = 50) async throws -> Page<CRMDeal> {
+    /// `search` matches the deal's or its account's name.
+    func deals(search: String = "", status: DealStatus? = nil, stage: String? = nil, accountId: Int? = nil,
+               pipelineId: Int? = nil, page: Int, perPage: Int = 50) async throws -> Page<CRMDeal> {
         var q = QueryBuilder()
         q.add("page", page)
         q.add("per_page", perPage)
+        q.add("search", search.trimmingCharacters(in: .whitespaces))
         if let status, status != .unknown { q.add("status", status.rawValue) }
         q.add("stage", stage)
         q.add("account_id", accountId)

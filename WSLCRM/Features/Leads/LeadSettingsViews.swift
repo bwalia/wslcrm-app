@@ -295,6 +295,23 @@ struct LeadSettingsView: View {
                         : "Add a Google Gemini provider to size deals from a web price search."))
             }
             Section {
+                TextField("e.g. Computers & IT", text: Binding(get: { settings?.businessType ?? "" },
+                                                               set: { settings?.businessType = String($0.prefix(60)) }))
+                    .accessibilityIdentifier("leads.settings.businessType")
+                Menu {
+                    ForEach(LeadSettings.businessTypeSuggestions, id: \.self) { type in
+                        Button(type) { settings?.businessType = type }
+                    }
+                } label: {
+                    Label("Pick a common one", systemImage: "list.bullet").frame(minHeight: 44)
+                }
+            } header: {
+                Text("Type of business")
+            } footer: {
+                Text("Shapes the details on each lead. Property shows the property deal fields (kind, situation, the seller's "
+                     + "deadline); anything else shows the general ones. Left blank, it counts as property.")
+            }
+            Section {
                 ForEach(Array((settings?.qualificationQuestions ?? []).enumerated()), id: \.offset) { index, _ in
                     TextField("Question \(index + 1)", text: Binding(
                         get: { settings?.qualificationQuestions[safe: index]?.label ?? "" },
