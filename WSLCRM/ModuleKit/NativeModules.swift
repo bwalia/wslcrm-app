@@ -72,7 +72,7 @@ enum NativeModules {
         Set(serverKeys.filter { destination(forKey: $0) == nil && !replaced.contains($0) })
     }
 
-    /// Every `menu_items.key` on a full OpsAPI (PROJECT_CODE=all), 2026-11-20. A module added to the
+    /// Every `menu_items.key` on a full OpsAPI (PROJECT_CODE=all), 2026-11-23. A module added to the
     /// server later shows up in `NativeModulesTests` until it has a screen here.
     static let serverKeys: [String] = [
         "dashboard", "academy", "accounting", "plugin:ai_runner:machines", "plugin:ai_runner:runners",
@@ -81,7 +81,7 @@ enum NativeModules {
         "care_home", "chat", "cms", "crm", "customers", "delivery", "domains", "employees", "field_service_jobs",
         "field_service_assets", "field_service_contracts", "field_service_parts", "field_service_reports",
         "field_service_requests", "field_service_simpro", "field_service_visits", "forms", "hospitals", "invoices",
-        "crm_leads", "my_tasks", "namespace", "activity", "api-keys", "plugins", "namespaces", "sso", "vault",
+        "crm_leads", "my_pay", "my_tasks", "namespace", "activity", "api-keys", "plugins", "namespaces", "sso", "vault",
         "webhooks", "plugin:opsapi_marketing:campaigns", "plugin:opsapi_marketing:conversations",
         "plugin:opsapi_marketing:guide", "plugin:opsapi_marketing:lists", "plugin:opsapi_marketing:overview",
         "plugin:opsapi_marketing:pixels", "plugin:opsapi_marketing:settings", "plugin:opsapi_marketing:studio",
