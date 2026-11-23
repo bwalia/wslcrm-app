@@ -82,6 +82,8 @@ struct AccountingBankView: View {
     @State private var suggesting: Set<String> = []
 
     var body: some View {
+        let canImport = session.allows(.create, AccountingRights.module)
+        let canReconcile = session.allows(.update, AccountingRights.module)
         List {
             if let notice { Section { TaxNoticeView(notice: notice) { self.notice = nil } } }
             Section {
@@ -91,22 +93,25 @@ struct AccountingBankView: View {
                     Text("Reconciled").tag("true")
                 }
                 .pickerStyle(.segmented)
+            } footer: {
+                if !canReconcile { Text(AccountingRights.readOnlyNote) }
             }
             switch pager.state {
             case .failed(let error): Section { InlineErrorRow(error: error) { Task { await pager.load() } } }
             case .loaded:
                 if pager.rows.isEmpty {
                     Section {
-                        TaxEmptyRow(title: "No transactions", message: "Import a bank statement to see your transactions here.",
+                        TaxEmptyRow(title: "No transactions",
+                                    message: canImport ? "Import a bank statement to see your transactions here." : nil,
                                     systemImage: "creditcard")
-                        Button("Import a bank statement") { importing = true }
+                        if canImport { Button("Import a bank statement") { importing = true } }
                     }
                 }
                 Section {
                     ForEach(pager.rows) { tx in
                         VStack(alignment: .leading, spacing: 6) {
                             BankTransactionRow(tx: tx)
-                            if tx.bool("is_reconciled") != true {
+                            if tx.bool("is_reconciled") != true, canReconcile {
                                 HStack {
                                     Button(suggesting.contains(tx.id) ? "Asking…" : "AI suggest", systemImage: "sparkles") {
                                         Task { await suggest(tx) }
@@ -130,9 +135,11 @@ struct AccountingBankView: View {
         .searchable(text: $search, prompt: "Search transactions")
         .navigationTitle("Bank transactions")
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button { importing = true } label: { Label("Import", systemImage: "square.and.arrow.down") }
-                    .accessibilityIdentifier("accounting.bank.import")
+            if canImport {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { importing = true } label: { Label("Import", systemImage: "square.and.arrow.down") }
+                        .accessibilityIdentifier("accounting.bank.import")
+                }
             }
         }
         .task(id: "\(search)|\(reconciled)") {
@@ -302,6 +309,8 @@ struct AccountingExpensesView: View {
     @State private var busy: Set<String> = []
 
     var body: some View {
+        let canAdd = session.allows(.create, AccountingRights.module)
+        let canDecide = session.allows(.update, AccountingRights.module)
         List {
             if let notice { Section { TaxNoticeView(notice: notice) { self.notice = nil } } }
             Section {
@@ -312,13 +321,16 @@ struct AccountingExpensesView: View {
                     Text("Rejected").tag("rejected")
                     Text("Posted").tag("posted")
                 }
+            } footer: {
+                if !canDecide { Text(AccountingRights.readOnlyNote) }
             }
             switch pager.state {
             case .failed(let error): Section { InlineErrorRow(error: error) { Task { await pager.load() } } }
             case .loaded:
                 if pager.rows.isEmpty {
                     Section {
-                        TaxEmptyRow(title: "No expenses", message: "Add your first expense to start tracking spending.",
+                        TaxEmptyRow(title: "No expenses",
+                                    message: canAdd ? "Add your first expense to start tracking spending." : nil,
                                     systemImage: "receipt")
                     }
                 }
@@ -329,7 +341,7 @@ struct AccountingExpensesView: View {
                                                                 recordID: e.id, seed: e)) {
                                 ExpenseRow(expense: e)
                             }
-                            if e.string("status") == "pending" {
+                            if e.string("status") == "pending", canDecide {
                                 HStack {
                                     Button("Approve", systemImage: "checkmark") { Task { await decide(e, "approve") } }
                                         .accessibilityIdentifier("accounting.expense.approve.\(e.id)")
@@ -349,9 +361,11 @@ struct AccountingExpensesView: View {
         }
         .navigationTitle("Expenses")
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button { adding = true } label: { Label("Add expense", systemImage: "plus") }
-                    .accessibilityIdentifier("accounting.expenses.add")
+            if canAdd {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { adding = true } label: { Label("Add expense", systemImage: "plus") }
+                        .accessibilityIdentifier("accounting.expenses.add")
+                }
             }
         }
         .task(id: status) {
@@ -651,7 +665,7 @@ struct AccountingReportsView: View {
         }
         .navigationTitle("Reports")
         .toolbar {
-            if tab == .vat {
+            if tab == .vat, session.allows(.create, AccountingRights.module) {
                 ToolbarItem(placement: .primaryAction) {
                     Button { newVAT = true } label: { Label("New VAT return", systemImage: "plus") }
                 }
@@ -726,7 +740,8 @@ struct AccountingReportsView: View {
                         HStack {
                             FieldBadge(field: FieldSpec("status", "Status", .status(.standard)), value: v.string("status") ?? "draft")
                             Spacer()
-                            if ["draft", "calculated"].contains(v.string("status") ?? "") {
+                            if ["draft", "calculated"].contains(v.string("status") ?? ""),
+                               session.allows(.update, AccountingRights.module) {
                                 Button("Mark as submitted") { submitting = v }.buttonStyle(.bordered).font(.wsFootnote)
                             }
                         }

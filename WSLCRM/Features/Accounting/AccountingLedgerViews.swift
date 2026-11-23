@@ -12,6 +12,8 @@ struct MoneyInOutView: View {
     @State private var adding = false
     @State private var notice: TaxNotice?
 
+    private var canAdd: Bool { session.allows(.create, AccountingRights.module) }
+
     var body: some View {
         List {
             if let notice { Section { TaxNoticeView(notice: notice) { self.notice = nil } } }
@@ -28,7 +30,8 @@ struct MoneyInOutView: View {
                 }
                 Section {
                     if list.isEmpty {
-                        TaxEmptyRow(title: "No entries yet", message: "Tap + to record one.",
+                        TaxEmptyRow(title: "No entries yet",
+                                    message: canAdd ? "Tap + to record one." : AccountingRights.readOnlyNote,
                                     systemImage: moneyIn ? "arrow.down.left.circle" : "arrow.up.right.circle")
                     }
                     ForEach(list) { BankTransactionRow(tx: $0) }
@@ -41,9 +44,12 @@ struct MoneyInOutView: View {
         }
         .navigationTitle(moneyIn ? "Money in" : "Money out")
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button { adding = true } label: { Label("Add entry", systemImage: "plus") }
-                    .accessibilityIdentifier("accounting.money.add")
+            // Saving posts the bank line and its journal entry (`accounting.create`).
+            if canAdd {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { adding = true } label: { Label("Add entry", systemImage: "plus") }
+                        .accessibilityIdentifier("accounting.money.add")
+                }
             }
         }
         .task { await load() }
