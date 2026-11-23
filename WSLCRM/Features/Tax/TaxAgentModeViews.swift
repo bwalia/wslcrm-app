@@ -281,3 +281,204 @@ struct TaxAgentModeSheet: View {
         }
     }
 }
+
+// MARK: - The workspace's settings (menu key `tax_agent_modes`, `/dashboard/tax/agent-modes`)
+
+/// One tax type's settings (`Mode.firm_settings`), as edited on the settings screen.
+struct TaxAgentModeSettings: Equatable {
+    var defaultMode: String
+    var allowed: [String]
+    var clientChoice: Bool
+    var steering: Bool
+    var isDefault: Bool
+
+    init(_ settings: Record) {
+        defaultMode = settings.string("default_mode") ?? "pilot"
+        let list = settings.array("allowed_modes").compactMap(\.stringValue)
+        allowed = TaxAgentMode.order.filter { list.isEmpty || list.contains($0) }
+        clientChoice = settings.bool("allow_client_choice") ?? true
+        steering = settings.bool("dynamic_steering") ?? true
+        isDefault = settings.bool("is_default") ?? false
+    }
+
+    /// Turning a mode on or off; the last one stays on, and the default moves to an allowed mode.
+    mutating func set(_ mode: String, allowed on: Bool) {
+        if on { allowed = TaxAgentMode.order.filter { $0 == mode || allowed.contains($0) } }
+        else if allowed.count > 1 { allowed.removeAll { $0 == mode } }
+        if !allowed.contains(defaultMode), let first = allowed.first { defaultMode = first }
+    }
+
+    /// `PUT /api/v2/tax/agent-modes/{regime}` (JSON: the list must stay a list).
+    var body: [String: JSONValue] {
+        ["default_mode": .string(defaultMode), "allowed_modes": .array(allowed.map(JSONValue.string)),
+         "allow_client_choice": .bool(clientChoice), "dynamic_steering": .bool(steering)]
+    }
+
+    /// When steering steps the agent down (the web's list, from `sa_signals` / `ct_signals`).
+    static func steeringRules(_ regime: String) -> [String] {
+        regime == TaxAgentMode.corporationTax ? [
+            "The trial balance doesn’t balance → CoPilot",
+            "Loans to directors or shareholders (s455) → Pilot",
+            "An AI-suggested adjustment of £10,000 or more → Pilot",
+            "A dormant company → Pilot",
+        ] : [
+            "More than half of the transactions need a check → CoPilot",
+            "More than a quarter need a check → Pilot",
+            "A flagged transaction of £10,000 or more → Pilot",
+            "A new statement still has transactions to check → Pilot",
+            "Three or more kinds of income on the return → Pilot",
+        ]
+    }
+}
+
+struct TaxAgentModesSettingsView: View {
+    @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
+    @State private var bundle: LoadState<Record> = .idle
+    @State private var drafts: [String: TaxAgentModeSettings] = [:]
+    @State private var saving: String?
+    @State private var notice: TaxNotice?
+
+    var body: some View {
+        List {
+            Section {
+                Text("Choose how much the AI Tax Return Agent does on its own — CoPilot, Pilot or AutoPilot — for each "
+                     + "kind of tax.").font(.wsSubheadline)
+            }
+            if let notice { Section { TaxNoticeView(notice: notice) { self.notice = nil } } }
+            switch bundle {
+            case .failed(let error):
+                Section { InlineErrorRow(error: error) { Task { await load() } } }
+            case .loaded(let b):
+                let canEdit = b.bool("can_edit") == true
+                if !canEdit {
+                    Section {
+                        TaxCallout(tone: .info, systemImage: "lock") {
+                            Text("Your accountant sets these, so you can look but not change them.")
+                            Text("You can still pick your own mode from the AI agent badge when they allow it.")
+                        }
+                    }
+                }
+                let regimes = b.records("regimes", idKeys: ["regime"])
+                if regimes.isEmpty {
+                    Section {
+                        TaxEmptyRow(title: "Nothing to set here",
+                                    message: "Neither Self Assessment nor Corporation Tax is switched on for this workspace.",
+                                    systemImage: "dial.medium")
+                    }
+                }
+                ForEach(regimes) { regime in regimeSections(regime, canEdit: canEdit) }
+            default:
+                EmptyView()
+            }
+        }
+        .overlay { if bundle.value == nil, bundle.error == nil { SkeletonList() } }
+        .navigationTitle("AI agent modes")
+        .task { await load() }
+        .refreshable { await load() }
+    }
+
+    @ViewBuilder
+    private func regimeSections(_ regime: Record, canEdit: Bool) -> some View {
+        let key = regime.id
+        let label = regime.string("label") ?? key
+        let binding = Binding(get: { drafts[key] ?? TaxAgentModeSettings(regime.object("settings") ?? Record([:])) },
+                              set: { drafts[key] = $0 })
+        let s = binding.wrappedValue
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(s.isDefault ? "Using the standard settings." : "Your workspace’s settings.")
+                    .font(.wsFootnote).foregroundStyle(.secondaryText)
+                TaxAgentModeBadge(regime: key, refreshKey: "\(s.defaultMode)|\(saving == nil)")
+            }
+            Picker("Default for clients", selection: binding.defaultMode) {
+                ForEach(s.allowed, id: \.self) { Text(TaxAgentMode.name($0)).tag($0) }
+            }
+            .disabled(!canEdit)
+            .accessibilityIdentifier("tax.agentModes.default.\(key)")
+            ForEach(TaxAgentMode.order, id: \.self) { mode in
+                Toggle(isOn: Binding(get: { s.allowed.contains(mode) },
+                                     set: { var next = s; next.set(mode, allowed: $0); drafts[key] = next })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Allow \(TaxAgentMode.name(mode))")
+                        Text(TaxAgentMode.blurb(mode)).font(.wsFootnote).foregroundStyle(.secondaryText)
+                    }
+                }
+                .disabled(!canEdit || s.allowed == [mode])
+                .accessibilityIdentifier("tax.agentModes.allow.\(key).\(mode)")
+            }
+        } header: {
+            Text(label)
+        } footer: {
+            Text("The default applies to every client who hasn’t picked their own. At least one mode stays allowed.")
+        }
+        Section {
+            Toggle(isOn: binding.clientChoice) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Clients can choose their own mode")
+                    Text("Among the allowed modes. Off: everyone uses the default.").font(.wsFootnote)
+                        .foregroundStyle(.secondaryText)
+                }
+            }
+            .disabled(!canEdit)
+            Toggle(isOn: binding.steering) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Step down when the data needs a person")
+                    Text("The agent steps down while something needs checking, and back up when it’s clean.")
+                        .font(.wsFootnote).foregroundStyle(.secondaryText)
+                }
+            }
+            .disabled(!canEdit)
+            if canEdit {
+                Button(saving == key ? "Saving…" : "Save \(label) settings", systemImage: "checkmark") {
+                    Task { await save(key, label: label, s) }
+                }
+                .disabled(saving != nil)
+                .accessibilityIdentifier("tax.agentModes.save.\(key)")
+            }
+        }
+        Section {
+            DisclosureGroup("What each mode does") {
+                ForEach(TaxAgentMode.order, id: \.self) { mode in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(TaxAgentMode.name(mode)).font(.wsHeadline)
+                        ForEach(TaxAgentMode.does(mode, regime: key), id: \.self) { Text("• " + $0).font(.wsFootnote) }
+                    }
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("When it steps down").font(.wsHeadline)
+                    ForEach(TaxAgentModeSettings.steeringRules(key), id: \.self) { Text("• " + $0).font(.wsFootnote) }
+                }
+                Text(TaxAgentMode.humanStep(key)).font(.wsFootnote).foregroundStyle(.secondaryText)
+            }
+        }
+    }
+
+    private func load() async {
+        if bundle.value == nil { bundle = .loading }
+        do {
+            let b = try await makeTaxAPI(services, user: session.user).record("/api/v2/tax/agent-modes")
+            bundle = .loaded(b)
+            drafts = [:]
+        } catch {
+            let apiError = error.asAPIError
+            if case .cancelled = apiError { return }
+            bundle = .failed(apiError)
+        }
+    }
+
+    private func save(_ regime: String, label: String, _ settings: TaxAgentModeSettings) async {
+        saving = regime
+        defer { saving = nil }
+        do {
+            let saved = try await makeTaxAPI(services, user: session.user)
+                .json(.put, "/api/v2/tax/agent-modes/\(regime)", settings.body).payload.record
+            drafts[regime] = TaxAgentModeSettings(saved)
+            notice = .success("\(label): saved. New clients start on \(TaxAgentMode.name(saved.string("default_mode"))).")
+        } catch {
+            // 422 names the setting that's wrong (`fields`), in the server's words.
+            let fields = error.asAPIError.body?["fields"]?.objectFields.values.compactMap(\.stringValue) ?? []
+            notice = .error(fields.first.map { "\(label): \($0)." } ?? error.asAPIError.plainMessage)
+        }
+    }
+}

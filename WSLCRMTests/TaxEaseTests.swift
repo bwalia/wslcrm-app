@@ -247,3 +247,57 @@ final class CorporationTaxTests: XCTestCase {
         XCTAssertEqual(CT.plain(other), "A period starting 2026-04-01 already exists")
     }
 }
+
+/// The workspace's AI agent mode settings (`GET /api/v2/tax/agent-modes`, `PUT /api/v2/tax/agent-modes/{regime}`)
+/// and the tax home's links.
+final class TaxAgentModesSettingsTests: XCTestCase {
+    /// `routes/tax-agent-modes.lua` for a member who can't edit: one regime on the standard settings, one saved.
+    static let bundle = """
+    {"success":true,"data":{"modes":[{"key":"copilot","label":"AI Tax Return Agent CoPilot",
+    "summary":"The AI explains and suggests; you approve every change.","self_assessment":{"confirm_profile_changes":true},
+    "corporation_tax":{"auto_compute":false}}],
+    "regimes":[{"regime":"self_assessment","label":"Self Assessment","settings":{"regime":"self_assessment",
+    "default_mode":"pilot","allowed_modes":["copilot","pilot","autopilot"],"allow_client_choice":true,
+    "dynamic_steering":true,"is_default":true}},{"regime":"corporation_tax","label":"Corporation Tax",
+    "settings":{"regime":"corporation_tax","default_mode":"copilot","allowed_modes":["copilot"],
+    "allow_client_choice":false,"dynamic_steering":false,"is_default":false,"updated_at":"2026-11-21 10:00:00"}}],
+    "can_edit":false}}
+    """
+
+    func testSettingsReadTheBundleAndSendWhatTheServerSaves() throws {
+        let bundle = try ResourceService.decode(Data(Self.bundle.utf8)).payload.record
+        XCTAssertEqual(bundle.bool("can_edit"), false)
+        let regimes = bundle.records("regimes", idKeys: ["regime"])
+        XCTAssertEqual(regimes.map(\.id), ["self_assessment", "corporation_tax"])
+        var sa = TaxAgentModeSettings(try XCTUnwrap(regimes[0].object("settings")))
+        XCTAssertTrue(sa.isDefault)
+        sa.set("pilot", allowed: false)
+        XCTAssertEqual(sa.allowed, ["copilot", "autopilot"])
+        XCTAssertEqual(sa.defaultMode, "copilot", "the default moves to a mode that's still allowed")
+        sa.set("pilot", allowed: true)
+        XCTAssertEqual(sa.allowed, ["copilot", "pilot", "autopilot"], "kept in rank order")
+        XCTAssertEqual(sa.body, ["default_mode": .string("copilot"),
+                                 "allowed_modes": .array([.string("copilot"), .string("pilot"), .string("autopilot")]),
+                                 "allow_client_choice": .bool(true), "dynamic_steering": .bool(true)])
+        var ct = TaxAgentModeSettings(try XCTUnwrap(regimes[1].object("settings")))
+        ct.set("copilot", allowed: false)
+        XCTAssertEqual(ct.allowed, ["copilot"], "the last allowed mode stays on")
+        XCTAssertFalse(ct.clientChoice)
+        XCTAssertEqual(TaxAgentModeSettings.steeringRules("corporation_tax").first, "The trial balance doesn’t balance → CoPilot")
+    }
+
+    @MainActor
+    func testTheNewMenuKeysAndTaxHomeLinksAreNative() {
+        guard case .native(let route)? = NativeModules.destination(forKey: "tax_agent_modes") else {
+            return XCTFail("tax_agent_modes has no native screen")
+        }
+        XCTAssertNotNil(ModuleCatalog.screen(route.id))
+        let home = Dictionary(TaxHomeView.pages.map { ($0.key, $0.screen) }, uniquingKeysWith: { a, _ in a })
+        for key in ["tax_vat_clients", "tax_agent_modes", "corporation_tax"] {
+            let screen = home[key]
+            XCTAssertNotNil(screen, "\(key) is on the tax home")
+            XCTAssertNotNil(screen.flatMap { ModuleCatalog.screen($0) }, key)
+            XCTAssertTrue(NativeModules.serverKeys.contains(key), key)
+        }
+    }
+}

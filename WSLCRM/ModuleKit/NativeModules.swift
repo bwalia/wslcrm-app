@@ -99,7 +99,7 @@ enum NativeModules {
         "tax_file", "tax_filing_requests", "tax_my_income", "tax_income_types", "tax_reports", "tax_hmrc",
         "tax_statements", "tax_transactions", "tax_vat", "tax_vat_clients", "document_templates", "timesheets", "users",
         // Added on the server on 2026-11-21.
-        "corporation_tax",
+        "corporation_tax", "tax_agent_modes",
     ]
 }
 

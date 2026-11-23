@@ -30,6 +30,7 @@ extension ModuleGroup {
             "tax_vat_clients": "tax.vat_clients",
             "accounting": "accounting.home",
             "corporation_tax": "ct.companies",
+            "tax_agent_modes": "tax.agent_modes",
         ],
         screen: { id in TaxScreens.view(id) })
 }
@@ -61,6 +62,7 @@ enum TaxScreens {
         case "tax.income_types": return AnyView(IncomeTypesAdminView())
         case "tax.vat": return AnyView(VATView(context: VATContext(parameter: parameter)))
         case "tax.vat_clients": return AnyView(VATClientsView())
+        case "tax.agent_modes": return AnyView(TaxAgentModesSettingsView())
         case "ct.companies": return AnyView(CTCompaniesView())
         case "ct.company": return parameter.map { AnyView(CTCompanyView(uuid: $0)) }
         case "ct.period": return parameter.map { AnyView(CTPeriodView(uuid: $0)) }
