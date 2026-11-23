@@ -17,8 +17,14 @@ struct SalesOrdersView: View {
     @State private var creatingStoreOrder = false
     @State private var notice: String?
     @State private var hop: SalesNativeHop?
+    @State private var openedStoreOrder: CreatedStoreOrder?
 
     private let perPage = 25
+
+    /// `search` starts the list filtered (a customer's email: their orders).
+    init(search: String = "") {
+        _query = State(initialValue: SalesOrderQuery(search: search))
+    }
 
     var body: some View {
         List {
@@ -89,8 +95,13 @@ struct SalesOrdersView: View {
         .sheet(isPresented: $creatingStoreOrder) {
             CreateStoreOrderView { created in
                 notice = "Order \(created.orderNumber ?? "") created."
+                openedStoreOrder = created
                 Task { await load() }
             }
+        }
+        .navigationDestination(item: $openedStoreOrder) { created in
+            StoreOrderDetailView(uuid: created.uuid, orderNumber: created.orderNumber,
+                                 opening: "Order \(created.orderNumber ?? "") created. Its status, payment and delivery are below.")
         }
         .navigationDestination(item: $hop) { hop in
             NativeScreenView(route: NativeScreenRoute(hop.id))

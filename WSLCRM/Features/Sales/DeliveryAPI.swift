@@ -13,7 +13,7 @@ struct DeliveryAPI: Sendable {
 
     /// The workspace's stores (`GET /api/v2/stores`, scoped by the workspace header).
     func stores() async throws -> [Record] {
-        let json = try await get("/api/v2/stores", query: [URLQueryItem(name: "limit", value: "100")])
+        let json = try await get("/api/v2/stores", query: [URLQueryItem(name: "perPage", value: "100")])
         return ResourceService.parsePage(json, listKey: "data", idKeys: ["uuid"], requestedPage: 1, perPage: 0).items
     }
 

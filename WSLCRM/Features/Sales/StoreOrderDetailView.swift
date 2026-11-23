@@ -6,6 +6,8 @@ import SwiftUI
 struct StoreOrderDetailView: View {
     let uuid: String
     var orderNumber: String?
+    /// What just happened before this screen opened ("Order created").
+    var opening: String?
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var state: LoadState<StoreOrder> = .idle
@@ -29,7 +31,10 @@ struct StoreOrderDetailView: View {
         .overlay { if state.value == nil && state.error == nil { SkeletonList() } }
         .navigationTitle(state.value?.orderNumber ?? orderNumber ?? "Order")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
+        .task {
+            if notice == nil, let opening, state.value == nil { notice = opening }
+            await load()
+        }
         .refreshable { await load() }
         .alert(pendingChange.map(Self.title) ?? "", isPresented: .init(get: { pendingChange != nil },
                                                                        set: { if !$0 { pendingChange = nil } }),

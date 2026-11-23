@@ -305,25 +305,46 @@ struct PurchaseOrderBillBody: Encodable, Sendable, Equatable {
     ]
 }
 
-/// `GET /purchase-orders/stats`.
+/// `GET /purchase-orders/stats`: counts for the whole workspace, money per currency (never added across currencies).
 struct PurchaseOrderStats: Decodable, Sendable {
+    struct CurrencyTotals: Decodable, Sendable, Equatable {
+        let currency: String
+        let openValue: Decimal
+        let toBillValue: Decimal
+        let billedValue: Decimal
+
+        enum CodingKeys: String, CodingKey { case currency, openValue, toBillValue, billedValue }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            currency = c.decodeFlexibleString(forKey: .currency)?.trimmedOrNil ?? "GBP"
+            openValue = c.decodeFlexibleDecimal(forKey: .openValue) ?? 0
+            toBillValue = c.decodeFlexibleDecimal(forKey: .toBillValue) ?? 0
+            billedValue = c.decodeFlexibleDecimal(forKey: .billedValue) ?? 0
+        }
+    }
+
     let openCount: Int
-    let openValue: Decimal
     let overdueCount: Int
     let toBillCount: Int
-    let toBillValue: Decimal
     let draftCount: Int
+    let byCurrency: [CurrencyTotals]
 
-    enum CodingKeys: String, CodingKey { case openCount, openValue, overdueCount, toBillCount, toBillValue, draftCount }
+    enum CodingKeys: String, CodingKey { case openCount, overdueCount, toBillCount, draftCount, byCurrency }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         openCount = c.decodeFlexibleInt(forKey: .openCount) ?? 0
-        openValue = c.decodeFlexibleDecimal(forKey: .openValue) ?? 0
         overdueCount = c.decodeFlexibleInt(forKey: .overdueCount) ?? 0
         toBillCount = c.decodeFlexibleInt(forKey: .toBillCount) ?? 0
-        toBillValue = c.decodeFlexibleDecimal(forKey: .toBillValue) ?? 0
         draftCount = c.decodeFlexibleInt(forKey: .draftCount) ?? 0
+        byCurrency = c.decodeLossyArray(CurrencyTotals.self, forKey: .byCurrency)
+    }
+
+    /// One amount per currency ("£1,200.00 + €300.00"); £0.00 when there are no orders.
+    func amounts(_ value: KeyPath<CurrencyTotals, Decimal>) -> String {
+        guard !byCurrency.isEmpty else { return Formatters.money(0, currency: "GBP") ?? "0" }
+        return byCurrency.map { Formatters.money($0[keyPath: value], currency: $0.currency) ?? "" }.joined(separator: " + ")
     }
 }
 
@@ -350,16 +371,4 @@ struct PurchaseOrderLineBody: Encodable, Sendable, Equatable, Hashable {
     var quantity: Decimal
     var unitPrice: Decimal
     var taxRate: Decimal
-}
-
-/// `POST /purchase-orders/{uuid}/receive`: each line's new running total received.
-struct PurchaseOrderReceiveBody: Encodable, Sendable, Equatable {
-    struct Line: Encodable, Sendable, Equatable {
-        var itemUuid: String
-        var receivedQuantity: Decimal
-    }
-
-    var items: [Line]?
-    var receiveAll: Bool?
-    var note: String?
 }
