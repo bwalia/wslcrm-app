@@ -949,7 +949,7 @@ struct FieldServiceAPI: Sendable {
             PendingMutation(kind: .visitCheckOut, method: .post, path: "\(base)/visits/\(visit.uuid)/check-out",
                             body: encode(body), namespaceId: context.namespaceId, userId: context.userId,
                             entityId: visit.uuid, jobId: visit.jobUuid,
-                            summary: "Check out · \(visit.jobNumber)",
+                            summary: "Finish job · \(visit.jobNumber)",
                             hints: ["complete_phase": body.completePhase ? "true" : "false"])
         }
 
