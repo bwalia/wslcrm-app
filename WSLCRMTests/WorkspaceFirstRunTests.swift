@@ -259,4 +259,33 @@ final class WorkspaceFirstRunTests: XCTestCase {
         ]))
         XCTAssertEqual(ThemesAPI.revertBody("r-1"), .object(["revision_uuid": .string("r-1")]))
     }
+
+    @MainActor
+    func testTheTokenSchemaBecomesEditableFields() throws {
+        let fields = ThemeTokenField.fields(try json("""
+        {"success":true,"data":{
+          "colors":{"primary":{"type":"color_scale","required":true,"ui":{"label":"Primary","group":"Brand","order":1}},
+                    "background":{"type":"color","default":"#ffffff","ui":{"label":"Background","group":"Surface","order":1}}},
+          "typography":{"font_family_base":{"type":"font","default":"Inter, sans-serif",
+                                            "ui":{"label":"Body font","group":"Typography","order":1}}},
+          "layout":{"density":{"type":"enum","values":["compact","comfortable","spacious"],"default":"comfortable",
+                               "ui":{"label":"Density","group":"Layout","order":3}}},
+          "branding":{"logo_asset_id":{"type":"asset","asset_type":"logo","ui":{"label":"Logo","group":"Branding"}}}}}
+        """))
+        XCTAssertEqual(fields.map(\.id), ["colors.primary", "colors.background", "typography.font_family_base",
+                                          "layout.density"], "in the editor's order, without uploaded pictures")
+        XCTAssertEqual(fields.last?.values, ["compact", "comfortable", "spacious"])
+        XCTAssertEqual(fields[1].defaultValue, .string("#ffffff"))
+        XCTAssertEqual(ThemeHex.color("#3366cc").map(ThemeHex.hex), "#3366cc")
+        XCTAssertEqual(ThemeHex.color("#fff").map(ThemeHex.hex), "#ffffff")
+        XCTAssertNil(ThemeHex.color("blue"))
+        let spacing = ThemeTokenField.fields(try json(
+            #"{"spacing":{"scale":{"type":"number","default":4,"ui":{"label":"Scale (px)","group":"Spacing"}}}}"#))
+        XCTAssertEqual(ThemeTokenField.numbersAsNumbers(["spacing": .object(["scale": .string("4.5")])], fields: spacing),
+                       ["spacing": .object(["scale": .number(4.5)])])
+        XCTAssertEqual(ThemesAPI.tokensBody(["colors": .object(["accent": .string("#ff0000")])]), .object([
+            "tokens": .object(["colors": .object(["accent": .string("#ff0000")])]),
+            "change_note": .string("Colours and fonts changed in the app"),
+        ]))
+    }
 }
