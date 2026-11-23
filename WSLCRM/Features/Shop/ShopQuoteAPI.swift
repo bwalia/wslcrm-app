@@ -124,6 +124,15 @@ extension ShopAPI {
         return rows.compactMap { if case .object(let o) = $0 { o } else { nil } }
     }
 
+    // MARK: Deal codes
+
+    /// Links the quote (and its revisions) to a deal code, or starts a new deal for it (nil code; shop.update).
+    func linkDealCode(quoteUuid: String, code: String?) async throws -> String {
+        let body = ShopDealCodeLinkBody(dealCode: code?.shopTrimmed, new: code == nil ? true : nil)
+        let result: ShopDealCodeLinkResult = try await quoteData(.post("/api/v2/shop/admin/quotes/\(quoteUuid)/deal-code", json: body))
+        return result.dealCode ?? code?.shopTrimmed ?? ""
+    }
+
     // MARK: Media library (product photos)
 
     /// Uploads a photo to the workspace's media library; its URL goes on the product.

@@ -96,18 +96,7 @@ struct ShopProductEditorView: View {
                 }
             }
             specsSection
-            Section {
-                TextEditor(text: $draft.attributes).font(.wsFootnote.monospaced()).frame(minHeight: 100)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
-                if let error = ShopJSON.object(draft.attributes).1 {
-                    Label("The attributes \(error).", systemImage: "exclamationmark.triangle").font(.wsFootnote)
-                        .foregroundStyle(Tone.warning.textColor)
-                }
-            } header: {
-                Text("Attributes (JSON)")
-            } footer: {
-                Text("Machine-readable facts the pricing engine and the assistant use (rules refer to these keys), e.g. {\"gpu_slots\": 4, \"psu_watts\": 2000, \"memory_type\": \"DDR5-RDIMM\"}.")
-            }
+            ShopAttributesSection(json: $draft.attributes)
             photosSection
             imagesSection
             seoSection

@@ -143,6 +143,8 @@ struct ShopQuoteDetailView: View {
     @State private var notice: String?
     @State private var messaging: ShopSupplierMessageKind?
     @State private var supplierNotice: String?
+    @State private var linkingDeal = false
+    @State private var dealCodeText = ""
 
     private var current: ShopQuote { quote ?? summary }
     private var canUpdate: Bool { session.shopPolicy.canUpdate }
@@ -407,7 +409,7 @@ struct ShopQuoteDetailView: View {
 
     @ViewBuilder
     private var suppliersAndCustomerSections: some View {
-            if session.shopPolicy.canCreate && current.status != .cancelled {
+            if session.shopPolicy.canCreate && session.shopPolicy.canUpdate && current.status != .cancelled {
                 Section {
                     Button {
                         messaging = .priceRequest(quoteUuid: current.uuid)
@@ -435,8 +437,27 @@ struct ShopQuoteDetailView: View {
                         }
                         .accessibilityIdentifier("shopQuote.deal")
                     }
+                    Button {
+                        dealCodeText = ""
+                        linkingDeal = true
+                    } label: {
+                        Label(current.dealCode == nil ? "Link a deal code" : "Change the deal code", systemImage: "link")
+                    }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("shopQuote.linkDeal")
                 } header: {
                     Text("Suppliers")
+                        // On the header (one view): on the Section it would be copied onto every row.
+                        .alert("Deal code", isPresented: $linkingDeal) {
+                            TextField("e.g. WS-DT5Z-994X", text: $dealCodeText).textInputAutocapitalization(.characters)
+                            Button("Link") { Task { await linkDeal(new: false) } }
+                                .disabled(dealCodeText.trimmedOrNil == nil)
+                            Button("Start a new deal") { Task { await linkDeal(new: true) } }
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("Type the code of the deal this quote belongs to, or start a new one. "
+                                 + "Revisions of this quote move with it.")
+                        }
                 } footer: {
                     Text("By email from here, or WhatsApp or a text from this phone. A price request never names the customer; an introduction shares their details, so only with their agreement.")
                 }
@@ -648,6 +669,17 @@ struct ShopQuoteDetailView: View {
                          (r.contactCreated ?? false) ? "contact created" : (r.contactUuid != nil ? "contact linked" : nil)].compactMap { $0 }
             notice = "Saved to the CRM" + (parts.isEmpty ? "." : ": " + parts.joined(separator: ", ") + ".")
             actionError = nil
+        } catch {
+            actionError = error.asAPIError
+        }
+    }
+
+    private func linkDeal(new: Bool) async {
+        do {
+            let code = try await services.shop.linkDealCode(quoteUuid: current.uuid, code: new ? nil : dealCodeText)
+            supplierNotice = new ? "New deal \(code) started for this quote." : "Linked to deal \(code)."
+            actionError = nil
+            await load()
         } catch {
             actionError = error.asAPIError
         }

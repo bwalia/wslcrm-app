@@ -136,6 +136,7 @@ struct ShopOrderDetailView: View {
     @State private var editingFulfilment = false
     @State private var shipping = false
     @State private var editingAddress = false
+    @State private var refunding = false
     @State private var notice: String?
     @State private var extras = ShopOrderExtras()
 
@@ -243,9 +244,21 @@ struct ShopOrderDetailView: View {
                 if let received = extras.paidAmountMinor {
                     DetailRow(label: "Received", value: ShopMoney.format(received, currency: current.currency))
                 }
-                DetailRow(label: "Stripe mode", value: current.stripeMode.map(Formatters.humanize))
-                if let intent = current.stripePaymentIntentId { CopyableRow(label: "Payment intent", value: intent) }
-                if let session = extras.stripeSessionId { CopyableRow(label: "Checkout session", value: session) }
+                if current.status.isRefundable && session.shopPolicy.canUpdate && order != nil {
+                    Button { refunding = true } label: {
+                        Label("Refund the customer", systemImage: "arrow.uturn.backward.circle")
+                    }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("shopOrder.refund")
+                }
+                if current.stripeMode != nil || current.stripePaymentIntentId != nil || extras.stripeSessionId != nil {
+                    DisclosureGroup("Technical details") {
+                        DetailRow(label: "Stripe mode", value: current.stripeMode.map(Formatters.humanize))
+                        if let intent = current.stripePaymentIntentId { CopyableRow(label: "Payment intent", value: intent) }
+                        if let session = extras.stripeSessionId { CopyableRow(label: "Checkout session", value: session) }
+                    }
+                    .accessibilityIdentifier("shopOrder.technical")
+                }
                 if let quoteNumber = current.quoteNumber, let quoteUuid = current.quoteUuid {
                     NavigationLink {
                         ShopQuoteDetailView(uuid: quoteUuid)
@@ -273,10 +286,10 @@ struct ShopOrderDetailView: View {
             }
         } message: { status in
             if status == .refunded {
-                Text("This only records the status. Issue the refund itself in Stripe (a full refund is also picked up automatically from Stripe).")
+                Text("This only records the status: no money moves. To pay the customer back, use Refund the customer under Payment.")
             } else if status == .cancelled {
                 Text(current.status == .pendingPayment ? "The order is cancelled and the stock held for it is released."
-                     : "The order will be cancelled. If it was paid, refund it in Stripe as well.")
+                     : "The order will be cancelled. If it was paid, pay the customer back with Refund the customer under Payment.")
             }
         }
         .sheet(isPresented: $editingFulfilment) {
@@ -298,6 +311,13 @@ struct ShopOrderDetailView: View {
                 }
             }
         }
+        .sheet(isPresented: $refunding) {
+            ShopRefundSheet(order: current) { done in
+                notice = done
+                actionError = nil
+                await load()
+            }
+        }
         .sheet(isPresented: $editingAddress) {
             ShopDeliveryAddressSheet(order: current, extras: extras) { summary in
                 notice = summary
@@ -310,6 +330,7 @@ struct ShopOrderDetailView: View {
     private func changeStatus(_ status: ShopOrderStatus) {
         switch status {
         case .shipped: shipping = true
+        case .refunded where current.status.isRefundable && session.shopPolicy.canUpdate: refunding = true
         case .cancelled, .refunded: pendingStatus = status
         default:
             Task { if await save(ShopOrderUpdate(status: status.rawValue)) { notice = "Order marked \(status.label.lowercased())." } }
