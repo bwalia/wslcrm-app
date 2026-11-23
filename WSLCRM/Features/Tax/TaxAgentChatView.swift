@@ -36,6 +36,8 @@ struct TaxAgentChatView: View {
     @State private var scanning = false
     @State private var confirmNewChat = false
     @State private var showEstimate = false
+    /// The AI Tax Return Agent mode the last turn ran in (CoPilot / Pilot / AutoPilot).
+    @State private var agentMode: Record?
     @FocusState private var composerFocused: Bool
 
     init(taxYear: String? = nil, variant: Variant = .page, figuresChanged: @escaping () -> Void = {}) {
@@ -54,6 +56,7 @@ struct TaxAgentChatView: View {
             if variant == .panel {
                 HStack {
                     Text(year.map { "Tax year \($0)" } ?? "").font(.wsFootnote).foregroundStyle(.secondaryText)
+                    modeBadge
                     Spacer()
                     Button("New chat", systemImage: "arrow.counterclockwise") { confirmNewChat = true }
                         .font(.wsFootnote)
@@ -62,6 +65,9 @@ struct TaxAgentChatView: View {
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 6)
+            }
+            if variant == .page, sessionID != nil {
+                HStack { modeBadge; Spacer() }.padding(.horizontal).padding(.vertical, 6)
             }
             if let estimate { estimateBar(estimate) }
             ScrollViewReader { proxy in
@@ -120,6 +126,18 @@ struct TaxAgentChatView: View {
     }
 
     // MARK: Pieces
+
+    /// How much the assistant does on its own; a turn's own mode keeps it current.
+    @ViewBuilder
+    private var modeBadge: some View {
+        if sessionID != nil {
+            TaxAgentModeBadge(regime: TaxAgentMode.selfAssessment, taxYear: year, given: agentMode,
+                              refreshKey: estimate?.string("unreviewed_count") ?? "", showReasons: variant == .page) {
+                agentMode = $0
+                messages.append(Message(role: "assistant", text: TaxAgentMode.doneText($0)))
+            }
+        }
+    }
 
     private func bubble(_ message: Message) -> some View {
         let mine = message.role == "user"
@@ -319,6 +337,7 @@ struct TaxAgentChatView: View {
         if messages.isEmpty { messages = [Message(role: "assistant", text: Self.greeting)] }
         awaitingConfirm = chat.object("pending")?.string("summary")
         quickReplies = Self.suggestions(rows.last { $0.string("role") == "assistant" })
+        if let mode = chat.object("agent_mode") { agentMode = mode }
     }
 
     private func applyTurn(_ turn: Record) {
@@ -333,8 +352,22 @@ struct TaxAgentChatView: View {
             figuresChanged()
         }
         if let ty = turn.object("progress")?.string("tax_year") { year = ty }
+        if let mode = turn.object("agent_mode") { agentMode = mode }
+        // AutoPilot changed categories by itself this turn: say so, and bring the figures up to date.
+        if let note = TaxAgentMode.autoAppliedNote(turn) {
+            messages.append(Message(role: "assistant", text: note))
+            figuresChanged()
+            Task { await refreshEstimate() }
+        }
         awaitingConfirm = turn.bool("awaiting_confirm") == true
             ? (turn.object("confirm_card")?.string("summary") ?? "Confirm this change?") : nil
+    }
+
+    private func refreshEstimate() async {
+        guard let id = sessionID else { return }
+        if let fresh = (try? await api.get("/api/v2/tax/agent/sessions/\(id)/estimate"))?.payload.record.object("estimate") {
+            estimate = fresh
+        }
     }
 
     private func send(_ raw: String) async {
