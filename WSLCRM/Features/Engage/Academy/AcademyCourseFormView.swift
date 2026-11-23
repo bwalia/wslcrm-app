@@ -145,15 +145,8 @@ struct AcademyCourseFormView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .accessibilityIdentifier("academy.course.slug")
-            TextField("Picture address, https://…/thumb.jpg", text: $draft.thumbnailURL)
-                .keyboardType(.URL)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .accessibilityIdentifier("academy.course.thumbnail")
-            if let url = URL(string: draft.thumbnailURL.trimmingCharacters(in: .whitespaces)),
-               draft.thumbnailURL.lowercased().hasPrefix("http") {
-                RichImage(url: url, alt: "Course picture").frame(maxHeight: 160)
-            }
+            EngageImageField(url: $draft.thumbnailURL, alt: "Course picture", placeholder: "https://…/thumb.jpg",
+                             id: "academy.course.thumbnail")
         } header: { Text("About the course") }
     }
 

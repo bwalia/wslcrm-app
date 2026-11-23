@@ -141,14 +141,14 @@ struct AcademyLessonEditorView: View {
                     Label("Free preview lesson", systemImage: "eye")
                 }
                 .accessibilityIdentifier("academy.lesson.preview")
-                TextField("Video file (storage key), e.g. courses/intro/lesson-1.mp4", text: $draft.s3Key)
+                TextField("Where the video is stored, e.g. courses/intro/lesson-1.mp4", text: $draft.s3Key)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .accessibilityIdentifier("academy.lesson.s3key")
             } header: { Text("Settings") } footer: {
                 Text("A published lesson shows on the course once the course itself is live. A free preview lesson "
-                    + "can be watched by anyone, even on a paid course. The video file is the lesson’s uploaded "
-                    + "video in the academy’s file storage; leave it empty when there is none.")
+                    + "can be watched by anyone, even on a paid course. “Where the video is stored” is the name of "
+                    + "the lesson’s video in the academy’s file storage, folders included; leave it empty when there is none.")
             }
         }
         .scrollDismissesKeyboard(.interactively)
