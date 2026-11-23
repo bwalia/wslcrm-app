@@ -50,6 +50,7 @@ struct MktUnsubView: View {
                 }
         }
         .navigationTitle("Unsubscribed")
+        .safeAreaInset(edge: .top, spacing: 0) { MktCampJourneyBar(path: MktCampPages.unsubscribed) }
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 EngageNoticeBar(notice: notice)

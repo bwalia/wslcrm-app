@@ -108,6 +108,7 @@ struct MktSettingsView: View {
             }
         }
         .navigationTitle("Marketing settings")
+        .safeAreaInset(edge: .top, spacing: 0) { MktCampJourneyBar(path: MktCampPages.settings) }
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: notice) }
         .overlay { if !loaded { SkeletonList() } }
         .toolbar {
@@ -151,10 +152,17 @@ struct MktSettingsView: View {
                     Label(warning, systemImage: "exclamationmark.triangle")
                         .font(.wsFootnote).foregroundStyle(Tone.warning.textColor)
                 }
+                if canOpenEmail {
+                    NavigationLink(value: NativeScreenRoute(WorkspaceScreen.email)) {
+                        Label("Connect or change the email account", systemImage: "envelope")
+                    }
+                    .accessibilityIdentifier("mkt.settings.email")
+                }
             } header: {
                 Text("How your emails are sent")
             } footer: {
-                Text("The email account is set under Workspace → Email in the menu. A campaign can use its own From address.")
+                Text(canOpenEmail ? "A campaign can use its own From address."
+                     : "A workspace admin connects the email account. A campaign can use its own From address.")
             }
         } else if let sendingError, !Self.isForbidden(sendingError) {
             Section("How your emails are sent") {
@@ -162,6 +170,8 @@ struct MktSettingsView: View {
             }
         }
     }
+
+    private var canOpenEmail: Bool { Marketing.reachable(WorkspaceScreen.email, session.permissions) == WorkspaceScreen.email }
 
     /// A 403: the part the person's role can't see is left out rather than shown as an error.
     private static func isForbidden(_ error: APIError) -> Bool {
