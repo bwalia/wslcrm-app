@@ -317,8 +317,10 @@ struct ReferSheet: View {
     var preselect: String?
     let onDone: (Referral) async -> Void
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var partners: LoadState<[Partner]> = .idle
+    @State private var addingPartner = false
     @State private var partnerUuid: String?
     @State private var value: String
     @State private var kind = "percent"
@@ -368,12 +370,25 @@ struct ReferSheet: View {
                 switch partners {
                 case .idle, .loading:
                     Section { SkeletonRow() }
+                case _ where !session.permissions.can(.read, .crmAccounts):
+                    Section {
+                        ContentUnavailableView("You can't see partners", systemImage: "lock",
+                                               description: Text("Partners are kept with your accounts. Ask a workspace admin "
+                                                                 + "to let you see accounts, then pass work on from here."))
+                    }
                 case .failed(let error):
                     Section { InlineErrorRow(error: error) { Task { await load() } } }
                 case .loaded(let list) where list.isEmpty:
                     Section {
                         ContentUnavailableView("No partners yet", systemImage: "person.2",
-                                               description: Text("Add the companies you pass work to under CRM › Partners and referrals."))
+                                               description: Text(session.permissions.can(.create, .crmAccounts)
+                                                                 ? "Add a company you pass work to. You can then send them this one."
+                                                                 : "Ask a workspace admin to add the companies you pass work to."))
+                        if session.permissions.can(.create, .crmAccounts) {
+                            Button { addingPartner = true } label: { Label("Add a partner", systemImage: "plus.circle.fill") }
+                                .buttonStyle(.large(.brand))
+                                .accessibilityIdentifier("refer.addPartner")
+                        }
                     }
                 case .loaded(let list):
                     Section("Partner") {
@@ -429,6 +444,13 @@ struct ReferSheet: View {
             .navigationTitle("Pass to a partner")
             .navigationBarTitleDisplayMode(.inline)
             .task { await load() }
+            .sheet(isPresented: $addingPartner) {
+                NavigationStack {
+                    ResourceFormView(descriptor: ModuleCatalog.crmPartners, existing: nil) { saved in
+                        Task { await load(select: saved?.string("uuid")) }
+                    }
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -460,12 +482,13 @@ struct ReferSheet: View {
         rate = "\(partner.commissionValue)"
     }
 
-    private func load() async {
+    private func load(select added: String? = nil) async {
+        guard session.permissions.can(.read, .crmAccounts) else { partners = .loaded([]); return }
         if partners.value == nil { partners = .loading }
         do {
             let list = try await services.crm.partners()
             partners = .loaded(list)
-            if let preselect, let partner = list.first(where: { $0.uuid == preselect }) { choose(partner) }
+            if let wanted = added ?? preselect, let partner = list.first(where: { $0.uuid == wanted }) { choose(partner) }
         } catch {
             partners = .failed(error.asAPIError)
         }
@@ -497,6 +520,7 @@ struct PartnersHubView: View {
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var partners: [Partner] = []
+    @State private var partnersError: APIError?
     @State private var referrals: LoadState<[Referral]> = .idle
     @State private var status = ""
     @State private var notice: String?
@@ -519,6 +543,9 @@ struct PartnersHubView: View {
                 .accessibilityIdentifier("partners.directory")
                 LabeledContent("Commission received",
                                value: Formatters.money(partners.reduce(0) { $0 + $1.commissionPaid }, currency: "GBP") ?? "")
+                if let partnersError {
+                    InlineErrorRow(error: partnersError) { Task { await load() } }
+                }
             } footer: {
                 Text("Companies you pass work to. They fulfil it; you earn the commission.")
             }
@@ -570,7 +597,12 @@ struct PartnersHubView: View {
     }
 
     private func load() async {
-        partners = (try? await services.crm.partners(includeInactive: true)) ?? partners
+        do {
+            partners = try await services.crm.partners(includeInactive: true)
+            partnersError = nil
+        } catch {
+            partnersError = error.asAPIError
+        }
         guard session.permissions.can(.read, .crmDeals) else { return }
         if referrals.value == nil { referrals = .loading }
         do {
