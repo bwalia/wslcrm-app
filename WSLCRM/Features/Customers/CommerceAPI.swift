@@ -58,12 +58,16 @@ struct CommerceAPI: Sendable {
 
     /// The list endpoint is not tenant-scoped: pass a store uuid to scope it. Without one, rows are
     /// filtered client-side to the workspace (so a page may hold fewer than `perPage` items).
-    func products(search: String, storeUuid: String?, namespaceInternalId: Int?, page: Int, perPage: Int = 25) async throws -> Page<Product> {
+    /// `search` matches name, description, tags, SKU and barcode; `show` picks active (the server's
+    /// default), inactive or all products.
+    func products(search: String, storeUuid: String?, namespaceInternalId: Int?, page: Int, perPage: Int = 25,
+                  show: ProductActiveFilter = .active) async throws -> Page<Product> {
         var q = QueryBuilder()
         q.add("page", page)
         q.add("perPage", perPage)
         q.add("search", search.trimmingCharacters(in: .whitespaces))
         q.add("store_id", storeUuid)
+        q.add("is_active", show.rawValue)
         q.add("orderBy", "created_at")
         q.add("orderDir", "desc")
         let envelope: Envelope.DataTotal<Product> = try await client.send(.get("/api/v2/products", query: q.items))
@@ -163,6 +167,19 @@ struct CommerceAPI: Sendable {
         var fields = [("status", status.rawValue)]
         if let notes, !notes.isEmpty { fields.append(("notes", notes)) }
         try await client.sendDiscardingBody(Endpoint(.put, "/api/v2/orders/\(uuid)/update-status").withForm(fields))
+    }
+}
+
+/// Which products the list shows (`is_active=true|false|all`).
+enum ProductActiveFilter: String, CaseIterable, Identifiable, Sendable {
+    case active = "true", inactive = "false", all
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .active: "Active"
+        case .inactive: "Inactive"
+        case .all: "All"
+        }
     }
 }
 
