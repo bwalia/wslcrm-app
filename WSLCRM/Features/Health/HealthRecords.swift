@@ -57,7 +57,7 @@ extension HealthCatalog {
                     FieldSpec("medication_schedule", "Medicine times", .json),
                 ]),
                 SectionSpec("Record", [
-                    FieldSpec("notes", "Notes", .multiline), FieldSpec("created_by", "Written by"),
+                    FieldSpec("notes", "Notes", .multiline), FieldSpec("created_by_name", "Written by"),
                     FieldSpec("approved_by", "Approved by"), FieldSpec("created_at", "Added", .dateTime),
                     FieldSpec("updated_at", "Last changed", .dateTime),
                 ]),
@@ -174,7 +174,7 @@ extension HealthCatalog {
             detail: [
                 SectionSpec(nil, [
                     FieldSpec("log_date", "Day", .date), FieldSpec("shift", "Shift", .choice(shifts)),
-                    FieldSpec("recorded_by", "Recorded by"), FieldSpec("general_wellbeing", "Wellbeing", .choice(wellbeing)),
+                    FieldSpec("recorded_by_name", "Recorded by"), FieldSpec("general_wellbeing", "Wellbeing", .choice(wellbeing)),
                     FieldSpec("pain_level", "Pain (0–10)", .integer), FieldSpec("weight", "Weight (kg)", .decimal(places: 1)),
                 ]),
                 SectionSpec("Sleep", [
@@ -307,6 +307,7 @@ extension HealthCatalog {
                     FieldSpec("follow_up_notes", "Follow-up", .multiline),
                 ]),
                 SectionSpec("Review", [
+                    FieldSpec("recorded_by_name", "Written by"),
                     FieldSpec("reviewed_by", "Reviewed by"), FieldSpec("reviewed_at", "Reviewed", .dateTime),
                     FieldSpec("created_at", "Written", .dateTime),
                 ]),
@@ -517,15 +518,15 @@ extension HealthCatalog {
                     FieldSpec("assigned_to", "Who’s dealing with it"), FieldSpec("created_at", "Raised", .dateTime),
                 ]),
                 SectionSpec("Follow-up", [
-                    FieldSpec("acknowledged_by", "Seen by"), FieldSpec("acknowledged_at", "Seen", .dateTime),
-                    FieldSpec("resolved_by", "Resolved by"), FieldSpec("resolved_at", "Resolved", .dateTime),
+                    FieldSpec("acknowledged_by_name", "Seen by"), FieldSpec("acknowledged_at", "Seen", .dateTime),
+                    FieldSpec("resolved_by_name", "Resolved by"), FieldSpec("resolved_at", "Resolved", .dateTime),
                     FieldSpec("resolution_notes", "How it was resolved", .multiline),
                     FieldSpec("escalation_level", "Escalation level", .integer), FieldSpec("escalated_to", "Escalated to"),
                 ]),
                 SectionSpec("Family", [
                     FieldSpec("notify_family", "Tell the family", .bool), FieldSpec("family_notified_at", "Family told", .dateTime),
                 ]),
-                SectionSpec("More", [FieldSpec("details", "Details", .json), FieldSpec("triggered_by", "Raised by")]),
+                SectionSpec("More", [FieldSpec("details", "Details", .json), FieldSpec("triggered_by_name", "Raised by")]),
             ],
             form: FormSpec([
                 SectionSpec(nil, [

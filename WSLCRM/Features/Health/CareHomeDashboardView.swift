@@ -16,7 +16,7 @@ struct CareHomeDashboardView: View {
     var body: some View {
         List {
             if let loadError {
-                Section { InlineErrorRow(error: loadError) { Task { await load() } } }
+                Section { HealthLoadErrorRow(error: loadError) { Task { await load() } } }
             }
             if loaded {
                 Section {
@@ -130,7 +130,7 @@ struct CareHomeDashboardView: View {
     // MARK: Helpers
 
     private func patientName(_ row: Record) -> String? {
-        patients[row.string("patient_id") ?? ""].map(PatientText.name)
+        HealthPatientRef.name(row, directory: patients)
     }
 
     private func assessmentRow(_ assessment: Record, detail: [String?]) -> some View {
@@ -146,12 +146,12 @@ struct CareHomeDashboardView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// The row opens the record when its patient is known (the lists name patients only by number).
+    /// The row opens the record when its patient is known.
     @ViewBuilder
     private func linked<Content: View>(_ row: Record, descriptor: (String) -> ResourceDescriptor,
                                        @ViewBuilder content: () -> Content) -> some View {
-        if let patient = patients[row.string("patient_id") ?? ""] {
-            NavigationLink(value: HealthScope.record(descriptor(patient.id), row)) { content() }
+        if let patient = HealthPatientRef.uuid(row, directory: patients) {
+            NavigationLink(value: HealthScope.record(descriptor(patient), row)) { content() }
         } else {
             content()
         }
@@ -176,11 +176,13 @@ struct CareHomeDashboardView: View {
         async let plans = try? api.rows("/api/v2/care-plans/due-for-review")
         async let wanderers = try? api.rows("/api/v2/dementia/high-risk-wandering")
         async let due = try? api.rows("/api/v2/dementia/due-for-reassessment")
-        async let directory = try? api.patientsByNumber()
         plansDue = await plans ?? []
         wandering = await wanderers ?? []
         reassessments = await due ?? []
-        patients = await directory ?? [:]
+        // Rows name their patient (patient_uuid); only an older server needs the directory.
+        if HealthPatientRef.needsDirectory(plansDue + wandering + reassessments) {
+            patients = (try? await api.patientsByNumber()) ?? [:]
+        }
         loaded = true
     }
 }
