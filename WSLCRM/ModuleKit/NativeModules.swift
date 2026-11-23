@@ -85,7 +85,7 @@ enum NativeModules {
         "webhooks", "plugin:opsapi_marketing:campaigns", "plugin:opsapi_marketing:conversations",
         "plugin:opsapi_marketing:guide", "plugin:opsapi_marketing:lists", "plugin:opsapi_marketing:overview",
         "plugin:opsapi_marketing:pixels", "plugin:opsapi_marketing:settings", "plugin:opsapi_marketing:studio",
-        "plugin:opsapi_marketing:unsubscribed", "orders", "patients", "plugin:helpdesk:overview",
+        "plugin:opsapi_marketing:unsubscribed", "orders", "patients", "payroll", "plugin:helpdesk:overview",
         "plugin:helpdesk:tickets", "plugin:opsapi_marketing:suppressions", "plugin:opsapi_marketing:templates",
         "plugin:portfoliolab:clients", "plugin:portfoliolab:dashboard", "plugin:portfoliolab:drafts",
         "plugin:portfoliolab:setup", "plugin:property_deals:holidays", "pos", "products", "projects",

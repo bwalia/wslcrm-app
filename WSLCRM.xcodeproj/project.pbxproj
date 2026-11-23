@@ -23,6 +23,7 @@
 		072C4F4D25EFE5244CA53CBF /* CMSBlockEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12F02F35450794AC7ED6B919 /* CMSBlockEditorView.swift */; };
 		0821D0C7484596DA6BD3F02F /* JobDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 546F85F21575AE4A8E49E474 /* JobDetailView.swift */; };
 		088AB6B8860B566086329024 /* PluginsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D64ABDC1DE56D663135E62E /* PluginsViews.swift */; };
+		08E8F0252FFEE7BBD56599EB /* PayrollHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D2F8A82859836A663E01226 /* PayrollHomeView.swift */; };
 		08E90870A64C3570EE296ED3 /* FieldSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B3C0382D2990D8B9E81FD1 /* FieldSpec.swift */; };
 		09B5C751CFADFC14DF0E286B /* ChatAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 696CE4B165F4DAA34E8F6A95 /* ChatAPI.swift */; };
 		09EE22B09B6076464B73A180 /* ProjectsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AD14E29062DEF3699C7F4A7 /* ProjectsViews.swift */; };
@@ -479,6 +480,7 @@
 		CEDDBB48E31964356720DC4D /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A13265EC09EE4BC8624DCC48 /* MainTabView.swift */; };
 		CEEF30810127E052C3927515 /* PropertyDealsIntTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5108B9643074CCFA5097A253 /* PropertyDealsIntTourUITests.swift */; };
 		CF2F3BFC2041CB7985F4C5FA /* ModuleGroup+EngageMarketingAudience.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E69F0154F5E2FFB1EDE0DBA /* ModuleGroup+EngageMarketingAudience.swift */; };
+		CF4EF8EA578F007109DD2ECC /* PayrollEmployeesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAA67776FE1D0853B939026B /* PayrollEmployeesView.swift */; };
 		CF77EE18AD6A2A4DED6C8592 /* DeliveryViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBFEC98996BAA762FB159C09 /* DeliveryViews.swift */; };
 		CFA17689C48D6B2321E06662 /* fs_visits_list.json in Resources */ = {isa = PBXBuildFile; fileRef = EC63148111E166F8388B57F9 /* fs_visits_list.json */; };
 		D08EE03BB0C5C43720987C15 /* EngageCMSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4D7BF9AA32F0C0014EB0C3B /* EngageCMSTests.swift */; };
@@ -566,6 +568,7 @@
 		F147F10EB02A7CE498D44161 /* AIPlatformViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D4A6817E2C96A4C521AEA3 /* AIPlatformViews.swift */; };
 		F14DD0DCDBB96359F5DDC021 /* ShopDealRequestViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3B598DCCC331660B7988255 /* ShopDealRequestViews.swift */; };
 		F20063EFA06DFEE7002BC8D7 /* EngageMarketingAudienceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 638C9EA79402B999C6A3CDCF /* EngageMarketingAudienceTests.swift */; };
+		F21BEF36CDCB2748AD1963CB /* PayrollRunView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC556111C4CE5E2B924B62AA /* PayrollRunView.swift */; };
 		F2DD943BAAF1C1C53B5EDCCA /* EmployeeViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8529B1A1CDA7F04B17EC423 /* EmployeeViews.swift */; };
 		F306915523790EBDFDAF5D67 /* InvoiceExtraSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 860FC173DEA69B4018EEE78A /* InvoiceExtraSheets.swift */; };
 		F4565750DBAC051653F87A87 /* CRMPartnersModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0453181F734CCACB1C332EC6 /* CRMPartnersModels.swift */; };
@@ -799,6 +802,7 @@
 		4BAA59A1ADEF49D4727A01ED /* ModuleGroup+Shop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ModuleGroup+Shop.swift"; sourceTree = "<group>"; };
 		4C00AE57BFC9B9BA59DDF59B /* PAFactViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PAFactViews.swift; sourceTree = "<group>"; };
 		4C9CA730958B9F676B41784F /* ResourceFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceFormView.swift; sourceTree = "<group>"; };
+		4D2F8A82859836A663E01226 /* PayrollHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayrollHomeView.swift; sourceTree = "<group>"; };
 		4D98E3467561FD355F6D1FBF /* NativeSVG.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSVG.swift; sourceTree = "<group>"; };
 		4DB7A1B1B323C41B5F812444 /* PayrollModuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayrollModuleTests.swift; sourceTree = "<group>"; };
 		4E1FFA29124E5039D58F641D /* EngageFormsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngageFormsTests.swift; sourceTree = "<group>"; };
@@ -1030,6 +1034,7 @@
 		A9E457F7FE442C96BEBEF047 /* APIEndpointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEndpointTests.swift; sourceTree = "<group>"; };
 		AA47B5A76CAD8F15F7541D1B /* WorkHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkHub.swift; sourceTree = "<group>"; };
 		AA4D74297FBF3C84893C5E39 /* PayrollAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayrollAPI.swift; sourceTree = "<group>"; };
+		AAA67776FE1D0853B939026B /* PayrollEmployeesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayrollEmployeesView.swift; sourceTree = "<group>"; };
 		AAD4DFA9FAB0A9E13853D0C8 /* MktCampAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MktCampAPI.swift; sourceTree = "<group>"; };
 		AC9C8D40ED99B6577CBF31B0 /* PropertyDealsCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropertyDealsCaptureTests.swift; sourceTree = "<group>"; };
 		ACA77D4EB24EEB60C763D986 /* PDSettingsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDSettingsViews.swift; sourceTree = "<group>"; };
@@ -1073,6 +1078,7 @@
 		BAA7965C16751FE1A63A99EC /* PDDealResearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDDealResearch.swift; sourceTree = "<group>"; };
 		BBFD429CA82B67E65258D35C /* DashboardURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardURL.swift; sourceTree = "<group>"; };
 		BBFEC98996BAA762FB159C09 /* DeliveryViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryViews.swift; sourceTree = "<group>"; };
+		BC556111C4CE5E2B924B62AA /* PayrollRunView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PayrollRunView.swift; sourceTree = "<group>"; };
 		BCE0D9ED3B6B27352895CF94 /* PDTaskActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDTaskActions.swift; sourceTree = "<group>"; };
 		BD01A34B22D62AD63D246646 /* AcademyJoinView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcademyJoinView.swift; sourceTree = "<group>"; };
 		BD42D5CD2363804D482C9322 /* ShopOrderWorkflowModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopOrderWorkflowModels.swift; sourceTree = "<group>"; };
@@ -1352,6 +1358,9 @@
 			children = (
 				77D86B39B0349C1ABCF483AE /* MyPayView.swift */,
 				AA4D74297FBF3C84893C5E39 /* PayrollAPI.swift */,
+				AAA67776FE1D0853B939026B /* PayrollEmployeesView.swift */,
+				4D2F8A82859836A663E01226 /* PayrollHomeView.swift */,
+				BC556111C4CE5E2B924B62AA /* PayrollRunView.swift */,
 			);
 			path = Payroll;
 			sourceTree = "<group>";
@@ -2891,6 +2900,9 @@
 				9B3C31E45878C3B3A521571A /* PagedList.swift in Sources */,
 				3DBA08CE951C2E6C0E995DCB /* PartProposalSheet.swift in Sources */,
 				90C709B014CAB99E7A861099 /* PayrollAPI.swift in Sources */,
+				CF4EF8EA578F007109DD2ECC /* PayrollEmployeesView.swift in Sources */,
+				08E8F0252FFEE7BBD56599EB /* PayrollHomeView.swift in Sources */,
+				F21BEF36CDCB2748AD1963CB /* PayrollRunView.swift in Sources */,
 				9EA84A3D8EFF39F7BE316378 /* PendingMutation.swift in Sources */,
 				ECDAFD93D6FF95C0A6B456A4 /* PermissionSet.swift in Sources */,
 				CEAD60AD0536E3E95FE19829 /* PhaseDetailView.swift in Sources */,
