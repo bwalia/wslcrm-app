@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LoginView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(APIEndpointController.self) private var endpoint
     @State private var identifier = ""
     @State private var password = ""
     @State private var isSubmitting = false
@@ -94,17 +95,21 @@ struct LoginView: View {
                     .padding(8)
                     .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                 Spacer(minLength: 12)
-                Button {
-                    showingEndpoint = true
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.wsTitle3)
-                        .foregroundStyle(Palette.onDarkInk)
-                        .frame(width: 44, height: 44)
+                // Pointing the app at another server is for testers: the App Store build hides it
+                // (unless it was already repointed, so there's a way back).
+                if endpoint.buildName != "Production" || endpoint.isOverridden {
+                    Button {
+                        showingEndpoint = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .font(.wsTitle3)
+                            .foregroundStyle(Palette.onDarkInk)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Environment settings")
+                    .accessibilityIdentifier("login.environmentSettings")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Environment settings")
-                .accessibilityIdentifier("login.environmentSettings")
             }
             Text(BrandStore.shared.brand.name)
                 .font(.brandDisplay)

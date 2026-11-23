@@ -173,6 +173,13 @@ private struct RoleDetailView: View {
         self.changed = changed
     }
 
+    /// The landing page by its menu name, not its web address.
+    private var landingName: String {
+        guard let path = role.landingPath?.trimmedOrNil else { return "Home" }
+        let items = session.menu.sections.flatMap(\.items) + session.menu.secondary
+        return items.first { $0.path == path }.map(AppCatalog.name(for:)) ?? path
+    }
+
     var body: some View {
         List {
             if let loadError { Section { InlineErrorRow(error: loadError) { Task { await load() } } } }
@@ -180,7 +187,6 @@ private struct RoleDetailView: View {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(role.displayName).font(.wsTitle3.bold()).accessibilityAddTraits(.isHeader)
-                    Text(role.roleName).font(.wsSubheadline.monospaced()).foregroundStyle(.secondaryText)
                     HStack(spacing: 6) {
                         if role.isSystem { StatusBadge(text: "Built in", systemImage: "lock", tone: .neutral) }
                         if role.isDefault { StatusBadge(text: "Given to new members", systemImage: "star", tone: .info) }
@@ -192,8 +198,7 @@ private struct RoleDetailView: View {
                 if let description = role.description {
                     Text(description).font(.wsBody)
                 }
-                DetailRow(label: "Opens after sign-in", value: role.landingPath ?? "The usual home page")
-                if let priority = role.priority { DetailRow(label: "Priority", value: priority.formatted()) }
+                DetailRow(label: "Opens after sign-in", value: landingName)
             }
             permissions
             Section("People with this role (\(members.count))") {
@@ -382,6 +387,7 @@ private struct RoleEditorView: View {
     var seed: RoleSummary?
     let onSaved: (String) -> Void
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var draft = RoleDraft()
     @State private var original = RoleDraft()
@@ -406,42 +412,30 @@ private struct RoleEditorView: View {
             FeedbackSection(feedback: feedback)
             Section {
                 LabeledContent("Name (needed)") {
-                    TextField("e.g. site_manager", text: $draft.roleName)
-                        .multilineTextAlignment(.trailing)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .disabled(isSystem && existing != nil)
-                        .accessibilityIdentifier("roleEditor.roleName")
-                }
-                LabeledContent("Display name") {
-                    TextField("e.g. Site manager", text: $draft.displayName)
+                    TextField(existing == nil ? "e.g. Site manager" : Formatters.humanize(draft.roleName),
+                              text: $draft.displayName)
                         .multilineTextAlignment(.trailing)
                         .accessibilityIdentifier("roleEditor.displayName")
                 }
                 TextField("What is this role for?", text: $draft.description, axis: .vertical)
                     .lineLimit(2...5)
                     .accessibilityIdentifier("roleEditor.description")
-            } footer: {
-                Text(isSystem && existing != nil ? "A built-in role keeps its name."
-                     : "The name is saved in lowercase with underscores, such as site_manager.")
             }
             Section {
-                TextField("e.g. /dashboard/my-tasks", text: $draft.landingPath)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .accessibilityIdentifier("roleEditor.landingPath")
+                Picker("Opens after sign-in", selection: $draft.landingPath) {
+                    Text("Home").tag("")
+                    ForEach(landingChoices, id: \.path) { choice in
+                        Text(choice.name).tag(choice.path)
+                    }
+                }
+                .accessibilityIdentifier("roleEditor.landingPath")
                 Toggle("Give to new members", isOn: $draft.isDefault)
                     .accessibilityIdentifier("roleEditor.isDefault")
-                LabeledContent("Priority") {
-                    TextField("e.g. 50", text: $draft.priority)
-                        .multilineTextAlignment(.trailing)
-                        .keyboardType(.numberPad)
-                        .accessibilityIdentifier("roleEditor.priority")
-                }
             } header: {
                 Text("Settings")
             } footer: {
-                Text("The landing page opens after sign-in for people with this role. Only one role is given to new "
-                     + "members; choosing this one replaces the current one. Higher priority roles are listed first.")
+                Text("The page that opens first when someone with this role signs in. Only one role is given to new "
+                     + "members; choosing this one replaces the current one.")
             }
             if isOwnerRole {
                 Section("What it can do") {
@@ -455,6 +449,10 @@ private struct RoleEditorView: View {
             } else {
                 Section { ProgressView("Loading permissions…") }
             }
+        }
+        // A new role's internal name is made from its name ("Site manager" → site_manager).
+        .onChange(of: draft.displayName) { _, name in
+            if existing == nil { draft.roleName = RoleDraft.machineName(name) }
         }
         .navigationTitle(existing == nil ? "New role" : "Edit role")
         .navigationBarTitleDisplayMode(.inline)
@@ -477,6 +475,21 @@ private struct RoleEditorView: View {
             }
             await loadCatalog()
         }
+    }
+
+    /// The pages in this workspace's menu, by name (each sends its path); a saved page that isn't in the
+    /// menu any more stays choosable so saving doesn't lose it.
+    private var landingChoices: [(name: String, path: String)] {
+        var seen = Set<String>([""])
+        var choices: [(name: String, path: String)] = []
+        for item in session.menu.sections.flatMap(\.items) + session.menu.secondary {
+            guard !AppCatalog.hiddenKeys.contains(item.key), let path = item.path?.trimmedOrNil,
+                  seen.insert(path).inserted else { continue }
+            choices.append((AppCatalog.name(for: item), path))
+        }
+        let saved = draft.landingPath.trimmingCharacters(in: .whitespaces)
+        if !seen.contains(saved) { choices.append(("The page saved before (\(saved))", saved)) }
+        return choices
     }
 
     private func loadCatalog() async {
