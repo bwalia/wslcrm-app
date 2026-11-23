@@ -14,6 +14,7 @@ struct WorkspaceAIProvidersView: View {
 
     private var descriptor: ResourceDescriptor { WorkspaceAdminCatalog.aiProviders }
     private var canEdit: Bool { session.permissions.can(.update, moduleName: "namespace") }
+    private var isPlatformAdmin: Bool { session.user?.isPlatformAdmin == true }
 
     var body: some View {
         List {
@@ -40,12 +41,27 @@ struct WorkspaceAIProvidersView: View {
                 if !providers.isEmpty {
                     Text("The one marked with sparkles runs the AI assistant. Without one, the assistant uses the "
                          + "platform’s own model.")
+                } else if isPlatformAdmin, loaded {
+                    Text(descriptor.list.emptyDescription ?? "")
+                }
+            }
+            if isPlatformAdmin {
+                Section {
+                    NavigationLink {
+                        AIChainView()
+                    } label: {
+                        Label("Platform fallback order", systemImage: "arrow.triangle.branch")
+                    }
+                    .accessibilityIdentifier("ai.chain")
+                } footer: {
+                    Text("For platform administrators: which of the platform's own models each AI feature tries, "
+                         + "and in what order.")
                 }
             }
         }
         .overlay {
             if !loaded, loadError == nil { SkeletonList() }
-            else if loaded, providers.isEmpty, loadError == nil {
+            else if loaded, providers.isEmpty, loadError == nil, !isPlatformAdmin {
                 ContentUnavailableView {
                     Label(descriptor.list.emptyTitle ?? "No AI models yet", systemImage: descriptor.systemImage)
                 } description: {

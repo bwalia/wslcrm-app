@@ -194,7 +194,7 @@ enum PluginDescriptors {
         }
 
         let noun = singular(schema.label).lowercased()
-        let editable = schema.fields.filter { $0.type != "json" }
+        let editable = schema.fields
         var descriptor = ResourceDescriptor(
             id: id(code: schema.pluginCode, key: schema.key), title: schema.label, noun: noun,
             systemImage: "puzzlepiece.extension", api: api,
@@ -213,13 +213,17 @@ enum PluginDescriptors {
             ],
             form: editable.isEmpty || !(schema.canCreate || schema.canUpdate) ? nil : FormSpec([
                 SectionSpec(nil, editable.map {
-                    FieldSpec($0.name, $0.label, $0.editKind, required: $0.required, help: $0.help)
+                    FieldSpec($0.name, $0.label, $0.editKind, required: $0.required,
+                              help: $0.type == "json" ? jsonHelp : $0.help)
                 }),
             ], sendOnlyChanges: true),
             summary: schema.description ?? schema.pluginName)
         PluginCustomisations.apply(to: &descriptor, schema: schema)
         return descriptor
     }
+
+    static let jsonHelp = "Written as data: words in \"double quotes\", lists in [ ], groups in { }, "
+        + "for example {\"colour\": \"blue\", \"sizes\": [8, 10]}. You'll be told if something isn't right."
 
     private static func sortLabel(_ name: String, _ fields: [String: PluginSchema.Field]) -> String {
         switch name {

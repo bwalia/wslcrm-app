@@ -22,7 +22,9 @@ struct AppsView: View {
                     }
                 } else {
                     let groups = catalog.filtered(search)
-                    if groups.isEmpty {
+                    if catalog.groups.isEmpty {
+                        NoAccessCard()
+                    } else if groups.isEmpty {
                         ContentUnavailableView.search(text: search)
                     }
                     ForEach(groups) { group in
