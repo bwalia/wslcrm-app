@@ -1,7 +1,8 @@
 import XCTest
 @testable import WSLCRM
 
-/// Bookkeeping: writes respect RBAC as `lapis/routes/accounting.lua` checks it.
+/// Bookkeeping: writes respect RBAC as `lapis/routes/accounting.lua` checks it, the expense edit form picks its
+/// category like Add expense, the purchase ledger searches, and money in/out takes several entries at once.
 final class AccountingEasyTests: XCTestCase {
     /// `accounting.read` alone: the screens hide import, add, reconcile, approve and reject, and say why.
     func testAReadOnlyMemberCantWriteTheBooks() {
@@ -54,5 +55,33 @@ final class AccountingEasyTests: XCTestCase {
         XCTAssertTrue(PurchaseLedgerView.matches(taxi, "uber"))
         XCTAssertTrue(PurchaseLedgerView.matches(taxi, ""))
         XCTAssertFalse(PurchaseLedgerView.matches(taxi, "stationery"))
+    }
+
+    /// Several money in/out entries go in one `bank-transactions/import {transactions: [...]}`; each with a category
+    /// gets its own balanced journal against the bank (1000) and VAT (2100) accounts.
+    func testMoneyEntriesBuildTheImportAndJournals() throws {
+        var sale = MoneyEntryLine(description: "Website build", party: "Acme", category: 40, amount: "120", reference: "INV-7")
+        sale.date = Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 3))!
+        let cash = MoneyEntryLine(description: "Cash sale", amount: "10", vatRate: 0)
+        XCTAssertTrue(sale.isReady && cash.isReady)
+        XCTAssertFalse(MoneyEntryLine().isReady)
+        XCTAssertEqual(sale.vat, 20)
+        XCTAssertEqual(sale.transaction(moneyIn: true), .object([
+            "transaction_date": .string("2026-11-03"), "description": .string("Website build (Acme) Ref: INV-7"),
+            "amount": .number(120), "transaction_type": .string("credit"), "category": .string("40")]))
+        guard case .object(let out) = cash.transaction(moneyIn: false) else { return XCTFail("an object") }
+        XCTAssertEqual(out["transaction_type"], .string("debit"))
+        XCTAssertNil(out["category"])
+        XCTAssertNil(cash.journal(moneyIn: false, bankID: 1, vatID: 2), "no category, no journal")
+
+        let journal = try XCTUnwrap(sale.journal(moneyIn: true, bankID: 1, vatID: 2))
+        XCTAssertEqual(journal["reference"], .string("INV-7"))
+        let lines = journal["lines"]?.list ?? []
+        XCTAssertEqual(lines.count, 3)
+        func total(_ key: String) -> Double {
+            lines.reduce(0) { sum, line in if case .number(let n)? = line[key] { return sum + n }; return sum }
+        }
+        XCTAssertEqual(total("debit_amount"), total("credit_amount"), "balanced")
+        XCTAssertEqual(lines[2]["credit_amount"], .number(20), "VAT on sales")
     }
 }

@@ -75,6 +75,71 @@ struct MoneyInOutView: View {
     }
 }
 
+/// One money in/out entry as typed.
+struct MoneyEntryLine: Identifiable, Equatable, Sendable {
+    let id = UUID()
+    var date = Date()
+    var description = ""
+    var party = ""
+    var category: Int?
+    var amount = ""
+    var vatRate = 20
+    var reference = ""
+
+    var gross: Decimal { Decimal(string: amount) ?? 0 }
+    var isReady: Bool { !description.trimmingCharacters(in: .whitespaces).isEmpty && gross > 0 }
+
+    /// VAT inside a gross amount: gross × rate / (100 + rate), to the penny.
+    var vat: Decimal {
+        guard vatRate > 0 else { return 0 }
+        var raw = gross * Decimal(vatRate) / Decimal(100 + vatRate)
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &raw, 2, .plain)
+        return rounded
+    }
+
+    /// The bank line for `POST …/bank-transactions/import {transactions: [...]}`.
+    func transaction(moneyIn: Bool) -> JSONValue {
+        var text = description
+        if !party.isEmpty { text += " (\(party))" }
+        if !reference.isEmpty { text += " Ref: \(reference)" }
+        var item: [String: JSONValue] = [
+            "transaction_date": .string(CalendarDay(date: date).isoString), "description": .string(text),
+            "amount": .number(NSDecimalNumber(decimal: gross).doubleValue),
+            "transaction_type": .string(moneyIn ? "credit" : "debit"),
+        ]
+        if let category { item["category"] = .string(String(category)) }
+        return .object(item)
+    }
+
+    /// The balanced journal entry against the bank (and VAT) account; nil without a category.
+    func journal(moneyIn: Bool, bankID: Int, vatID: Int?) -> [String: JSONValue]? {
+        guard let category else { return nil }
+        let g = NSDecimalNumber(decimal: gross).doubleValue
+        let v = NSDecimalNumber(decimal: vat).doubleValue
+        func line(_ account: Int, _ debit: Double, _ credit: Double, _ words: String) -> JSONValue {
+            .object(["account_id": .number(Double(account)), "debit_amount": .number(debit),
+                     "credit_amount": .number(credit), "description": .string(words)])
+        }
+        var lines: [JSONValue]
+        if moneyIn {
+            lines = [line(bankID, g, 0, "Bank receipt"), line(category, 0, g - v, description)]
+            if v > 0, let vatID { lines.append(line(vatID, 0, v, "VAT on sales")) }
+        } else {
+            lines = [line(category, g - v, 0, description), line(bankID, 0, g, "Bank payment")]
+            if v > 0, let vatID { lines.append(line(vatID, v, 0, "VAT on purchases")) }
+        }
+        var journal: [String: JSONValue] = [
+            "entry_date": .string(CalendarDay(date: date).isoString),
+            "description": .string((moneyIn ? "Sales receipt: " : "Purchase: ") + description), "lines": .array(lines),
+        ]
+        if !reference.isEmpty { journal["reference"] = .string(reference) }
+        return journal
+    }
+}
+
+/// Record one or several receipts or payments in one go: every entry is posted as a bank line in one import,
+/// and each entry with a category also gets its journal entry.
 struct MoneyEntryForm: View {
     let moneyIn: Bool
     let accounts: AccountingAccounts
@@ -82,38 +147,47 @@ struct MoneyEntryForm: View {
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
-    @State private var date = Date()
-    @State private var description = ""
-    @State private var party = ""
-    @State private var category: Int?
-    @State private var amount = ""
-    @State private var vatRate = 20
-    @State private var reference = ""
+    @State private var lines = [MoneyEntryLine()]
     @State private var busy = false
     @State private var error: String?
 
     var body: some View {
         Form {
-            Section {
-                DatePicker("Date", selection: $date, displayedComponents: .date)
-                TextField(moneyIn ? "What was this payment for?" : "What did you buy?", text: $description)
-                    .accessibilityIdentifier("accounting.money.description")
-                TextField(moneyIn ? "Customer name" : "Supplier name", text: $party)
-                Picker("Category", selection: $category) {
-                    Text("Choose a category…").tag(Int?.none)
-                    ForEach(accounts.active(moneyIn ? "revenue" : "expense")) { a in
-                        Text(AccountingAccounts.label(a)).tag(a.int("id"))
+            ForEach($lines) { $entry in
+                Section {
+                    DatePicker("Date", selection: $entry.date, displayedComponents: .date)
+                    TextField(moneyIn ? "What was this payment for?" : "What did you buy?", text: $entry.description)
+                        .accessibilityIdentifier("accounting.money.description")
+                    TextField(moneyIn ? "Customer name" : "Supplier name", text: $entry.party)
+                    Picker("Category", selection: $entry.category) {
+                        Text("Choose a category…").tag(Int?.none)
+                        ForEach(accounts.active(moneyIn ? "revenue" : "expense")) { a in
+                            Text(AccountingAccounts.label(a)).tag(a.int("id"))
+                        }
+                    }
+                    TextField(moneyIn ? "Amount in" : "Amount out", text: $entry.amount).keyboardType(.decimalPad)
+                        .accessibilityIdentifier("accounting.money.amount")
+                    Picker("VAT rate", selection: $entry.vatRate) {
+                        Text("0% (zero rated)").tag(0)
+                        Text("5% (reduced)").tag(5)
+                        Text("20% (standard)").tag(20)
+                    }
+                    LabeledContent("VAT amount", value: TaxMoney.text(entry.vat))
+                    TextField("Reference / invoice number", text: $entry.reference)
+                    if lines.count > 1 {
+                        Button("Remove this entry", role: .destructive) { lines.removeAll { $0.id == entry.id } }
+                    }
+                } header: {
+                    if lines.count > 1, let index = lines.firstIndex(where: { $0.id == entry.id }) {
+                        Text("Entry \(index + 1)")
                     }
                 }
-                TextField(moneyIn ? "Amount in" : "Amount out", text: $amount).keyboardType(.decimalPad)
-                    .accessibilityIdentifier("accounting.money.amount")
-                Picker("VAT rate", selection: $vatRate) {
-                    Text("0% (zero rated)").tag(0)
-                    Text("5% (reduced)").tag(5)
-                    Text("20% (standard)").tag(20)
+            }
+            Section {
+                Button("Add another entry", systemImage: "plus") {
+                    lines.append(MoneyEntryLine(date: lines.last?.date ?? Date(), vatRate: lines.last?.vatRate ?? 20))
                 }
-                LabeledContent("VAT amount", value: TaxMoney.text(vat))
-                TextField("Reference / invoice number", text: $reference)
+                .accessibilityIdentifier("accounting.money.addLine")
             } footer: {
                 Text("With a category, a journal entry is posted to your bank and VAT accounts as well.")
             }
@@ -125,21 +199,10 @@ struct MoneyEntryForm: View {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
                 Button(busy ? "Saving…" : "Save") { Task { await save() } }
-                    .disabled(busy || description.isEmpty || (Decimal(string: amount) ?? 0) <= 0)
+                    .disabled(busy || !lines.allSatisfy(\.isReady))
                     .accessibilityIdentifier("accounting.money.save")
             }
         }
-    }
-
-    private var gross: Decimal { Decimal(string: amount) ?? 0 }
-
-    /// VAT inside a gross amount: gross × rate / (100 + rate), to the penny.
-    private var vat: Decimal {
-        guard vatRate > 0 else { return 0 }
-        var raw = gross * Decimal(vatRate) / Decimal(100 + vatRate)
-        var rounded = Decimal()
-        NSDecimalRound(&rounded, &raw, 2, .plain)
-        return rounded
     }
 
     private func save() async {
@@ -147,48 +210,28 @@ struct MoneyEntryForm: View {
         defer { busy = false }
         let bank = accounts.control("bank")
         let vatAccount = accounts.control("vat")
-        if category != nil && (bank == nil || (vat > 0 && vatAccount == nil)) {
+        let needsBank = lines.contains { $0.category != nil }
+        let needsVAT = lines.contains { $0.category != nil && $0.vat > 0 }
+        if (needsBank && bank == nil) || (needsVAT && vatAccount == nil) {
             error = "Add a bank account (code 1000) and a VAT account (code 2100) to the chart of accounts first."
             return
         }
-        let day = CalendarDay(date: date).isoString
-        var text = description
-        if !party.isEmpty { text += " (\(party))" }
-        if !reference.isEmpty { text += " Ref: \(reference)" }
-        var item: [String: JSONValue] = [
-            "transaction_date": .string(day), "description": .string(text),
-            "amount": .number(NSDecimalNumber(decimal: gross).doubleValue), "transaction_type": .string(moneyIn ? "credit" : "debit"),
-        ]
-        if let category { item["category"] = .string(String(category)) }
         let api = makeTaxAPI(services, user: session.user)
         do {
-            try await api.json(.post, "/api/v2/accounting/bank-transactions/import", ["transactions": .array([.object(item)])])
-            if let category, let bankID = bank?.int("id") {
-                let g = NSDecimalNumber(decimal: gross).doubleValue
-                let v = NSDecimalNumber(decimal: vat).doubleValue
-                func line(_ account: Int, _ debit: Double, _ credit: Double, _ words: String) -> JSONValue {
-                    .object(["account_id": .number(Double(account)), "debit_amount": .number(debit),
-                             "credit_amount": .number(credit), "description": .string(words)])
+            try await api.json(.post, "/api/v2/accounting/bank-transactions/import",
+                               ["transactions": .array(lines.map { $0.transaction(moneyIn: moneyIn) })])
+            if let bankID = bank?.int("id") {
+                for entry in lines {
+                    if let journal = entry.journal(moneyIn: moneyIn, bankID: bankID, vatID: vatAccount?.int("id")) {
+                        try await api.json(.post, "/api/v2/accounting/journal-entries", journal)
+                    }
                 }
-                var lines: [JSONValue]
-                if moneyIn {
-                    lines = [line(bankID, g, 0, "Bank receipt"), line(category, 0, g - v, description)]
-                    if v > 0, let vatID = vatAccount?.int("id") { lines.append(line(vatID, 0, v, "VAT on sales")) }
-                } else {
-                    lines = [line(category, g - v, 0, description), line(bankID, 0, g, "Bank payment")]
-                    if v > 0, let vatID = vatAccount?.int("id") { lines.append(line(vatID, v, 0, "VAT on purchases")) }
-                }
-                var journal: [String: JSONValue] = [
-                    "entry_date": .string(day), "description": .string((moneyIn ? "Sales receipt: " : "Purchase: ") + description),
-                    "lines": .array(lines),
-                ]
-                if !reference.isEmpty { journal["reference"] = .string(reference) }
-                try await api.json(.post, "/api/v2/accounting/journal-entries", journal)
             }
-            done(moneyIn ? "Money in recorded." : "Money out recorded.")
+            done(lines.count == 1 ? (moneyIn ? "Money in recorded." : "Money out recorded.")
+                 : "\(lines.count) entries recorded.")
             dismiss()
         } catch {
-            self.error = "The entry couldn’t be saved: \(error.asAPIError.plainMessage)"
+            self.error = "The entries couldn’t be saved: \(error.asAPIError.plainMessage)"
         }
     }
 }
