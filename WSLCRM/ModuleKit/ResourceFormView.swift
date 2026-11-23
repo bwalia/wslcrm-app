@@ -38,6 +38,8 @@ enum FormCoding {
             return .text(tags.joined(separator: ", "))
         case .secret:
             return .text("")
+        case .json:
+            return .text(record?[field.key].map(jsonText) ?? "")
         case .reference(let spec):
             let value = record?.string(field.saveKey) ?? record?.string(field.key) ?? ""
             let label = spec.displayKey.flatMap { record?.string($0) } ?? value
@@ -62,6 +64,10 @@ enum FormCoding {
                     ? "\(field.label) must be a number." : nil
             case .email:
                 return trimmed.contains("@") && trimmed.contains(".") ? nil : "\(field.label) doesn’t look like an email address."
+            case .json:
+                return parseJSON(trimmed) == nil
+                    ? "\(field.label) isn’t written correctly. Check every { has a matching }, every [ a ], words are "
+                        + "in \"double quotes\" and items are separated by commas." : nil
             default:
                 return nil
             }
@@ -103,10 +109,31 @@ enum FormCoding {
             case .tags:
                 return .array(text.split(separator: ",").map { .string($0.trimmingCharacters(in: .whitespaces)) }
                     .filter { $0.stringValue?.isEmpty == false })
+            case .json:
+                return parseJSON(text)
             default:
                 return .string(text)
             }
         }
+    }
+
+    /// Free-form JSON as the person edits it: indented, keys in order (a stored string stays as it is).
+    static func jsonText(_ value: JSONValue) -> String {
+        switch value {
+        case .null: return ""
+        case .string(let text): return text
+        default:
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            return (try? encoder.encode(value)).map { String(decoding: $0, as: UTF8.self) } ?? ""
+        }
+    }
+
+    /// What was typed as JSON, or nil when it isn't. The keyboard's curly quotes count as straight ones.
+    static func parseJSON(_ text: String) -> JSONValue? {
+        let straight = text.replacingOccurrences(of: "\u{201C}", with: "\"").replacingOccurrences(of: "\u{201D}", with: "\"")
+            .replacingOccurrences(of: "\u{2018}", with: "'").replacingOccurrences(of: "\u{2019}", with: "'")
+        return try? JSONDecoder().decode(JSONValue.self, from: Data(straight.utf8))
     }
 
     /// The body for a save. `sendOnlyChanges` leaves out what wasn't touched.
@@ -343,8 +370,14 @@ struct FieldEditor: View {
             }
         case .reference(let spec):
             ReferenceField(label: label, spec: spec, value: $value)
-        case .multiline, .json:
+        case .multiline:
             TextField(label, text: textBinding, axis: .vertical).lineLimit(3...8)
+        case .json:
+            TextField(label, text: textBinding, axis: .vertical)
+                .lineLimit(3...12)
+                .font(.wsBody.monospaced())
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
         case .secret:
             SecureField(field.placeholder ?? "\(label) — leave blank to keep", text: textBinding)
         default:
