@@ -6,9 +6,9 @@ enum PAMapping {
     // MARK: Gate and Today
 
     static func me(from briefing: PAServerBriefing) -> PAMe {
+        // No stand-in permissions: screens check the real RBAC modules (`property_pa_*`) on the session.
         PAMe(enabled: true, role: briefing.me?.isManager == true ? .manager : .agent, userUuid: nil,
-             displayName: briefing.me?.name,
-             permissions: briefing.me?.isManager == true ? ["knowledge": ["manage"], "manager_view": ["read"]] : ["knowledge": ["create"]],
+             displayName: briefing.me?.name, permissions: nil,
              stt: "server", maxAudioSeconds: 300, timezone: nil)
     }
 
