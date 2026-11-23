@@ -437,6 +437,15 @@ struct AddExpenseForm: View {
     static let fallbackCategories = ["Office Supplies", "Travel", "Software", "Marketing", "Professional Services",
                                      "Utilities", "Other"]
 
+    /// The category picker on the expense edit form (module kit): the same choices as here, the workspace's
+    /// active expense accounts (`GET /accounting/accounts?type=expense`), saved by name.
+    nonisolated static let categoryPicker: ReferenceSpec = {
+        var spec = ReferenceSpec(list: "/api/v2/accounting/accounts", valueKey: "name", titleKeys: ["name"],
+                                 subtitleKeys: ["code"], searchParam: nil)
+        spec.query = ["type": "expense", "is_active": "true", "per_page": "500"]
+        return spec
+    }()
+
     var body: some View {
         Form {
             if let message { Section { TaxNoticeView(notice: message) } }
