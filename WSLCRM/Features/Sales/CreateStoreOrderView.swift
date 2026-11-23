@@ -30,6 +30,18 @@ struct CreateStoreOrderView: View {
     /// One key per form, so tapping Create twice never makes two orders.
     @State private var idempotencyKey = UUID().uuidString
 
+    init(prefill: PickedCustomer? = nil, onCreated: @escaping (CreatedStoreOrder) -> Void) {
+        self.onCreated = onCreated
+        if let prefill {
+            _email = State(initialValue: prefill.email)
+            _phone = State(initialValue: prefill.phone)
+            _firstName = State(initialValue: prefill.firstName)
+            _lastName = State(initialValue: prefill.lastName)
+            _withDelivery = State(initialValue: prefill.hasAddress)
+            _deliveryAddress = State(initialValue: prefill.hasAddress ? prefill.storeOrderAddress : StoreOrderAddress())
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -138,6 +150,16 @@ struct CreateStoreOrderView: View {
 
     private var customerSection: some View {
         Section {
+            ChooseCustomerButton { picked in
+                email = picked.email
+                phone = picked.phone
+                firstName = picked.firstName
+                lastName = picked.lastName
+                if picked.hasAddress {
+                    withDelivery = true
+                    deliveryAddress = picked.storeOrderAddress
+                }
+            }
             TextField("Email (required)", text: $email)
                 .keyboardType(.emailAddress).textContentType(.emailAddress)
                 .textInputAutocapitalization(.never).autocorrectionDisabled()

@@ -23,8 +23,9 @@ struct ShopQuoteBuilderView: View {
     @State private var error: APIError?
     @State private var created: ShopQuote?
 
-    init(kind: ShopQuoteKind = .order) {
+    init(kind: ShopQuoteKind = .order, customer: ShopCustomerDraft? = nil) {
         _terms = State(initialValue: ShopOrderTermsDraft(kind: kind))
+        if let customer { _customer = State(initialValue: customer) }
     }
 
     private var shippingMinor: Int? { shipping.shopTrimmed.isEmpty ? 0 : ShopMoney.minor(from: shipping) }
