@@ -368,6 +368,16 @@ struct TaskDetailsSheet: View {
                     TextField("Description", text: $description, axis: .vertical)
                         .lineLimit(3...12)
                         .accessibilityIdentifier("task.edit.description")
+                } footer: {
+                    let kept = RichText.formattingLostOnEdit(task.description)
+                    if !kept.isEmpty {
+                        let what = ListFormatter.localizedString(byJoining: kept)
+                        Text(descriptionChanged
+                             ? "Saving will keep your words but drop the \(what) in this description. To keep them, undo your change to the description."
+                             : "This description has \(what). If you change it here, the words stay but the \(what) are dropped.")
+                            .foregroundStyle(descriptionChanged ? Tone.warning.textColor : .secondaryText)
+                            .accessibilityIdentifier("task.edit.formattingWarning")
+                    }
                 }
                 Section {
                     Toggle("Start date", isOn: $hasStart).disabled(task.startDate != nil)
@@ -439,6 +449,10 @@ struct TaskDetailsSheet: View {
         estimate = task.timeEstimateMinutes.flatMap { $0 > 0 ? String($0) : nil } ?? ""
         epicId = task.epicId
         coverColor = task.coverColor ?? ""
+    }
+
+    private var descriptionChanged: Bool {
+        description.trimmingCharacters(in: .whitespacesAndNewlines) != RichText.plain(task.description)
     }
 
     /// Only what changed, so a field somebody else edited meanwhile isn't overwritten.

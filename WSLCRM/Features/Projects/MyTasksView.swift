@@ -78,6 +78,7 @@ struct MyTasksView: View {
         .navigationTitle("My tasks")
         .searchable(text: $search, prompt: "Search my tasks")
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) { WorkAskAIButton(path: WorkAskAIButton.myTasks) }
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink(value: WorkScreen.waiting.route) {
                     Label("Waiting for me", systemImage: "tray.full")
@@ -85,7 +86,9 @@ struct MyTasksView: View {
                 .accessibilityIdentifier("mytasks.waiting")
             }
         }
+        .workRunningTimer()
         .task { await load() }
+        .workReloadOnReturn { await load() }
     }
 
     private var filters: some View {
