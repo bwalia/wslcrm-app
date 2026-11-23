@@ -353,4 +353,82 @@ final class ShopEasyTests: XCTestCase {
         XCTAssertEqual(fresh["new"] as? Bool, true)
         XCTAssertNil(fresh["deal_code"])
     }
+
+    // MARK: Signatures: store orders (routes/orders.lua) and deliveries (routes/delivery-assignments.lua)
+
+    static let signatureJSON = #"""
+    {"success":true,"data":{"signature":{"uuid":"sig-1","signer_name":"Jo Bloggs","note":"At the door",
+      "signed_at":"2026-11-24T10:15:00Z","captured_by":"sam@shop.test","image_sha256":"ab12","image_bytes":2048},
+     "can_sign":false,"status":"delivered"}}
+    """#
+
+    func testAStoreOrderIsSignedForAndHandedOverInOneStep() async throws {
+        let recorder = Recorder()
+        let api = SalesAPI(client: await client(recorder, ["/api/v2/orders/o-1/signature": Self.signatureJSON]))
+        let state = try await api.signStoreOrder("o-1", StoreOrderSignatureBody(signerName: "Jo Bloggs",
+                                                                                 image: "data:image/png;base64,iVBORw0KGgo=",
+                                                                                 note: nil, markHandedOver: true))
+        XCTAssertEqual(state.signature?.signerName, "Jo Bloggs")
+        XCTAssertEqual(state.signature?.capturedBy, "sam@shop.test")
+        XCTAssertFalse(state.canSign)
+        let body = try XCTUnwrap(recorder.last("/api/v2/orders/o-1/signature")?.jsonBody)
+        XCTAssertEqual(body["signer_name"] as? String, "Jo Bloggs")
+        XCTAssertEqual(body["image"] as? String, "data:image/png;base64,iVBORw0KGgo=")
+        XCTAssertEqual(body["mark_handed_over"] as? Bool, true)
+        XCTAssertNil(body["note"])
+
+        try await api.voidStoreOrderSignature("o-1", reason: "Wrong person")
+        let void = try XCTUnwrap(recorder.last("/api/v2/orders/o-1/signature/void")?.jsonBody)
+        XCTAssertEqual(void["reason"] as? String, "Wrong person")
+
+        XCTAssertEqual(SignatureCapture.problem(name: "J", png: Data([1])), "Type the name of the person signing.")
+        XCTAssertNotNil(SignatureCapture.problem(name: "Jo", png: Data(count: 301 * 1024)), "the server takes 300 KB at most")
+        XCTAssertNil(SignatureCapture.problem(name: "Jo", png: Data([1, 2, 3])))
+    }
+
+    func testADeliveryPartnerSeesTheirDeliveriesAndDeliversWithASignature() async throws {
+        let recorder = Recorder()
+        let api = DeliveryAPI(client: await client(recorder, [
+            "/api/v2/delivery-partner/assignments": #"""
+            {"assignments":[{"uuid":"da-1","status":"in_transit","delivery_fee":"4.50","pickup_address":"1 Mill Lane",
+              "delivery_address":"2 High St","delivery_city":"Leeds","delivery_postal_code":"LS1 1AA","customer_name":"Jo Bloggs",
+              "order_number":"ORD-1","total_amount":"40.00","store_name":"High Street","store_phone":"0113 000",
+              "delivery_latitude":null,"delivery_longitude":null,"proof_of_delivery":null}]}
+            """#,
+            "/api/v2/delivery-assignments/da-1/status": #"""
+            {"success":true,"message":"Assignment status updated from 'in_transit' to 'delivered'","assignment":{"uuid":"da-1",
+             "status":"delivered"},"order_status":"delivered","previous_status":"in_transit"}
+            """#,
+            "/api/v2/delivery-assignments/da-1/signature": Self.signatureJSON,
+        ]))
+        let rows = try await api.myAssignments(status: "active")
+        XCTAssertEqual(rows.first?.id, "da-1")
+        XCTAssertEqual(MyDeliveryDetailView.address(try XCTUnwrap(rows.first)), "2 High St, Leeds, LS1 1AA")
+        let list = try XCTUnwrap(recorder.last("/api/v2/delivery-partner/assignments"))
+        XCTAssertEqual(query(list)["status"], "active")
+        XCTAssertNil(list.value(forHTTPHeaderField: "X-Namespace-Id"), "a partner needs no workspace")
+
+        let message = try await api.moveMyAssignment("da-1", DeliveryStatusBody(status: "delivered", notes: nil,
+                                                                               signature: "data:image/png;base64,iVBORw0KGgo=",
+                                                                               signerName: "Jo Bloggs"))
+        XCTAssertEqual(message, "Assignment status updated from 'in_transit' to 'delivered'")
+        let put = try XCTUnwrap(recorder.last("/api/v2/delivery-assignments/da-1/status"))
+        XCTAssertEqual(put.httpMethod, "PUT")
+        let body = try XCTUnwrap(put.jsonBody)
+        XCTAssertEqual(body["status"] as? String, "delivered")
+        XCTAssertEqual(body["signer_name"] as? String, "Jo Bloggs")
+        XCTAssertEqual(body["signature"] as? String, "data:image/png;base64,iVBORw0KGgo=", "JSON keeps + / = as they are")
+        XCTAssertNil(body["notes"])
+
+        let proof = try await api.assignmentSignature("da-1")
+        XCTAssertEqual(proof.signature?.signerName, "Jo Bloggs")
+
+        XCTAssertEqual(MyDeliverySteps.next(from: "pending").map(\.status), ["accepted", "rejected"])
+        XCTAssertEqual(MyDeliverySteps.next(from: "accepted").map(\.status), ["picked_up", "cancelled"])
+        XCTAssertEqual(MyDeliverySteps.next(from: "picked_up").map(\.status), ["in_transit", "cancelled"])
+        let last = MyDeliverySteps.next(from: "in_transit")
+        XCTAssertEqual(last.map(\.status), ["delivered", "delivered", "failed"])
+        XCTAssertEqual(last.map(\.signs), [true, false, false], "only the first one asks for the signature")
+        XCTAssertTrue(MyDeliverySteps.next(from: "delivered").isEmpty)
+    }
 }

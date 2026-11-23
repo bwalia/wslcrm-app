@@ -77,6 +77,7 @@ struct DeliveryHomeView: View {
     @AppStorage("delivery.store") private var savedStore = ""
     @State private var stores: LoadState<[Record]> = .idle
     @State private var tab: Tab = .partners
+    @State private var isPartner = false
 
     private var store: Record? {
         guard let stores = stores.value else { return nil }
@@ -108,6 +109,7 @@ struct DeliveryHomeView: View {
         .safeAreaInset(edge: .top) { header }
         .navigationTitle("Delivery")
         .task { if stores.value == nil { await load() } }
+        .task { isPartner = await MyDeliveries.isPartner(services) }
     }
 
     private var header: some View {
@@ -127,6 +129,10 @@ struct DeliveryHomeView: View {
             }
             .pickerStyle(.segmented)
             .accessibilityIdentifier("delivery.tab")
+            if isPartner {
+                NavigationLink(value: NativeScreenRoute(SalesScreen.myDeliveries)) { MyDeliveries.entryLabel }
+                    .accessibilityIdentifier("delivery.myDeliveries")
+            }
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -831,6 +837,8 @@ struct DeliveryOrderView: View {
     @State private var busy = false
     @State private var actionError: APIError?
     @State private var notice: String?
+    @State private var proof: ShopOrderSignatureState?
+    @State private var proofImage: UIImage?
 
     var body: some View {
         List {
@@ -919,6 +927,9 @@ struct DeliveryOrderView: View {
             DetailRow(label: "Delivery expected", value: Formatters.dateTime(a.date("estimated_delivery_time")))
             DetailRow(label: "Delivered", value: Formatters.dateTime(a.date("actual_delivery_time")))
         }
+        if let signature = proof?.signature {
+            Section("Signed for") { SignatureProofRows(signature: signature, image: proofImage) }
+        }
         Section("Proof and notes") {
             DetailRow(label: "Tracking number", value: a.string("tracking_number"))
             DetailRow(label: "Proof of delivery", value: a.string("proof_of_delivery"))
@@ -935,6 +946,11 @@ struct DeliveryOrderView: View {
                 return
             }
             assignment = .loaded(try await services.delivery.assignment(uuid))
+            proof = try? await services.delivery.assignmentSignature(uuid)
+            proofImage = nil
+            if proof?.signature != nil, let data = try? await services.delivery.assignmentSignatureImage(uuid) {
+                proofImage = UIImage(data: data)
+            }
         } catch {
             let apiError = error.asAPIError
             if case .cancelled = apiError { return }

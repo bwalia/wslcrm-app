@@ -17,6 +17,11 @@ struct StoreOrderDetailView: View {
     @State private var pendingChange: StoreOrderStatusChange?
     @State private var changeNote = ""
     @State private var editing: StoreOrderEdit?
+    /// Proof of delivery (nil until loaded, or when the server has no signatures).
+    @State private var signature: ShopOrderSignatureState?
+    @State private var signatureImage: UIImage?
+    /// The customer is signing: also hand the order over (true) or only sign (false).
+    @State private var signing: Bool?
 
     private var canUpdate: Bool { session.permissions.can(.update, .orders) }
 
@@ -36,6 +41,16 @@ struct StoreOrderDetailView: View {
             await load()
         }
         .refreshable { await load() }
+        .fullScreenCover(isPresented: .init(get: { signing != nil }, set: { if !$0 { signing = nil } })) {
+            if let order = state.value {
+                SignatureCaptureSheet(title: "Sign for the order",
+                                      summary: "\(order.orderNumber) · \(order.items.count) item\(order.items.count == 1 ? "" : "s")",
+                                      signer: order.customerName,
+                                      action: signing == true ? "Save and hand over" : "Save signature") { capture in
+                    await sign(capture, handOver: signing == true)
+                }
+            }
+        }
         .alert(pendingChange.map(Self.title) ?? "", isPresented: .init(get: { pendingChange != nil },
                                                                        set: { if !$0 { pendingChange = nil } }),
                presenting: pendingChange) { change in
@@ -89,6 +104,9 @@ struct StoreOrderDetailView: View {
         }
 
         if canUpdate { actionsSection(order) }
+
+        StoreOrderSignatureSection(state: signature, image: signatureImage, canUpdate: canUpdate,
+                                   sign: { signing = false }, void: { reason in await voidSignature(reason) })
 
         Section("Customer") {
             DetailRow(label: "Name", value: order.customerName)
@@ -241,11 +259,21 @@ struct StoreOrderDetailView: View {
                     .accessibilityIdentifier("storeOrder.markPaid")
                 }
                 if unfulfilled {
+                    if signature?.canSign == true && signature?.signature == nil {
+                        Button { signing = true } label: {
+                            Label("Customer signs and hand over", systemImage: "signature")
+                        }
+                        .buttonStyle(.large(.progress, prominent: true))
+                        .listRowSeparator(.hidden)
+                        .disabled(busy)
+                        .accessibilityIdentifier("storeOrder.signAndHandOver")
+                    }
                     Button {
                         changeNote = ""
                         pendingChange = StoreOrderStatusChange(fulfillmentStatus: "fulfilled")
                     } label: {
-                        Label("Mark handed over", systemImage: "hand.raised")
+                        Label(signature?.canSign == true && signature?.signature == nil ? "Hand over without a signature"
+                              : "Mark handed over", systemImage: "hand.raised")
                     }
                     .disabled(busy)
                     .accessibilityIdentifier("storeOrder.markFulfilled")
@@ -257,7 +285,49 @@ struct StoreOrderDetailView: View {
 
     // MARK: Actions
 
+    /// The signature, quietly nothing when this server can't take one yet.
+    private func loadSignature() async {
+        guard let s = try? await services.sales.storeOrderSignature(uuid) else { signature = nil; return }
+        signature = s
+        signatureImage = nil
+        if s.signature != nil, let data = try? await services.sales.storeOrderSignatureImage(uuid) {
+            signatureImage = UIImage(data: data)
+        }
+    }
+
+    private func sign(_ capture: SignatureCapture, handOver: Bool) async -> APIError? {
+        do {
+            let body = StoreOrderSignatureBody(signerName: capture.signerName, image: capture.image, note: capture.note,
+                                               markHandedOver: handOver ? true : nil)
+            _ = try await services.sales.signStoreOrder(uuid, body)
+            actionError = nil
+            notice = handOver ? "Signed for by \(capture.signerName) and handed over." : "Signed for by \(capture.signerName)."
+            await load()
+            return nil
+        } catch {
+            let apiError = error.asAPIError
+            // No file storage here: say so plainly; handing over without a signature still works.
+            if apiError.serverError?.status == 503 {
+                return ResourceService.problem(503, "File storage isn't set up here, so the signature can't be kept. "
+                                                   + "Cancel, then use Hand over without a signature.")
+            }
+            return apiError
+        }
+    }
+
+    private func voidSignature(_ reason: String) async {
+        do {
+            try await services.sales.voidStoreOrderSignature(uuid, reason: reason.trimmingCharacters(in: .whitespacesAndNewlines))
+            actionError = nil
+            notice = "Signature voided. A new one can be taken."
+            await load()
+        } catch {
+            actionError = error.asAPIError
+        }
+    }
+
     private func load() async {
+        await loadSignature()
         do {
             state = .loaded(try await services.sales.storeOrder(uuid))
         } catch {
