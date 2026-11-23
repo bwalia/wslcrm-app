@@ -128,6 +128,16 @@ struct Invoice: Identifiable, Hashable, Sendable {
     var canEditHeader: Bool { status == .draft || status == .sent }
     var canEditItems: Bool { status == .draft || status == .sent }
     var canSend: Bool { status == .draft }
+    /// Emailing works in any state but void: a draft is marked sent, later ones are sent again.
+    var canEmail: Bool { status != .void && status != .cancelled }
+    /// Overdue invoices are emailed as a reminder.
+    var emailActionTitle: String {
+        switch displayStatus {
+        case .draft: "Email to customer"
+        case .overdue: "Send a reminder"
+        default: "Email again"
+        }
+    }
     var canVoid: Bool { status != .void }
     var canDelete: Bool { status == .draft }
     var canRecordPayment: Bool { status != .draft && status != .void && balanceDue > 0 }

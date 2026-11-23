@@ -1,3 +1,4 @@
+import QuickLook
 import SwiftUI
 import UIKit
 
@@ -100,6 +101,7 @@ private struct InvoicesListBody: View {
     @Binding var issuedTo: Date?
     @Binding var opened: InvoiceRoute?
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
 
     var body: some View {
         list
@@ -139,7 +141,9 @@ private struct InvoicesListBody: View {
     private var list: some View {
         PagedList(model: holder.list, searchPrompt: "Number, customer or email", emptyTitle: "No invoices",
                   emptySystemImage: "doc.text",
-                  emptyDescription: isFiltered ? "No invoices match these filters." : "Tap + to make your first invoice.") { invoice in
+                  emptyDescription: isFiltered ? "No invoices match these filters."
+                      : session.permissions.can(.create, .invoices) ? "Tap + to make your first invoice."
+                      : "Invoices your team makes show here. Ask an admin if you need to make them too.") { invoice in
             NavigationLink {
                 InvoiceDetailView(invoiceUuid: invoice.id) { updated in
                     if let updated { holder.list.replace(updated) } else { holder.list.remove(id: invoice.id) }
@@ -183,6 +187,7 @@ private struct InvoicesListSheets: ViewModifier {
     @Binding var issuedTo: Date?
     @Binding var opened: InvoiceRoute?
     @Environment(\.services) private var services
+    @State private var openedNotice: String?
 
     func body(content: Content) -> some View {
         content
@@ -195,6 +200,8 @@ private struct InvoicesListSheets: ViewModifier {
                     let created = try await services.invoices.create(body)
                     await holder.list.load()
                     stats = try? await services.invoices.stats()
+                    openedNotice = "Invoice \(created.displayNumber) created as a draft. Check it, then email it to the customer."
+                    opened = InvoiceRoute(uuid: created.id)
                     return created
                 }
             }
@@ -202,10 +209,15 @@ private struct InvoicesListSheets: ViewModifier {
                 InvoiceFromTimesheetsSheet { invoice in
                     await holder.list.load()
                     stats = try? await services.invoices.stats()
+                    openedNotice = "Invoice created from the hours as a draft."
                     opened = InvoiceRoute(uuid: invoice.id)
                 }
             }
-            .navigationDestination(item: $opened) { route in InvoiceDetailView(invoiceUuid: route.uuid) }
+            .navigationDestination(item: $opened) { route in
+                InvoiceDetailView(invoiceUuid: route.uuid, onChange: { updated in
+                    if let updated { holder.list.replace(updated) } else { Task { await holder.list.load() } }
+                }, opening: openedNotice)
+            }
     }
 }
 
@@ -248,6 +260,8 @@ struct InvoiceRow: View {
 struct InvoiceDetailView: View {
     let invoiceUuid: String
     var onChange: (Invoice?) -> Void = { _ in }
+    /// What just happened before this screen opened ("Invoice created").
+    var opening: String?
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
@@ -260,9 +274,11 @@ struct InvoiceDetailView: View {
     @State private var confirmVoid = false
     @State private var confirmDelete = false
     @State private var pdfURL: URL?
+    @State private var previewURL: URL?
     @State private var emailing = false
     @State private var editingHeader = false
     @State private var notice: String?
+    @State private var shownOpening = false
     @State private var vat: VatInvoiceCheck?
     @State private var einvoice: EinvoiceCheck?
     @State private var einvoiceURL: URL?
@@ -280,19 +296,20 @@ struct InvoiceDetailView: View {
         }
         .navigationTitle(state.value?.displayNumber ?? "Invoice")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
+        .task {
+            if !shownOpening { notice = opening; shownOpening = true }
+            await load()
+        }
         .refreshable { await load() }
         .toolbar {
             if let invoice = state.value {
                 ToolbarItem(placement: .topBarTrailing) {
-                    if let pdfURL {
-                        ShareLink(item: pdfURL) { Label("Share PDF", systemImage: "square.and.arrow.up") }
-                    } else {
-                        Button("PDF", systemImage: "doc.richtext") {
-                            pdfURL = InvoicePDFRenderer.render(invoice, company: session.workspace?.name)
-                        }
-                        .accessibilityIdentifier("invoice.pdf")
+                    // One tap shows the PDF; Quick Look has its own share button.
+                    Button("Preview PDF", systemImage: "doc.richtext") {
+                        pdfURL = pdfURL ?? InvoicePDFRenderer.render(invoice, company: session.workspace?.name)
+                        previewURL = pdfURL
                     }
+                    .accessibilityIdentifier("invoice.pdf")
                 }
                 if session.permissions.can(.update, .invoices) && invoice.canEditHeader {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -301,42 +318,48 @@ struct InvoiceDetailView: View {
                 }
             }
         }
+        .quickLookPreview($previewURL)
         .sheet(item: $editingItem) { item in
             LineItemSheet(item: item) { body in
-                await mutate { try await services.invoices.updateItem(invoiceUuid, itemId: item.id, body) }
+                await mutate("Line saved.") { try await services.invoices.updateItem(invoiceUuid, itemId: item.id, body) }
             } onDelete: {
-                await mutate { try await services.invoices.deleteItem(invoiceUuid, itemId: item.id) }
+                await mutate("Line removed.") { try await services.invoices.deleteItem(invoiceUuid, itemId: item.id) }
             }
         }
         .sheet(isPresented: $addingItem) {
             LineItemSheet(item: nil) { body in
-                await mutate { try await services.invoices.addItem(invoiceUuid, body) }
+                await mutate("Line added.") { try await services.invoices.addItem(invoiceUuid, body) }
             } onDelete: { false }
         }
         .sheet(isPresented: $emailing) {
             if let invoice = state.value {
-                EmailInvoiceSheet(invoice: invoice, company: session.workspace?.name) { Task { await load() } }
+                EmailInvoiceSheet(invoice: invoice, company: session.workspace?.name) { to in
+                    notice = invoice.displayStatus == .overdue ? "Reminder emailed to \(to)."
+                        : invoice.status == .draft ? "Emailed to \(to) and marked as sent." : "Emailed to \(to) again."
+                    actionError = nil
+                    Task { await load() }
+                }
             }
         }
         .sheet(isPresented: $editingHeader) {
             if let invoice = state.value {
                 InvoiceEditSheet(invoice: invoice) { body in
-                    let saved = await mutate { try await services.invoices.updateHeader(invoiceUuid, body) }
-                    if saved { notice = "Invoice saved." }
-                    return saved
+                    await mutate("Invoice saved.") { try await services.invoices.updateHeader(invoiceUuid, body) }
                 }
             }
         }
         .sheet(isPresented: $recordingPayment) {
             if let invoice = state.value {
                 PaymentSheet(invoice: invoice) { body in
-                    await mutate { try await services.invoices.recordPayment(invoiceUuid, body) }
+                    await mutate(Self.paymentNotice(body.amount, currency: invoice.currency)) {
+                        try await services.invoices.recordPayment(invoiceUuid, body)
+                    }
                 }
             }
         }
         .confirmationDialog("Void this invoice?", isPresented: $confirmVoid, titleVisibility: .visible) {
             Button("Void invoice", role: .destructive) {
-                Task { _ = await mutate { try await services.invoices.void(invoiceUuid) } }
+                Task { _ = await mutate("Invoice voided.") { try await services.invoices.void(invoiceUuid) } }
             }
         } message: {
             Text("A voided invoice can't be reopened. Recorded payments are kept.")
@@ -384,21 +407,28 @@ struct InvoiceDetailView: View {
                 DetailRow(label: "Payment terms", value: invoice.paymentTermsDays.map { "\($0) days" })
                 if let address = invoice.customerAddress { MapsLinkRow(address: address) }
             }
-            if let notice {
-                Section { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
+            if notice != nil || actionError != nil {
+                Section {
+                    if let actionError { InlineErrorRow(error: actionError) }
+                    if let notice { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
+                }
             }
 
-            if canUpdate && (invoice.canSend || invoice.canVoid) || (permissions.can(.create, .payments) && invoice.canRecordPayment) {
+            if canUpdate && (invoice.canEmail || invoice.canVoid) || (permissions.can(.create, .payments) && invoice.canRecordPayment)
+                || (permissions.can(.delete, .invoices) && invoice.canDelete) {
                 Section("Actions") {
-                    if canUpdate && invoice.canSend {
+                    if canUpdate && invoice.canEmail {
                         // #611: emailing attaches the PDF this app renders and marks a draft sent.
                         Button { emailing = true } label: {
-                            Label("Email to customer", systemImage: "envelope.fill")
+                            Label(invoice.emailActionTitle,
+                                  systemImage: invoice.displayStatus == .overdue ? "bell.badge.fill" : "envelope.fill")
                         }
-                        .buttonStyle(.large(.info))
+                        .buttonStyle(.large(invoice.displayStatus == .overdue ? .warning : .info))
                         .listRowSeparator(.hidden)
                         .accessibilityIdentifier("invoice.email")
-                        Button { Task { _ = await mutate { try await services.invoices.send(invoiceUuid) } } } label: {
+                    }
+                    if canUpdate && invoice.canSend {
+                        Button { Task { _ = await mutate("Marked as sent.") { try await services.invoices.send(invoiceUuid) } } } label: {
                             Label("Mark as sent without emailing", systemImage: "paperplane")
                         }
                         .frame(minHeight: 44)
@@ -418,7 +448,6 @@ struct InvoiceDetailView: View {
                         Button("Delete draft", role: .destructive) { confirmDelete = true }
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }
-                    if let actionError { InlineErrorRow(error: actionError) }
                 }
                 .disabled(busy)
             }
@@ -467,7 +496,7 @@ struct InvoiceDetailView: View {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(Formatters.money(payment.amount, currency: invoice.currency) ?? "").font(.wsHeadline.monospacedDigit())
-                                Text([Formatters.humanize(payment.paymentMethod), payment.referenceNumber,
+                                Text([payment.paymentMethod.map(PaymentSheet.methodLabel), payment.referenceNumber,
                                       payment.paymentDate.flatMap { Formatters.day($0.date()) }].compactMap { $0 }.joined(separator: " · "))
                                     .font(.wsCaption).foregroundStyle(.secondaryText)
                             }
@@ -476,7 +505,11 @@ struct InvoiceDetailView: View {
                         .swipeActions {
                             if permissions.can(.delete, .payments) {
                                 Button("Delete", role: .destructive) {
-                                    Task { _ = await mutate { try await services.invoices.deletePayment(invoiceUuid, paymentId: payment.id) } }
+                                    Task {
+                                        _ = await mutate("Payment deleted.") {
+                                            try await services.invoices.deletePayment(invoiceUuid, paymentId: payment.id)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -545,7 +578,7 @@ struct InvoiceDetailView: View {
                 Text(einvoice.valid ? "Passes the Peppol BIS 3.0 checks." : "Fix these before sending it as an e-invoice:")
                     .font(.wsSubheadline.weight(.semibold))
                     .foregroundStyle(einvoice.valid ? Tone.success.textColor : Tone.warning.textColor)
-                ForEach(einvoice.errors, id: \.self) { Text("• \($0.message) (\($0.rule))").font(.wsCaption) }
+                ForEach(einvoice.errors, id: \.self) { Text("• \($0.message)").font(.wsCaption) }
                 ForEach(einvoice.warnings, id: \.self) { Text($0).font(.wsCaption).foregroundStyle(.secondaryText) }
             }
         } header: {
@@ -593,20 +626,26 @@ struct InvoiceDetailView: View {
         }
     }
 
-    /// Runs a mutation that returns the refreshed invoice. Returns success.
+    static func paymentNotice(_ amount: Decimal, currency: String) -> String {
+        "Payment of \(Formatters.money(amount, currency: currency) ?? amount.formatted()) recorded."
+    }
+
+    /// Runs a mutation that returns the refreshed invoice, then says what happened. Returns success.
     @discardableResult
-    private func mutate(_ operation: () async throws -> Invoice) async -> Bool {
+    private func mutate(_ success: String, _ operation: () async throws -> Invoice) async -> Bool {
         busy = true
         defer { busy = false }
         do {
             let updated = try await operation()
             state = .loaded(updated)
             actionError = nil
+            notice = success
             pdfURL = nil
             onChange(updated)
             return true
         } catch {
             actionError = error.asAPIError
+            notice = nil
             return false
         }
     }
@@ -700,6 +739,19 @@ struct PaymentSheet: View {
 
     private let methods = ["bank_transfer", "credit_card", "cash", "check", "paypal", "other"]
 
+    /// The stored codes in plain UK words.
+    static func methodLabel(_ code: String) -> String {
+        switch code {
+        case "bank_transfer": "Bank transfer"
+        case "credit_card": "Card"
+        case "cash": "Cash"
+        case "check": "Cheque"
+        case "paypal": "PayPal"
+        case "other": "Other"
+        default: Formatters.humanize(code)
+        }
+    }
+
     init(invoice: Invoice, save: @escaping (PaymentBody) async -> Bool) {
         self.invoice = invoice
         self.save = save
@@ -713,7 +765,7 @@ struct PaymentSheet: View {
                     TextField("Amount", value: $amount, format: .number).keyboardType(.decimalPad)
                         .font(.wsTitle2.monospacedDigit())
                     Picker("Method", selection: $method) {
-                        ForEach(methods, id: \.self) { Text(Formatters.humanize($0)).tag($0) }
+                        ForEach(methods, id: \.self) { Text(Self.methodLabel($0)).tag($0) }
                     }
                     TextField("Reference", text: $reference)
                     DatePicker("Date", selection: $date, displayedComponents: .date)
@@ -744,37 +796,105 @@ struct PaymentSheet: View {
     }
 }
 
+/// A new invoice: the customer (picked or typed), dates and terms, how to pay, the customer's PO number and
+/// lines with a tax rate from the workspace's list (`GET /api/v2/invoices/tax-rates`, else typed).
 struct InvoiceCreateSheet: View {
     let create: (InvoiceHeaderBody) async throws -> Invoice
+    @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
-    @State private var customerName = ""
-    @State private var customerEmail = ""
-    @State private var dueDate = Calendar.current.date(byAdding: .day, value: 30, to: Date()) ?? Date()
+    @State private var customerName: String
+    @State private var customerEmail: String
+    @State private var customerAddress: String
+    @State private var issueDate = Date()
+    @State private var terms = 30
     @State private var currency = Formatters.fallbackCurrency
+    @State private var poNumber = ""
+    @State private var methodUuid = ""
+    @State private var methods: [PaymentMethodInfo] = []
+    @State private var taxRates: [TaxRate] = []
     @State private var notes = ""
     @State private var items: [LineItemBody] = [LineItemBody(description: "", quantity: 1, unitPrice: 0, taxRate: 20)]
     @State private var saving = false
     @State private var error: APIError?
 
+    /// Payment terms offered (days after the issue date).
+    static let termChoices = [0, 7, 14, 30, 60]
+
+    init(prefill: PickedCustomer? = nil, create: @escaping (InvoiceHeaderBody) async throws -> Invoice) {
+        self.create = create
+        _customerName = State(initialValue: prefill?.name ?? "")
+        _customerEmail = State(initialValue: prefill?.email ?? "")
+        _customerAddress = State(initialValue: prefill?.addressText ?? "")
+    }
+
+    static func dueDate(issued: Date, terms: Int, calendar: Calendar = .current) -> Date {
+        calendar.date(byAdding: .day, value: terms, to: issued) ?? issued
+    }
+
+    static func termsLabel(_ days: Int) -> String { days == 0 ? "Due on receipt" : "\(days) days" }
+
+    /// The body `POST /api/v2/invoices` reads; blank fields are left out.
+    static func body(name: String, email: String, address: String, issued: Date, terms: Int, currency: String,
+                     notes: String, poNumber: String, methodUuid: String, items: [LineItemBody]) -> InvoiceHeaderBody {
+        let lines = items.filter { !$0.description.trimmingCharacters(in: .whitespaces).isEmpty }
+        return InvoiceHeaderBody(customerName: name.trimmingCharacters(in: .whitespaces),
+                                 customerEmail: email.trimmedOrNil, issueDate: CalendarDay(date: issued),
+                                 dueDate: CalendarDay(date: dueDate(issued: issued, terms: terms)), currency: currency,
+                                 notes: notes.trimmedOrNil, paymentTermsDays: terms, lineItems: lines.isEmpty ? nil : lines,
+                                 poNumber: poNumber.trimmedOrNil, paymentMethodUuid: methodUuid.trimmedOrNil,
+                                 customerAddress: address.trimmingCharacters(in: .whitespacesAndNewlines).trimmedOrNil)
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section("Customer") {
-                    TextField("Customer name", text: $customerName).textContentType(.organizationName)
+                    ChooseCustomerButton { picked in
+                        customerName = picked.name
+                        customerEmail = picked.email
+                        customerAddress = picked.addressText
+                    }
+                    TextField("Customer name (needed)", text: $customerName).textContentType(.organizationName)
+                        .accessibilityIdentifier("invoiceCreate.customer")
                     TextField("Email", text: $customerEmail).keyboardType(.emailAddress).textInputAutocapitalization(.never)
+                    TextField("Address", text: $customerAddress, axis: .vertical).lineLimit(2...4)
                 }
-                Section("Terms") {
-                    DatePicker("Due date", selection: $dueDate, displayedComponents: .date)
+                Section {
+                    DatePicker("Issued", selection: $issueDate, displayedComponents: .date)
+                    Picker("Payment terms", selection: $terms) {
+                        ForEach(Self.termChoices, id: \.self) { Text(Self.termsLabel($0)).tag($0) }
+                    }
+                    LabeledContent("Due", value: Formatters.day(Self.dueDate(issued: issueDate, terms: terms)) ?? "")
                     Picker("Currency", selection: $currency) {
                         ForEach(Formatters.currencyChoices(including: currency), id: \.self) { Text($0).tag($0) }
                     }
+                    TextField("Customer's PO number (optional)", text: $poNumber)
+                    Picker("How to pay", selection: $methodUuid) {
+                        Text("Default bank account").tag("")
+                        ForEach(methods) { method in
+                            Text(method.label + (method.isDefault ? " (default)" : "")).tag(method.uuid ?? "")
+                        }
+                    }
+                } header: {
+                    Text("Dates and terms")
+                } footer: {
+                    Text("The due date follows the payment terms. \"How to pay\" is printed on the invoice.")
                 }
                 ForEach($items.indices, id: \.self) { index in
                     Section("Line \(index + 1)") {
                         TextField("Description", text: $items[index].description)
                         TextField("Quantity", value: $items[index].quantity, format: .number).keyboardType(.decimalPad)
                         TextField("Unit price", value: $items[index].unitPrice, format: .number).keyboardType(.decimalPad)
-                        TextField("Tax %", value: $items[index].taxRate, format: .number).keyboardType(.decimalPad)
+                        if taxRates.isEmpty {
+                            TextField("VAT %", value: $items[index].taxRate, format: .number).keyboardType(.decimalPad)
+                        } else {
+                            Picker("Tax rate", selection: $items[index].taxRate) {
+                                ForEach(taxRates) { Text("\($0.name) (\($0.rate.formatted())%)").tag($0.rate) }
+                                if !taxRates.contains(where: { $0.rate == items[index].taxRate }) {
+                                    Text("\(items[index].taxRate.formatted())%").tag(items[index].taxRate)
+                                }
+                            }
+                        }
                         if items.count > 1 {
                             Button("Remove line", role: .destructive) { items.remove(at: index) }
                         }
@@ -784,31 +904,37 @@ struct InvoiceCreateSheet: View {
                     Button("Add another line", systemImage: "plus") {
                         items.append(LineItemBody(description: "", quantity: 1, unitPrice: 0, taxRate: items.last?.taxRate ?? 0))
                     }
-                    TextField("Notes", text: $notes, axis: .vertical)
+                    TextField("Notes shown on the invoice", text: $notes, axis: .vertical)
                 }
                 if let error { Section { InlineErrorRow(error: error) } }
             }
             .navigationTitle("New invoice")
             .navigationBarTitleDisplayMode(.inline)
+            .task {
+                methods = (try? await services.invoices.paymentMethods()) ?? []
+                taxRates = (try? await services.invoices.taxRates()) ?? []
+                if let preferred = taxRates.first(where: \.isDefault), items.count == 1, items[0].description.isEmpty {
+                    items[0].taxRate = preferred.rate
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") { submit() }
                         .disabled(customerName.trimmingCharacters(in: .whitespaces).isEmpty || saving)
+                        .accessibilityIdentifier("invoiceCreate.save")
                 }
             }
+            .interactiveDismissDisabled(saving)
         }
     }
 
     private func submit() {
         saving = true
         error = nil
-        let lines = items.filter { !$0.description.trimmingCharacters(in: .whitespaces).isEmpty }
-        let body = InvoiceHeaderBody(customerName: customerName.trimmingCharacters(in: .whitespaces),
-                                     customerEmail: customerEmail.isEmpty ? nil : customerEmail,
-                                     issueDate: CalendarDay(date: Date()), dueDate: CalendarDay(date: dueDate),
-                                     currency: currency, notes: notes.isEmpty ? nil : notes, paymentTermsDays: nil,
-                                     lineItems: lines.isEmpty ? nil : lines)
+        let body = Self.body(name: customerName, email: customerEmail, address: customerAddress, issued: issueDate,
+                             terms: terms, currency: currency, notes: notes, poNumber: poNumber, methodUuid: methodUuid,
+                             items: items)
         Task {
             defer { saving = false }
             do {
@@ -825,6 +951,15 @@ struct InvoiceCreateSheet: View {
 
 /// The API has no PDF download, so invoices are rendered on device for sharing.
 enum InvoicePDFRenderer {
+    /// The totals printed under the lines; discounts are shown so the figures add up.
+    static func totals(_ invoice: Invoice, money: (Decimal) -> String) -> [(String, String)] {
+        var rows = [("Subtotal", money(invoice.subtotal))]
+        if invoice.discountAmount > 0 { rows.append(("Discounts", "−" + money(invoice.discountAmount))) }
+        rows += [("Tax", money(invoice.taxAmount)), ("Total", money(invoice.totalAmount)), ("Paid", money(invoice.amountPaid)),
+                 ("Balance due", money(invoice.balanceDue))]
+        return rows
+    }
+
     @MainActor
     static func render(_ invoice: Invoice, company: String? = nil) -> URL? {
         let page = CGRect(x: 0, y: 0, width: 595, height: 842) // A4 at 72 dpi
@@ -882,10 +1017,9 @@ enum InvoicePDFRenderer {
                     }
                 }
                 y += 16
-                for (label, value) in [("Subtotal", invoice.subtotal), ("Tax", invoice.taxAmount), ("Total", invoice.totalAmount),
-                                       ("Paid", invoice.amountPaid), ("Balance due", invoice.balanceDue)] {
+                for (label, value) in InvoicePDFRenderer.totals(invoice, money: money) {
                     _ = draw(label, x: 300, font: .systemFont(ofSize: 12), width: 140, alignment: .right)
-                    _ = draw(money(value), x: 447, font: label == "Balance due" ? .boldSystemFont(ofSize: 12) : .systemFont(ofSize: 12),
+                    _ = draw(value, x: 447, font: label == "Balance due" ? .boldSystemFont(ofSize: 12) : .systemFont(ofSize: 12),
                              width: 100, alignment: .right)
                     y += 18
                 }
@@ -919,7 +1053,8 @@ enum InvoicePDFRenderer {
 struct EmailInvoiceSheet: View {
     let invoice: Invoice
     var company: String?
-    var onSent: () -> Void = {}
+    /// Called with the address it went to.
+    var onSent: (String) -> Void = { _ in }
 
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
@@ -929,11 +1064,21 @@ struct EmailInvoiceSheet: View {
     @State private var sentTo: String?
     @State private var error: APIError?
 
-    init(invoice: Invoice, company: String? = nil, onSent: @escaping () -> Void = {}) {
+    init(invoice: Invoice, company: String? = nil, onSent: @escaping (String) -> Void = { _ in }) {
         self.invoice = invoice
         self.company = company
         self.onSent = onSent
         _recipient = State(initialValue: invoice.customerEmail ?? "")
+        _message = State(initialValue: Self.reminderNote(invoice) ?? "")
+    }
+
+    /// An overdue invoice's email starts as a polite reminder.
+    static func reminderNote(_ invoice: Invoice) -> String? {
+        guard invoice.displayStatus == .overdue else { return nil }
+        let due = invoice.dueDate.flatMap { Formatters.day($0.date()) }.map { " on \($0)" } ?? ""
+        let amount = Formatters.money(invoice.balanceDue, currency: invoice.currency) ?? ""
+        return "A friendly reminder that this invoice was due\(due). \(amount) is still to pay. "
+            + "If you have already paid, thank you, and please ignore this email."
     }
 
     var body: some View {
@@ -956,7 +1101,7 @@ struct EmailInvoiceSheet: View {
                 } footer: {
                     Text(invoice.status == .draft
                          ? "Attaches the invoice PDF and marks this invoice as sent."
-                         : "Attaches the invoice PDF and emails it again.")
+                         : "Attaches the invoice PDF and emails it again. Its status doesn't change.")
                 }
                 if let sentTo {
                     Section {
@@ -966,7 +1111,7 @@ struct EmailInvoiceSheet: View {
                 }
                 if let error { Section { InlineErrorRow(error: error) } }
             }
-            .navigationTitle("Email invoice")
+            .navigationTitle(invoice.displayStatus == .overdue ? "Send a reminder" : "Email invoice")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(sentTo == nil ? "Cancel" : "Done") { dismiss() } }
@@ -994,7 +1139,7 @@ struct EmailInvoiceSheet: View {
                 let result = try await services.invoices.email(
                     invoice.id, pdf: pdf, filename: url.lastPathComponent, to: recipient, message: message)
                 sentTo = result.to
-                onSent()
+                onSent(result.to)
             } catch {
                 self.error = error.asAPIError
             }
