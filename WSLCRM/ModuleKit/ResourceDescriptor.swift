@@ -145,11 +145,51 @@ struct ResourcePermissions: Hashable, Sendable {
     /// Override per action when a module splits them (`create` on one module, `delete` on another).
     var createModule: String?
     var deleteModule: String?
+    /// A write the server checks as one specific `module.action` (some routes guard adding and removing
+    /// with `namespace.update`). Wins over `createModule` / `deleteModule`.
+    var writes: [Action: Grant] = [:]
 
-    init(module: String? = nil, createModule: String? = nil, deleteModule: String? = nil) {
+    struct Grant: Hashable, Sendable {
+        let module: String
+        let action: Action
+
+        init(_ module: String, _ action: Action) {
+            self.module = module
+            self.action = action
+        }
+    }
+
+    init(module: String? = nil, createModule: String? = nil, deleteModule: String? = nil,
+         writes: [Action: Grant] = [:]) {
         self.module = module
         self.createModule = createModule
         self.deleteModule = deleteModule
+        self.writes = writes
+    }
+
+    /// Every write needs `module.update`, as routes that guard create, update and delete with one grant
+    /// (`Http.guard("namespace", "update")`).
+    static func updateGuarded(_ module: String) -> ResourcePermissions {
+        ResourcePermissions(module: module, writes: [.create: Grant(module, .update), .update: Grant(module, .update),
+                                                     .delete: Grant(module, .update)])
+    }
+
+    /// The `module.action` the server checks for a write here (nil module: anyone who sees the screen).
+    func grant(for action: Action) -> (module: String?, action: Action) {
+        if let grant = writes[action] { return (grant.module, grant.action) }
+        switch action {
+        case .create: return (createModule ?? module, .create)
+        case .delete: return (deleteModule ?? module, .delete)
+        default: return (module, action)
+        }
+    }
+}
+
+extension PermissionSet {
+    /// Whether a write on a described resource is allowed, as the server will check it.
+    func allows(_ action: Action, on permissions: ResourcePermissions) -> Bool {
+        let grant = permissions.grant(for: action)
+        return allows(grant.action, grant.module)
     }
 }
 

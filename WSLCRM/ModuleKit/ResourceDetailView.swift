@@ -181,12 +181,12 @@ private struct ResourceDetailContent: View {
 
     private var canEdit: Bool {
         descriptor.api.update != nil && descriptor.form != nil && isWritable
-            && session.permissions.allows(.update, descriptor.permissions.module)
+            && session.permissions.allows(.update, on: descriptor.permissions)
     }
 
     private var canDelete: Bool {
         descriptor.api.delete != nil && !descriptor.singleton && isWritable
-            && session.permissions.allows(.delete, descriptor.permissions.deleteModule ?? descriptor.permissions.module)
+            && session.permissions.allows(.delete, on: descriptor.permissions)
     }
 
     // MARK: - Work

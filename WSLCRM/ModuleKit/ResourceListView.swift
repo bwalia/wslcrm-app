@@ -188,7 +188,7 @@ private struct ResourceListContent: View {
 
     private var canCreate: Bool {
         guard descriptor.api.create != nil, descriptor.form != nil else { return false }
-        return session.permissions.allows(.create, descriptor.permissions.createModule ?? descriptor.permissions.module)
+        return session.permissions.allows(.create, on: descriptor.permissions)
     }
 
     private var filterMenu: some View {
