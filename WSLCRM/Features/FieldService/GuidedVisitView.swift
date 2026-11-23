@@ -52,8 +52,8 @@ private struct GuidedVisitContent: View {
         }
         .sheet(item: $proposingPart) { proposal in
             PartProposalSheet(model: proposal,
-                              currency: model.displayedVisit?.jobCurrency ?? Formatters.fallbackCurrency) {
-                model.notice = "Part sent to the office for approval."
+                              currency: model.displayedVisit?.jobCurrency ?? Formatters.fallbackCurrency) { message in
+                model.notice = message
                 Task { await model.load() }
             }
         }

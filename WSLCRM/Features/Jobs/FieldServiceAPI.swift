@@ -292,6 +292,9 @@ struct ServiceRequestBody: Encodable, Sendable, Equatable {
     var productRef: String?
     var serviceAddress: String?
     var servicePostcode: String?
+    /// Targets ("Respond by", "Resolve by"): ISO-8601 UTC, or `""` on edit to clear.
+    var slaResponseDueAt: String?
+    var slaResolveDueAt: String?
 }
 
 typealias CreateServiceRequestBody = ServiceRequestBody
@@ -808,7 +811,8 @@ struct FieldServiceAPI: Sendable {
     /// validates first), so the client stops before spending an upload on a doomed request.
     static let maxPhotoBytes = 10 * 1024 * 1024
 
-    func uploadPhoto(jobUuid: String, jpeg: Data, visitUuid: String?, caption: String?) async throws -> FsJobPhoto {
+    func uploadPhoto(jobUuid: String, jpeg: Data, visitUuid: String?, caption: String?,
+                     itemUuid: String? = nil) async throws -> FsJobPhoto {
         guard jpeg.count <= Self.maxPhotoBytes else {
             throw APIError.validation(ServerError(status: 413,
                                                   message: "That photo is too large to upload (over 10 MB). Take it again at a smaller size.",
@@ -817,6 +821,8 @@ struct FieldServiceAPI: Sendable {
         var fields: [(String, String)] = []
         if let visitUuid { fields.append(("visit_uuid", visitUuid)) }
         if let caption, !caption.isEmpty { fields.append(("caption", caption)) }
+        // Ties the photo to a proposed line (more evidence for a part proposal).
+        if let itemUuid { fields.append(("item_uuid", itemUuid)) }
         let file = Endpoint.FilePart(fieldName: "photo", filename: "photo-\(Int(Date().timeIntervalSince1970)).jpg",
                                      mimeType: "image/jpeg", data: jpeg)
         let endpoint = Endpoint(.post, "\(Self.base)/jobs/\(jobUuid)/photos").withMultipart(fields: fields, file: file)

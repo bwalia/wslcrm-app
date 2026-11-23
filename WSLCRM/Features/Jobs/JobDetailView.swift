@@ -322,7 +322,7 @@ private struct JobDetailContent: View {
             if !detail.visits.isEmpty {
                 Section {
                     ForEach(detail.visits.sorted { ($0.scheduledStart ?? .distantPast) < ($1.scheduledStart ?? .distantPast) }) { visit in
-                        Group {
+                        HStack(spacing: 4) {
                             if visit.engineerUserUuid == session.user?.uuid && !policy.isDispatcherForVisits {
                                 NavigationLink(value: GuidedVisitRoute(uuid: visit.uuid)) {
                                     VisitSummaryRow(visit: visit, showsJob: false)
@@ -330,6 +330,11 @@ private struct JobDetailContent: View {
                             } else {
                                 NavigationLink(value: VisitRoute(uuid: visit.uuid)) {
                                     VisitSummaryRow(visit: visit, showsJob: false)
+                                }
+                            }
+                            if hasVisitActions(visit, detail: detail) {
+                                moreMenu("More for this visit", id: "job.visit.more.\(visit.uuid)") {
+                                    visitActions(visit, detail: detail)
                                 }
                             }
                         }
@@ -340,7 +345,7 @@ private struct JobDetailContent: View {
                     Text("Visits")
                 } footer: {
                     if canManageVisits(detail) {
-                        Text("Swipe a visit that hasn't started to reschedule, reassign, cancel or delete it.")
+                        Text("Tap … on a visit that hasn't started to reschedule, reassign, cancel or delete it.")
                     }
                 }
             }
@@ -487,6 +492,51 @@ private struct JobDetailContent: View {
         }
     }
 
+    private func hasVisitActions(_ visit: Visit, detail: JobDetail) -> Bool {
+        let preStart = visit.status == .scheduled || visit.status == .enRoute
+        let editable = detail.job.status != .completed && detail.job.status != .cancelled
+        return canManageVisits(detail)
+            && ((preStart && editable) || (!visit.invoiced && visit.timesheetUuid == nil && visit.status != .onSite))
+    }
+
+    private func hasPhaseActions(_ detail: JobDetail) -> Bool {
+        model.policy.isDispatcherForJobs && detail.job.status != .completed && detail.job.status != .cancelled
+    }
+
+    /// Edit / remove a line, and approve or reject it, from its "…" menu or a long press.
+    @ViewBuilder
+    private func itemActions(_ item: JobItem, detail: JobDetail, policy: FieldServicePolicy) -> some View {
+        if canEditItem(item, detail: detail) {
+            Button { editingItem = item } label: { Label("Edit", systemImage: "pencil") }
+            Button(role: .destructive) { deletingItem = item } label: { Label("Remove", systemImage: "trash") }
+        }
+        if policy.canApproveItems(in: detail), !item.invoiced {
+            if item.approvalStatus != .approved {
+                Button { Task { await model.setApproval(item, approve: true) } } label: {
+                    Label("Approve", systemImage: "checkmark.circle")
+                }
+            }
+            if item.approvalStatus != .rejected {
+                Button { Task { await model.setApproval(item, approve: false) } } label: {
+                    Label("Reject", systemImage: "xmark.circle")
+                }
+            }
+        }
+    }
+
+    /// The visible "…" beside a row, so its actions don't hide behind a swipe.
+    private func moreMenu<Content: View>(_ label: String, id: String, @ViewBuilder content: () -> Content) -> some View {
+        Menu(content: content) {
+            Image(systemName: "ellipsis.circle")
+                .font(.wsTitle3)
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(id)
+    }
+
     @ViewBuilder
     private func phaseActions(_ phase: JobPhase, detail: JobDetail) -> some View {
         let editable = detail.job.status != .completed && detail.job.status != .cancelled
@@ -615,12 +665,19 @@ private struct JobDetailContent: View {
                 Text("No phases on this job.").foregroundStyle(.secondaryText)
             }
             ForEach(model.displayedPhases, id: \.phase.uuid) { display in
-                NavigationLink {
-                    PhaseDetailView(model: model, phaseUuid: display.phase.uuid)
-                } label: {
-                    PhaseRow(display: display)
+                HStack(spacing: 4) {
+                    NavigationLink {
+                        PhaseDetailView(model: model, phaseUuid: display.phase.uuid)
+                    } label: {
+                        PhaseRow(display: display)
+                    }
+                    .accessibilityIdentifier("job.phase.\(display.phase.sortOrder)")
+                    if hasPhaseActions(detail), !editMode.isEditing {
+                        moreMenu("More for “\(display.phase.name)”", id: "job.phase.more.\(display.phase.sortOrder)") {
+                            phaseActions(display.phase, detail: detail)
+                        }
+                    }
                 }
-                .accessibilityIdentifier("job.phase.\(display.phase.sortOrder)")
                 .swipeActions { phaseActions(display.phase, detail: detail) }
                 .contextMenu { phaseActions(display.phase, detail: detail) }
             }
@@ -661,6 +718,11 @@ private struct JobDetailContent: View {
                         Spacer()
                         Text(Formatters.money(item.lineTotal, currency: detail.job.currency) ?? "")
                             .font(.wsSubheadline.monospacedDigit())
+                        if canEditItem(item, detail: detail) || (policy.canApproveItems(in: detail) && !item.invoiced) {
+                            moreMenu("More for this line", id: "job.item.more.\(item.uuid)") {
+                                itemActions(item, detail: detail, policy: policy)
+                            }
+                        }
                     }
                     Text(["\(item.quantity.formatted()) × \(Formatters.money(item.unitPrice, currency: detail.job.currency) ?? "")",
                           Formatters.humanize(item.itemType), item.supplier, item.partNumber.map { "Part \($0)" }]
@@ -683,12 +745,7 @@ private struct JobDetailContent: View {
                     }
                 }
                 .padding(.vertical, 4)
-                .contextMenu {
-                    if canEditItem(item, detail: detail) {
-                        Button { editingItem = item } label: { Label("Edit", systemImage: "pencil") }
-                        Button(role: .destructive) { deletingItem = item } label: { Label("Remove", systemImage: "trash") }
-                    }
-                }
+                .contextMenu { itemActions(item, detail: detail, policy: policy) }
                 .swipeActions(edge: .leading) {
                     if canEditItem(item, detail: detail) {
                         Button("Edit") { editingItem = item }.tint(.blue)

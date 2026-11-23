@@ -277,6 +277,18 @@ private struct MyWorkContent: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("mywork.hero")
+                        // Straight to Maps from the top of the day, without opening the job first.
+                        let place = [hero.siteName, hero.fullAddress].compactMap { $0 }.joined(separator: ", ")
+                        if !place.isEmpty, let url = MapsLink.url(for: place) {
+                            Link(destination: url) {
+                                Label("Directions", systemImage: "location.fill")
+                                    .font(.wsHeadline)
+                                    .frame(maxWidth: .infinity, minHeight: 50)
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel("Directions to \(hero.siteName ?? place)")
+                            .accessibilityIdentifier("mywork.hero.directions")
+                        }
                     }
                     SummaryCard(summary: layout.summary)
                     ForEach(layout.buckets) { bucket in
