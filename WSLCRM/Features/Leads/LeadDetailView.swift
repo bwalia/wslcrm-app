@@ -16,6 +16,8 @@ struct LeadDetailView: View {
     @State private var timeline: [LeadTimelineItem] = []
     @State private var bundle: LeadSettingsBundle?
     @State private var formResponses: [WebFormRecordResponse] = []
+    /// The Property Deals side of the lead (`GET /api/v2/property-deals/leads/:uuid`), for property businesses.
+    @State private var propertyLead: Record?
     @State private var sheet: Sheet?
     @State private var busy = false
     @State private var actionError: APIError?
@@ -24,13 +26,15 @@ struct LeadDetailView: View {
     @State private var loadingReport = false
     @State private var cancellingMeeting: LeadMeeting?
     @State private var cancelReason = ""
+    @State private var showsWholeTimeline = false
 
     enum Sheet: Identifiable {
         case edit, call, step, meeting(LeadMeeting?), outcome(LeadMeeting), park(LeadStage), convert, assign
-        case email(subject: String?, body: String?), qualify, refer(partner: String?)
+        case email(subject: String?, body: String?), qualify, refer(partner: String?), property(Record)
 
         var id: String {
             switch self {
+            case .property: "property"
             case .edit: "edit"
             case .call: "call"
             case .step: "step"
@@ -64,6 +68,7 @@ struct LeadDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .task { bundle = try? await services.leads.settings() }
+        .task(id: showsProperty) { await loadProperty() }
         .task(id: leadUuid) {
             formResponses = await WebFormRecordResponsesSection.load(services: services, session: session,
                                                                      entityType: "lead", entityUUID: leadUuid)
@@ -129,6 +134,13 @@ struct LeadDetailView: View {
             LeadShopSections(metadata: lead.metadata)
             // The lead's answers to the workspace's forms (as on the web's lead page).
             WebFormRecordResponsesSection(items: formResponses)
+            if showsProperty, let propertyLead {
+                PDLeadPropertySection(lead: propertyLead,
+                                      canEdit: session.propertyDeals?.can(.update, .leads) ?? false,
+                                      canStartWorkflow: session.propertyDeals?.can(.create, .deals) ?? false,
+                                      edit: { sheet = .property(propertyLead) },
+                                      startWorkflow: { Task { await startPropertyWorkflow(propertyLead) } })
+            }
             if !timeline.isEmpty { history }
             if canWork(lead), session.permissions.can(.delete, .crmLeads), lead.stage != .converted {
                 Section {
@@ -159,7 +171,10 @@ struct LeadDetailView: View {
     private func header(_ lead: Lead) -> some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
-                Text(lead.displayName).font(.wsTitle2.bold())
+                HStack(alignment: .firstTextBaseline) {
+                    Text(lead.displayName).font(.wsTitle2.bold())
+                    ShopVipMark(email: lead.email)
+                }
                 Text(headline(lead)).font(.wsSubheadline).foregroundStyle(.secondaryText)
                 LeadStageTrack(stage: lead.stage, label: stageLabel)
                 HStack {
@@ -598,7 +613,7 @@ struct LeadDetailView: View {
 
     private var history: some View {
         Section("Timeline") {
-            ForEach(timeline.prefix(50)) { item in
+            ForEach(showsWholeTimeline ? Array(timeline) : Array(timeline.prefix(Self.timelinePreview))) { item in
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
                         Text(item.title).font(.wsSubheadline.weight(.semibold))
@@ -611,8 +626,15 @@ struct LeadDetailView: View {
                     if let detail = item.detail { Text(detail).font(.wsSubheadline) }
                 }
             }
+            if !showsWholeTimeline, timeline.count > Self.timelinePreview {
+                Button("Show all \(timeline.count)") { showsWholeTimeline = true }
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("lead.timeline.showAll")
+            }
         }
     }
+
+    private static let timelinePreview = 50
 
     // MARK: Sheets
 
@@ -688,6 +710,11 @@ struct LeadDetailView: View {
                 notice = body.move ? "Qualified." : "Saved."
                 await reload(updated)
             }
+        case .property(let record):
+            PDLeadDetailsSheet(lead: record) {
+                notice = "Deal details saved."
+                Task { await loadProperty() }
+            }
         case .refer(let partner):
             ReferSheet(subject: referSubject(lead), dealValue: lead.estimatedValue,
                        currency: lead.currency, suggestions: (lead.analysis?.result?.partnerSuggestions ?? []).map {
@@ -717,6 +744,32 @@ struct LeadDetailView: View {
     }
 
     private func canWork(_ lead: Lead) -> Bool { lead.permissions?.canWork ?? session.permissions.can(.update, .crmLeads) }
+
+    /// The property deal fields, as on the web: only for a property business with Property Deals on and readable.
+    private var showsProperty: Bool {
+        session.propertyDeals?.can(.read, .leads) == true && LeadSettings.isPropertyBusiness(bundle?.settings.businessType)
+    }
+
+    private func loadProperty() async {
+        guard showsProperty else { propertyLead = nil; return }
+        propertyLead = (try? await services.pdRaw.record("/leads/\(leadUuid)")) ?? propertyLead
+    }
+
+    /// As on the Property Deals lead screen: a seller's lead buys, a buyer's sells.
+    private func startPropertyWorkflow(_ record: Record) async {
+        let dealType = record.string("details.lead_kind") == "buyer_investor" ? "sell" : "buy"
+        busy = true
+        defer { busy = false }
+        do {
+            try await services.pdRaw.send(.post, "/deals", ["lead_uuid": .string(leadUuid), "deal_type": .string(dealType)],
+                                          idempotent: true)
+            notice = "Property workflow started. It's under Property Deals › Deals."
+            actionError = nil
+            await loadProperty()
+        } catch {
+            actionError = error.asAPIError
+        }
+    }
 
     private func canLogCall(_ lead: Lead) -> Bool { canWork(lead) && lead.stage != .converted }
 

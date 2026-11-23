@@ -53,8 +53,16 @@ struct LeadsHomeView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    NavigationLink { PartnersHubView() } label: {
-                        Label("Partners and referrals", systemImage: "person.2.badge.gearshape")
+                    if session.permissions.can(.read, .crmAccounts) {
+                        NavigationLink { PartnersHubView() } label: {
+                            Label("Partners and referrals", systemImage: "person.2.badge.gearshape")
+                        }
+                    } else {
+                        // Partners are kept with the accounts (crm_accounts read on the server).
+                        Button {} label: {
+                            Label("Partners: ask an admin to let you see accounts", systemImage: "lock")
+                        }
+                        .disabled(true)
                     }
                     if bundle?.canEdit == true || session.permissions.can(.manage, .crmLeads) {
                         NavigationLink { LeadSettingsView() } label: { Label("Lead settings", systemImage: "gearshape") }
@@ -533,6 +541,8 @@ struct LeadRow: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
                 Text(card.name).font(.wsHeadline)
+                // A VIP Trade member of the shop (one lookup for the rows on screen; needs shop.read).
+                ShopVipMark(email: card.email)
                 Spacer()
                 if let score = card.aiScore {
                     Text("\(score)")
