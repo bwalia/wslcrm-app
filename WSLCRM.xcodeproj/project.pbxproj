@@ -239,6 +239,7 @@
 		6919101EECDE30DC198F2CE4 /* MktGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1831BE91069B694A75027E36 /* MktGuideView.swift */; };
 		699C46BD76CA43F52AA368C6 /* WorkspacePart+Operations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62CFF5598490ED275B3BA81B /* WorkspacePart+Operations.swift */; };
 		69B426B702FAD15F22C334C2 /* WorkspacePeopleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52EC2CC479A652FF392C7D8A /* WorkspacePeopleTests.swift */; };
+		69BC90E80CAEAE78443149C0 /* EasyCRMTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F076F94CA5BBD73055952056 /* EasyCRMTests.swift */; };
 		6A9F032DE510742BC776A36B /* TaxHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A92DA5CD09547B52D3BA65FD /* TaxHomeView.swift */; };
 		6B45E9EF926FC599925D82CA /* PurchaseOrderExtraSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D592AEA986ECA9E6D4070EF /* PurchaseOrderExtraSheets.swift */; };
 		6BBD6061A90F33532113E329 /* SyncCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A5DE06BD292F4CE44CC9FD0 /* SyncCenter.swift */; };
@@ -1182,6 +1183,7 @@
 		EF9D254341317A9B19C30B62 /* RoleViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoleViews.swift; sourceTree = "<group>"; };
 		F0297B7F739CA0ECB799E0DE /* RetryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetryPolicy.swift; sourceTree = "<group>"; };
 		F06C2FCCEC1497E6D10E91D4 /* ShopOrdersViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopOrdersViews.swift; sourceTree = "<group>"; };
+		F076F94CA5BBD73055952056 /* EasyCRMTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EasyCRMTests.swift; sourceTree = "<group>"; };
 		F0A7439BFB444ADC7AA2A5DD /* TimesheetsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimesheetsAPI.swift; sourceTree = "<group>"; };
 		F14E252DC867CA93491BF471 /* EnvelopeDecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvelopeDecodingTests.swift; sourceTree = "<group>"; };
 		F23EE396CB4072055B7E09C9 /* CustomersViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomersViews.swift; sourceTree = "<group>"; };
@@ -1519,6 +1521,7 @@
 				D83B517660B2B90E08280BE7 /* AppThemeTests.swift */,
 				3F38BEA7FBF4297F5398A148 /* ChatModuleTests.swift */,
 				B211F28142EC1E9114C5D7EC /* CRMModuleTests.swift */,
+				F076F94CA5BBD73055952056 /* EasyCRMTests.swift */,
 				034027A222D377A885ECDC66 /* EngageAcademyTests.swift */,
 				C8CB0A677DBCC2706A647E96 /* EngageATSTests.swift */,
 				C4D7BF9AA32F0C0014EB0C3B /* EngageCMSTests.swift */,
@@ -3047,6 +3050,7 @@
 				3ADA0F23DE14E58F9A60B2B7 /* AppThemeTests.swift in Sources */,
 				ABDEBCC69D1C847FB1C20458 /* CRMModuleTests.swift in Sources */,
 				4DADE692E9CACFCABF138272 /* ChatModuleTests.swift in Sources */,
+				69BC90E80CAEAE78443149C0 /* EasyCRMTests.swift in Sources */,
 				3FF7F5ACF42D643A700AC69C /* EngageATSTests.swift in Sources */,
 				7BDD38DBD8AE9F56F9BC5603 /* EngageAcademyTests.swift in Sources */,
 				D08EE03BB0C5C43720987C15 /* EngageCMSTests.swift in Sources */,
