@@ -5,7 +5,7 @@ import SwiftUI
 
 struct ProjectsListView: View {
     enum Tab: String, CaseIterable, Identifiable {
-        case all, starred, active, onHold, completed, cancelled
+        case all, starred, active, onHold, completed, cancelled, archived
         var id: String { rawValue }
         var title: String {
             switch self {
@@ -15,17 +15,19 @@ struct ProjectsListView: View {
             case .onHold: "On hold"
             case .completed: "Completed"
             case .cancelled: "Cancelled"
+            case .archived: "Archived"
             }
         }
 
         func includes(_ project: KanbanProject) -> Bool {
             switch self {
-            case .all: true
-            case .starred: project.isStarred
+            case .all: project.status != .archived
+            case .starred: project.isStarred && project.status != .archived
             case .active: project.status == .active
             case .onHold: project.status == .onHold
             case .completed: project.status == .completed
             case .cancelled: project.status == .cancelled
+            case .archived: project.status == .archived
             }
         }
     }
@@ -42,10 +44,13 @@ struct ProjectsListView: View {
     @State private var archiving: KanbanProject?
     @State private var deleting: KanbanProject?
     @State private var notice: WorkNotice?
+    /// Archived projects, read only when that chip is chosen (the main list leaves them out).
+    @State private var archived: LoadState<[KanbanProject]> = .idle
 
     private var shown: [KanbanProject] {
         let text = search.trimmingCharacters(in: .whitespaces).lowercased()
-        return (state.value ?? []).filter { project in
+        let source = tab == .archived ? (archived.value ?? []) : (state.value ?? [])
+        return source.filter { project in
             tab.includes(project) && (text.isEmpty
                 || project.name.lowercased().contains(text)
                 || (project.description ?? "").lowercased().contains(text)
@@ -58,7 +63,7 @@ struct ProjectsListView: View {
             switch state {
             case .idle, .loading: SkeletonList()
             case .failed(let error): ErrorStateView(error: error) { Task { await load() } }
-            case .loaded(let all) where all.isEmpty:
+            case .loaded(let all) where all.isEmpty && tab != .archived:
                 ContentUnavailableView {
                     Label("No projects yet", systemImage: "square.stack.3d.up")
                 } description: {
@@ -71,6 +76,11 @@ struct ProjectsListView: View {
                             .buttonStyle(.borderedProminent)
                             .accessibilityIdentifier("projects.createFirst")
                     }
+                    Button("See archived projects") {
+                        tab = .archived
+                        Task { await loadArchived() }
+                    }
+                    .accessibilityIdentifier("projects.showArchived")
                 }
             case .loaded(let all):
                 List {
@@ -80,7 +90,23 @@ struct ProjectsListView: View {
                             .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                     }
                     .listRowBackground(Color.clear)
-                    if shown.isEmpty {
+                    if tab == .archived, archived.value == nil {
+                        if case .failed(let error) = archived {
+                            InlineErrorRow(error: error) { Task { await loadArchived() } }
+                        } else {
+                            HStack { Spacer(); ProgressView("Loading archived projects…"); Spacer() }
+                                .listRowBackground(Color.clear)
+                        }
+                    } else if shown.isEmpty, tab == .archived, search.isEmpty {
+                        ContentUnavailableView {
+                            Label("No archived projects", systemImage: "archivebox")
+                        } description: {
+                            Text("Projects you archive or delete come here, so you can bring them back.")
+                        } actions: {
+                            Button("Show all projects") { tab = .all }
+                        }
+                        .listRowBackground(Color.clear)
+                    } else if shown.isEmpty {
                         ContentUnavailableView {
                             Label("No projects found", systemImage: "magnifyingglass")
                         } description: {
@@ -93,13 +119,22 @@ struct ProjectsListView: View {
                     ForEach(shown) { project in
                         row(project)
                     }
+                    if tab == .archived, !shown.isEmpty, session.permissions.can(.update, .projects) {
+                        Text("Swipe a project, or touch and hold it, to restore it. Only its admins and owner can.")
+                            .font(.wsFootnote).foregroundStyle(.secondaryText)
+                            .listRowBackground(Color.clear)
+                    }
                 }
                 .refreshable { await load() }
+                .onChange(of: tab) { _, new in
+                    if new == .archived { Task { await loadArchived() } }
+                }
             }
         }
         .navigationTitle("Projects")
         .searchable(text: $search, prompt: "Search projects")
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) { WorkAskAIButton(path: WorkAskAIButton.projects) }
             if permissions.canCreate {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("New project", systemImage: "plus") { creating = true }
@@ -120,21 +155,23 @@ struct ProjectsListView: View {
             get: { archiving != nil }, set: { if !$0 { archiving = nil } }), titleVisibility: .visible, presenting: archiving) { project in
             Button("Archive") { Task { await archive(project) } }
         } message: { _ in
-            Text("It leaves your project list. A project admin can set it back to Active in its settings.")
+            Text("It leaves your project list. You can bring it back from Archived.")
         }
         .confirmationDialog("Delete “\(deleting?.name ?? "")”?", isPresented: Binding(
             get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible, presenting: deleting) { project in
             Button("Delete project", role: .destructive) { Task { await delete(project) } }
         } message: { _ in
-            Text("The project, its boards and cards leave everyone's lists. Only the project owner can do this.")
+            Text("Deleting archives the project: it leaves everyone's lists with its boards and cards. You can restore it from Archived. Only the project owner can do this.")
         }
         .workNotice($notice)
+        .workRunningTimer()
         .task { await load() }
+        .workReloadOnReturn { await load() }
     }
 
     private func row(_ project: KanbanProject) -> some View {
         let access = ProjectAccess(project: project, session: session)
-        return NavigationLink(value: ProjectRoute(uuid: project.uuid)) {
+        return NavigationLink(value: WorkScreen.projectHome(project: project.uuid).route) {
             ProjectRow(project: project)
         }
         .accessibilityIdentifier("project.row.\(project.name)")
@@ -145,11 +182,17 @@ struct ProjectsListView: View {
             .tint(.orange)
         }
         .swipeActions(edge: .trailing) {
-            if access.canDeleteProject {
-                Button("Delete", systemImage: "trash", role: .destructive) { deleting = project }
-            }
-            if access.canAdmin, session.permissions.can(.update, .projects), project.status != .archived {
-                Button("Archive", systemImage: "archivebox") { archiving = project }.tint(.gray)
+            if project.status == .archived {
+                if canRestore(project, access: access) {
+                    Button("Restore", systemImage: "arrow.uturn.backward") { Task { await restore(project) } }.tint(.green)
+                }
+            } else {
+                if access.canDeleteProject {
+                    Button("Delete", systemImage: "trash", role: .destructive) { deleting = project }
+                }
+                if access.canAdmin, session.permissions.can(.update, .projects) {
+                    Button("Archive", systemImage: "archivebox") { archiving = project }.tint(.gray)
+                }
             }
         }
         .contextMenu {
@@ -157,13 +200,24 @@ struct ProjectsListView: View {
                 Task { await star(project) }
             }
             Button("Settings", systemImage: "gearshape") { settingsFor = project }
-            if access.canAdmin, session.permissions.can(.update, .projects), project.status != .archived {
-                Button("Archive", systemImage: "archivebox") { archiving = project }
-            }
-            if access.canDeleteProject {
-                Button("Delete", systemImage: "trash", role: .destructive) { deleting = project }
+            if project.status == .archived {
+                if canRestore(project, access: access) {
+                    Button("Restore", systemImage: "arrow.uturn.backward") { Task { await restore(project) } }
+                }
+            } else {
+                if access.canAdmin, session.permissions.can(.update, .projects) {
+                    Button("Archive", systemImage: "archivebox") { archiving = project }
+                }
+                if access.canDeleteProject {
+                    Button("Delete", systemImage: "trash", role: .destructive) { deleting = project }
+                }
             }
         }
+    }
+
+    /// The server's update rule: `projects.update` and a project admin (or the workspace's own rights).
+    private func canRestore(_ project: KanbanProject, access: ProjectAccess) -> Bool {
+        access.canAdmin && session.permissions.can(.update, .projects)
     }
 
     private func load() async {
@@ -174,6 +228,26 @@ struct ProjectsListView: View {
             state = .loaded(result.projects)
         } catch {
             if state.value == nil { state = .failed(error.asAPIError) } else { notice = .failed(error.asAPIError.plainMessage) }
+        }
+        if tab == .archived { await loadArchived() }
+    }
+
+    private func loadArchived() async {
+        if archived.value == nil { archived = .loading }
+        do {
+            archived = .loaded(try await services.kanban.allProjects(status: .archived).projects)
+        } catch {
+            if archived.value == nil { archived = .failed(error.asAPIError) } else { notice = .failed(error.asAPIError.plainMessage) }
+        }
+    }
+
+    private func restore(_ project: KanbanProject) async {
+        do {
+            try await services.kanban.updateProject(project.uuid, ProjectBody(status: KanbanProjectStatus.active.rawValue))
+            notice = .done("“\(project.name)” restored. It's back in your project list.")
+            await load()
+        } catch {
+            notice = .failed(error.asAPIError.plainMessage)
         }
     }
 
@@ -190,7 +264,7 @@ struct ProjectsListView: View {
     private func archive(_ project: KanbanProject) async {
         do {
             try await services.kanban.updateProject(project.uuid, ProjectBody(status: KanbanProjectStatus.archived.rawValue))
-            notice = .done("“\(project.name)” archived.")
+            notice = .done("“\(project.name)” archived. It's under Archived if you need it back.")
             await load()
         } catch {
             notice = .failed(error.asAPIError.plainMessage)
@@ -200,7 +274,7 @@ struct ProjectsListView: View {
     private func delete(_ project: KanbanProject) async {
         do {
             try await services.kanban.deleteProject(project.uuid)
-            notice = .done("“\(project.name)” deleted.")
+            notice = .done("“\(project.name)” deleted. You can restore it from Archived.")
             await load()
         } catch {
             notice = .failed(error.asAPIError.plainMessage)
@@ -321,9 +395,14 @@ struct ProjectFormSheet: View {
     @State private var due = Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date()
     @State private var customer: TimesheetCustomerOption?
     @State private var customerUuid: String?
+    @State private var customerName: String?
     @State private var pickingCustomer = false
+    @State private var currency = ProjectMoney.defaultCurrency
+    @State private var budget = ""
+    @State private var hourlyRate = ""
     @State private var busy = false
     @State private var error: String?
+    @Environment(SessionStore.self) private var session
 
     private var isNew: Bool { project == nil }
 
@@ -334,6 +413,8 @@ struct ProjectFormSheet: View {
         if trimmed.count > 100 { return "The name must be under 100 characters." }
         if description.count > 500 { return "The description must be under 500 characters." }
         if hasStart, hasDue, due < start { return "The due date can't be before the start date." }
+        if !budget.isEmpty, ProjectMoney.amount(budget) == nil { return "The budget must be an amount, like 5000." }
+        if !hourlyRate.isEmpty, ProjectMoney.amount(hourlyRate) == nil { return "The hourly rate must be an amount, like 75." }
         return nil
     }
 
@@ -394,13 +475,33 @@ struct ProjectFormSheet: View {
                     Button {
                         pickingCustomer = true
                     } label: {
-                        LabeledContent("Customer", value: customer?.name ?? (customerUuid == nil ? "None — internal project" : "Linked"))
+                        LabeledContent("Customer", value: customer?.name
+                                       ?? (customerUuid == nil ? "None — internal project" : customerName ?? "Finding the customer…"))
                     }
                     .accessibilityIdentifier("project.form.customer")
                 } header: {
                     Text("Billing")
                 } footer: {
                     Text("Time logged on this project's tasks is billed to this customer when you invoice it.")
+                }
+
+                Section {
+                    Picker("Currency", selection: $currency) {
+                        ForEach(ProjectMoney.currencies, id: \.self) { code in
+                            Text("\(code) — \(Locale.current.localizedString(forCurrencyCode: code) ?? code)").tag(code)
+                        }
+                    }
+                    .accessibilityIdentifier("project.form.currency")
+                    TextField("Budget, e.g. 5000 (optional)", text: $budget)
+                        .keyboardType(.decimalPad)
+                        .accessibilityIdentifier("project.form.budget")
+                    TextField("Hourly rate, e.g. 75 (optional)", text: $hourlyRate)
+                        .keyboardType(.decimalPad)
+                        .accessibilityIdentifier("project.form.hourlyRate")
+                } header: {
+                    Text("Budget and rate")
+                } footer: {
+                    Text("The budget is what the project may cost; billable time approved on its cards counts against it. The hourly rate prices time logged on the project.")
                 }
 
                 if let error {
@@ -421,6 +522,12 @@ struct ProjectFormSheet: View {
                 WorkCustomerPickerSheet(selection: $customer)
             }
             .onAppear(perform: fill)
+            .task(id: customerUuid) {
+                guard let uuid = customerUuid, customer == nil else { return }
+                customerName = await ProjectCustomerName.find(uuid, services: services,
+                                                              canReadCustomers: session.permissions.can(.read, .customers))
+                    ?? "A customer you can't see"
+            }
             .interactiveDismissDisabled(busy)
         }
     }
@@ -435,6 +542,9 @@ struct ProjectFormSheet: View {
         if let day = project.startDay { hasStart = true; start = day.date() }
         if let day = project.dueDay { hasDue = true; due = day.date() }
         customerUuid = project.customerUuid
+        currency = project.budgetCurrency?.uppercased() ?? ProjectMoney.defaultCurrency
+        budget = ProjectMoney.text(project.budget)
+        hourlyRate = ProjectMoney.text(project.hourlyRate)
     }
 
     private func save() async {
@@ -447,6 +557,10 @@ struct ProjectFormSheet: View {
                                startDate: hasStart ? CalendarDay.string(start) : nil,
                                dueDate: hasDue ? CalendarDay.string(due) : nil,
                                customerUuid: customer?.uuid)
+        body.budgetCurrency = currency
+        // An emptied amount is sent as 0, as the web does, so it really clears.
+        body.budget = ProjectMoney.amount(budget) ?? (project?.budget != nil ? 0 : nil)
+        body.hourlyRate = ProjectMoney.amount(hourlyRate) ?? (project?.hourlyRate != nil ? 0 : nil)
         do {
             if let project {
                 body.status = status.rawValue
@@ -460,6 +574,38 @@ struct ProjectFormSheet: View {
         } catch {
             self.error = error.asAPIError.plainMessage
         }
+    }
+}
+
+/// A project's money: the web's currencies (GBP first, the app's default) and amounts typed as text.
+enum ProjectMoney {
+    static let defaultCurrency = "GBP"
+    static let currencies = ["GBP", "EUR", "USD", "INR", "CAD", "AUD", "JPY", "CNY"]
+
+    /// "5,000.50" or "£75" → 5000.50 / 75; nil for anything that isn't a non-negative amount.
+    static func amount(_ text: String) -> Decimal? {
+        let cleaned = text.filter { "0123456789.".contains($0) }
+        guard !cleaned.isEmpty, cleaned.filter({ $0 == "." }).count <= 1,
+              text.trimmingCharacters(in: .whitespaces).first != "-",
+              let value = Decimal(string: cleaned, locale: Locale(identifier: "en_US_POSIX")) else { return nil }
+        return value
+    }
+
+    /// A stored amount back into the text field ("" when unset or zero).
+    static func text(_ value: Decimal?) -> String {
+        guard let value, value > 0 else { return "" }
+        return NSDecimalNumber(decimal: value).stringValue
+    }
+}
+
+/// The billing customer's name for a project's `customer_uuid`: the customer record when the person
+/// may read customers, otherwise the timesheet lookup (which needs no customers grant).
+enum ProjectCustomerName {
+    static func find(_ uuid: String, services: Services, canReadCustomers: Bool) async -> String? {
+        if canReadCustomers, let customer = try? await services.commerce.customer(uuid) {
+            return customer.displayName
+        }
+        return (try? await services.timesheets.customers(matching: ""))?.first { $0.uuid == uuid }?.name
     }
 }
 
@@ -512,6 +658,38 @@ struct WorkCustomerPickerSheet: View {
 
 // MARK: - One project
 
+/// Opening a project from the list. With just one board it goes straight onto the board (where the
+/// work is), with the project's summary behind the info button; otherwise the summary lists the boards.
+struct ProjectEntryView: View {
+    let uuid: String
+    @Environment(\.services) private var services
+    @State private var boards: LoadState<[KanbanBoard]> = .idle
+
+    var body: some View {
+        switch boards {
+        case .loaded(let list) where list.count == 1:
+            BoardView(uuid: list[0].uuid, name: list[0].name)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        NavigationLink(value: ProjectRoute(uuid: uuid)) {
+                            Label("About this project", systemImage: "info.circle")
+                        }
+                        .accessibilityIdentifier("board.projectSummary")
+                    }
+                }
+        case .loaded, .failed:
+            // A problem reading the boards is shown (and retried) by the summary itself.
+            ProjectDetailView(uuid: uuid)
+        case .idle, .loading:
+            SkeletonList()
+                .task {
+                    do { boards = .loaded(try await services.kanban.boards(projectUuid: uuid)) }
+                    catch { boards = .failed(error.asAPIError) }
+                }
+        }
+    }
+}
+
 /// A project's home: the board(s), the plan (sprints, epics), insight and the team.
 struct ProjectDetailView: View {
     let uuid: String
@@ -553,6 +731,7 @@ struct ProjectDetailView: View {
                     .accessibilityIdentifier("project.settings")
                 }
             }
+            ToolbarItem(placement: .topBarTrailing) { WorkAskAIButton(path: WorkAskAIButton.project(uuid)) }
         }
         .sheet(isPresented: $creatingBoard) {
             BoardFormSheet(projectUuid: uuid, board: nil) { message in
@@ -574,7 +753,9 @@ struct ProjectDetailView: View {
             Text("The board and its cards are put away. The project's main board can't be archived.")
         }
         .workNotice($notice)
+        .workRunningTimer()
         .task { await load() }
+        .workReloadOnReturn { await load() }
     }
 
     @ViewBuilder

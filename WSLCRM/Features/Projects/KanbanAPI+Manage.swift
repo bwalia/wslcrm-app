@@ -81,6 +81,10 @@ struct ProjectBody: Encodable, Sendable {
     var startDate: String?
     var dueDate: String?
     var customerUuid: String?
+    /// Money as plain numbers in `budgetCurrency` (the web's `budget`, `budget_currency`, `hourly_rate`).
+    var budget: Decimal?
+    var budgetCurrency: String?
+    var hourlyRate: Decimal?
 }
 
 struct MemberBody: Encodable, Sendable {
@@ -135,16 +139,18 @@ struct TaskUuidsBody: Encodable, Sendable {
 extension KanbanAPI {
     // MARK: Projects
 
-    /// Every project the caller belongs to (the server leaves archived ones out). The list is
-    /// small, so it is fetched whole and filtered on the phone, as the web does — the route
-    /// ignores `status` and `starred`.
-    func allProjects(search: String = "") async throws -> (projects: [KanbanProject], permissions: ObjectPermissions) {
+    /// Every project the caller belongs to. The server leaves archived ones out unless asked for
+    /// them (`status=archived`). The list is small, so it is fetched whole and filtered on the
+    /// phone, as the web does.
+    func allProjects(search: String = "", status: KanbanProjectStatus? = nil) async throws
+        -> (projects: [KanbanProject], permissions: ObjectPermissions) {
         var all: [KanbanProject] = []
         var permissions = ObjectPermissions.none
         var page = 1
         while page <= 20 {
             var query = [URLQueryItem(name: "page", value: String(page)), URLQueryItem(name: "perPage", value: "200")]
             if !search.isEmpty { query.append(URLQueryItem(name: "search", value: search)) }
+            if let status { query.append(URLQueryItem(name: "status", value: status.rawValue)) }
             let envelope: Envelope.Kanban<LossyArray<KanbanProject>> =
                 try await client.send(.get("\(Self.base)/projects", query: query))
             all += envelope.data.elements

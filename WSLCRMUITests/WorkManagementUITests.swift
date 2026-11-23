@@ -119,8 +119,8 @@ final class WorkManagementUITests: XCTestCase {
         launch(role: "manager")
         openMore("more.projects")
 
+        // A project with one board opens straight onto it.
         element("project.row.DBS service desk", timeout: 20).tap()
-        element("board.row.Service desk board", timeout: 20).tap()
 
         // Every column is named with its count, which is how a phone shows a whole board.
         XCTAssertTrue(element("board.column.Ready for agent").exists)
@@ -216,8 +216,8 @@ final class WorkManagementUITests: XCTestCase {
     func testACardWithoutADefinitionOfDoneIsNotOfferedToAnAgent() {
         launch(role: "manager")
         openMore("more.projects")
+        // A project with one board opens straight onto it.
         element("project.row.DBS service desk", timeout: 20).tap()
-        element("board.row.Service desk board", timeout: 20).tap()
         element("board.newTask").tap()
 
         element("task.new.title").tap()
