@@ -132,8 +132,9 @@ struct AIRunnerAPI: Sendable {
 
     // MARK: Runners and sources
 
+    /// Every connection (the route pages at 20 unless asked; 100 is its most).
     func runners(refresh: Bool = false) async throws -> [AIRunner] {
-        try await get("/runners", query: ["refresh": refresh ? "1" : nil]).records.map(AIRunner.init)
+        try await get("/runners", query: ["refresh": refresh ? "1" : nil, "per_page": "100"]).records.map(AIRunner.init)
     }
 
     func runner(_ uuid: String) async throws -> AIRunner {
@@ -178,8 +179,10 @@ struct AIRunnerAPI: Sendable {
                        ])]))
     }
 
+    /// One runner's sessions, with the task each became. `/sessions?runner_uuid=` is open to runner
+    /// managers as well as run managers (`/runners/:uuid/sessions` is run managers only).
     func runnerSessions(_ uuid: String) async throws -> [Record] {
-        try await get("/runners/\(Self.id(uuid))/sessions").records
+        try await get("/sessions", query: ["runner_uuid": uuid, "per_page": "100"]).records
     }
 
     /// Every session every runner reported (Machines).

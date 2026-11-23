@@ -42,6 +42,12 @@ struct TaskAIPanel: View {
                 }
                 .accessibilityElement(children: .combine)
             }
+            if !(work?.terminalSessions ?? []).isEmpty {
+                NavigationLink(value: WorkScreen.workLog(task: task.uuid).route) {
+                    Label("See the work log: prompts, commands and screen replays", systemImage: "list.bullet.rectangle")
+                }
+                .accessibilityIdentifier("task.ai.workLog")
+            }
             ForEach(work?.pullRequests ?? []) { pr in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
