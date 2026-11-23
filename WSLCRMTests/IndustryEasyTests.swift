@@ -296,4 +296,57 @@ final class IndustryEasyTests: XCTestCase {
         XCTAssertEqual(reply.reply, "Hold at £255k")
         XCTAssertNil(reply.decision)
     }
+
+    // MARK: Customer signs at check-out
+
+    func testCheckOutSendsTheSignatureOnlyWhenFinished() throws {
+        let detail = try onSiteVisit()
+        var form = CheckOutForm(visit: detail.visit, phase: detail.phase)
+        // Without a signature: no customer_signature key at all.
+        XCTAssertNil(try json(form.body(coordinates: nil))["customer_signature"])
+
+        let png = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        form.signaturePNG = png
+        form.customerSignoffName = "A"
+        XCTAssertEqual(form.signatureProblem, "Type the name of the person signing.", "the server wants 2+ characters")
+        XCTAssertFalse(form.isValid)
+        form.customerSignoffName = "  Ann Lee "
+        XCTAssertNil(form.signatureProblem)
+        XCTAssertTrue(form.isValid)
+        // POST /visits/:uuid/check-out { customer_signoff_name, customer_signature: PNG data URL }
+        let body = try json(form.body(coordinates: nil))
+        XCTAssertEqual(body["customer_signoff_name"] as? String, "Ann Lee")
+        XCTAssertEqual(body["customer_signature"] as? String, "data:image/png;base64," + png.base64EncodedString())
+
+        form.outcome = .comingBack
+        XCTAssertNil(try json(form.body(coordinates: nil))["customer_signature"], "only a finished job is signed for")
+
+        form.outcome = .finished
+        form.signaturePNG = Data(count: CheckOutForm.maxSignatureBytes + 1)
+        XCTAssertNotNil(form.signatureProblem, "over 300 KB is refused before it is sent")
+    }
+
+    func testVisitSignatureShapesDecode() throws {
+        // GET /visits/:uuid/signature (DeliverySignatureQueries.current)
+        let status = try JSONDecoder.opsAPI().decode(Envelope.Standard<VisitSignatureStatus>.self, from: Data(#"""
+        {"success":true,"data":{"signature":{"uuid":"sg-1","signer_name":"Ann Lee","note":null,
+         "signed_at":"2026-11-24T10:15:00Z","captured_by":"Sam","image_sha256":"ab","image_bytes":2048},
+         "can_sign":false,"status":"completed"}}
+        """#.utf8)).data
+        XCTAssertEqual(status.signature?.signerName, "Ann Lee")
+        XCTAssertEqual(status.canSign, false)
+        XCTAssertTrue(VisitSignatureCard.caption(status.signature).hasPrefix("Signed by Ann Lee · "))
+        let none = try JSONDecoder.opsAPI().decode(Envelope.Standard<VisitSignatureStatus>.self, from: Data(#"""
+        {"success":true,"data":{"signature":null,"can_sign":true,"status":"on_site"}}
+        """#.utf8)).data
+        XCTAssertNil(none.signature)
+        XCTAssertEqual(VisitSignatureCard.caption(nil), "Signed by the customer")
+
+        // Every visit JSON carries has_customer_signature.
+        let visit = try JSONDecoder.opsAPI().decode(Visit.self, from: Data(#"""
+        {"uuid":"v1","status":"completed","job_uuid":"j1","job_number":"JOB-1","job_title":"AC","has_customer_signature":true}
+        """#.utf8))
+        XCTAssertTrue(visit.hasCustomerSignature)
+        XCTAssertFalse(try onSiteVisit().visit.hasCustomerSignature, "absent means not signed")
+    }
 }

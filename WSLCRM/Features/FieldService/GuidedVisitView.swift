@@ -59,7 +59,8 @@ private struct GuidedVisitContent: View {
         }
         .sheet(isPresented: $showingFinish) {
             if let detail = model.detail {
-                CheckOutSheet(visit: detail.visit, phase: detail.phase) { form in
+                CheckOutSheet(visit: detail.visit, phase: detail.phase,
+                              signatureUnavailable: model.signatureUnavailable) { form in
                     await model.checkOut(form)
                 }
             }
@@ -238,6 +239,7 @@ private struct GuidedVisitContent: View {
                         Text("Job complete").font(.wsTitle3.bold())
                         if let summary = visit.workSummary { Text(summary).multilineTextAlignment(.center) }
                         if let hours = visit.labourHours { Text("\(hours.formatted()) h on site").font(.wsFootnote).foregroundStyle(.secondaryText) }
+                        if visit.hasCustomerSignature { VisitSignatureCard(visitUuid: visit.uuid) }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(20)

@@ -53,6 +53,8 @@ struct CheckOutBody: Encodable, Sendable, Equatable {
     var forcePhase: Bool
     var latitude: Double?
     var longitude: Double?
+    /// The customer's signature as a PNG data URL; needs `customer_signoff_name` (2+ characters).
+    var customerSignature: String? = nil
 }
 
 struct NoAccessBody: Encodable, Sendable {
@@ -838,6 +840,17 @@ struct FieldServiceAPI: Sendable {
             }
             throw error
         }
+    }
+
+    /// Who signed for the visit and when (nil when nobody has).
+    func visitSignature(_ visitUuid: String) async throws -> VisitSignatureStatus {
+        let envelope: Envelope.Standard<VisitSignatureStatus> = try await client.send(.get("\(Self.base)/visits/\(visitUuid)/signature"))
+        return envelope.data
+    }
+
+    /// The signature itself, a PNG.
+    func visitSignatureImage(_ visitUuid: String) async throws -> Data {
+        try await client.sendRaw(.get("\(Self.base)/visits/\(visitUuid)/signature/image")).0
     }
 
     func deletePhoto(_ uuid: String) async throws {

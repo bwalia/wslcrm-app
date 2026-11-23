@@ -538,6 +538,8 @@ struct Visit: Identifiable, Hashable, Sendable {
     var hourlyRate: Decimal? = nil
     /// Its labour is on an invoice: it can no longer be deleted.
     var invoiced: Bool = false
+    /// The customer signed on screen at check-out (`GET /visits/:uuid/signature` has who and when).
+    var hasCustomerSignature: Bool = false
 
     var fullAddress: String? {
         let parts = [serviceAddress, servicePostcode].compactMap { $0?.trimmingCharacters(in: .whitespaces) }
@@ -561,7 +563,7 @@ extension Visit: Decodable {
         case phaseName, phaseStatus, customerUuid, customerName, customerPhone, productName, productRef
         case serviceAddress, servicePostcode, siteUuid, siteName, siteAccessNotes
         case refrigerantType, refrigerantAddedKg, refrigerantRecoveredKg, leakCheckResult, leakCheckNotes, fgasCylinderRef
-        case timesheetUuid, customerSignedAt, hourlyRate, invoiced
+        case timesheetUuid, customerSignedAt, hourlyRate, invoiced, hasCustomerSignature
     }
 
     init(from decoder: Decoder) throws {
@@ -611,6 +613,7 @@ extension Visit: Decodable {
         customerSignedAt = c.decodeDate(forKey: .customerSignedAt)
         hourlyRate = c.decodeFlexibleDecimal(forKey: .hourlyRate)
         invoiced = c.decodeFlexibleBool(forKey: .invoiced) ?? false
+        hasCustomerSignature = c.decodeFlexibleBool(forKey: .hasCustomerSignature) ?? false
     }
 }
 
@@ -1035,4 +1038,18 @@ struct NotificationsResponse: Decodable, Sendable {
         notifications = c.decodeLossyArray(AppNotification.self, forKey: .notifications)
         unreadCount = c.decodeFlexibleInt(forKey: .unreadCount) ?? notifications.filter { !$0.isRead }.count
     }
+}
+
+/// `GET /field-service/visits/:uuid/signature` (the shop's shapes, DeliverySignatureQueries).
+struct VisitSignatureStatus: Decodable, Sendable, Equatable {
+    struct Signature: Decodable, Sendable, Equatable {
+        var uuid: String?
+        var signerName: String?
+        var note: String?
+        var signedAt: Date?
+    }
+
+    var signature: Signature?
+    var canSign: Bool?
+    var status: String?
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @MainActor
 @Observable
@@ -25,6 +26,8 @@ final class VisitDetailViewModel {
     var queuedMessage: String?
     /// Said after an action worked ("Logged 2.5 h to the timesheet").
     var notice: String?
+    /// The workspace has no file storage (503 STORAGE_UNAVAILABLE): finish with the typed name only.
+    var signatureUnavailable = false
 
     private let api: FieldServiceAPI
     private let sync: SyncCenter
@@ -97,8 +100,14 @@ final class VisitDetailViewModel {
         let body = form.body(coordinates: coordinates)
         let notice = form.followUpRequired
             ? "Visit finished. The task stays open and the office will book you back in."
-            : "Job finished. Thank you."
-        return await perform(FieldServiceAPI.Mutations.checkOut(visit, body: body, context: context), notice: notice)
+            : body.customerSignature != nil ? "Job finished and signed for. Thank you." : "Job finished. Thank you."
+        let sent = await perform(FieldServiceAPI.Mutations.checkOut(visit, body: body, context: context), notice: notice)
+        if !sent, actionError?.serverError?.code == "STORAGE_UNAVAILABLE" {
+            // Nothing was saved (one transaction): the sheet drops the signature and says why.
+            signatureUnavailable = true
+            actionError = nil
+        }
+        return sent
     }
 
     func markNoAccess(reason: String) async -> Bool {
@@ -321,6 +330,10 @@ struct CheckOutForm: Equatable {
     var followUpNotes = ""
     var noAccessReason = ""
     var forcePhase = false
+    /// The customer's signature from the pad (PNG), sent only when the job is finished.
+    var signaturePNG: Data?
+    /// The server keeps signatures up to 300 KB (ShopOrderSignatureQueries.MAX_BYTES).
+    static let maxSignatureBytes = 300 * 1024
     /// The visit's phase is still open, so "Finished" closes it.
     private(set) var phaseOpen = false
 
@@ -341,7 +354,17 @@ struct CheckOutForm: Equatable {
     /// no access needs a reason.
     var isValid: Bool {
         if outcome == .noAccess { return !noAccessReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        return labourHours >= 0 && labourHours <= 24
+        return labourHours >= 0 && labourHours <= 24 && signatureProblem == nil
+    }
+
+    /// What stops a signature being sent, in plain words (nil: fine, or no signature).
+    var signatureProblem: String? {
+        guard outcome == .finished, let png = signaturePNG else { return nil }
+        if customerSignoffName.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 {
+            return "Type the name of the person signing."
+        }
+        if png.count > Self.maxSignatureBytes { return "The signature is too large. Clear it and sign again." }
+        return nil
     }
 
     func body(coordinates: Coordinates?) -> CheckOutBody {
@@ -355,7 +378,9 @@ struct CheckOutForm: Equatable {
                             completePhase: completePhase,
                             forcePhase: completePhase && forcePhase,
                             latitude: coordinates?.latitude,
-                            longitude: coordinates?.longitude)
+                            longitude: coordinates?.longitude,
+                            customerSignature: outcome == .finished
+                                ? signaturePNG.map { "data:image/png;base64," + $0.base64EncodedString() } : nil)
     }
 }
 
@@ -415,7 +440,8 @@ private struct VisitDetailContent: View {
         .refreshable { await model.load() }
         .sheet(isPresented: $showingCheckOut) {
             if let detail = model.detail {
-                CheckOutSheet(visit: detail.visit, phase: detail.phase) { form in
+                CheckOutSheet(visit: detail.visit, phase: detail.phase,
+                              signatureUnavailable: model.signatureUnavailable) { form in
                     await model.checkOut(form)
                 }
             }
@@ -657,7 +683,7 @@ private struct VisitDetailContent: View {
     private func reportSection(_ visit: Visit) -> some View {
         let hasReport = visit.checkedInAt != nil || visit.checkedOutAt != nil || visit.workSummary != nil
             || visit.customerSignoffName != nil || visit.followUpNotes != nil || visit.cancelledReason != nil
-            || visit.timesheetUuid != nil
+            || visit.timesheetUuid != nil || visit.hasCustomerSignature
         if hasReport {
             Section("Report") {
                 if let summary = visit.workSummary {
@@ -691,6 +717,9 @@ private struct VisitDetailContent: View {
                 if visit.timesheetUuid != nil {
                     Label("Logged to the timesheet", systemImage: "clock.badge.checkmark")
                         .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                }
+                if visit.hasCustomerSignature {
+                    VisitSignatureCard(visitUuid: visit.uuid)
                 }
             }
         }
@@ -831,14 +860,19 @@ private struct VisitDetailContent: View {
 struct CheckOutSheet: View {
     let visit: Visit
     let phase: JobPhase?
+    /// The workspace can't keep signatures (no file storage): finish with the typed name.
+    var signatureUnavailable = false
     let submit: (CheckOutForm) async -> Bool
     @Environment(\.dismiss) private var dismiss
     @State private var form: CheckOutForm
     @State private var submitting = false
+    @State private var signing = false
 
-    init(visit: Visit, phase: JobPhase?, submit: @escaping (CheckOutForm) async -> Bool) {
+    init(visit: Visit, phase: JobPhase?, signatureUnavailable: Bool = false,
+         submit: @escaping (CheckOutForm) async -> Bool) {
         self.visit = visit
         self.phase = phase
+        self.signatureUnavailable = signatureUnavailable
         self.submit = submit
         _form = State(initialValue: CheckOutForm(visit: visit, phase: phase))
     }
@@ -911,6 +945,48 @@ struct CheckOutSheet: View {
                 }
             }
             .interactiveDismissDisabled(submitting)
+            .sheet(isPresented: $signing) {
+                VisitSignaturePadSheet(name: form.customerSignoffName) { name, png in
+                    form.customerSignoffName = name
+                    form.signaturePNG = png
+                }
+            }
+            .onChange(of: signatureUnavailable, initial: true) { _, unavailable in
+                if unavailable { form.signaturePNG = nil }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var signatureRows: some View {
+        if signatureUnavailable {
+            Label("Signatures can't be kept on this workspace (it has no file storage). Finish with the typed name.",
+                  systemImage: "exclamationmark.triangle")
+                .foregroundStyle(Tone.warning.textColor)
+                .accessibilityIdentifier("checkout.signatureUnavailable")
+        } else if let png = form.signaturePNG, let image = UIImage(data: png) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxHeight: 120)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 10))
+                .accessibilityLabel("Customer's signature")
+                .accessibilityIdentifier("checkout.signature")
+            if let problem = form.signatureProblem {
+                Label(problem, systemImage: "exclamationmark.circle").foregroundStyle(Tone.danger.textColor)
+            }
+            HStack {
+                Button("Sign again") { signing = true }
+                Spacer()
+                Button("Remove", role: .destructive) { form.signaturePNG = nil }
+            }
+            .buttonStyle(.borderless)
+        } else {
+            Button { signing = true } label: {
+                Label("Customer signs on screen", systemImage: "signature")
+            }
+            .frame(minHeight: 44)
+            .accessibilityIdentifier("checkout.sign")
         }
     }
 
@@ -946,7 +1022,7 @@ struct CheckOutSheet: View {
         }
 
         Section {
-            SheetSectionTitle("Customer")
+            SheetSectionTitle(form.outcome == .finished ? "Customer signs" : "Customer")
             TextField("Customer name for sign-off", text: $form.customerSignoffName)
                 .textContentType(.name)
                 .textInputAutocapitalization(.words)
@@ -955,6 +1031,13 @@ struct CheckOutSheet: View {
                form.customerSignoffName.trimmingCharacters(in: .whitespaces).isEmpty {
                 Label("Closing this task needs the customer's name.", systemImage: "signature")
                     .foregroundStyle(Tone.warning.textColor)
+            }
+            if form.outcome == .finished {
+                signatureRows
+            }
+        } footer: {
+            if form.outcome == .finished, !signatureUnavailable {
+                Text("Optional, but it's the customer's proof the work was done. If they aren't there, finish without it.")
             }
         }
 

@@ -594,6 +594,7 @@
 		FD5E7AC753A08BED97B44712 /* MktDesignAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D956A3E5EC911A25D60760C /* MktDesignAPI.swift */; };
 		FDDE129ECD0C491DD8D04C83 /* MktListAddPeopleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDBA42E674CD7794560F4B80 /* MktListAddPeopleView.swift */; };
 		FE3101076CD5F0D1B00F2922 /* TimesheetsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B43AB34F0462ED1D60D69B9 /* TimesheetsViews.swift */; };
+		FEA17D83E089C11AD00A8A94 /* VisitSignature.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1460F88A01F162AB26BE9B4E /* VisitSignature.swift */; };
 		FEABFC42C4F0F3F70BA23492 /* SprintViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B995C86AC5604D5A7FBBC365 /* SprintViews.swift */; };
 		FF537E8A67AD7283C12E6DAA /* ShopCatalogQuotesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB2D6B1407F44C846E8685ED /* ShopCatalogQuotesTests.swift */; };
 		FFF77B561F9368165B8D3FFD /* ReportPDFRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 258E664B8B3FBABA27A8C275 /* ReportPDFRenderer.swift */; };
@@ -671,6 +672,7 @@
 		12CF54717DB51CCCB53ECC29 /* AIRunnersViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIRunnersViews.swift; sourceTree = "<group>"; };
 		12F02F35450794AC7ED6B919 /* CMSBlockEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CMSBlockEditorView.swift; sourceTree = "<group>"; };
 		13500ADF686FBF5FE5055F74 /* WorkModuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkModuleTests.swift; sourceTree = "<group>"; };
+		1460F88A01F162AB26BE9B4E /* VisitSignature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitSignature.swift; sourceTree = "<group>"; };
 		14DECE6067FC38E9403F5539 /* PDCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDCapture.swift; sourceTree = "<group>"; };
 		1502B44F685F03ADE2E0B5A4 /* shop_deals_recent.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = shop_deals_recent.json; sourceTree = "<group>"; };
 		1590E2AAFFD277246245556A /* PendingMutation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingMutation.swift; sourceTree = "<group>"; };
@@ -1927,6 +1929,7 @@
 			isa = PBXGroup;
 			children = (
 				6046749EB8F36C75D72F9D22 /* VisitDetailView.swift */,
+				1460F88A01F162AB26BE9B4E /* VisitSignature.swift */,
 				F5A2E3BBE71D8D64182CF4AD /* VisitsScheduleView.swift */,
 				BDE0974521C9CA816351005C /* VisitSummaryRow.swift */,
 			);
@@ -3008,6 +3011,7 @@
 				66F483A38A7A2E4BCF78C89E /* VATView.swift in Sources */,
 				8F858CE6BF280F3183A1962A /* VaultViews.swift in Sources */,
 				B1D1F4F711E4C86DAEF48CB3 /* VisitDetailView.swift in Sources */,
+				FEA17D83E089C11AD00A8A94 /* VisitSignature.swift in Sources */,
 				AEAE0DE2E21843B79AB5257F /* VisitSummaryRow.swift in Sources */,
 				E95789EE39B9E1B2DB740D16 /* VisitsScheduleView.swift in Sources */,
 				735180826F6FEE8FC9CEA479 /* WSLCRMApp.swift in Sources */,
