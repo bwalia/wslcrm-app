@@ -169,6 +169,7 @@ struct PDDealTasksView: View {
     @State private var title = ""
     @State private var notice: String?
     @State private var actionError: APIError?
+    @State private var actions = PDTaskActions()
 
     var body: some View {
         List {
@@ -184,8 +185,11 @@ struct PDDealTasksView: View {
                                            description: Text("Tasks come from the deal's workflow; add your own with +."))
                 }
                 ForEach(tasks) { task in
-                    NavigationLink(value: PDTaskRoute(uuid: task.taskUuid)) { PDTaskRow(task: task) }
-                        .accessibilityIdentifier("pd.dealTasks.row.\(task.taskUuid)")
+                    HStack(spacing: 4) {
+                        NavigationLink(value: PDTaskRoute(uuid: task.taskUuid)) { PDTaskRow(task: task) }
+                            .accessibilityIdentifier("pd.dealTasks.row.\(task.taskUuid)")
+                        PDTaskRowActions(task: task, actions: actions)
+                    }
                 }
             }
         }
@@ -199,8 +203,12 @@ struct PDDealTasksView: View {
                 }
             }
         }
-        .task(id: showDone) { await load() }
+        .task(id: showDone) {
+            actions.onChange = { await load() }
+            await load()
+        }
         .refreshable { await load() }
+        .pdTaskActionSheets(actions)
         .alert("Add a task to this deal", isPresented: $adding) {
             TextField("What needs doing", text: $title)
             Button("Add") { Task { await add() } }

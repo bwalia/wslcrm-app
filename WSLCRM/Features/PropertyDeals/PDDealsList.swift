@@ -395,6 +395,8 @@ struct PDDealsBoardView: View {
     @State private var templates: [Record] = []
     @State private var state: LoadState<Record> = .idle
     @State private var moving: PDMoveTarget?
+    @State private var fixRoute: NativeScreenRoute?
+    @State private var editingDeal: String?
     @State private var notice: String?
 
     var body: some View {
@@ -456,9 +458,23 @@ struct PDDealsBoardView: View {
         .task(id: template) { await load() }
         .refreshable { await load() }
         .sheet(item: $moving) { target in
-            PDMoveStageSheet(target: target) { stageName in
+            PDMoveStageSheet(target: target, onMoved: { stageName in
                 notice = "\(target.dealName) moved to \(stageName)."
                 Task { await load() }
+            }, onFix: { fix in
+                Task {
+                    try? await Task.sleep(for: .milliseconds(450))  // let the sheet go first
+                    switch fix {
+                    case .screen(let route, _): fixRoute = route
+                    case .editDeal: editingDeal = target.dealUuid
+                    }
+                }
+            })
+        }
+        .navigationDestination(item: $fixRoute) { NativeScreenView(route: $0) }
+        .sheet(isPresented: Binding(get: { editingDeal != nil }, set: { if !$0 { editingDeal = nil } })) {
+            if let editingDeal {
+                PDEditDealSheet(dealUuid: editingDeal) { notice = "Deal saved."; Task { await load() } }
             }
         }
     }
@@ -577,10 +593,12 @@ struct PDMoveTarget: Identifiable, Hashable, Sendable {
 struct PDMoveStageSheet: View {
     let target: PDMoveTarget
     let onMoved: (String) -> Void
+    /// Opens the place that fixes a gap (the deal's tasks, compliance, documents, or Edit deal).
+    var onFix: ((PDGateFix) -> Void)?
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
     @State private var checking: String?
-    @State private var missing: [String] = []
+    @State private var missing: [PDGateGap] = []
     @State private var blockedStage: String?
     @State private var error: APIError?
 
@@ -590,11 +608,26 @@ struct PDMoveStageSheet: View {
                 if let error { Section { InlineErrorRow(error: error) } }
                 if let blockedStage, !missing.isEmpty {
                     Section {
-                        ForEach(missing, id: \.self) { Label($0, systemImage: "lock.fill").foregroundStyle(Tone.danger.textColor) }
+                        ForEach(missing, id: \.self) { gap in
+                            if let fix = gap.fix(dealUuid: target.dealUuid), let onFix {
+                                Button {
+                                    dismiss()
+                                    onFix(fix)
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Label(gap.message, systemImage: "lock.fill").foregroundStyle(Tone.danger.textColor)
+                                        Text(fix.title).font(.wsSubheadline.weight(.semibold))
+                                    }
+                                }
+                                .accessibilityIdentifier("pd.move.fix.\(gap.type ?? "")")
+                            } else {
+                                Label(gap.message, systemImage: "lock.fill").foregroundStyle(Tone.danger.textColor)
+                            }
+                        }
                     } header: {
                         Text("Not ready for \(blockedStage) yet")
                     } footer: {
-                        Text("Finish these first, then move the deal.")
+                        Text(onFix == nil ? "Finish these first, then move the deal." : "Tap one to fix it, then move the deal.")
                     }
                     .accessibilityIdentifier("pd.move.missing")
                 }
@@ -628,10 +661,10 @@ struct PDMoveStageSheet: View {
         let raw = services.pdRaw
         do {
             let gate = try await raw.record("/deals/\(target.dealUuid)/gate", ["to": stage.key])
-            let gaps = Self.missing(gate)
+            let gaps = Self.gaps(gate.records("missing"))
             if gate.bool("ok") == false {
                 blockedStage = stage.name
-                missing = gaps.isEmpty ? ["Something the workflow needs isn’t done yet."] : gaps
+                missing = gaps.isEmpty ? [PDGateGap(message: "Something the workflow needs isn’t done yet.", type: nil)] : gaps
                 return
             }
             try await raw.send(.post, "/deals/\(target.dealUuid)/stage", ["to": .string(stage.key)])
@@ -639,7 +672,7 @@ struct PDMoveStageSheet: View {
             dismiss()
         } catch let apiError as APIError {
             // A 409 carries the gate's missing items.
-            if let details = apiError.serverError?.rawBody, let gaps = Self.missing(fromErrorBody: details), !gaps.isEmpty {
+            if let details = apiError.serverError?.rawBody, let gaps = Self.gaps(fromErrorBody: details), !gaps.isEmpty {
                 blockedStage = stage.name
                 missing = gaps
             } else {
@@ -654,10 +687,51 @@ struct PDMoveStageSheet: View {
         gate.records("missing").compactMap { $0.string("message") }
     }
 
+    /// `missing[]` items with their `type` (engine.lua `E.gate`: task, compliance, document, field, enquiries).
+    static func gaps(_ rows: [Record]) -> [PDGateGap] {
+        rows.compactMap { row in row.string("message").map { PDGateGap(message: $0, type: row.string("type")) } }
+    }
+
+    static func gaps(fromErrorBody body: String) -> [PDGateGap]? {
+        guard let data = body.data(using: .utf8), let json = try? ResourceService.decode(data),
+              case .object(let fields) = json else { return nil }
+        return gaps(Record(fields).records("details.missing"))
+    }
+
     /// `{ error, details: { missing: [{ message }] } }` from a refused move or save.
     static func missing(fromErrorBody body: String) -> [String]? {
         guard let data = body.data(using: .utf8), let json = try? ResourceService.decode(data),
               case .object(let fields) = json else { return nil }
         return Record(fields).records("details.missing").compactMap { $0.string("message") }
+    }
+}
+
+/// Where a refused stage move is fixed.
+enum PDGateFix: Hashable {
+    case screen(NativeScreenRoute, title: String)
+    case editDeal
+
+    var title: String {
+        switch self {
+        case .screen(_, let title): title
+        case .editDeal: "Edit the deal"
+        }
+    }
+}
+
+/// One thing a stage's gate says is missing.
+struct PDGateGap: Hashable {
+    let message: String
+    let type: String?
+
+    func fix(dealUuid: String) -> PDGateFix? {
+        switch type {
+        case "task", "tasks": .screen(NativeScreenRoute("pd.deal.tasks", dealUuid), title: "Open the deal's tasks")
+        case "compliance": .screen(NativeScreenRoute("pd.deal.compliance", dealUuid), title: "Open compliance")
+        case "document", "documents": .screen(NativeScreenRoute("pd.deal.documents", dealUuid), title: "Add the document")
+        case "enquiries": .screen(NativeScreenRoute("pd.deal.enquiries", dealUuid), title: "Open enquiries")
+        case "field", "fields": .editDeal
+        default: nil
+        }
     }
 }
