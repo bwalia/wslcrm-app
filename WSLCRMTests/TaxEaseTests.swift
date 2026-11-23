@@ -95,3 +95,155 @@ final class TaxEaseTests: XCTestCase {
         XCTAssertEqual(merged.bool("can_choose"), true, "what the turn didn't carry is kept")
     }
 }
+
+/// Corporation Tax: shapes from `CorporationTaxQueries` (listCompanies, getPeriod, compute) and the bodies the
+/// routes read (`routes/corporation-tax.lua`, all JSON).
+final class CorporationTaxTests: XCTestCase {
+    private func json(_ text: String) throws -> JSONValue { try ResourceService.decode(Data(text.utf8)) }
+
+    @MainActor
+    func testTheMenuKeyAndItsScreensAreNative() {
+        guard case .native(let route)? = NativeModules.destination(forKey: "corporation_tax") else {
+            return XCTFail("corporation_tax has no native screen")
+        }
+        XCTAssertEqual(route.id, "ct.companies")
+        for id in ["ct.companies", "ct.company:c-1", "ct.period:p-1"] { XCTAssertNotNil(ModuleCatalog.screen(id), id) }
+        XCTAssertNil(ModuleCatalog.screen("ct.period"), "a period needs its uuid")
+    }
+
+    func testCompaniesListReadsTheLatestPeriodAndDeadlines() async throws {
+        let store = InMemoryTokenStore(AuthTokens(accessToken: "a", refreshToken: "r"))
+        let client = APIClient(baseURL: URL(string: "https://api.test")!, session: StubURLProtocol.session { request in
+            XCTAssertEqual(request.url?.path, "/api/v2/corporation-tax/companies")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Namespace-Id"), "ns-1")
+            return .json(200, """
+            {"success":true,"data":[{"id":4,"uuid":"c-1","namespace_id":2,"name":"Acme Ltd","company_number":"01234567",
+            "associated_companies":1,"books_source":"imported","framework":"FRS105","is_dormant":false,
+            "latest_period":{"uuid":"p-1","start_date":"2025-04-01","end_date":"2026-03-31","status":"books_locked"},
+            "deadlines":{"payment":"2027-01-01","payment_source":"https://www.gov.uk/pay-corporation-tax",
+            "return_filing":"2027-03-31","companies_house_accounts":"2026-12-31","companies_house_accounts_verified":false,
+            "s455_repayment_cutoff":"2026-12-31"}},
+            {"id":5,"uuid":"c-2","name":"Quiet Ltd","associated_companies":0,"is_dormant":true}]}
+            """)
+        }, tokenStore: store)
+        await client.setNamespace("ns-1")
+        let rows = try await TaxAPI(client: client).records("/api/v2/corporation-tax/companies")
+        XCTAssertEqual(rows.map(\.id), ["c-1", "c-2"], "the uuid, never the numeric id")
+        XCTAssertEqual(rows[0].object("latest_period")?.id, "p-1")
+        XCTAssertEqual(CT.companyLine(rows[0]), "Company 01234567 · 1 associated")
+        XCTAssertEqual(CT.companyLine(rows[1]), "No company number · Dormant")
+        XCTAssertEqual(CT.statusLabel(rows[0].string("latest_period.status")), "Books locked")
+        XCTAssertNil(rows[1].object("latest_period"))
+    }
+
+    func testDeadlinesSayHowLongIsLeft() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 12, day: 1))!
+        XCTAssertEqual(CT.due("2026-12-11", now: now, calendar: calendar)?.tone, .warning)
+        XCTAssertTrue(CT.due("2026-12-11", now: now, calendar: calendar)?.text.hasSuffix("(in 10 days)") == true)
+        XCTAssertTrue(CT.due("2026-11-30", now: now, calendar: calendar)?.text.hasSuffix("(overdue)") == true)
+        XCTAssertEqual(CT.due("2027-06-01", now: now, calendar: calendar)?.tone, .neutral)
+        XCTAssertNil(CT.due(nil))
+    }
+
+    func testCompanyAndPeriodBodies() {
+        let new = CTCompanyForm.body(name: " Acme Ltd ", number: "", associated: 2, dormant: false, editing: false)
+        XCTAssertEqual(new, ["name": .string("Acme Ltd"), "associated_companies": .number(2), "is_dormant": .bool(false)])
+        let edit = CTCompanyForm.body(name: "Acme", number: "", associated: 0, dormant: true, editing: true)
+        XCTAssertEqual(edit["company_number"], .string(""), "an edit can clear the number")
+
+        let calendar = Calendar(identifier: .gregorian)
+        let next = CTNewPeriodForm.suggestedDates(after: "2026-03-31", calendar: calendar)
+        XCTAssertEqual(CalendarDay(date: next.start, calendar: calendar).isoString, "2026-04-01")
+        XCTAssertEqual(CalendarDay(date: next.end, calendar: calendar).isoString, "2027-03-31")
+        let body = CTNewPeriodForm.body(start: next.start, end: next.end, losses: "£1,500", mainPool: "", specialPool: "x",
+                                        calendar: calendar)
+        XCTAssertEqual(body, ["start_date": .string("2026-04-01"), "end_date": .string("2027-03-31"),
+                              "trading_losses_bf": .number(1500)])
+    }
+
+    func testTrialBalanceLinesAreWhatImportTrialBalanceReads() {
+        let parsed = CTTrialBalance.parse("""
+        code,name,type,debit,credit
+        4010, Sales, income, 0, 160000
+        6100,Wages,expenses,40000,
+        1200\tBank\tasset\t£1,250.50\t0
+        9999,Odd,stuff,1,0
+        """)
+        XCTAssertEqual(parsed.lines.count, 3)
+        XCTAssertEqual(parsed.lines[0], .object(["account_code": .string("4010"), "account_name": .string("Sales"),
+                                                 "account_type": .string("revenue"), "debit": .number(0),
+                                                 "credit": .number(160000)]))
+        XCTAssertEqual(parsed.lines[1]["account_type"], .string("expense"))
+        XCTAssertEqual(parsed.lines[1]["credit"], .number(0))
+        XCTAssertEqual(parsed.lines[2]["debit"], .number(1250.5), "tabs keep thousands commas whole")
+        XCTAssertEqual(parsed.problems.count, 1)
+        XCTAssertTrue(parsed.problems[0].hasPrefix("Line 5:"))
+        XCTAssertEqual(CTTrialBalance.side(Record(["debit": .number(0), "credit": .string("300.00")])), "£300.00 Cr")
+    }
+
+    /// `getPeriod` after a suggest run in Pilot: the route adds `agent_mode` and `auto_accepted`.
+    static let suggestedPeriod = """
+    {"success":true,"data":{"id":9,"uuid":"p-1","company_id":4,"start_date":"2025-04-01","end_date":"2026-03-31",
+    "status":"books_locked","trading_losses_bf":"2500.00","claim_current_year_loss":false,"property_income":"0",
+    "chargeable_gains":0,"exempt_distributions":0,"opening_main_pool":"1200","opening_special_pool":0,
+    "company":{"uuid":"c-1","name":"Acme Ltd","associated_companies":0,"is_dormant":false},
+    "trial_balance":[{"account_code":"4010","account_name":"Sales","account_type":"revenue","debit":0,"credit":160000,
+    "source":"imported"}],"trial_balance_totals":{"debit":160000,"credit":160000,"balanced":true},
+    "adjustments":[{"uuid":"a-1","kind":"add_back","category":"entertaining","description":"Client entertaining",
+    "amount":"850.00","suggested_by":"rules","status":"accepted"},{"uuid":"a-2","kind":"add_back","category":"other",
+    "description":"Fines","amount":200,"suggested_by":"ai","status":"suggested"},{"uuid":"a-3","kind":"deduction",
+    "category":"x","description":"Y","amount":10,"suggested_by":"rules","status":"accepted"}],
+    "assets":{},"participator_loans":{},"deadlines":{"payment":"2027-01-01","return_filing":"2027-03-31",
+    "s455_repayment_cutoff":"2026-12-31"},"filing":{"ct600":"not_built","ixbrl":"not_built","live":false},
+    "agent_mode":{"regime":"corporation_tax","configured":"pilot","effective":"pilot","steered":false,"reasons":{}},
+    "auto_accepted":2}}
+    """
+
+    func testASuggestRunSaysWhatTheAgentAccepted() throws {
+        let after = try json(Self.suggestedPeriod).payload.record
+        XCTAssertEqual(after.id, "p-1")
+        let before = Record(["status": .string("books_locked"), "adjustments": .object([:])])
+        XCTAssertEqual(CTWords.suggestNotice(before: before, after: after),
+                       .success("Pilot accepted 2 adjustments. 1 more waits for you."))
+        XCTAssertEqual(CTWords.suggestNotice(before: after, after: after.setting("auto_accepted", .number(0))),
+                       .info("Nothing new to suggest."))
+        XCTAssertEqual(CTWords.startStep(after), 1, "a suggestion is waiting")
+        XCTAssertEqual(after.records("assets").count, 0, "cjson's {} is an empty list")
+        let inputs = CTInputs(after)
+        XCTAssertEqual(inputs.losses, "2500")
+        XCTAssertEqual(inputs.mainPool, "1200")
+        XCTAssertEqual(inputs.body(["trading_losses_bf", "property_income", "claim_current_year_loss"]),
+                       ["trading_losses_bf": .number(2500), "property_income": .number(0),
+                        "claim_current_year_loss": .bool(false)])
+    }
+
+    func testAssetAndLoanBodies() {
+        var asset = CTAssetDraft()
+        asset.movement = "disposal"
+        asset.category = "car"
+        asset.description = "Old car"
+        asset.date = CalendarDay(year: 2025, month: 9, day: 1).date()
+        asset.cost = "18000"
+        asset.proceeds = "6,000"
+        asset.co2 = "95"
+        XCTAssertEqual(asset.body, ["movement": .string("disposal"), "category": .string("car"),
+                                    "description": .string("Old car"), "cost": .number(18000),
+                                    "event_date": .string("2025-09-01"), "new_unused": .bool(true),
+                                    "proceeds": .number(6000), "co2_gkm": .number(95)])
+        asset.cost = "lots"
+        XCTAssertNil(asset.body)
+        var loan = CTLoanDraft()
+        loan.name = "Jo Director"
+        loan.owed = "12000"
+        XCTAssertEqual(loan.body, ["participator_name": .string("Jo Director"), "balance_at_end": .number(12000),
+                                   "repaid_within_9_months": .number(0)])
+    }
+
+    func testPlainWordsForTheServersMessages() {
+        let ledger = APIError.validation(ServerError(status: 400, message: "This deployment has no bookkeeping ledger", fieldErrors: [:], rawBody: ""))
+        XCTAssertTrue(CT.plain(ledger).hasPrefix("There’s no bookkeeping ledger"))
+        let other = APIError.validation(ServerError(status: 409, message: "A period starting 2026-04-01 already exists", fieldErrors: [:], rawBody: ""))
+        XCTAssertEqual(CT.plain(other), "A period starting 2026-04-01 already exists")
+    }
+}

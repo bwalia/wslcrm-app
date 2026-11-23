@@ -72,7 +72,7 @@ enum NativeModules {
         Set(serverKeys.filter { destination(forKey: $0) == nil && !replaced.contains($0) })
     }
 
-    /// Every `menu_items.key` on a full OpsAPI (PROJECT_CODE=all), 2026-11-20. A module added to the
+    /// Every `menu_items.key` on a full OpsAPI (PROJECT_CODE=all), 2026-11-21. A module added to the
     /// server later shows up in `NativeModulesTests` until it has a screen here.
     static let serverKeys: [String] = [
         "dashboard", "academy", "accounting", "plugin:ai_runner:machines", "plugin:ai_runner:runners",
@@ -98,6 +98,8 @@ enum NativeModules {
         "settings", "shop", "shop_analytics", "stores", "tax", "tax_agent", "tax_bank_accounts", "tax_categories",
         "tax_file", "tax_filing_requests", "tax_my_income", "tax_income_types", "tax_reports", "tax_hmrc",
         "tax_statements", "tax_transactions", "tax_vat", "tax_vat_clients", "document_templates", "timesheets", "users",
+        // Added on the server on 2026-11-21.
+        "corporation_tax",
     ]
 }
 
