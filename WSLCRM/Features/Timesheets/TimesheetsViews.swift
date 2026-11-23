@@ -11,6 +11,11 @@ struct TimesheetsView: View {
     @State private var statusFilter: TimesheetStatus?
     @State private var summary: TimesheetSummary?
     @State private var logging = false
+    /// Bumped to make the lists read again: after logging time, and on coming back from a
+    /// timesheet that may have been submitted, approved or deleted.
+    @State private var reload = 0
+    @State private var hasAppeared = false
+    @State private var notice: WorkNotice?
 
     enum Tab: String, CaseIterable, Identifiable {
         case mine, approvals
@@ -33,22 +38,38 @@ struct TimesheetsView: View {
             }
             Group {
                 switch tab {
-                case .mine: MyTimesheetsList(statusFilter: $statusFilter, summary: summary)
-                case .approvals: ApprovalQueueList()
+                case .mine:
+                    // The filter is read when the list's model is made, so a new filter makes a new list.
+                    MyTimesheetsList(statusFilter: $statusFilter, summary: summary, reload: reload)
+                        .id(statusFilter)
+                case .approvals: ApprovalQueueList(reload: reload, notice: $notice) { await loadSummary() }
                 }
             }
         }
         .navigationTitle("Timesheets")
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) { WorkAskAIButton(path: WorkAskAIButton.timesheets) }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Log time", systemImage: "plus") { logging = true }
                     .accessibilityIdentifier("timesheet.log")
             }
         }
         .sheet(isPresented: $logging) {
-            LogTimeSheet { await loadSummary() }
+            LogTimeSheet {
+                notice = .done("Time logged. It's a draft until you submit it for approval.")
+                reload += 1
+                await loadSummary()
+            }
         }
+        .workNotice($notice)
         .task { await loadSummary() }
+        .onAppear {
+            if hasAppeared {
+                reload += 1
+                Task { await loadSummary() }
+            }
+            hasAppeared = true
+        }
     }
 
     private func loadSummary() async {
@@ -62,6 +83,7 @@ private struct MyTimesheetsList: View {
     @Environment(\.services) private var services
     @Binding var statusFilter: TimesheetStatus?
     let summary: TimesheetSummary?
+    let reload: Int
 
     var body: some View {
         ModelHost(make: { [api = services.timesheets, status = statusFilter] in
@@ -73,22 +95,40 @@ private struct MyTimesheetsList: View {
                 }
                 StatusFilterBar(selection: $statusFilter)
                 PagedList(model: model, searchPrompt: nil,
-                          emptyTitle: "No time logged",
+                          emptyTitle: statusFilter == nil ? "No time logged" : "Nothing here",
                           emptySystemImage: "clock.badge.questionmark",
-                          emptyDescription: "Log the hours you have worked and submit them for approval.") { sheet in
+                          emptyDescription: statusFilter.map { "None of your timesheets are “\($0.label)”. Pick “All” to see every one." }
+                            ?? "Log the hours you have worked and submit them for approval.") { sheet in
                     NavigationLink(value: TimesheetRoute(uuid: sheet.uuid)) {
                         TimesheetRow(timesheet: sheet, showsActor: false)
                     }
                     .accessibilityIdentifier("timesheet.row.\(sheet.uuid)")
                 }
             }
-            .onChange(of: statusFilter) { _, _ in Task { await model.load() } }
+            .onChange(of: reload) { _, _ in Task { await model.load() } }
         }
     }
 }
 
 private struct ApprovalQueueList: View {
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
+    let reload: Int
+    @Binding var notice: WorkNotice?
+    let onDecided: () async -> Void
+    @State private var deciding: QueueDecision?
+
+    /// A swipe's decision, waiting for its comment or reason.
+    private struct QueueDecision: Identifiable {
+        let sheet: Timesheet
+        let decision: TimesheetDetailView.Decision
+        var id: String { "\(sheet.uuid).\(decision.rawValue)" }
+    }
+
+    private var policy: FieldServicePolicy { session.policy }
+    private var me: WorkActor {
+        WorkActor(uuid: session.user?.uuid ?? "", name: session.user?.displayName ?? "Me", kind: .person)
+    }
 
     var body: some View {
         ModelHost(make: { [api = services.timesheets] in
@@ -102,8 +142,50 @@ private struct ApprovalQueueList: View {
                     TimesheetRow(timesheet: sheet, showsActor: true)
                 }
                 .accessibilityIdentifier("timesheet.approval.\(sheet.uuid)")
+                .swipeActions(edge: .trailing) {
+                    // The same rights the server checks (timesheet_approvals.approve / .reject).
+                    if sheet.status.canDecide, policy.canDecideTimesheets(as: me) {
+                        if policy.canRejectTimesheets {
+                            Button("Send back", systemImage: "arrow.uturn.backward") {
+                                deciding = QueueDecision(sheet: sheet, decision: .reject)
+                            }
+                            .tint(.orange)
+                        }
+                        if policy.canApproveTimesheets {
+                            Button("Approve", systemImage: "checkmark") {
+                                deciding = QueueDecision(sheet: sheet, decision: .approve)
+                            }
+                            .tint(.green)
+                        }
+                    }
+                }
+            }
+            .onChange(of: reload) { _, _ in Task { await model.load() } }
+            .sheet(item: $deciding) { item in
+                TimesheetDecisionSheet(decision: item.decision) { text in
+                    await decide(item, text: text, model: model)
+                }
             }
         }
+    }
+
+    private func decide(_ item: QueueDecision, text: String, model: PagedListModel<Timesheet>) async {
+        let who = item.sheet.actor.name
+        do {
+            switch item.decision {
+            case .approve:
+                try await services.timesheets.approve(item.sheet.uuid, comments: text.trimmedOrNil)
+                notice = .done("\(who)'s timesheet approved.")
+            case .reject:
+                try await services.timesheets.reject(item.sheet.uuid, reason: text.trimmingCharacters(in: .whitespacesAndNewlines))
+                notice = .done("\(who)'s timesheet sent back with your reason.")
+            }
+            model.remove(id: item.sheet.id)
+            await onDecided()
+        } catch {
+            notice = .failed(error.asAPIError.plainMessage)
+        }
+        await model.load()
     }
 }
 
@@ -193,6 +275,11 @@ struct TimesheetRow: View {
                     .font(.wsSubheadline)
                 if timesheet.isBillable {
                     Label("Billable", systemImage: "sterlingsign.circle").font(.wsSubheadline)
+                }
+                if let amount = timesheet.amount, amount > 0 {
+                    Text(Formatters.money(Decimal(amount), currency: "GBP") ?? "")
+                        .font(.wsSubheadline.weight(.semibold))
+                        .accessibilityLabel("Comes to \(Formatters.money(Decimal(amount), currency: "GBP") ?? "")")
                 }
                 if showsActor || timesheet.isMachineTime {
                     ActorChip(actor: timesheet.actor)
@@ -317,7 +404,7 @@ struct TimesheetDetailView: View {
                     Text("No time entries yet.").foregroundStyle(.secondaryText)
                 }
                 ForEach(entries) { entry in
-                    VStack(alignment: .leading, spacing: 2) {
+                    let row = VStack(alignment: .leading, spacing: 2) {
                         HStack {
                             Text(Formatters.day(entry.date) ?? "—").font(.wsSubheadline.weight(.semibold))
                             Spacer()
@@ -328,6 +415,14 @@ struct TimesheetDetailView: View {
                         }
                         let tags = [entry.projectReference, entry.category, entry.isBillable ? "billable" : "not billable"].compactMap { $0 }
                         Text(tags.joined(separator: " · ")).font(.wsCaption).foregroundStyle(.secondaryText)
+                    }
+                    Group {
+                        if editable, isMine {
+                            Button { entryForm = EntryFormTarget(entry: entry) } label: { row.foregroundStyle(.primary) }
+                                .accessibilityHint("Opens the entry to change it")
+                        } else {
+                            row
+                        }
                     }
                     .accessibilityIdentifier("timesheet.entry.\(entry.uuid)")
                     .swipeActions {
@@ -349,7 +444,7 @@ struct TimesheetDetailView: View {
                 Text("Time entries")
             } footer: {
                 if editable {
-                    Text("Each entry is one chunk of work. The hours add up to the timesheet's total. Entries can only change while it's a draft; submitting locks them.")
+                    Text("Each entry is one chunk of work. The hours add up to the timesheet's total. Tap an entry to change it. Entries can only change while it's a draft; submitting locks them.")
                 }
             }
 
@@ -407,14 +502,20 @@ struct TimesheetDetailView: View {
             }
             .accessibilityIdentifier("timesheet.reopen")
         }
-        if sheet.status.canDecide, policy.canDecideTimesheets(as: me), !isMine {
-            Button("Approve") { deciding = .approve }
-                .buttonStyle(LargeButtonStyle(tone: .success))
-                .accessibilityIdentifier("timesheet.approve")
-            Button("Send back", role: .destructive) { deciding = .reject }
-                .accessibilityIdentifier("timesheet.reject")
+        // The server checks only the approver's rights (timesheet_approvals.approve / .reject,
+        // which owners and admins hold), so someone with them may decide on their own time too.
+        if sheet.status.canDecide, policy.canDecideTimesheets(as: me) {
+            if policy.canApproveTimesheets {
+                Button("Approve") { deciding = .approve }
+                    .buttonStyle(LargeButtonStyle(tone: .success))
+                    .accessibilityIdentifier("timesheet.approve")
+            }
+            if policy.canRejectTimesheets {
+                Button("Send back", role: .destructive) { deciding = .reject }
+                    .accessibilityIdentifier("timesheet.reject")
+            }
         } else if sheet.status.canDecide, isMine {
-            Text("Somebody else approves your time.")
+            Text("It's waiting for someone who approves timesheets.")
                 .font(.wsFootnote).foregroundStyle(.secondaryText)
         }
         if sheet.status == .approved, session.permissions.can(.create, .invoices) {
