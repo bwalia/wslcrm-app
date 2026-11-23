@@ -40,4 +40,19 @@ final class AccountingEasyTests: XCTestCase {
         let page = try await ResourceService(client: client).page(spec.descriptor, search: "", page: 1)
         XCTAssertEqual(page.items.map(\.id), ["Travel"], "the account's name is what's saved")
     }
+
+    /// `GET /accounting/expenses` doesn't filter on `search` yet, so the ledger fetches the latest 500 and filters.
+    func testPurchaseLedgerSearch() {
+        XCTAssertEqual(PurchaseLedgerView.query(status: "", category: "", search: " ")["search"] ?? nil, nil)
+        let query = PurchaseLedgerView.query(status: "pending", category: "travel", search: " taxi ")
+        XCTAssertEqual(query["search"] ?? nil, "taxi")
+        XCTAssertEqual(query["per_page"] ?? nil, "500")
+        XCTAssertEqual(query["status"] ?? nil, "pending")
+        let taxi = Record(["uuid": .string("x-1"), "description": .string("Airport TAXI"), "vendor": .string("Uber"),
+                           "category": .string("travel")])
+        XCTAssertTrue(PurchaseLedgerView.matches(taxi, "taxi"))
+        XCTAssertTrue(PurchaseLedgerView.matches(taxi, "uber"))
+        XCTAssertTrue(PurchaseLedgerView.matches(taxi, ""))
+        XCTAssertFalse(PurchaseLedgerView.matches(taxi, "stationery"))
+    }
 }

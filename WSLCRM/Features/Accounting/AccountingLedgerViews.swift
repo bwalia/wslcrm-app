@@ -357,6 +357,7 @@ struct PurchaseLedgerView: View {
     @State private var stats: Record?
     @State private var status = ""
     @State private var category = ""
+    @State private var search = ""
 
     static let categories = ["purchases", "materials", "subcontractors", "office", "travel", "utilities", "marketing",
                              "software", "professional_fees", "other"]
@@ -365,10 +366,10 @@ struct PurchaseLedgerView: View {
         List {
             Section {
                 TaxAmountRow(label: "Expenses this month", value: stats?.money("expenses_this_month") ?? "£0.00")
-                TaxAmountRow(label: "Waiting or approved (this page)", value: TaxMoney.text(pager.rows
+                TaxAmountRow(label: "Waiting or approved (this page)", value: TaxMoney.text(shown
                     .filter { ["pending", "approved"].contains($0.string("status") ?? "") }
                     .reduce(0) { $0 + ($1.decimal("amount") ?? 0) }), tone: .warning)
-                TaxAmountRow(label: "VAT reclaimable (this page)", value: TaxMoney.text(pager.rows
+                TaxAmountRow(label: "VAT reclaimable (this page)", value: TaxMoney.text(shown
                     .filter { $0.bool("is_vat_reclaimable") != false }.reduce(0) { $0 + ($1.decimal("vat_amount") ?? 0) }))
             }
             Section {
@@ -386,8 +387,8 @@ struct PurchaseLedgerView: View {
             case .loaded:
                 breakdown
                 Section {
-                    if pager.rows.isEmpty { TaxEmptyRow(title: "No expenses found", systemImage: "cart") }
-                    ForEach(pager.rows) { e in
+                    if shown.isEmpty { TaxEmptyRow(title: "No expenses found", systemImage: "cart") }
+                    ForEach(shown) { e in
                         NavigationLink(value: ResourceRoute(descriptorID: ModuleCatalog.accountingExpenses.id,
                                                             recordID: e.id, seed: e)) {
                             VStack(alignment: .leading, spacing: 4) {
@@ -398,28 +399,53 @@ struct PurchaseLedgerView: View {
                                 }
                             }
                         }
-                        .task { if e.id == pager.rows.last?.id { await pager.more() } }
+                        .task { if e.id == shown.last?.id { await pager.more() } }
                     }
                 }
             default:
                 Section { HStack { ProgressView(); Text("Loading…") } }
             }
         }
+        .searchable(text: $search, prompt: "Description, supplier or category")
         .navigationTitle("Purchase ledger")
-        .task(id: "\(status)|\(category)") {
+        .task(id: "\(status)|\(category)|\(search)") {
+            if !search.isEmpty { try? await Task.sleep(for: .milliseconds(300)) }
+            guard !Task.isCancelled else { return }
             let api = makeTaxAPI(services, user: session.user)
             pager.api = api
             pager.path = "/api/v2/accounting/expenses"
-            pager.query = ["status": status.isEmpty ? nil : status, "category": category.isEmpty ? nil : category]
+            pager.query = Self.query(status: status, category: category, search: search)
             await pager.load()
             stats = try? await api.get("/api/v2/accounting/reports/dashboard-stats").payload.record
         }
         .refreshable { await pager.load() }
     }
 
+    /// `GET /accounting/expenses` query. `search` is sent as the web sends it, but the server doesn't filter on it
+    /// yet (`routes/accounting.lua`), so a search fetches the latest 500 and `matches` filters them here.
+    nonisolated static func query(status: String, category: String, search: String) -> [String: String?] {
+        var query: [String: String?] = ["status": status.isEmpty ? nil : status,
+                                        "category": category.isEmpty ? nil : category]
+        if let text = search.trimmedOrNil {
+            query["search"] = text
+            query["per_page"] = "500"  // ponytail: client-side search over the latest 500; drop when the server filters
+        }
+        return query
+    }
+
+    /// Description, supplier, category or notes contain the words searched for (any case).
+    nonisolated static func matches(_ expense: Record, _ search: String) -> Bool {
+        guard let text = search.trimmedOrNil?.lowercased() else { return true }
+        return ["description", "vendor", "category", "sub_category", "notes"].contains {
+            expense.string($0)?.lowercased().contains(text) == true
+        }
+    }
+
+    private var shown: [Record] { pager.rows.filter { Self.matches($0, search) } }
+
     @ViewBuilder
     private var breakdown: some View {
-        let groups = Dictionary(grouping: pager.rows) { $0.string("category") ?? "Uncategorised" }
+        let groups = Dictionary(grouping: shown) { $0.string("category") ?? "Uncategorised" }
             .mapValues { $0.reduce(Decimal(0)) { $0 + ($1.decimal("amount") ?? 0) } }
             .sorted { $0.value > $1.value }
         let total = groups.reduce(Decimal(0)) { $0 + $1.value }
