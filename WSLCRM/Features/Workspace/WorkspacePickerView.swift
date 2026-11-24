@@ -13,9 +13,24 @@ struct WorkspacePickerView: View {
     @State private var creating = false
     @State private var search = ""
     @State private var feedback: Feedback = .none
+    @State private var isDeliveryPartner = false
+    @State private var confirmingSignOut = false
 
     var body: some View {
         List {
+            // A delivery partner's drops need no workspace: reachable before one is chosen (or without any).
+            if isInitialChoice, isDeliveryPartner {
+                Section {
+                    NavigationLink {
+                        NativeScreenView(route: NativeScreenRoute(SalesScreen.myDeliveries))
+                    } label: {
+                        MyDeliveries.entryLabel.font(.wsHeadline).frame(minHeight: 44)
+                    }
+                    .accessibilityIdentifier("workspace.myDeliveries")
+                } footer: {
+                    Text("The orders you're delivering, and signing for them on delivery.")
+                }
+            }
             if session.workspaces.isEmpty {
                 noWorkspaceSection
             }
@@ -55,7 +70,8 @@ struct WorkspacePickerView: View {
         .toolbar {
             if isInitialChoice {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Sign out") { Task { await session.signOut() } }
+                    Button("Sign out") { confirmingSignOut = true }
+                        .accessibilityIdentifier("workspace.signOut")
                 }
             }
         }
@@ -66,6 +82,12 @@ struct WorkspacePickerView: View {
             await load()
         }
         .sheet(isPresented: $creating) { CreateWorkspaceSheet() }
+        .confirmationDialog("Sign out of \(BrandStore.shared.brand.name)?", isPresented: $confirmingSignOut,
+                            titleVisibility: .visible) {
+            Button("Sign out", role: .destructive) { Task { await session.signOut() } }
+        } message: {
+            Text("You'll need your email and password to sign in again.")
+        }
     }
 
     /// Nobody has added this person to a workspace: say why, and how to get in.
@@ -152,6 +174,7 @@ struct WorkspacePickerView: View {
         let api = services.workspace()
         await inbox.load(api)
         if let found = try? await api.directory() { directory = found }
+        if isInitialChoice { isDeliveryPartner = await MyDeliveries.isPartner(services) }
     }
 
     private func choose(_ workspace: Workspace) {

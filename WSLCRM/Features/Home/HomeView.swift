@@ -37,6 +37,10 @@ struct HomeView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
+                if MenuLoadFailedCard.applies(hasWorkspace: session.workspace != nil, error: session.permissionsError,
+                                              menuIsEmpty: session.menu.isEmpty) {
+                    MenuLoadFailedCard()
+                }
                 if !invitations.items.isEmpty || !invitations.feedback.isNone { invitationsSection }
                 // Delivery partners (no workspace needed): their drops, signed for on delivery.
                 if isDeliveryPartner {
@@ -55,7 +59,11 @@ struct HomeView: View {
                 if !hubs.isEmpty { workSection }
                 quickActions(catalog: catalog)
                 if !catalog.nativeEntries.isEmpty { appsSection(catalog: catalog) }
-                if NoAccessCard.applies(session: session, catalog: catalog, hubs: hubs) { NoAccessCard() }
+                if NoAccessCard.applies(hasWorkspace: session.workspace != nil, menuFailed: session.permissionsError != nil,
+                                        hasApps: !catalog.groups.isEmpty, hasWork: !hubs.isEmpty,
+                                        isDeliveryPartner: isDeliveryPartner) {
+                    NoAccessCard()
+                }
                 // The AI Navigator, once its native screen is in this person's menu.
                 if let chat = catalog.entry(forKey: AppMenu.aiChatKey) {
                     AppEntryLink(entry: chat) { AssistantCardLabel() }
@@ -228,10 +236,14 @@ struct HomeView: View {
     }
 
     private func quickActions(catalog: AppCatalog) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let items = actions(catalog: catalog)
+        // Side by side, but two to a row at the largest text sizes so the names stay readable.
+        let perRow = max(1, min(items.count, typeSize.isAccessibilitySize ? 2 : 4))
+        return VStack(alignment: .leading, spacing: 10) {
             DashboardSectionHeader("Quick actions")
-            HStack(alignment: .top, spacing: 8) {
-                ForEach(actions(catalog: catalog)) { action in
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: perRow),
+                      spacing: 12) {
+                ForEach(items) { action in
                     Group {
                         if let destination = action.destination {
                             MenuDestinationLink(destination: destination) { quickActionLabel(action) }
@@ -318,7 +330,7 @@ private struct HomeHero: View {
                     Image(systemName: unread > 0 ? "bell.badge.fill" : "bell")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white)
-                        .frame(width: 40, height: 40)
+                        .frame(width: 44, height: 44)
                         .background(.white.opacity(0.12), in: Circle())
                         .overlay(alignment: .topTrailing) {
                             if unread > 0 {
@@ -338,7 +350,7 @@ private struct HomeHero: View {
                     Text(session.user?.initials ?? "?")
                         .font(BrandFont.font(.semibold, size: 15, relativeTo: .subheadline))
                         .foregroundStyle(.white)
-                        .frame(width: 40, height: 40)
+                        .frame(width: 44, height: 44)
                         .background(Color.accentColor, in: Circle())
                         .overlay(Circle().stroke(.white.opacity(0.35), lineWidth: 2))
                 }
@@ -514,12 +526,13 @@ private struct AssistantCardLabel: View {
     }
 }
 
-/// A role that opens nothing in this workspace: say so, and who can fix it (the web's wording).
+/// A role that opens nothing in this workspace: say so, and who can fix it.
 struct NoAccessCard: View {
-    /// The menu loaded, but nothing in it has a screen and there's no work area.
-    @MainActor
-    static func applies(session: SessionStore, catalog: AppCatalog, hubs: [NavigationPolicy.Home]) -> Bool {
-        session.workspace != nil && session.permissionsError == nil && catalog.groups.isEmpty && hubs.isEmpty
+    /// The menu loaded, but nothing in it has a screen and there's no work area. A delivery partner
+    /// has their deliveries, so it isn't "nothing" for them.
+    static func applies(hasWorkspace: Bool, menuFailed: Bool, hasApps: Bool, hasWork: Bool,
+                        isDeliveryPartner: Bool) -> Bool {
+        hasWorkspace && !menuFailed && !hasApps && !hasWork && !isDeliveryPartner
     }
 
     var body: some View {
@@ -531,7 +544,7 @@ struct NoAccessCard: View {
             Text("Nothing to show here yet")
                 .font(.brandHeadline)
             Text("Your role doesn't give you access to anything in this workspace yet. Ask the person who manages "
-                 + "it to give you a role with access, for example Developer.")
+                 + "it to give you a role for the work you do.")
                 .font(.brandFootnote)
                 .foregroundStyle(.secondaryText)
                 .multilineTextAlignment(.center)
@@ -541,6 +554,39 @@ struct NoAccessCard: View {
         .brandCard(padding: 20)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("home.noAccess")
+    }
+}
+
+/// The menu couldn't be loaded and there's no saved copy, so Home and Apps would be empty: say so,
+/// and offer to try again.
+struct MenuLoadFailedCard: View {
+    @Environment(SessionStore.self) private var session
+    @State private var retrying = false
+
+    static func applies(hasWorkspace: Bool, error: APIError?, menuIsEmpty: Bool) -> Bool {
+        hasWorkspace && error != nil && menuIsEmpty
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("We couldn't load your apps")
+                .font(.brandHeadline)
+                .accessibilityAddTraits(.isHeader)
+            if retrying {
+                ProgressView("Trying again…").padding(.vertical, 8)
+            } else if let error = session.permissionsError {
+                InlineErrorRow(error: error) {
+                    Task {
+                        retrying = true
+                        await session.reloadPermissions()
+                        retrying = false
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .brandCard(padding: 16)
+        .accessibilityIdentifier("home.menuFailed")
     }
 }
 
