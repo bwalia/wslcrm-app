@@ -10,6 +10,7 @@ struct HomeView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SyncCenter.self) private var sync
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var digest = HomeDigest()
     @State private var editingHome = false
     @State private var showingProfile = false
@@ -72,6 +73,9 @@ struct HomeView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 32)
+            // A big iPad or Mac window: Home stays a readable column in the middle instead of scattering.
+            .frame(maxWidth: 1100)
+            .frame(maxWidth: .infinity)
         }
         .brandCanvas()
         // A running task timer, wherever it was started (hidden when none is running).
@@ -146,7 +150,7 @@ struct HomeView: View {
             }
             let others = Array(hubs.dropFirst())
             if !others.isEmpty {
-                LazyVGrid(columns: others.count == 1 ? [GridItem(.flexible())] : columns(min: 150), spacing: 10) {
+                LazyVGrid(columns: tileColumns(others.count), spacing: 10) {
                     ForEach(others, id: \.self) { hub in
                         Button { open(.hub(hub)) } label: { HubCard(hub: hub) }
                             .buttonStyle(.pressableCard)
@@ -165,7 +169,7 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 10) {
             DashboardSectionHeader("Needs you today")
             if !digest.hasLoaded {
-                LazyVGrid(columns: columns(min: 150), spacing: 10) {
+                LazyVGrid(columns: tileColumns(4), spacing: 10) {
                     ForEach(0..<4, id: \.self) { _ in
                         MetricCard(title: "Loading", value: "00", systemImage: "circle").redacted(reason: .placeholder)
                     }
@@ -178,7 +182,7 @@ struct HomeView: View {
                     .brandCard(padding: 14, radius: 16)
                     .accessibilityIdentifier("home.allClear")
             } else {
-                LazyVGrid(columns: columns(min: 150), spacing: 10) {
+                LazyVGrid(columns: tileColumns(digest.signals.count), spacing: 10) {
                     ForEach(digest.signals) { signal in
                         signalLink(signal)
                     }
@@ -301,8 +305,12 @@ struct HomeView: View {
         }
     }
 
-    private func columns(min: CGFloat) -> [GridItem] {
-        [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 280 : min), spacing: 10)]
+    /// Two a row on a phone; on an iPad or a Mac up to four, and fewer when there are fewer cards, so a row is
+    /// always filled instead of a few tiles packed to the left of a wide window.
+    private func tileColumns(_ count: Int) -> [GridItem] {
+        if typeSize.isAccessibilitySize { return [GridItem(.adaptive(minimum: 280), spacing: 10)] }
+        let perRow = count == 1 ? 1 : (sizeClass == .regular ? min(count, 4) : 2)
+        return Array(repeating: GridItem(.flexible(), spacing: 10), count: perRow)
     }
 
 }
