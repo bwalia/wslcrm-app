@@ -49,7 +49,8 @@ struct PATodayView: View {
         .navigationTitle(manager ? "Manager" : "PA")
         .toolbar { toolbar }
         .overlay(alignment: .bottomTrailing) {
-            if !manager { micButton }
+            // POST /captures/start needs property_pa_records.create (and the PA's proposals updates.create).
+            if !manager, session.permissions.paCanCapture { micButton }
         }
         .task(id: mode) {
             await load()
@@ -62,7 +63,7 @@ struct PATodayView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, let card = calledCard {
                 calledCard = nil
-                askAfterCall = card
+                if session.permissions.paCanCapture { askAfterCall = card }
             }
         }
         .onAppear { if state.value != nil { Task { await load(quietly: true) } } }

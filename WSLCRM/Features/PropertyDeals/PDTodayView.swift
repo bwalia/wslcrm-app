@@ -103,7 +103,8 @@ struct PDTodayView: View {
                         .accessibilityIdentifier("pd.today.captureMessage")
                 }
             }
-            PDHotLeadsSection(leads: visibleHotLeads) { calledLead = $0 }
+            PDHotLeadsSection(leads: visibleHotLeads,
+                              onCalled: PDWriteGates.canLogCall(session.propertyDeals) ? { calledLead = $0 } : nil)
             summarySection(today)
             if push.authorization == .notDetermined && !pushPromptDismissed {
                 pushPrompt
@@ -299,8 +300,7 @@ struct PDTodayView: View {
     // MARK: Data
 
     private var canCapture: Bool {
-        guard let access = session.propertyDeals else { return false }
-        return access.can(.create, .deals) || access.can(.create, .properties)
+        PDWriteGates.canCapture(session.propertyDeals, session.permissions)
     }
 
     private var approvalsWaiting: Int {

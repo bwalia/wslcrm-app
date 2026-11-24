@@ -8,7 +8,8 @@ struct PDSuppliersView: View {
     @Environment(SessionStore.self) private var session
 
     var body: some View {
-        PDSuppliersList(raw: services.pdRaw, canCreate: session.propertyDeals?.can(.create, .suppliers) ?? false)
+        PDSuppliersList(raw: services.pdRaw, canCreate: session.propertyDeals?.can(.create, .suppliers) ?? false,
+                        canBook: PDWriteGates.canBookNearest(session.propertyDeals))
     }
 
     /// `GET /suppliers` query (search is `q`; kind is one of the kinds).
@@ -32,6 +33,7 @@ private final class PDSuppliersSource {
 
 private struct PDSuppliersList: View {
     let canCreate: Bool
+    let canBook: Bool
     @State private var source: PDSuppliersSource
     @State private var model: PagedListModel<Record>
     @State private var kind = ""
@@ -42,8 +44,9 @@ private struct PDSuppliersList: View {
     @State private var notice: String?
     @State private var appeared = false
 
-    init(raw: PDRaw, canCreate: Bool) {
+    init(raw: PDRaw, canCreate: Bool, canBook: Bool) {
         self.canCreate = canCreate
+        self.canBook = canBook
         let source = PDSuppliersSource(raw: raw)
         _source = State(initialValue: source)
         _model = State(initialValue: PagedListModel { search, page in try await source.fetch(search: search, page: page) })
@@ -52,7 +55,8 @@ private struct PDSuppliersList: View {
     var body: some View {
         PagedList(model: model, searchPrompt: "Search by name or town", emptyTitle: "No suppliers yet",
                   emptySystemImage: "wrench.and.screwdriver",
-                  emptyDescription: "EPC assessors, surveyors, solicitors and more, with how fast they really are.") { supplier in
+                  emptyDescription: "EPC assessors, surveyors, solicitors and more, with how fast they really are.",
+                  emptyActionTitle: "Add supplier", emptyAction: canCreate ? { adding = true } : nil) { supplier in
             NavigationLink(value: NativeScreenRoute("pd.supplier", supplier.id)) { PDSupplierRow(supplier: supplier) }
                 .accessibilityIdentifier("pd.suppliers.row.\(supplier.id)")
         }
@@ -90,9 +94,11 @@ private struct PDSuppliersList: View {
                 }
                 .accessibilityIdentifier("pd.suppliers.filter")
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { booking = true } label: { Label("Book the nearest", systemImage: "location.north.circle") }
-                    .accessibilityIdentifier("pd.suppliers.bookNearest")
+            if canBook {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { booking = true } label: { Label("Book the nearest", systemImage: "location.north.circle") }
+                        .accessibilityIdentifier("pd.suppliers.bookNearest")
+                }
             }
             if canCreate {
                 ToolbarItem(placement: .primaryAction) {

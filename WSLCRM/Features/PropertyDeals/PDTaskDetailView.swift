@@ -304,7 +304,9 @@ struct PDTaskDetailView: View {
             openURL(url) { accepted in
                 if accepted {
                     // Shown when they come back from the call / chat / mail app.
-                    if state.value?.dealUuid != nil { contactToLog = ContactAttempt(party: party, channel: channel) }
+                    if state.value?.dealUuid != nil, PDWriteGates.canLogChase(session.propertyDeals) {
+                        contactToLog = ContactAttempt(party: party, channel: channel)
+                    }
                 } else {
                     openError = "This phone can't open \(title)."
                 }

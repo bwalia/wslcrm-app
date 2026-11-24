@@ -436,6 +436,7 @@ private struct PDSavedSearchesSection: View {
     let report: (String?, APIError?) -> Void
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
+    @State private var confirm: PendingConfirmation?
     @State private var searches: [Record] = []
     @State private var alerts: [Record] = []
     @State private var name = ""
@@ -464,12 +465,16 @@ private struct PDSavedSearchesSection: View {
                 }
                 .swipeActions(allowsFullSwipe: false) {
                     if session.propertyDeals?.can(.delete, .properties) ?? false {
-                        Button("Delete", role: .destructive) { Task { await delete(search) } }
+                        Button("Delete", role: .destructive) {
+                            confirm = PendingConfirmation(title: "Delete \(search.string("name") ?? "this search")?",
+                                                          message: "The deal scout stops running it.",
+                                                          button: "Delete search") { await delete(search) }
+                        }
                     }
                 }
             }
         } header: {
-            Text("Saved searches").task { await load() }
+            Text("Saved searches").task { await load() }.workConfirmation($confirm)
         } footer: {
             Text("The deal scout re-runs these every morning and alerts you. Swipe one to delete it.")
         }
