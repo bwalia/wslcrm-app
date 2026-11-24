@@ -9,6 +9,7 @@ name: iOS Release (TestFlight & App Store)
 #
 # Pipeline: ci_build_number → prepare_signing → build_ipa → beta
 # Testers get the Workstation CRM build against int (WSLCRM-Int) unless a dispatch picks another.
+# The App Store build is Prod (WSLCRM-Prod): Run workflow → testflight, build Prod.
 # Runner: the self-hosted Mac Studio. This repo is public, so nothing here runs for pull
 # requests — only for pushes to main, tags and manual runs, which need write access.
 # Secrets: GitHub Actions or WSLVault kv/wslcrm/ios. See docs/IOS_RELEASE.md.
@@ -47,6 +48,7 @@ on:
         default: Int
         options:
           - Int
+          - Prod
       version:
         description: "Marketing version override (blank = project.yml)"
         required: false
@@ -159,6 +161,23 @@ jobs:
       - name: Install XcodeGen
         if: env.BUILDS_APP == 'true'
         run: command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
+
+      # Release-Prod reads the production server from the repository variable
+      # WSLCRM_PROD_API_BASE_URL (kept out of this public repo), via the git-ignored
+      # Config/Prod.local.xcconfig. The "Validate API base URL" build phase still checks it.
+      - name: Point a Prod build at the production server
+        if: env.BUILDS_APP == 'true' && endsWith(env.RELEASE_CONFIGURATION, '-Prod')
+        env:
+          PROD_URL: ${{ vars.WSLCRM_PROD_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PROD_URL:-}" ]; then
+            echo "::error::Set the repository variable WSLCRM_PROD_API_BASE_URL (https://…) to build Prod."
+            exit 1
+          fi
+          # `//` starts a comment in an xcconfig, so https://host is written https:/$()/host.
+          printf 'WSLCRM_PROD_API_BASE_URL = %s\n' "${PROD_URL/:\/\//:/\$()/}" > Config/Prod.local.xcconfig
+          cat Config/Prod.local.xcconfig
 
       - name: Resolve marketing version
         if: env.BUILDS_APP == 'true'
