@@ -26,7 +26,8 @@ struct NativeScreenRoute: Hashable, Sendable {
 /// Every module the app shows natively, gathered from the groups.
 enum ModuleCatalog {
     /// Add a new area here (one line), and its file under `Catalog/`.
-    static let groups: [ModuleGroup] = [.shop, .chat, .tax, .work, .crm, .engage, .workspace, .sales, .industry]
+    static let groups: [ModuleGroup] = [.shop, .chat, .tax, .work, .crm, .engage, .workspace, .sales, .industry,
+                                         .payroll]
 
     static let all: [ResourceDescriptor] = groups.flatMap(\.descriptors)
 

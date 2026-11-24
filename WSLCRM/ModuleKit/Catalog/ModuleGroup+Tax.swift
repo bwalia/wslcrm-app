@@ -257,7 +257,8 @@ extension ModuleCatalog {
             SectionSpec(nil, [
                 FieldSpec("expense_date", "Date", .date), FieldSpec("description", "Description", required: true),
                 FieldSpec("amount", "Amount (including VAT)", .decimal(places: 2), required: true),
-                FieldSpec("category", "Category", required: true), FieldSpec("vendor", "Supplier"),
+                FieldSpec("category", "Category", .reference(AddExpenseForm.categoryPicker), required: true),
+                FieldSpec("vendor", "Supplier"),
                 FieldSpec("notes", "Notes", .multiline),
             ]),
             SectionSpec("VAT", [

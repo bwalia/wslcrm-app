@@ -95,6 +95,8 @@ struct ReferenceSpec: Hashable, Sendable {
     var searchParam: String? = "search"
     var paging: Paging = .none
     var listKey: String?
+    /// Sent with every request for the choices (`type=expense`).
+    var query: [String: String] = [:]
 
     init(list: String, valueKey: String = "uuid", titleKeys: [String] = ["name"], subtitleKeys: [String] = [],
          displayKey: String? = nil, searchParam: String? = "search", paging: Paging = .none, listKey: String? = nil) {
@@ -111,8 +113,8 @@ struct ReferenceSpec: Hashable, Sendable {
     /// A throwaway descriptor so the kit's list loading can be reused for the picker.
     var descriptor: ResourceDescriptor {
         ResourceDescriptor(id: "reference:\(list)", title: "Choose", noun: "item", systemImage: "list.bullet",
-                           api: ResourceAPISpec(list: list, paging: paging, searchParam: searchParam, listKey: listKey,
-                                                idKeys: [valueKey]),
+                           api: ResourceAPISpec(list: list, paging: paging, searchParam: searchParam, listQuery: query,
+                                                listKey: listKey, idKeys: [valueKey]),
                            list: ListSpec(title: titleKeys, subtitle: subtitleKeys.map { FieldSpec($0, $0) }))
     }
 }
