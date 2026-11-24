@@ -70,6 +70,9 @@ struct CRMHomeView: View {
                         Label("Partners and referrals", systemImage: "person.2.badge.gearshape")
                     }
                     .accessibilityIdentifier("crm.partners")
+                } else {
+                    Label("Partners and referrals need access to accounts. Ask a workspace admin.", systemImage: "lock")
+                        .font(.wsSubheadline).foregroundStyle(.secondaryText)
                 }
             }
         }
@@ -290,7 +293,7 @@ struct CRMAccountDetailView: View {
         }
         .sheet(isPresented: $addingContact) {
             if let account = state.value {
-                CRMContactForm(contact: nil, presetAccountId: account.id) { body in
+                CRMContactForm(contact: nil, presetAccountId: account.id, presetAccountName: account.name) { body in
                     let created = try await services.crm.createContact(body)
                     notice = "\(created.fullName) added to \(account.name)."
                     await load()
@@ -300,7 +303,7 @@ struct CRMAccountDetailView: View {
         }
         .sheet(isPresented: $addingDeal) {
             if let account = state.value {
-                CRMDealForm(deal: nil, pipeline: nil, presetAccountId: account.id) { body in
+                CRMDealForm(deal: nil, pipeline: nil, presetAccountId: account.id, presetAccountName: account.name) { body in
                     let created = try await services.crm.createDeal(body)
                     notice = "Deal “\(created.name)” added."
                     await load()
@@ -669,9 +672,12 @@ struct CRMContactForm: View {
     @State private var body_: ContactBody
     @State private var saving = false
     @State private var error: APIError?
+    private let accountName: String?
 
-    init(contact: CRMContact?, presetAccountId: Int? = nil, save: @escaping (ContactBody) async throws -> CRMContact) {
+    init(contact: CRMContact?, presetAccountId: Int? = nil, presetAccountName: String? = nil,
+         save: @escaping (ContactBody) async throws -> CRMContact) {
         self.contact = contact
+        self.accountName = contact?.accountName ?? presetAccountName
         self.save = save
         _body_ = State(initialValue: ContactBody(firstName: contact?.firstName ?? "", lastName: contact?.lastName,
                                                  email: contact?.email, phone: contact?.phone, mobile: contact?.mobile,
@@ -696,7 +702,7 @@ struct CRMContactForm: View {
                     OptionalTextField("Email", text: $body_.email).keyboardType(.emailAddress).textInputAutocapitalization(.never)
                 }
                 Section("Account") {
-                    CRMAccountPicker(accountId: $body_.accountId)
+                    CRMAccountPicker(accountId: $body_.accountId, name: accountName)
                     Picker("Status", selection: Binding(get: { body_.status ?? "active" }, set: { body_.status = $0 })) {
                         Text("Active").tag("active")
                         Text("Inactive").tag("inactive")
@@ -731,43 +737,105 @@ struct CRMContactForm: View {
     }
 }
 
-/// Picks an account by numeric id (the only link form CRM updates accept).
+/// Picks an account, saved by its numeric id (the only link form CRM updates accept): search every account.
 struct CRMAccountPicker: View {
     @Binding var accountId: Int?
-    @Environment(\.services) private var services
-    @State private var accounts: [CRMAccount] = []
+    /// The current account's name, when the record carries it.
+    var name: String?
+    @State private var chosen: String??
+    @State private var picking = false
+
+    static let spec = ReferenceSpec(list: "\(CRMAPI.base)/accounts", valueKey: "id", titleKeys: ["name"],
+                                    subtitleKeys: ["industry", "city"], paging: .pageAndPerPage)
 
     var body: some View {
-        Picker("Account", selection: $accountId) {
-            Text("None").tag(Int?.none)
-            ForEach(accounts) { Text($0.name).tag(Optional($0.id)) }
-            if let accountId, !accounts.contains(where: { $0.id == accountId }) {
-                Text("Current account").tag(Optional(accountId))
+        Button { picking = true } label: {
+            LabeledContent("Account") {
+                Text(accountId == nil ? "None" : (chosen ?? name) ?? "Chosen")
+                    .foregroundStyle(accountId == nil ? Color.secondaryText : Color.primary)
             }
         }
-        .task {
-            accounts = (try? await services.crm.accounts(search: "", page: 1, perPage: 200).items) ?? []
+        .foregroundStyle(.primary)
+        .accessibilityIdentifier("crm.picker.account")
+        .sheet(isPresented: $picking) {
+            NavigationStack {
+                ReferencePicker(title: "Choose an account", spec: Self.spec) { record in
+                    accountId = record.int("id")
+                    chosen = .some(record.string("name"))
+                } clear: {
+                    accountId = nil
+                    chosen = .some(nil)
+                }
+            }
         }
     }
 }
 
-/// Picks a contact by numeric id, from the chosen account's people when there is one.
+/// Picks a contact, saved by numeric id: search the chosen account's people, or everyone when there is none.
 struct CRMContactPicker: View {
     @Binding var contactId: Int?
     var accountId: Int?
-    @Environment(\.services) private var services
-    @State private var contacts: [CRMContact] = []
+    /// The current contact's name, when the record carries it.
+    var name: String?
+    @State private var chosen: String??
+    @State private var picking = false
 
     var body: some View {
-        Picker("Contact", selection: $contactId) {
-            Text("None").tag(Int?.none)
-            ForEach(contacts) { Text($0.fullName).tag(Optional($0.id)) }
-            if let contactId, !contacts.contains(where: { $0.id == contactId }) {
-                Text("Current contact").tag(Optional(contactId))
+        Button { picking = true } label: {
+            LabeledContent("Contact") {
+                Text(contactId == nil ? "None" : (chosen ?? name) ?? "Chosen")
+                    .foregroundStyle(contactId == nil ? Color.secondaryText : Color.primary)
             }
         }
-        .task(id: accountId) {
-            contacts = (try? await services.crm.contacts(search: "", accountId: accountId, page: 1, perPage: 200).items) ?? []
+        .foregroundStyle(.primary)
+        .accessibilityIdentifier("crm.picker.contact")
+        .sheet(isPresented: $picking) {
+            NavigationStack {
+                CRMContactChoices(accountId: accountId) { contact in
+                    contactId = contact?.id
+                    chosen = .some(contact?.fullName)
+                    picking = false
+                }
+            }
+        }
+    }
+}
+
+/// The kit's picker can't filter by account, so contacts are listed here from the typed API
+/// (`GET /crm/contacts?account_id=&search=&page=&per_page=`).
+private struct CRMContactChoices: View {
+    let accountId: Int?
+    let pick: (CRMContact?) -> Void
+    @Environment(\.services) private var services
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ModelHost(make: { [crm = services.crm, accountId] in
+            PagedListModel<CRMContact> { search, page in
+                try await crm.contacts(search: search, accountId: accountId, page: page)
+            }
+        }) { model in
+            PagedList(model: model, searchPrompt: "Name or email", emptyTitle: "No contacts",
+                      emptySystemImage: "person.crop.circle",
+                      emptyDescription: accountId == nil ? "Add people under Contacts first."
+                                                         : "This account has no contacts yet. Add one on the account.") { contact in
+                Button { pick(contact) } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(contact.fullName).font(.wsHeadline)
+                        if let detail = [contact.accountName, contact.email].compactMap({ $0 }).joined(separator: " · ").nonEmpty {
+                            Text(detail).font(.wsSubheadline).foregroundStyle(.secondaryText)
+                        }
+                    }
+                    .foregroundStyle(.primary)
+                }
+                .accessibilityIdentifier("crm.picker.contact.\(contact.id)")
+            }
+        }
+        .navigationTitle(accountId == nil ? "Choose a contact" : "Choose from the account")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            ToolbarItem(placement: .destructiveAction) { Button("None") { pick(nil) } }
         }
     }
 }

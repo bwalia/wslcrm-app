@@ -754,12 +754,15 @@ struct ShopOrderExtras: Sendable, Decodable {
     var deliveryAddress: ShopDeliveryAddress?
     var deliveryChangePending = false
     var shippedAt: Date?
+    /// Bank transfer: where the customer was asked to pay, and the reference to use (the order number).
+    var paymentMethods: [PaymentMethodInfo] = []
+    var paymentReference: String?
 
     enum CodingKeys: String, CodingKey {
         case dealCode, paymentMethod, bankTransferDue, daysWaiting, paidReference, invoiceUuid, customerPoNumber
         case deliveryDate, deliveryWindow, customerUpdates, deliveryChangeRequests
         case purchaseOrders, stripeSessionId, paidAmountMinor, billingAddress, deliveryMethod, deliveryAddress
-        case deliveryChangePending, tracking
+        case deliveryChangePending, tracking, paymentMethods, paymentReference
     }
 
     private struct TrackingTimes: Decodable {
@@ -787,6 +790,8 @@ struct ShopOrderExtras: Sendable, Decodable {
         deliveryAddress = try? c.decodeIfPresent(ShopDeliveryAddress.self, forKey: .deliveryAddress)
         deliveryChangePending = c.decodeFlexibleBool(forKey: .deliveryChangePending) ?? false
         shippedAt = ((try? c.decodeIfPresent(TrackingTimes.self, forKey: .tracking))?.shippedAt).flatMap(APIDate.parse)
+        paymentMethods = c.decodeLossyArray(PaymentMethodInfo.self, forKey: .paymentMethods)
+        paymentReference = c.decodeFlexibleString(forKey: .paymentReference)?.trimmedOrNil
     }
 
     init() {
@@ -803,6 +808,8 @@ struct ShopMarkPaidBody: Encodable, Sendable {
     var reference: String?
     /// YYYY-MM-DD
     var paidAt: String?
+    /// What arrived, in pence; less than the total is refused (400 PART_PAYMENT).
+    var amountMinor: Int?
 }
 
 /// `POST /orders/:uuid/invoice`: the draft accounting invoice made from the order (made once).

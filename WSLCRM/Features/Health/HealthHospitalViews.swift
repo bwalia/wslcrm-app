@@ -83,7 +83,7 @@ struct HealthHospitalView: View {
     var body: some View {
         List {
             if let loadError {
-                Section { InlineErrorRow(error: loadError) { Task { await load() } } }
+                Section { HealthLoadErrorRow(error: loadError) { Task { await load() } } }
             }
             if let record {
                 header(record)
@@ -200,9 +200,9 @@ struct HealthHospitalView: View {
         if !alerts.isEmpty {
             Section {
                 ForEach(alerts) { alert in
-                    if let patient = patientsByNumber[alert.string("patient_id") ?? ""] {
-                        NavigationLink(value: HealthScope.record(HealthCatalog.alerts(patient: patient.id), alert)) {
-                            HealthAlertRow(alert: alert, patientName: PatientText.name(patient))
+                    if let patient = HealthPatientRef.uuid(alert, directory: patientsByNumber) {
+                        NavigationLink(value: HealthScope.record(HealthCatalog.alerts(patient: patient), alert)) {
+                            HealthAlertRow(alert: alert, patientName: HealthPatientRef.name(alert, directory: patientsByNumber))
                         }
                     } else {
                         HealthAlertRow(alert: alert, patientName: nil)
@@ -283,7 +283,7 @@ struct HealthHospitalView: View {
             recent = Array(page.items.prefix(10))
             patientTotal = page.total
         }
-        if !alerts.isEmpty, let table = try? await api.patientsByNumber(hospital: uuid) {
+        if HealthPatientRef.needsDirectory(alerts), let table = try? await api.patientsByNumber(hospital: uuid) {
             patientsByNumber = table
         }
     }

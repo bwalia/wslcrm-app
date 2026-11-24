@@ -24,6 +24,19 @@ struct PDTaskDetailView: View {
     @State private var contactToLog: ContactAttempt?
     @State private var openError: String?
     @State private var preview: URL?
+    /// Notes and the checklist are kanban writes, which also need the person on the deal's task list
+    /// (its kanban project). False once the server said they aren't.
+    @State private var onTaskList = true
+
+    static let notOnTaskList = "You're not on this deal's task list — ask the deal's manager to add you."
+
+    /// A kanban refusal (403) means "not on the task list", said plainly; anything else as it is.
+    static func explain(_ error: APIError) -> String {
+        if case .forbidden = error { return notOnTaskList }
+        return error.localizedDescription
+    }
+
+    private var canWriteTaskList: Bool { onTaskList && (session.propertyDeals?.can(.update, .tasks) ?? false) }
 
     /// A call / WhatsApp / email the user just started from here; offered for the chase log
     /// when they come back to the app.
@@ -225,7 +238,7 @@ struct PDTaskDetailView: View {
     @ViewBuilder
     private func checklistSection(_ task: PDTask) -> some View {
         ForEach(checklists) { list in
-            Section(list.name) {
+            Section {
                 ForEach(list.items ?? []) { item in
                     let done = displayedDone(item)
                     Button {
@@ -238,10 +251,14 @@ struct PDTaskDetailView: View {
                                 .foregroundStyle(done ? Tone.success.color : .secondary)
                         }
                     }
-                    .disabled(!(session.propertyDeals?.can(.update, .tasks) ?? false))
+                    .disabled(!canWriteTaskList)
                     .accessibilityValue(done ? "Done" : "Not done")
                     .accessibilityIdentifier("pd.task.checklist.\(item.uuid)")
                 }
+            } header: {
+                Text(list.name)
+            } footer: {
+                if !onTaskList { Text(Self.notOnTaskList) }
             }
         }
     }
@@ -324,7 +341,11 @@ struct PDTaskDetailView: View {
                 }
                 .accessibilityElement(children: .combine)
             }
-            if session.propertyDeals?.can(.update, .tasks) ?? false {
+            if !onTaskList, session.propertyDeals?.can(.update, .tasks) ?? false {
+                Label(Self.notOnTaskList, systemImage: "person.badge.key")
+                    .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                    .accessibilityIdentifier("pd.task.notOnTaskList")
+            } else if canWriteTaskList {
                 HStack(alignment: .bottom) {
                     TextField("Add a note", text: $newNote, axis: .vertical)
                         .lineLimit(1...5)
@@ -406,7 +427,9 @@ struct PDTaskDetailView: View {
             state = .loaded(fetched.value)
             cachedAt = fetched.cachedAt
             async let lists = try? services.kanban.checklists(taskUuid: taskUuid)
-            async let notes = try? services.kanban.comments(taskUuid: taskUuid)
+            async let notes: Result<[KanbanComment], Error> = {
+                do { return .success(try await services.kanban.comments(taskUuid: taskUuid)) } catch { return .failure(error) }
+            }()
             async let files = try? api.documents(taskUuid: taskUuid)
             let dealUuid = fetched.value.dealUuid
             async let overview: Fetched<PDDealOverview>? = {
@@ -414,7 +437,14 @@ struct PDTaskDetailView: View {
                 return try? await api.overview(dealUuid: dealUuid)
             }()
             checklists = await lists ?? checklists
-            comments = await notes ?? comments
+            switch await notes {
+            case .success(let loaded):
+                comments = loaded
+                onTaskList = true
+            case .failure(let error):
+                // The kanban side hides a task from anyone not on its project (404), though the deal task exists.
+                if case .notFound = error.asAPIError { onTaskList = false }
+            }
             documents = await files ?? documents
             parties = await overview?.value.parties ?? parties
         } catch {
@@ -426,7 +456,11 @@ struct PDTaskDetailView: View {
         guard let context = session.mutationContext else { return }
         var shown = item
         shown.isCompleted = displayedDone
-        _ = try? await sync.perform(PropertyDealsAPI.Mutations.checklist(task.ref, item: shown, context: context))
+        do {
+            _ = try await sync.perform(PropertyDealsAPI.Mutations.checklist(task.ref, item: shown, context: context))
+        } catch {
+            refused(error.asAPIError)
+        }
         if connectivity.isOnline { checklists = (try? await services.kanban.checklists(taskUuid: taskUuid)) ?? checklists }
     }
 
@@ -439,8 +473,13 @@ struct PDTaskDetailView: View {
             }
         } catch {
             newNote = text
-            actions.message = error.asAPIError.localizedDescription
+            refused(error.asAPIError)
         }
+    }
+
+    private func refused(_ error: APIError) {
+        if case .forbidden = error { onTaskList = false }
+        actions.message = Self.explain(error)
     }
 
     private func logContact(_ attempt: ContactAttempt) async {

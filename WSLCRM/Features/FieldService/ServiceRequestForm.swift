@@ -23,6 +23,8 @@ struct ServiceRequestFormSheet: View {
     @State private var productRef: String
     @State private var address: String
     @State private var postcode: String
+    @State private var respondBy: Date?
+    @State private var resolveBy: Date?
     @State private var saving = false
     @State private var error: APIError?
 
@@ -50,6 +52,8 @@ struct ServiceRequestFormSheet: View {
         _productRef = State(initialValue: request?.productRef ?? "")
         _address = State(initialValue: request?.serviceAddress ?? "")
         _postcode = State(initialValue: request?.servicePostcode ?? "")
+        _respondBy = State(initialValue: request?.slaResponseDueAt)
+        _resolveBy = State(initialValue: request?.slaResolveDueAt)
     }
 
     var body: some View {
@@ -93,6 +97,15 @@ struct ServiceRequestFormSheet: View {
                         .accessibilityIdentifier("request.productRef")
                 }
 
+                Section {
+                    TargetDateRow(title: "Respond by", date: $respondBy, id: "request.respondBy")
+                    TargetDateRow(title: "Resolve by", date: $resolveBy, id: "request.resolveBy")
+                } header: {
+                    Text("Targets")
+                } footer: {
+                    Text("When the customer should hear back, and when the fault should be fixed. Requests past a target are flagged.")
+                }
+
                 Section("Contact") {
                     TextField("Reported by", text: $reportedBy).textContentType(.name)
                     Picker("Channel", selection: $channel) {
@@ -133,7 +146,9 @@ struct ServiceRequestFormSheet: View {
             channel: channel, reportedBy: clean(reportedBy), priority: priority.rawValue,
             customerUuid: customer?.uuid ?? (isEdit ? "" : nil), siteUuid: site?.uuid ?? (isEdit ? "" : nil),
             productUuid: product?.uuid ?? (isEdit ? "" : nil), productRef: clean(productRef),
-            serviceAddress: clean(address), servicePostcode: clean(postcode))
+            serviceAddress: clean(address), servicePostcode: clean(postcode),
+            slaResponseDueAt: respondBy.map(APIDate.string(from:)) ?? (isEdit ? "" : nil),
+            slaResolveDueAt: resolveBy.map(APIDate.string(from:)) ?? (isEdit ? "" : nil))
         saving = true
         error = nil
         Task {
@@ -352,6 +367,7 @@ struct AssignConvertToJobSheet: View {
     @State private var members: [Engineer] = []
     @State private var jobTypeUuid: String?
     @State private var engineerUuid: String?
+    @State private var managerUuid: String?
     @State private var firstVisit = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0,
                                                           of: Calendar.current.date(byAdding: .day, value: 1, to: Date())!) ?? Date()
     @State private var hasDueDate = false
@@ -404,6 +420,13 @@ struct AssignConvertToJobSheet: View {
                 }
 
                 Section("Management") {
+                    Picker("Service manager", selection: $managerUuid) {
+                        Text(request.assignedManagerName ?? "Me").tag(String?.none)
+                        ForEach(members.filter { $0.uuid != request.assignedManagerUuid }) {
+                            Text($0.pickerLabel).tag(Optional($0.uuid))
+                        }
+                    }
+                    .accessibilityIdentifier("convert.manager")
                     Toggle("Due date", isOn: $hasDueDate)
                     if hasDueDate { DatePicker("Due", selection: $dueDate, displayedComponents: .date) }
                 }
@@ -432,7 +455,7 @@ struct AssignConvertToJobSheet: View {
         submitting = true
         let body = ConvertToJobBody(title: title.trimmingCharacters(in: .whitespaces), priority: priority.rawValue,
                                     jobTypeUuid: jobTypeUuid, dueDate: hasDueDate ? CalendarDay(date: dueDate) : nil,
-                                    engineerUuid: engineerUuid,
+                                    serviceManagerUuid: managerUuid, engineerUuid: engineerUuid,
                                     scheduledStart: engineerUuid != nil ? firstVisit : nil)
         Task {
             let result = await convert(body)
@@ -536,6 +559,25 @@ private struct FaultCategorySheet: View {
             state = .loaded(try await services.fieldService.faultCategories())
         } catch {
             state = .failed(error.asAPIError)
+        }
+    }
+}
+
+/// An optional date and time: "Not set" until switched on.
+private struct TargetDateRow: View {
+    let title: String
+    @Binding var date: Date?
+    let id: String
+
+    var body: some View {
+        Toggle(title, isOn: Binding(get: { date != nil }, set: { on in
+            date = on ? (date ?? Calendar.current.date(byAdding: .day, value: 1, to: Date())) : nil
+        }))
+        .accessibilityIdentifier(id)
+        if let current = date {
+            DatePicker(title, selection: Binding(get: { current }, set: { date = $0 }))
+                .labelsHidden()
+                .accessibilityIdentifier("\(id).date")
         }
     }
 }

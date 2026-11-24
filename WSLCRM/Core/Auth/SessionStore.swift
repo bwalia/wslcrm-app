@@ -146,6 +146,7 @@ final class SessionStore {
         } else if let token = response.token, let refresh = response.refreshToken {
             await client.setTokens(AuthTokens(accessToken: token, refreshToken: refresh))
             enableFaceIDUnlockAfterSignIn()
+            landingDue = true
             await loadSessionContext()
         } else {
             throw APIError.decoding(endpoint: "POST /auth/login", description: "No session_token in response", body: "")
@@ -163,6 +164,7 @@ final class SessionStore {
             }
             await client.setTokens(AuthTokens(accessToken: response.token, refreshToken: refreshToken))
             enableFaceIDUnlockAfterSignIn()
+            landingDue = true
             apply(user: response.user, workspaces: response.namespaces, current: response.currentNamespace)
             await chooseInitialWorkspace()
             // Warm the offline copy of the user profile.
@@ -230,6 +232,56 @@ final class SessionStore {
         }
     }
 
+    /// Said once on Home after a workspace change the person asked for ("You joined Acme").
+    var notice: String?
+    /// The role's landing page (`/dashboard/my-tasks`) to open once, just after signing in.
+    var landingPath: String?
+    @ObservationIgnored private var landingDue = false
+
+    /// `userinfo.namespace.landing_path` in a workspace-scoped JWT (opsapi `helper/jwt-helper.lua`:
+    /// the role's own landing page, else the workspace's default).
+    nonisolated static func landingPath(inToken token: String) -> String? {
+        let parts = token.split(separator: ".")
+        guard parts.count >= 2 else { return nil }
+        var base64 = String(parts[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while base64.count % 4 != 0 { base64 += "=" }
+        guard let data = Data(base64Encoded: base64),
+              let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let userinfo = payload["userinfo"] as? [String: Any],
+              let namespace = userinfo["namespace"] as? [String: Any],
+              let path = (namespace["landing_path"] as? String)?.trimmingCharacters(in: .whitespaces),
+              !path.isEmpty else { return nil }
+        return path
+    }
+
+    /// After joining or making a workspace: reloads the person's workspaces (`/auth/me`) and opens it.
+    func join(workspaceUuid: String?, name: String, notice: String) async {
+        await refreshMemberships()
+        let target = workspaces.first { $0.uuid == workspaceUuid }
+            ?? workspaceUuid.map { Workspace(uuid: $0, name: name) }
+        guard let target else { return }
+        if !workspaces.contains(where: { $0.uuid == target.uuid }) { workspaces.append(target) }
+        self.notice = notice
+        permissionsError = nil
+        await select(target)
+    }
+
+    /// Pull to refresh on the workspace picker: someone may have added the person meanwhile. With no
+    /// workspace chosen yet and now exactly one, it opens.
+    func reloadWorkspaces() async {
+        await refreshMemberships()
+        if phase == .choosingWorkspace, workspace == nil, workspaces.count == 1, let only = workspaces.first {
+            permissionsError = nil
+            await select(only)
+        }
+    }
+
+    private func refreshMemberships() async {
+        guard let (me, data) = try? await auth.me() else { return }
+        await cache.store(data, key: "auth/me", namespaceId: Self.sessionCacheNamespace)
+        apply(user: me.user, workspaces: me.namespaces, current: me.currentNamespace)
+    }
+
     /// Switches tenant: persists the choice, points every request at it, reloads permissions
     /// and bumps `workspaceGeneration` so all screens re-fetch.
     func select(_ workspace: Workspace, notifyServer: Bool = true) async {
@@ -238,13 +290,16 @@ final class SessionStore {
         defaults.set(workspace.uuid, forKey: Self.selectedWorkspaceKey)
         await client.setNamespace(workspace.uuid)
 
-        if notifyServer {
+        if notifyServer || landingDue {
             // Keeps the web dashboard's "last active" in sync and scopes /auth/me. The header,
             // not the JWT, decides the tenant for every call, so failure here is not fatal.
             if let response = try? await auth.switchNamespace(uuid: workspace.uuid), let token = response.token {
                 await client.replaceAccessToken(token)
+                // Just signed in: the role's landing page (in the scoped token) opens first.
+                if landingDue { landingPath = Self.landingPath(inToken: token) }
             }
         }
+        landingDue = false
         await reloadPermissions()
         if changed { workspaceGeneration += 1 }
         phase = .signedIn
@@ -345,6 +400,9 @@ final class SessionStore {
         workspace = nil
         permissions = .none
         menu = .empty
+        notice = nil
+        landingPath = nil
+        landingDue = false
         propertyDeals = nil
         propertyPA = nil
         phase = .signedOut

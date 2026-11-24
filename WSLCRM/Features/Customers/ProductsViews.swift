@@ -11,6 +11,9 @@ final class ProductsViewModel {
     var selectedStoreUuid: String? {
         didSet { selection.uuid = selectedStoreUuid }
     }
+    var show: ProductActiveFilter = .active {
+        didSet { selection.show = show }
+    }
     let list: PagedListModel<Product>
 
     @ObservationIgnored private let selection = StoreSelection()
@@ -21,6 +24,7 @@ final class ProductsViewModel {
     @MainActor
     private final class StoreSelection {
         var uuid: String?
+        var show: ProductActiveFilter = .active
     }
 
     init(api: CommerceAPI, namespaceInternalId: Int?) {
@@ -28,7 +32,8 @@ final class ProductsViewModel {
         self.namespaceInternalId = namespaceInternalId
         let selection = self.selection
         list = PagedListModel<Product> { search, page in
-            try await api.products(search: search, storeUuid: selection.uuid, namespaceInternalId: namespaceInternalId, page: page)
+            try await api.products(search: search, storeUuid: selection.uuid, namespaceInternalId: namespaceInternalId, page: page,
+                                   show: selection.show)
         }
     }
 
@@ -116,9 +121,12 @@ private struct ProductsContent: View {
     let error: APIError?
 
     var body: some View {
-        PagedList(model: model.list, searchPrompt: "Name or description", emptyTitle: "No products",
+        PagedList(model: model.list, searchPrompt: "Name, SKU or barcode",
+                  emptyTitle: model.show == .inactive ? "No inactive products" : "No products",
                   emptySystemImage: "shippingbox",
-                  emptyDescription: "The things you sell or service. Only products in use are listed; tap + to add one.") { product in
+                  emptyDescription: model.show == .inactive
+                      ? "Products you mark inactive (not for sale) are kept here."
+                      : "The things you sell or service. Products marked inactive are under Show: Inactive.") { product in
             NavigationLink {
                 ProductDetailView(productUuid: product.uuid, stores: model.stores, catalogCurrency: model.currency) { updated in
                     if let updated { model.list.replace(updated) } else { model.list.remove(id: product.id) }
@@ -137,6 +145,12 @@ private struct ProductsContent: View {
                         .font(.wsSubheadline).foregroundStyle(Tone.success.textColor)
                         .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal).padding(.vertical, 6)
                 }
+                Picker("Show", selection: $model.show) {
+                    ForEach(ProductActiveFilter.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal).padding(.vertical, 6)
+                .accessibilityIdentifier("products.show")
                 if model.stores.count > 1 {
                     Picker("Store", selection: $model.selectedStoreUuid) {
                         ForEach(model.stores) { Text($0.name).tag(Optional($0.uuid)) }
@@ -152,6 +166,9 @@ private struct ProductsContent: View {
         .onChange(of: model.selectedStoreUuid) { _, _ in
             Task { await model.list.load() }
         }
+        .onChange(of: model.show) { _, _ in
+            Task { await model.list.load() }
+        }
     }
 }
 
@@ -163,7 +180,10 @@ struct ProductRow: View {
         HStack(alignment: .top, spacing: 12) {
             ProductThumbnail(url: product.imageURL, size: 44)
             VStack(alignment: .leading, spacing: 4) {
-                Text(product.name).font(.wsHeadline).lineLimit(2)
+                HStack(spacing: 6) {
+                    Text(product.name).font(.wsHeadline).lineLimit(2)
+                    if !product.isActive { StatusBadge(text: "Inactive", systemImage: "pause.circle", tone: .neutral) }
+                }
                 if let line = [product.sku.map { "SKU \($0)" }, product.categoryName, product.storeName].compactMap({ $0 })
                     .joined(separator: " · ").trimmedOrNil {
                     Text(line).font(.wsSubheadline).foregroundStyle(.secondaryText)
@@ -309,7 +329,8 @@ struct ProductDetailView: View {
                 Section {
                     DeleteButton(title: "Delete product",
                                  message: "This permanently deletes the product and removes it from past orders' item lists. "
-                                     + "To stop selling it, mark it inactive instead.") {
+                                     + "To stop selling it, tap Edit and switch Active off instead: it stays under "
+                                     + "Products › Show: Inactive and can be switched back on.") {
                         do {
                             try await services.commerce.deleteProduct(product.uuid)
                             onChange(nil)
@@ -542,6 +563,7 @@ struct ProductForm: View {
     @State private var costPrice: String
     @State private var lowStock: String
     @State private var chosenCurrency: String
+    @State private var scanningBarcode = false
     @State private var saving = false
     @State private var error: APIError?
 
@@ -606,8 +628,23 @@ struct ProductForm: View {
                     TextField("SKU (A–Z, 0–9, -)", text: Binding(get: { body_.sku ?? "" },
                                                                   set: { body_.sku = $0.uppercased().filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" } }))
                         .textInputAutocapitalization(.characters)
-                    TextField("Barcode (to scan at the till)", text: Binding(get: { body_.barcode ?? "" }, set: { body_.barcode = $0 }))
-                        .keyboardType(.numberPad)
+                    HStack {
+                        TextField("Barcode (to scan at the till)", text: Binding(get: { body_.barcode ?? "" }, set: { body_.barcode = $0 }))
+                            .keyboardType(.numberPad)
+                        if POSScannerView.isAvailable {
+                            Button { scanningBarcode = true } label: { Image(systemName: "barcode.viewfinder") }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("Scan the barcode")
+                                .accessibilityIdentifier("productForm.scanBarcode")
+                        }
+                    }
+                    .sheet(isPresented: $scanningBarcode) {
+                        POSScannerView { code in
+                            body_.barcode = code
+                            scanningBarcode = false
+                            return "Barcode \(code) added."
+                        }
+                    }
                     Toggle("Count stock", isOn: Binding(get: { body_.trackInventory ?? true }, set: { body_.trackInventory = $0 }))
                     if body_.trackInventory ?? true {
                         Stepper("In stock: \(body_.inventoryQuantity ?? 0)",

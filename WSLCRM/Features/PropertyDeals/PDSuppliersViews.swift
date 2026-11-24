@@ -84,12 +84,15 @@ private struct PDSuppliersList: View {
                         Text("Active").tag("true")
                         Text("Not active").tag("false")
                     }
-                    Button("Book the nearest", systemImage: "location.north.circle") { booking = true }
                 } label: {
                     Label("Filter", systemImage: kind.isEmpty && active.isEmpty ? "line.3.horizontal.decrease.circle"
                                                                                  : "line.3.horizontal.decrease.circle.fill")
                 }
                 .accessibilityIdentifier("pd.suppliers.filter")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { booking = true } label: { Label("Book the nearest", systemImage: "location.north.circle") }
+                    .accessibilityIdentifier("pd.suppliers.bookNearest")
             }
             if canCreate {
                 ToolbarItem(placement: .primaryAction) {

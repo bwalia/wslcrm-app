@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 /// Opens the records kept under one patient or hospital with the module kit's own screens.
 ///
@@ -104,5 +104,62 @@ enum PatientText {
             parts.append("Room \(room)" + (record.string("bed_number").map { " / \($0)" } ?? ""))
         }
         return parts.joined(separator: " · ")
+    }
+}
+
+/// The patient a cross-patient row is about (open alerts, plans due for review, dementia lists).
+/// The server names the patient on the row (`patient_uuid`, `patient_first_name`, `patient_last_name`);
+/// an older server only gives `patient_id` (the database number), looked up in the patient directory.
+enum HealthPatientRef {
+    static func uuid(_ row: Record, directory: [String: Record]) -> String? {
+        row.string("patient_uuid") ?? directory[row.string("patient_id") ?? ""]?.id
+    }
+
+    static func name(_ row: Record, directory: [String: Record]) -> String? {
+        let named = [row.string("patient_first_name"), row.string("patient_last_name")].compactMap { $0 }
+            .joined(separator: " ")
+        if !named.isEmpty { return named }
+        return directory[row.string("patient_id") ?? ""].map(PatientText.name)
+    }
+
+    /// Only an older server's rows need the (up to 1,000 patients) directory read.
+    static func needsDirectory(_ rows: [Record]) -> Bool {
+        rows.contains { $0.string("patient_uuid") == nil }
+    }
+}
+
+/// A health screen the server refused (403): say whose permission it needs, not "an error".
+enum HealthAccess {
+    static let title = "You need access to Patients"
+    static let message = "Ask a workspace admin to give your role access to Patients."
+
+    static func isRefused(_ error: APIError?) -> Bool {
+        if case .forbidden = error { return true }
+        return false
+    }
+}
+
+/// Shows the plain "you need access" words for a 403, and the usual error row (with retry) otherwise.
+struct HealthLoadErrorRow: View {
+    let error: APIError
+    let retry: () -> Void
+
+    var body: some View {
+        if HealthAccess.isRefused(error) {
+            HealthNoAccessView()
+        } else {
+            InlineErrorRow(error: error, retry: retry)
+        }
+    }
+}
+
+struct HealthNoAccessView: View {
+    var body: some View {
+        ContentUnavailableView {
+            Label(HealthAccess.title, systemImage: "lock")
+        } description: {
+            Text(HealthAccess.message)
+        }
+        .accessibilityIdentifier("health.noAccess")
     }
 }

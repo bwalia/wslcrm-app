@@ -213,6 +213,18 @@ final class RolePermissionTests: XCTestCase {
         XCTAssertTrue(engineer.can(.read, .fsParts), "but the stock list is readable, for materials on site")
     }
 
+    /// Access is role-driven, as on the server: an owner given a limited role is limited by it.
+    func testAnOwnerWithALimitedRoleIsLimitedByIt() {
+        let owner = PermissionSet(isAdmin: false, isOwner: true,
+                                  grants: ["fs_visits": ["read", "update"]], menuKeys: ["field_service_visits"])
+        XCTAssertTrue(owner.can(.update, .fsVisits))
+        XCTAssertFalse(owner.can(.update, .invoices))
+        XCTAssertFalse(owner.can(.delete, moduleName: "crm_accounts"))
+        // An admin still passes, whatever the grants.
+        XCTAssertTrue(PermissionSet(isAdmin: true, isOwner: false, grants: ["fs_visits": ["read"]], menuKeys: [])
+            .can(.update, .invoices))
+    }
+
     func testOwnerAndAdminAreNotBlockedByGrants() throws {
         let owner = PermissionSet(isAdmin: false, isOwner: true, grants: [:], menuKeys: [])
         let admin = PermissionSet(isAdmin: true, isOwner: false, grants: [:], menuKeys: [])

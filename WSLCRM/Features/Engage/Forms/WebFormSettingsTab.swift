@@ -257,8 +257,8 @@ private struct WebFormBrandingSection: View {
             if let p = problems["primary_color"] { Text(p).font(.wsFootnote).foregroundStyle(Tone.danger.textColor) }
             WebFormColourRow(label: "Page background", hex: $settings.background, fallback: "#f8fafc")
             if let p = problems["background"] { Text(p).font(.wsFootnote).foregroundStyle(Tone.danger.textColor) }
-            TextField("Logo (image address, https://…)", text: $settings.logoURL)
-                .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+            EngageImageField(url: $settings.logoURL, alt: "Logo", placeholder: "Logo (image address, https://…)",
+                             previewHeight: 80, id: "forms.settings.logo")
             if let p = problems["logo_url"] { Text(p).font(.wsFootnote).foregroundStyle(Tone.danger.textColor) }
             TextField("Submit button text, e.g. Submit", text: Binding(get: { settings.submitLabel },
                                                                        set: { settings.submitLabel = String($0.prefix(40)) }))

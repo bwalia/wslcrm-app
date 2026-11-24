@@ -38,10 +38,12 @@ final class HomeDigest {
         if menu.contains("field_service_jobs") || menu.contains("field_service_visits") { sources.insert(.fieldService) }
         if session.propertyDeals != nil { sources.insert(.deals) }
         if session.propertyPA != nil { sources.insert(.pa) }
+        if menu.contains("tax_file") { sources.insert(.taxReturn) }
+        if menu.contains("tax_filing_requests") { sources.insert(.taxQueue) }
         return sources
     }
 
-    enum Source: Hashable, Sendable { case shop, leads, tasks, invoices, fieldService, deals, pa }
+    enum Source: Hashable, Sendable { case shop, leads, tasks, invoices, fieldService, deals, pa, taxReturn, taxQueue }
 
     func load(session: SessionStore, services: Services) async {
         let sources = Self.sources(session: session)
@@ -62,9 +64,18 @@ final class HomeDigest {
         async let fieldService = sources.contains(.fieldService) ? try? await services.fieldService.stats() : nil
         async let deals = sources.contains(.deals) ? try? await services.propertyDeals.today().value : nil
         async let pa = sources.contains(.pa) ? try? await services.propertyPA.briefing().value : nil
+        // The return people file now, and an accountant's open queue (opsapi routes/tax-filing.lua).
+        async let taxReturn = sources.contains(.taxReturn)
+            ? try? await services.workspace().get("/api/v2/tax/filing/overview", query: ["tax_year": TaxYear.filing()])
+            : nil
+        async let taxQueue = sources.contains(.taxQueue)
+            ? try? await services.workspace().get("/api/v2/tax/filing/queue", query: ["status": "open", "perPage": "1"])
+            : nil
 
         let digest = await Self.signals(shop: shop, steps: steps, tasks: tasks?.items, overdueInvoices: overdueInvoices?.total,
-                                        fieldService: fieldService, deals: deals, pa: pa, isEngineer: isEngineer)
+                                        fieldService: fieldService, deals: deals, pa: pa, isEngineer: isEngineer,
+                                        taxReturn: (await taxReturn).map { WorkspaceAPI.object($0.payload) },
+                                        taxQueue: (await taxQueue).map(WorkspaceAPI.object))
         signals = digest.signals
         activity = digest.activity
         hasLoaded = true
@@ -74,7 +85,8 @@ final class HomeDigest {
     /// Turns each module's summary into signals (kept apart so it can be unit-tested).
     nonisolated static func signals(shop: ShopKPIs?, steps: LeadMySteps?, tasks: [KanbanTask]?, overdueInvoices: Int?,
                                     fieldService: FieldServiceStats?, deals: PDToday?, pa: PAServerBriefing?,
-                                    isEngineer: Bool, now: Date = Date(), calendar: Calendar = .current)
+                                    isEngineer: Bool, taxReturn: Record? = nil, taxQueue: Record? = nil,
+                                    now: Date = Date(), calendar: Calendar = .current)
         -> (signals: [HomeSignal], activity: [NavigationPolicy.Home: Int]) {
         var signals: [HomeSignal] = []
         var activity: [NavigationPolicy.Home: Int] = [:]
@@ -137,6 +149,32 @@ final class HomeDigest {
                 key: "plugin:property_pa:today")
             add("pa.opportunities", "Opportunities to act on", pa.opportunities.count, "sparkles", .progress,
                 hub: .propertyPA, key: "plugin:property_pa:today")
+        }
+        if let taxReturn {
+            // The person's own return: what it needs next.
+            let year = taxReturn.string("tax_year") ?? TaxYear.filing()
+            switch taxReturn.string("request.status") {
+            case "needs_info":
+                add("tax.question", "Your accountant has a question about your \(year) return", 1,
+                    "questionmark.bubble", .warning, hub: nil, key: "tax_file")
+            case "rejected":
+                add("tax.returned", "Your \(year) tax return was sent back to you", 1, "arrow.uturn.backward",
+                    .danger, hub: nil, key: "tax_file")
+            case nil:
+                add("tax.check", "Transactions to check for your \(year) tax return",
+                    taxReturn.int("estimate.unreviewed") ?? 0, "doc.text.magnifyingglass", .info, hub: nil, key: "tax_file")
+            default:
+                break
+            }
+        }
+        if let taxQueue {
+            // An accountant's queue: new returns, and ones being filed.
+            add("tax.queue.new", "New tax returns to review", taxQueue.int("meta.counts.submitted") ?? 0,
+                "tray.and.arrow.down", .warning, hub: nil, key: "tax_filing_requests")
+            add("tax.queue.reviewing", "Tax returns you're reviewing", taxQueue.int("meta.counts.reviewing") ?? 0,
+                "doc.text", .info, hub: nil, key: "tax_filing_requests")
+            add("tax.queue.filing", "Tax returns to file with HMRC", taxQueue.int("meta.counts.filing") ?? 0,
+                "paperplane", .progress, hub: nil, key: "tax_filing_requests")
         }
         return (signals, activity)
     }

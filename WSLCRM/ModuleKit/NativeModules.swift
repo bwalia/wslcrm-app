@@ -72,7 +72,7 @@ enum NativeModules {
         Set(serverKeys.filter { destination(forKey: $0) == nil && !replaced.contains($0) })
     }
 
-    /// Every `menu_items.key` on a full OpsAPI (PROJECT_CODE=all), 2026-11-20. A module added to the
+    /// Every `menu_items.key` on a full OpsAPI (PROJECT_CODE=all), 2026-11-23. A module added to the
     /// server later shows up in `NativeModulesTests` until it has a screen here.
     static let serverKeys: [String] = [
         "dashboard", "academy", "accounting", "plugin:ai_runner:machines", "plugin:ai_runner:runners",
@@ -81,11 +81,11 @@ enum NativeModules {
         "care_home", "chat", "cms", "crm", "customers", "delivery", "domains", "employees", "field_service_jobs",
         "field_service_assets", "field_service_contracts", "field_service_parts", "field_service_reports",
         "field_service_requests", "field_service_simpro", "field_service_visits", "forms", "hospitals", "invoices",
-        "crm_leads", "my_tasks", "namespace", "activity", "api-keys", "plugins", "namespaces", "sso", "vault",
+        "crm_leads", "my_pay", "my_tasks", "namespace", "activity", "api-keys", "plugins", "namespaces", "sso", "vault",
         "webhooks", "plugin:opsapi_marketing:campaigns", "plugin:opsapi_marketing:conversations",
         "plugin:opsapi_marketing:guide", "plugin:opsapi_marketing:lists", "plugin:opsapi_marketing:overview",
         "plugin:opsapi_marketing:pixels", "plugin:opsapi_marketing:settings", "plugin:opsapi_marketing:studio",
-        "plugin:opsapi_marketing:unsubscribed", "orders", "patients", "plugin:helpdesk:overview",
+        "plugin:opsapi_marketing:unsubscribed", "orders", "patients", "payroll", "plugin:helpdesk:overview",
         "plugin:helpdesk:tickets", "plugin:opsapi_marketing:suppressions", "plugin:opsapi_marketing:templates",
         "plugin:portfoliolab:clients", "plugin:portfoliolab:dashboard", "plugin:portfoliolab:drafts",
         "plugin:portfoliolab:setup", "plugin:property_deals:holidays", "pos", "products", "projects",
@@ -98,6 +98,8 @@ enum NativeModules {
         "settings", "shop", "shop_analytics", "stores", "tax", "tax_agent", "tax_bank_accounts", "tax_categories",
         "tax_file", "tax_filing_requests", "tax_my_income", "tax_income_types", "tax_reports", "tax_hmrc",
         "tax_statements", "tax_transactions", "tax_vat", "tax_vat_clients", "document_templates", "timesheets", "users",
+        // Added on the server on 2026-11-21.
+        "corporation_tax", "tax_agent_modes",
     ]
 }
 

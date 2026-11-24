@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 
 // MARK: - Products
@@ -140,6 +141,7 @@ struct ShopProductDetailView: View {
     @State private var editing = false
     @State private var adjusting: ShopStockTarget?
     @State private var notice: String?
+    @State private var stockNotice: String?
     @State private var enquiries: [ShopStockEnquiry] = []
     @State private var askingSupplier = false
     @State private var supplierNotice: String?
@@ -213,6 +215,9 @@ struct ShopProductDetailView: View {
 
             Section {
                 ShopStockFigures(stock: s.stockQty, held: s.held, available: s.available, threshold: s.lowStockThreshold, isLow: s.lowStock)
+                if let stockNotice {
+                    Label(stockNotice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor)
+                }
                 DetailRow(label: "Lead time", value: "\(product.leadTimeDays) day\(product.leadTimeDays == 1 ? "" : "s")")
                 DetailRow(label: "Backorders", value: product.allowBackorder ? "Allowed" : "Not allowed")
                 if policy.canUpdate {
@@ -353,7 +358,10 @@ struct ShopProductDetailView: View {
         }
         .sheet(item: $adjusting) { target in
             NavigationStack {
-                ShopStockAdjustForm(target: target) { await load() }
+                ShopStockAdjustForm(target: target) { message in
+                    stockNotice = message
+                    await load()
+                }
             }
         }
         .alert("Archived", isPresented: .init(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
@@ -527,6 +535,8 @@ private struct ShopCategoryForm: View {
     @State private var seoLocale: ShopLocale = .en
     @State private var saving = false
     @State private var error: APIError?
+    @State private var photo: PhotosPickerItem?
+    @State private var uploading = false
 
     init(category: ShopCategory?, all: [ShopCategory], onSaved: @escaping () async -> Void) {
         self.category = category
@@ -554,7 +564,16 @@ private struct ShopCategoryForm: View {
                     ForEach(all.filter { $0.uuid != category?.uuid }) { Text($0.name).tag($0.uuid) }
                 }
                 TextField("Description", text: $description, axis: .vertical).lineLimit(2...5)
-                TextField("Picture address (https://…)", text: $imageURL)
+                HStack {
+                    ShopThumbnail(url: URL(string: imageURL.shopTrimmed))
+                    PhotosPicker(selection: $photo, matching: .images) {
+                        Label(uploading ? "Uploading…" : (imageURL.shopTrimmed.isEmpty ? "Choose a picture" : "Change the picture"),
+                              systemImage: "photo")
+                    }
+                    .disabled(uploading)
+                    .accessibilityIdentifier("shopCategory.photo")
+                }
+                TextField("Or the picture's address (https://…)", text: $imageURL)
                     .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
             }
             Section {
@@ -580,12 +599,36 @@ private struct ShopCategoryForm: View {
         }
         .navigationTitle(category == nil ? "New category" : "Edit category")
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: photo) { _, item in
+            guard let item else { return }
+            Task { await upload(item) }
+        }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") { Task { await save() } }
                     .disabled(saving || name.trimmedOrNil == nil)
             }
+        }
+    }
+
+    /// Into the workspace's media library, then its address goes on the category.
+    private func upload(_ item: PhotosPickerItem) async {
+        uploading = true
+        defer { uploading = false; photo = nil }
+        guard let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data),
+              let jpeg = ShopProductEditorView.jpeg(image) else {
+            error = ResourceService.problem(0, "That picture couldn't be read. Try another one.")
+            return
+        }
+        let base = ShopSlug.make(name).isEmpty ? "category" : ShopSlug.make(name)
+        do {
+            let asset = try await services.shop.uploadMedia(jpeg.data, filename: "\(base).jpg", mimeType: "image/jpeg",
+                                                            title: name.shopTrimmed, width: jpeg.width, height: jpeg.height)
+            imageURL = asset.url
+            error = nil
+        } catch {
+            self.error = error.asAPIError
         }
     }
 
@@ -716,6 +759,8 @@ struct ShopStockView: View {
     @State private var adjusting: ShopStockTarget?
     @State private var showingMovements = false
     @State private var historyOf: ShopStockRow?
+    @State private var openProduct: String?
+    @State private var notice: String?
     /// "product", "option" or "" for both.
     @State private var kind = ""
 
@@ -749,6 +794,9 @@ struct ShopStockView: View {
                 .listRowInsets(EdgeInsets())
                 .accessibilityIdentifier("shopStock.kind")
             }
+            if let notice {
+                Section { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
+            }
             Section {
                 ForEach(rows) { row in
                     Button {
@@ -764,13 +812,24 @@ struct ShopStockView: View {
                         Button { historyOf = row } label: { Label("History", systemImage: "clock.arrow.circlepath") }
                             .tint(.blue)
                     }
+                    .swipeActions(edge: .leading) {
+                        if let product = row.isOption ? row.productUuid : row.uuid {
+                            Button { openProduct = product } label: { Label("Open product", systemImage: "shippingbox") }
+                                .tint(.indigo)
+                        }
+                    }
                     .contextMenu {
+                        if let product = row.isOption ? row.productUuid : row.uuid {
+                            Button { openProduct = product } label: { Label("Open product", systemImage: "shippingbox") }
+                        }
                         Button { historyOf = row } label: { Label("Movement history", systemImage: "clock.arrow.circlepath") }
                     }
                 }
             } footer: {
                 if !rows.isEmpty {
-                    Text(session.shopPolicy.canUpdate ? "Tap a row to adjust its stock; swipe left for its history." : "Swipe left on a row for its history.")
+                    Text(session.shopPolicy.canUpdate
+                         ? "Tap a row to adjust its stock; swipe right to open the product, left for its history."
+                         : "Swipe right on a row to open the product, left for its history.")
                 }
             }
         }
@@ -795,9 +854,13 @@ struct ShopStockView: View {
         .refreshable { await load() }
         .sheet(item: $adjusting) { target in
             NavigationStack {
-                ShopStockAdjustForm(target: target) { await load() }
+                ShopStockAdjustForm(target: target) { message in
+                    notice = message
+                    await load()
+                }
             }
         }
+        .navigationDestination(item: $openProduct) { uuid in ShopProductDetailView(uuid: uuid) }
         .sheet(isPresented: $showingMovements) {
             NavigationStack { ShopMovementsView() }
         }
@@ -857,7 +920,8 @@ private struct ShopMovementsView: View {
 
 struct ShopStockAdjustForm: View {
     let target: ShopStockTarget
-    let onSaved: () async -> Void
+    /// Told what changed ("Stock of Mug increased by 5, now 12.").
+    let onSaved: (String) async -> Void
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
     @State private var direction = 1
@@ -881,13 +945,24 @@ struct ShopStockAdjustForm: View {
                     Text("Remove").tag(-1)
                 }
                 .pickerStyle(.segmented)
-                Stepper("\(direction > 0 ? "Add" : "Remove") \(amount)", value: $amount, in: 1...10_000)
+                HStack {
+                    Text(direction > 0 ? "Add" : "Remove")
+                    TextField("How many", value: $amount, format: .number)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 90)
+                        .accessibilityIdentifier("shopStock.amount")
+                    Stepper("How many", value: $amount, in: 1...10_000).labelsHidden()
+                }
                 Picker("Reason", selection: $reason) {
                     ForEach(ShopStockReason.allCases, id: \.self) { Text(Formatters.humanize($0.rawValue)).tag($0) }
                 }
                 TextField("Note (optional)", text: $note)
             } footer: {
                 Text("On hand becomes \(target.current + delta). Stock held for checkouts isn't affected.")
+            }
+            if amount < 1 {
+                Section { Label("Enter how many, 1 or more.", systemImage: "exclamationmark.circle").foregroundStyle(Tone.warning.textColor) }
             }
             if let error { Section { InlineErrorRow(error: error) } }
         }
@@ -897,9 +972,15 @@ struct ShopStockAdjustForm: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Save") { Task { await save() } }.disabled(saving)
+                Button("Save") { Task { await save() } }.disabled(saving || amount < 1)
             }
         }
+    }
+
+    static func message(_ target: ShopStockTarget, delta: Int) -> String {
+        let now = target.current + delta
+        return delta >= 0 ? "Stock of \(target.name) increased by \(delta), now \(now)."
+            : "Stock of \(target.name) reduced by \(-delta), now \(now)."
     }
 
     private func save() async {
@@ -911,7 +992,7 @@ struct ShopStockAdjustForm: View {
             case .product: try await services.shop.adjustProductStock(target.uuid, body)
             case .option: try await services.shop.adjustOptionStock(target.uuid, body)
             }
-            await onSaved()
+            await onSaved(Self.message(target, delta: delta))
             dismiss()
         } catch {
             self.error = error.asAPIError

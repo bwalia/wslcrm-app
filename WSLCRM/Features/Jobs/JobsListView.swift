@@ -192,7 +192,7 @@ private struct JobsListContent: View {
         }
         .sheet(isPresented: $creating) {
             NavigationStack {
-                ResourceFormView(descriptor: ModuleCatalog.fsJobs, existing: nil) { saved in
+                JobFormView(existing: nil) { saved in
                     Task { await model.load() }
                     if let saved { created = JobRoute(uuid: saved.id) }
                 }

@@ -49,6 +49,7 @@ struct PurchaseOrdersListView: View {
     @State private var supplier = ""
     @State private var raisedFrom: Date?
     @State private var raisedTo: Date?
+    @State private var opened: PurchaseOrder?
 
     var body: some View {
         ModelHost(make: { [api = services.purchaseOrders, filterBox = FilterBox(), project = route.projectUuid] in
@@ -73,11 +74,11 @@ struct PurchaseOrdersListView: View {
                 if let stats, route.projectUuid == nil {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 10) {
-                            StatTile(title: "Open", value: "\(stats.openCount) · \(Formatters.money(stats.openValue, currency: nil) ?? "")",
-                                     systemImage: "shippingbox")
+                            StatTile(title: "Open (\(stats.openCount))", value: stats.amounts(\.openValue), systemImage: "shippingbox")
                             StatTile(title: "Overdue", value: "\(stats.overdueCount)", systemImage: "exclamationmark.triangle")
-                            StatTile(title: "To bill", value: "\(stats.toBillCount) · \(Formatters.money(stats.toBillValue, currency: nil) ?? "")",
+                            StatTile(title: "To bill (\(stats.toBillCount))", value: stats.amounts(\.toBillValue),
                                      systemImage: "sterlingsign.circle")
+                            StatTile(title: "Billed", value: stats.amounts(\.billedValue), systemImage: "checkmark.seal")
                         }
                         .frame(height: 76)
                         .padding(.horizontal)
@@ -112,8 +113,15 @@ struct PurchaseOrdersListView: View {
                     let created = try await services.purchaseOrders.create(body)
                     await holder.list.load()
                     stats = try? await services.purchaseOrders.stats()
+                    opened = created
                     return created
                 }
+            }
+            .navigationDestination(item: $opened) { po in
+                PurchaseOrderDetailView(uuid: po.id, onChange: { updated in
+                    if let updated { holder.list.replace(updated) } else { holder.list.remove(id: po.id) }
+                    Task { stats = try? await services.purchaseOrders.stats() }
+                }, opening: "Purchase order \(po.poNumber) created as a draft. Add its lines, then send it to the supplier.")
             }
         }
         .navigationTitle(route.projectName.map { "POs · \($0)" } ?? "Purchase orders")
@@ -184,6 +192,8 @@ struct PurchaseOrderRow: View {
 struct PurchaseOrderDetailView: View {
     let uuid: String
     var onChange: (PurchaseOrder?) -> Void = { _ in }
+    /// What just happened before this screen opened ("Purchase order created").
+    var opening: String?
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
@@ -245,7 +255,10 @@ struct PurchaseOrderDetailView: View {
         }
         .navigationTitle(state.value?.poNumber ?? "Purchase order")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
+        .task {
+            if notice == nil, let opening, state.value == nil { notice = opening }
+            await load()
+        }
         .refreshable { await load() }
         .toolbar {
             if let po = state.value {

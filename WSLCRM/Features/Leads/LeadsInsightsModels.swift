@@ -268,6 +268,21 @@ struct LeadSettings: Codable, Sendable, Equatable {
     var stageLabels: [String: String]
     var publicCaptcha: Bool
     var meeting: Meeting
+    /// What the workspace sells, free text ("Property", "Computers & IT"). Blank counts as property.
+    var businessType: String
+
+    /// The web's suggestions for "Type of business" (leads.service.ts BUSINESS_TYPE_SUGGESTIONS).
+    static let businessTypeSuggestions = ["Property", "Computers & IT", "Retail", "Professional services",
+                                          "Trades & construction", "Health & care", "Hospitality", "Manufacturing",
+                                          "Software", "Other"]
+
+    /// As the web's `isPropertyBusiness`: blank, or anything about property, estate agents, letting or landlords.
+    static func isPropertyBusiness(_ type: String?) -> Bool {
+        let text = (type ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty
+            || text.range(of: #"propert|real[\s-]?estate|estate agen|letting|landlord"#,
+                          options: [.regularExpression, .caseInsensitive]) != nil
+    }
 
     struct WorkingHours: Codable, Sendable, Equatable {
         var timezone: String
@@ -294,7 +309,7 @@ struct LeadSettings: Codable, Sendable, Equatable {
     enum CodingKeys: String, CodingKey {
         case firstResponseMinutes, workingHours, attemptPlanHours, escalateAfterMinutes, autoAssign, roundRobinUserUuids
         case managerUserUuids, aiEnabled, aiProviderUuid, aiDailyCostUsd, aiHotScore, currency, qualificationQuestions
-        case lostReasons, stageLabels, publicCaptcha, meeting
+        case lostReasons, stageLabels, publicCaptcha, meeting, businessType
     }
 
     init(from decoder: Decoder) throws {
@@ -320,6 +335,7 @@ struct LeadSettings: Codable, Sendable, Equatable {
         publicCaptcha = c.decodeFlexibleBool(forKey: .publicCaptcha) ?? false
         meeting = (try? c.decodeIfPresent(Meeting.self, forKey: .meeting))
             ?? Meeting(defaultMinutes: 30, defaultLink: "", sendInvites: true, leadReminderHours: 24, staffReminderMinutes: 60)
+        businessType = (try? c.decodeIfPresent(String.self, forKey: .businessType)) ?? ""
     }
 
     func encode(to encoder: Encoder) throws {
@@ -342,6 +358,8 @@ struct LeadSettings: Codable, Sendable, Equatable {
         try c.encode(StageLabels(labels: stageLabels), forKey: .stageLabels)
         try c.encode(publicCaptcha, forKey: .publicCaptcha)
         try c.encode(meeting, forKey: .meeting)
+        // Saved whole: leaving it out would blank it on the server.
+        try c.encode(businessType.trimmingCharacters(in: .whitespacesAndNewlines), forKey: .businessType)
     }
 
     /// Encodes `[stage: label]` with keys that are never renamed by the snake_case key strategy.

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @MainActor
 @Observable
@@ -25,6 +26,8 @@ final class VisitDetailViewModel {
     var queuedMessage: String?
     /// Said after an action worked ("Logged 2.5 h to the timesheet").
     var notice: String?
+    /// The workspace has no file storage (503 STORAGE_UNAVAILABLE): finish with the typed name only.
+    var signatureUnavailable = false
 
     private let api: FieldServiceAPI
     private let sync: SyncCenter
@@ -74,7 +77,8 @@ final class VisitDetailViewModel {
 
     func markEnRoute() async {
         guard let visit = detail?.visit, let context = session.mutationContext else { return }
-        await perform(FieldServiceAPI.Mutations.enRoute(visit, context: context))
+        await perform(FieldServiceAPI.Mutations.enRoute(visit, context: context),
+                      notice: "You're on your way. The office can see you're travelling.")
     }
 
     func checkIn() async {
@@ -82,21 +86,35 @@ final class VisitDetailViewModel {
         busy = true
         let coordinates = await location.currentCoordinates()
         busy = false
-        await perform(FieldServiceAPI.Mutations.checkIn(visit, coordinates: coordinates, context: context))
+        await perform(FieldServiceAPI.Mutations.checkIn(visit, coordinates: coordinates, context: context),
+                      notice: "You've arrived. Your time on site starts now.")
     }
 
+    /// Sends the finish sheet: "No access" goes to the no-access route, the rest to check-out.
     func checkOut(_ form: CheckOutForm) async -> Bool {
+        if form.outcome == .noAccess { return await markNoAccess(reason: form.noAccessReason) }
         guard let visit = detail?.visit, let context = session.mutationContext else { return false }
         busy = true
         let coordinates = await location.currentCoordinates()
         busy = false
         let body = form.body(coordinates: coordinates)
-        return await perform(FieldServiceAPI.Mutations.checkOut(visit, body: body, context: context))
+        let notice = form.followUpRequired
+            ? "Visit finished. The task stays open and the office will book you back in."
+            : body.customerSignature != nil ? "Job finished and signed for. Thank you." : "Job finished. Thank you."
+        let sent = await perform(FieldServiceAPI.Mutations.checkOut(visit, body: body, context: context), notice: notice)
+        if !sent, actionError?.serverError?.code == "STORAGE_UNAVAILABLE" {
+            // Nothing was saved (one transaction): the sheet drops the signature and says why.
+            signatureUnavailable = true
+            actionError = nil
+        }
+        return sent
     }
 
     func markNoAccess(reason: String) async -> Bool {
         guard let visit = detail?.visit, let context = session.mutationContext else { return false }
-        return await perform(FieldServiceAPI.Mutations.noAccess(visit, reason: reason, context: context))
+        let reason = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        return await perform(FieldServiceAPI.Mutations.noAccess(visit, reason: reason, context: context),
+                             notice: "No access recorded. The office will rebook the visit.")
     }
 
     /// Quote-sheet line logged on site; queued offline like the other on-site writes.
@@ -110,6 +128,7 @@ final class VisitDetailViewModel {
         do {
             switch try await sync.perform(FieldServiceAPI.Mutations.addItem(visit, body: body, context: context)) {
             case .sent:
+                notice = "“\(body.description)” added to the job sheet."
                 await load()
             case .queued:
                 queuedMessage = "Saved on this device. It will be added to the job when you're back online."
@@ -247,13 +266,14 @@ final class VisitDetailViewModel {
     }
 
     @discardableResult
-    private func perform(_ mutation: PendingMutation) async -> Bool {
+    private func perform(_ mutation: PendingMutation, notice: String? = nil) async -> Bool {
         busy = true
         defer { busy = false }
         do {
             switch try await sync.perform(mutation) {
             case .sent(let data):
                 apply(responseData: data, kind: mutation.kind)
+                if let notice { self.notice = notice }
             case .queued:
                 queuedMessage = "Saved on this device. It will be sent automatically when you're back online."
             }
@@ -276,15 +296,46 @@ final class VisitDetailViewModel {
     }
 }
 
-/// The work report collected at check-out.
+/// The work report collected when the engineer finishes. One plain choice — finished, coming
+/// back, or couldn't get in — decides what is sent: a revisit never closes the task.
 struct CheckOutForm: Equatable {
+    enum Outcome: String, CaseIterable, Identifiable {
+        case finished, comingBack, noAccess
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .finished: "Finished"
+            case .comingBack: "Coming back"
+            case .noAccess: "No access"
+            }
+        }
+
+        func hint(phaseName: String?) -> String {
+            switch self {
+            case .finished:
+                phaseName.map { "The work is done. “\($0)” will be closed." } ?? "The work is done."
+            case .comingBack:
+                "You need to come back. The task stays open and the office is asked to book the next visit."
+            case .noAccess:
+                "You couldn't get in or couldn't work. The office will rebook."
+            }
+        }
+    }
+
+    var outcome: Outcome = .finished
     var workSummary = ""
     var labourHours: Double = 1
     var customerSignoffName = ""
-    var followUpRequired = false
     var followUpNotes = ""
-    var completePhase = false
+    var noAccessReason = ""
     var forcePhase = false
+    /// The customer's signature from the pad (PNG), sent only when the job is finished.
+    var signaturePNG: Data?
+    /// The server keeps signatures up to 300 KB (ShopOrderSignatureQueries.MAX_BYTES).
+    static let maxSignatureBytes = 300 * 1024
+    /// The visit's phase is still open, so "Finished" closes it.
+    private(set) var phaseOpen = false
 
     init(visit: Visit, phase: JobPhase?, now: Date = Date()) {
         if let checkedIn = visit.checkedInAt {
@@ -292,14 +343,28 @@ struct CheckOutForm: Equatable {
             // Nearest quarter hour, clamped to the API's 0–24 range.
             labourHours = min(24, max(0.25, (hours * 4).rounded() / 4))
         }
-        if let phase {
-            completePhase = !phase.status.isFinished
-        }
+        phaseOpen = phase.map { !$0.status.isFinished } ?? false
     }
 
-    /// The work summary is optional server-side (#610 finish sheet); hours must be within 0–24.
+    var followUpRequired: Bool { outcome == .comingBack }
+    /// Only "Finished" completes the phase; coming back leaves it open for the next visit.
+    var completePhase: Bool { outcome == .finished && phaseOpen }
+
+    /// The work summary is optional server-side (#610 finish sheet); hours must be within 0–24;
+    /// no access needs a reason.
     var isValid: Bool {
-        labourHours >= 0 && labourHours <= 24
+        if outcome == .noAccess { return !noAccessReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        return labourHours >= 0 && labourHours <= 24 && signatureProblem == nil
+    }
+
+    /// What stops a signature being sent, in plain words (nil: fine, or no signature).
+    var signatureProblem: String? {
+        guard outcome == .finished, let png = signaturePNG else { return nil }
+        if customerSignoffName.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 {
+            return "Type the name of the person signing."
+        }
+        if png.count > Self.maxSignatureBytes { return "The signature is too large. Clear it and sign again." }
+        return nil
     }
 
     func body(coordinates: Coordinates?) -> CheckOutBody {
@@ -313,7 +378,9 @@ struct CheckOutForm: Equatable {
                             completePhase: completePhase,
                             forcePhase: completePhase && forcePhase,
                             latitude: coordinates?.latitude,
-                            longitude: coordinates?.longitude)
+                            longitude: coordinates?.longitude,
+                            customerSignature: outcome == .finished
+                                ? signaturePNG.map { "data:image/png;base64," + $0.base64EncodedString() } : nil)
     }
 }
 
@@ -373,7 +440,8 @@ private struct VisitDetailContent: View {
         .refreshable { await model.load() }
         .sheet(isPresented: $showingCheckOut) {
             if let detail = model.detail {
-                CheckOutSheet(visit: detail.visit, phase: detail.phase) { form in
+                CheckOutSheet(visit: detail.visit, phase: detail.phase,
+                              signatureUnavailable: model.signatureUnavailable) { form in
                     await model.checkOut(form)
                 }
             }
@@ -435,7 +503,7 @@ private struct VisitDetailContent: View {
         } message: { error in
             Text(error.localizedDescription + (error.serverError?.correlationId.map { "\n\nReference: \($0)" } ?? ""))
         }
-        .alert("Checked out with warnings", isPresented: .init(get: { !model.warnings.isEmpty }, set: { if !$0 { model.warnings = [] } }),
+        .alert("Job finished, but…", isPresented: .init(get: { !model.warnings.isEmpty }, set: { if !$0 { model.warnings = [] } }),
                presenting: model.warnings) { _ in
             Button("OK", role: .cancel) {}
         } message: { warnings in
@@ -615,7 +683,7 @@ private struct VisitDetailContent: View {
     private func reportSection(_ visit: Visit) -> some View {
         let hasReport = visit.checkedInAt != nil || visit.checkedOutAt != nil || visit.workSummary != nil
             || visit.customerSignoffName != nil || visit.followUpNotes != nil || visit.cancelledReason != nil
-            || visit.timesheetUuid != nil
+            || visit.timesheetUuid != nil || visit.hasCustomerSignature
         if hasReport {
             Section("Report") {
                 if let summary = visit.workSummary {
@@ -649,6 +717,9 @@ private struct VisitDetailContent: View {
                 if visit.timesheetUuid != nil {
                     Label("Logged to the timesheet", systemImage: "clock.badge.checkmark")
                         .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                }
+                if visit.hasCustomerSignature {
+                    VisitSignatureCard(visitUuid: visit.uuid)
                 }
             }
         }
@@ -728,7 +799,7 @@ private struct VisitDetailContent: View {
                         Task { await model.checkIn() }
                     }
                 case .onSite:
-                    actionButton("Check out", systemImage: "checkmark.circle.fill", tone: .success, prominent: true, id: "checkOut") {
+                    actionButton("Finish job", systemImage: "checkmark.circle.fill", tone: .success, prominent: true, id: "checkOut") {
                         showingCheckOut = true
                     }
                 default:
@@ -738,7 +809,7 @@ private struct VisitDetailContent: View {
                     showingNoAccess = true
                 }
                 if visit.status != .onSite {
-                    Button("Complete without checking in…") { showingCheckOut = true }
+                    Button("Finish without checking in…") { showingCheckOut = true }
                         .frame(maxWidth: .infinity, minHeight: 44)
                         .accessibilityIdentifier("visit.action.checkOutDirect")
                 }
@@ -789,14 +860,19 @@ private struct VisitDetailContent: View {
 struct CheckOutSheet: View {
     let visit: Visit
     let phase: JobPhase?
+    /// The workspace can't keep signatures (no file storage): finish with the typed name.
+    var signatureUnavailable = false
     let submit: (CheckOutForm) async -> Bool
     @Environment(\.dismiss) private var dismiss
     @State private var form: CheckOutForm
     @State private var submitting = false
+    @State private var signing = false
 
-    init(visit: Visit, phase: JobPhase?, submit: @escaping (CheckOutForm) async -> Bool) {
+    init(visit: Visit, phase: JobPhase?, signatureUnavailable: Bool = false,
+         submit: @escaping (CheckOutForm) async -> Bool) {
         self.visit = visit
         self.phase = phase
+        self.signatureUnavailable = signatureUnavailable
         self.submit = submit
         _form = State(initialValue: CheckOutForm(visit: visit, phase: phase))
     }
@@ -805,57 +881,38 @@ struct CheckOutSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    SheetSectionTitle("Work report")
-                    TextField("What did you do?", text: $form.workSummary, axis: .vertical)
-                        .lineLimit(4...10)
-                        .accessibilityIdentifier("checkout.workSummary")
-                } footer: {
-                    Text("Tip: use the microphone on the keyboard to dictate.")
-                }
-
-                Section {
-                    Stepper(value: $form.labourHours, in: 0...24, step: 0.25) {
-                        LabeledContent("Labour", value: Formatters.hours(Decimal(form.labourHours)) ?? "")
-                            .font(.wsTitle3.monospacedDigit())
-                    }
-                    .accessibilityIdentifier("checkout.labourHours")
-                } footer: {
-                    if visit.checkedInAt == nil {
-                        Text("You didn't check in, so enter the hours worked.")
-                    }
-                }
-
-                Section {
-                    SheetSectionTitle("Customer")
-                    TextField("Customer name for sign-off", text: $form.customerSignoffName)
-                        .textContentType(.name)
-                        .textInputAutocapitalization(.words)
-                        .accessibilityIdentifier("checkout.signoff")
-                }
-
-                if let phase {
-                    Section {
-                        SheetSectionTitle("Phase")
-                        Toggle("Complete “\(phase.name)”", isOn: $form.completePhase)
-                            .disabled(phase.status.isFinished)
-                        if form.completePhase {
-                            if phase.needsSignoff && form.customerSignoffName.trimmingCharacters(in: .whitespaces).isEmpty {
-                                Label("This phase needs the customer's name above.", systemImage: "signature")
-                                    .foregroundStyle(Tone.warning.textColor)
-                            }
-                            if phase.uncheckedCount > 0 {
-                                Toggle("Complete even though \(phase.uncheckedCount) checklist item(s) aren't ticked", isOn: $form.forcePhase)
-                            }
+                    SheetSectionTitle("How did it go?")
+                    Picker("How did it go?", selection: $form.outcome) {
+                        ForEach(CheckOutForm.Outcome.allCases) { outcome in
+                            Text(outcome.title).tag(outcome)
                         }
                     }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("checkout.outcome")
+                    Text(form.outcome.hint(phaseName: form.phaseOpen ? phase?.name : nil))
+                        .font(.wsFootnote)
+                        .foregroundStyle(.secondaryText)
                 }
 
-                Section {
-                    Toggle("Follow-up visit needed", isOn: $form.followUpRequired)
-                    if form.followUpRequired {
-                        TextField("What needs doing next?", text: $form.followUpNotes, axis: .vertical)
-                            .lineLimit(2...5)
+                if form.outcome == .noAccess {
+                    Section("Why couldn't you work?") {
+                        ForEach(NoAccessSheet.quickReasons, id: \.self) { quick in
+                            Button {
+                                form.noAccessReason = quick
+                            } label: {
+                                HStack {
+                                    Text(quick).foregroundStyle(.primary)
+                                    Spacer()
+                                    if form.noAccessReason == quick { Image(systemName: "checkmark").foregroundStyle(.tint) }
+                                }
+                                .frame(minHeight: 44)
+                            }
+                        }
+                        TextField("Other reason", text: $form.noAccessReason, axis: .vertical)
+                            .accessibilityIdentifier("checkout.noAccessReason")
                     }
+                } else {
+                    reportSections
                 }
 
                 Section {
@@ -867,16 +924,20 @@ struct CheckOutSheet: View {
                             if ok { dismiss() }
                         }
                     } label: {
-                        if submitting { ProgressView().tint(.white) } else { Text("Check out") }
+                        if submitting {
+                            ProgressView().tint(.white)
+                        } else {
+                            Text(form.outcome == .noAccess ? "Record no access" : "Finish job")
+                        }
                     }
-                    .buttonStyle(.large(.success))
+                    .buttonStyle(.large(form.outcome == .noAccess ? .danger : .success))
                     .disabled(!form.isValid || submitting)
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets())
                     .accessibilityIdentifier("checkout.submit")
                 }
             }
-            .navigationTitle("Check out")
+            .navigationTitle("Finish job")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -884,6 +945,109 @@ struct CheckOutSheet: View {
                 }
             }
             .interactiveDismissDisabled(submitting)
+            .sheet(isPresented: $signing) {
+                VisitSignaturePadSheet(name: form.customerSignoffName) { name, png in
+                    form.customerSignoffName = name
+                    form.signaturePNG = png
+                }
+            }
+            .onChange(of: signatureUnavailable, initial: true) { _, unavailable in
+                if unavailable { form.signaturePNG = nil }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var signatureRows: some View {
+        if signatureUnavailable {
+            Label("Signatures can't be kept on this workspace (it has no file storage). Finish with the typed name.",
+                  systemImage: "exclamationmark.triangle")
+                .foregroundStyle(Tone.warning.textColor)
+                .accessibilityIdentifier("checkout.signatureUnavailable")
+        } else if let png = form.signaturePNG, let image = UIImage(data: png) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxHeight: 120)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 10))
+                .accessibilityLabel("Customer's signature")
+                .accessibilityIdentifier("checkout.signature")
+            if let problem = form.signatureProblem {
+                Label(problem, systemImage: "exclamationmark.circle").foregroundStyle(Tone.danger.textColor)
+            }
+            HStack {
+                Button("Sign again") { signing = true }
+                Spacer()
+                Button("Remove", role: .destructive) { form.signaturePNG = nil }
+            }
+            .buttonStyle(.borderless)
+        } else {
+            Button { signing = true } label: {
+                Label("Customer signs on screen", systemImage: "signature")
+            }
+            .frame(minHeight: 44)
+            .accessibilityIdentifier("checkout.sign")
+        }
+    }
+
+    @ViewBuilder
+    private var reportSections: some View {
+        Section {
+            SheetSectionTitle("Work report")
+            TextField("What did you do?", text: $form.workSummary, axis: .vertical)
+                .lineLimit(4...10)
+                .accessibilityIdentifier("checkout.workSummary")
+        } footer: {
+            Text("Tip: use the microphone on the keyboard to dictate.")
+        }
+
+        if form.outcome == .comingBack {
+            Section {
+                TextField("What needs doing next time?", text: $form.followUpNotes, axis: .vertical)
+                    .lineLimit(2...5)
+                    .accessibilityIdentifier("checkout.followUpNotes")
+            }
+        }
+
+        Section {
+            Stepper(value: $form.labourHours, in: 0...24, step: 0.25) {
+                LabeledContent("Labour", value: Formatters.hours(Decimal(form.labourHours)) ?? "")
+                    .font(.wsTitle3.monospacedDigit())
+            }
+            .accessibilityIdentifier("checkout.labourHours")
+        } footer: {
+            if visit.checkedInAt == nil {
+                Text("You didn't check in, so enter the hours worked.")
+            }
+        }
+
+        Section {
+            SheetSectionTitle(form.outcome == .finished ? "Customer signs" : "Customer")
+            TextField("Customer name for sign-off", text: $form.customerSignoffName)
+                .textContentType(.name)
+                .textInputAutocapitalization(.words)
+                .accessibilityIdentifier("checkout.signoff")
+            if form.completePhase, phase?.needsSignoff == true,
+               form.customerSignoffName.trimmingCharacters(in: .whitespaces).isEmpty {
+                Label("Closing this task needs the customer's name.", systemImage: "signature")
+                    .foregroundStyle(Tone.warning.textColor)
+            }
+            if form.outcome == .finished {
+                signatureRows
+            }
+        } footer: {
+            if form.outcome == .finished, !signatureUnavailable {
+                Text("Optional, but it's the customer's proof the work was done. If they aren't there, finish without it.")
+            }
+        }
+
+        if form.completePhase, let phase, phase.uncheckedCount > 0 {
+            Section {
+                Toggle("Close it even though \(phase.uncheckedCount) checklist item(s) aren't ticked",
+                       isOn: $form.forcePhase)
+            } footer: {
+                Text("Otherwise “\(phase.name)” stays open until the checklist is done.")
+            }
         }
     }
 }
@@ -893,13 +1057,13 @@ struct NoAccessSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var reason = ""
     @State private var submitting = false
-    private let quickReasons = ["Nobody home", "Site locked", "Customer cancelled on arrival", "Unsafe to work"]
+    static let quickReasons = ["Nobody home", "Site locked", "Customer cancelled on arrival", "Unsafe to work"]
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Reason") {
-                    ForEach(quickReasons, id: \.self) { quick in
+                    ForEach(Self.quickReasons, id: \.self) { quick in
                         Button {
                             reason = quick
                         } label: {

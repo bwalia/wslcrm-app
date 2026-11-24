@@ -181,8 +181,11 @@ struct PDTodayView: View {
         if !tasks.isEmpty {
             Section {
                 ForEach(tasks) { task in
-                    NavigationLink(value: PDTaskRoute(uuid: task.taskUuid)) {
-                        PDTaskRow(task: task)
+                    HStack(spacing: 4) {
+                        NavigationLink(value: PDTaskRoute(uuid: task.taskUuid)) {
+                            PDTaskRow(task: task)
+                        }
+                        PDTaskRowActions(task: task, actions: actions)
                     }
                     .swipeActions(edge: .leading, allowsFullSwipe: true) {
                         if canUpdateTasks, task.pdStatus != .awaitingApproval {

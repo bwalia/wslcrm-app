@@ -98,6 +98,9 @@ struct MktTemplatesListView: View {
         // New filters make a new list (its first page loads when it appears).
         .id(filters)
         .safeAreaInset(edge: .top, spacing: 0) {
+            if mode == .studio, !embedded { MktCampJourneyBar(path: MktCampPages.studio) }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 if notice == nil {
                     HStack(alignment: .top) {

@@ -45,6 +45,13 @@ extension PurchaseOrdersAPI {
         try await portalWrite(Endpoint(.post, portalPath(uuid) + "/documents").withMultipart(fields: fields, file: file))
     }
 
+    /// A payment or delivery with its proof attached (multipart: the fields as text + `file`).
+    func portalPostWithFile(_ uuid: String, _ path: String, _ body: [String: JSONValue],
+                            file: Endpoint.FilePart) async throws -> Record? {
+        try await portalWrite(Endpoint(.post, portalPath(uuid) + path)
+            .withMultipart(fields: PortalText.formFields(body), file: file))
+    }
+
     /// Downloads a document through its two-minute signed link.
     func portalDocument(_ uuid: String, documentId: String) async throws -> Data {
         let (linkData, _) = try await client.sendRaw(Endpoint(.post, portalPath(uuid) + "/documents/\(documentId)/link")
@@ -69,6 +76,16 @@ enum PortalText {
     static let invoiceKinds: [Choice] = [
         Choice("proforma", "Proforma invoice"), Choice("invoice", "Final VAT invoice"), Choice("credit_note", "Credit note"),
     ]
+    /// A proforma, invoice or credit note that came by email (`POST …/portal/invoices`).
+    static let invoiceFields: [FieldSpec] = [
+        FieldSpec("kind", "Kind", .choice(invoiceKinds), required: true, defaultValue: .string("invoice")),
+        FieldSpec("number", "Invoice number", required: true),
+        FieldSpec("invoice_date", "Invoice date", .date, required: true),
+        FieldSpec("net", "Net", .decimal(places: 2)), FieldSpec("vat", "VAT", .decimal(places: 2)),
+        FieldSpec("total", "Total", .decimal(places: 2), required: true),
+        FieldSpec("due_date", "Due", .date), FieldSpec("supplier_order_ref", "Their order reference"),
+        FieldSpec("payment_terms", "Payment terms"), FieldSpec("note", "Note", .multiline),
+    ]
     static let paymentMethods: [Choice] = [
         Choice("faster_payment", "Faster Payment"), Choice("bacs", "BACS"), Choice("chaps", "CHAPS"), Choice("card", "Card"),
         Choice("other", "Other"),
@@ -76,6 +93,11 @@ enum PortalText {
     static let balanceStates = ["nothing_due": "Nothing due", "unpaid": "Not paid yet", "part_paid": "Part paid",
                                 "paid": "Paid in full", "overpaid": "Overpaid"]
     static let stageActions = ["acknowledged": "Mark acknowledged", "cancelled": "Cancel the order", "closed": "Close it"]
+
+    /// A JSON body as multipart text fields (sorted, so the order is stable).
+    static func formFields(_ body: [String: JSONValue]) -> [(String, String)] {
+        body.keys.sorted().compactMap { key in body[key]?.stringValue.map { (key, $0) } }
+    }
 
     /// The document type that also records a proforma, invoice or credit note.
     static func invoiceKind(forDocType type: String) -> String? {
@@ -423,16 +445,9 @@ struct PurchaseOrderPortalSections: View {
                 await write("Document added.") { try await services.purchaseOrders.portalUpload(po.id, fields: fields, file: file) }
             }
         case .invoice:
-            PortalFormSheet(title: "Record an invoice", action: "Save", fields: [
-                FieldSpec("kind", "Kind", .choice(PortalText.invoiceKinds), required: true, defaultValue: .string("invoice")),
-                FieldSpec("number", "Invoice number", required: true),
-                FieldSpec("invoice_date", "Invoice date", .date, required: true),
-                FieldSpec("net", "Net", .decimal(places: 2)), FieldSpec("vat", "VAT", .decimal(places: 2)),
-                FieldSpec("total", "Total", .decimal(places: 2), required: true),
-                FieldSpec("due_date", "Due", .date), FieldSpec("supplier_order_ref", "Their order reference"),
-                FieldSpec("payment_terms", "Payment terms"), FieldSpec("note", "Note", .multiline),
-            ], footer: "For a proforma or invoice that came by email. Upload the file under Documents too, if you have it.") { body in
-                await write("Invoice recorded.") { try await services.purchaseOrders.portalPost(po.id, "/invoices", body) }
+            PortalFormSheet(title: "Record an invoice", action: "Save", fields: PortalText.invoiceFields,
+                            footer: "For a proforma or invoice that came by email. Upload the file under Documents too, if you have it.") { body in
+                try await perform("Invoice recorded.") { try await services.purchaseOrders.portalPost(po.id, "/invoices", body) }
             }
         case .payment:
             let invoices = panel.records("invoices", idKeys: ["id"])
@@ -447,8 +462,12 @@ struct PurchaseOrderPortalSections: View {
                     Choice($0.id, "\($0.string("label") ?? "Invoice") \($0.string("number") ?? "")")
                 })),
                 FieldSpec("note", "Note", .multiline),
-            ], footer: "The balance is worked out against the final invoice, else the latest proforma, else the order.") { body in
-                await write("Payment recorded.") { try await services.purchaseOrders.portalPost(po.id, "/payments", body) }
+            ], footer: "The balance is worked out against the final invoice, else the latest proforma, else the order.",
+               fileLabel: "The bank's confirmation (optional)") { body, file in
+                try await perform("Payment recorded.") {
+                    if let file { return try await services.purchaseOrders.portalPostWithFile(po.id, "/payments", body, file: file) }
+                    return try await services.purchaseOrders.portalPost(po.id, "/payments", body)
+                }
             }
         case .dispatch:
             PortalFormSheet(title: "Dispatched", action: "Save", fields: [
@@ -457,14 +476,18 @@ struct PurchaseOrderPortalSections: View {
                 FieldSpec("dispatched_on", "Dispatched on", .date, defaultValue: .string(LeadDay.string(Date()))),
                 FieldSpec("expected_on", "Expected on", .date), FieldSpec("note", "Note", .multiline),
             ], footer: nil) { body in
-                await write("Dispatch recorded.") { try await services.purchaseOrders.portalPost(po.id, "/dispatch", body) }
+                try await perform("Dispatch recorded.") { try await services.purchaseOrders.portalPost(po.id, "/dispatch", body) }
             }
         case .delivered:
             PortalFormSheet(title: "Delivered", action: "Save", fields: [
                 FieldSpec("delivered_on", "Delivered on", .date, defaultValue: .string(LeadDay.string(Date()))),
                 FieldSpec("received_by", "Signed for by"), FieldSpec("note", "Note", .multiline),
-            ], footer: "Record the goods themselves with “Record a delivery” at the top.") { body in
-                await write("Delivery recorded.") { try await services.purchaseOrders.portalPost(po.id, "/delivered", body) }
+            ], footer: "Record the goods themselves with “Record a delivery” at the top.",
+               fileLabel: "Proof of delivery (optional)") { body, file in
+                try await perform("Delivery recorded.") {
+                    if let file { return try await services.purchaseOrders.portalPostWithFile(po.id, "/delivered", body, file: file) }
+                    return try await services.purchaseOrders.portalPost(po.id, "/delivered", body)
+                }
             }
         case .link:
             NavigationStack {
@@ -499,14 +522,19 @@ struct PurchaseOrderPortalSections: View {
         loaded = true
     }
 
-    @discardableResult
-    private func write(_ message: String, _ work: () async throws -> Record?) async -> Bool {
+    /// Runs a change and says what happened; a failure is thrown to the open form, which shows it.
+    private func perform(_ message: String, _ work: () async throws -> Record?) async throws {
         busy = true
         defer { busy = false }
+        if let updated = try await work() { panel = updated } else { await load() }
+        error = nil
+        await onChange(message)
+    }
+
+    @discardableResult
+    private func write(_ message: String, _ work: () async throws -> Record?) async -> Bool {
         do {
-            if let updated = try await work() { panel = updated } else { await load() }
-            error = nil
-            await onChange(message)
+            try await perform(message, work)
             return true
         } catch {
             self.error = error.asAPIError
@@ -543,16 +571,36 @@ struct PurchaseOrderPortalSections: View {
 }
 
 /// A short form drawn from field descriptions (the module kit's editors); the body is sent as JSON.
-private struct PortalFormSheet: View {
+/// A failed save stays open and shows why.
+struct PortalFormSheet: View {
     let title: String
     let action: String
     let fields: [FieldSpec]
     let footer: String?
-    let save: ([String: JSONValue]) async -> Bool
+    /// Asks for an optional file (a PDF, photo or scan) under this heading; nil asks for none.
+    var fileLabel: String?
+    let save: ([String: JSONValue], Endpoint.FilePart?) async throws -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var file: Endpoint.FilePart?
+
+    init(title: String, action: String, fields: [FieldSpec], footer: String?, fileLabel: String? = nil,
+         save: @escaping ([String: JSONValue], Endpoint.FilePart?) async throws -> Void) {
+        self.title = title
+        self.action = action
+        self.fields = fields
+        self.footer = footer
+        self.fileLabel = fileLabel
+        self.save = save
+    }
+
+    init(title: String, action: String, fields: [FieldSpec], footer: String?,
+         save: @escaping ([String: JSONValue]) async throws -> Void) {
+        self.init(title: title, action: action, fields: fields, footer: footer, fileLabel: nil) { body, _ in try await save(body) }
+    }
     @State private var values: [String: FormValue] = [:]
     @State private var problems: [String: String] = [:]
     @State private var saving = false
+    @State private var error: APIError?
 
     var body: some View {
         NavigationStack {
@@ -567,6 +615,10 @@ private struct PortalFormSheet: View {
                 } footer: {
                     if let footer { Text(footer) }
                 }
+                if let fileLabel {
+                    Section(fileLabel) { PortalFilePicker(file: $file) }
+                }
+                if let error { Section { InlineErrorRow(error: error) } }
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
@@ -584,10 +636,15 @@ private struct PortalFormSheet: View {
                         problems = found
                         guard found.isEmpty else { return }
                         saving = true
+                        error = nil
                         Task {
-                            let ok = await save(body)
-                            saving = false
-                            if ok { dismiss() }
+                            defer { saving = false }
+                            do {
+                                try await save(body, file)
+                                dismiss()
+                            } catch {
+                                self.error = error.asAPIError
+                            }
                         }
                     }
                     .disabled(saving)
@@ -613,9 +670,10 @@ private struct PortalUploadSheet: View {
     @State private var note = ""
     @State private var visible = true
     @State private var file: Endpoint.FilePart?
-    @State private var importing = false
-    @State private var photo: PhotosPickerItem?
     @State private var invoice: [String: String] = [:]
+    @State private var invoiceDate = Date()
+    @State private var hasDueDate = false
+    @State private var dueDate = Calendar.current.date(byAdding: .day, value: 30, to: Date()) ?? Date()
     @State private var saving = false
     @State private var problem: String?
 
@@ -628,12 +686,7 @@ private struct PortalUploadSheet: View {
                     Picker("What it is", selection: $docType) {
                         ForEach(PortalText.docTypes) { Text($0.label).tag($0.value) }
                     }
-                    Button(file == nil ? "Choose a file (PDF, PNG or JPG)" : "File: \(file?.filename ?? "")", systemImage: "doc") {
-                        importing = true
-                    }
-                    PhotosPicker(selection: $photo, matching: .images) {
-                        Label("Or choose a photo", systemImage: "photo")
-                    }
+                    PortalFilePicker(file: $file)
                     TextField("Note (optional)", text: $note)
                     Toggle("The supplier can see it", isOn: $visible)
                 } footer: {
@@ -642,32 +695,18 @@ private struct PortalUploadSheet: View {
                 if invoiceKind != nil {
                     Section("Invoice details") {
                         TextField("Invoice number (needed)", text: binding("number"))
-                        TextField("Invoice date (YYYY-MM-DD, needed)", text: binding("invoice_date"))
+                        DatePicker("Invoice date", selection: $invoiceDate, displayedComponents: .date)
                         TextField("Net", text: binding("net")).keyboardType(.decimalPad)
                         TextField("VAT", text: binding("vat")).keyboardType(.decimalPad)
                         TextField("Total (needed)", text: binding("total")).keyboardType(.decimalPad)
-                        TextField("Due date (YYYY-MM-DD)", text: binding("due_date"))
+                        Toggle("It says when it's due", isOn: $hasDueDate)
+                        if hasDueDate { DatePicker("Due", selection: $dueDate, displayedComponents: .date) }
                     }
                 }
                 if let problem { Section { Label(problem, systemImage: "exclamationmark.circle").foregroundStyle(Tone.danger.textColor) } }
             }
             .navigationTitle("Add a document")
             .navigationBarTitleDisplayMode(.inline)
-            .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf, .png, .jpeg]) { result in
-                guard case .success(let url) = result else { return }
-                let access = url.startAccessingSecurityScopedResource()
-                defer { if access { url.stopAccessingSecurityScopedResource() } }
-                guard let data = try? Data(contentsOf: url) else { problem = "That file couldn't be read."; return }
-                let type = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/pdf"
-                file = Endpoint.FilePart(fieldName: "file", filename: url.lastPathComponent, mimeType: type, data: data)
-            }
-            .onChange(of: photo) { _, item in
-                Task {
-                    guard let item, let data = try? await item.loadTransferable(type: Data.self) else { return }
-                    file = Endpoint.FilePart(fieldName: "file", filename: "photo-\(Int(Date().timeIntervalSince1970)).jpg",
-                                             mimeType: "image/jpeg", data: data)
-                }
-            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -689,9 +728,11 @@ private struct PortalUploadSheet: View {
         var fields: [(String, String)] = [("doc_type", docType), ("visible_to_supplier", visible ? "true" : "false")]
         if let text = note.trimmedOrNil { fields.append(("note", text)) }
         if invoiceKind != nil {
-            let kept = invoice.compactMapValues { $0.trimmedOrNil }
-            guard kept["number"] != nil, kept["invoice_date"] != nil, kept["total"] != nil else {
-                problem = "Add the invoice number, date and total."
+            var kept = invoice.compactMapValues { $0.trimmedOrNil }
+            kept["invoice_date"] = CalendarDay(date: invoiceDate).isoString
+            kept["due_date"] = hasDueDate ? CalendarDay(date: dueDate).isoString : nil
+            guard kept["number"] != nil, kept["total"] != nil else {
+                problem = "Add the invoice number and total."
                 return
             }
             let json = (try? JSONEncoder.sorted.encode(kept)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
@@ -703,5 +744,53 @@ private struct PortalUploadSheet: View {
             saving = false
             if ok { dismiss() }
         }
+    }
+}
+
+/// A file for the order: from Files (PDF, PNG, JPG), a photo, or a scan with the camera (one PDF).
+struct PortalFilePicker: View {
+    @Binding var file: Endpoint.FilePart?
+    @State private var importing = false
+    @State private var photo: PhotosPickerItem?
+    @State private var scanning = false
+    @State private var problem: String?
+
+    var body: some View {
+        Button(file == nil ? "Choose a file (PDF, PNG or JPG)" : "File: \(file?.filename ?? "")", systemImage: "doc") {
+            importing = true
+        }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf, .png, .jpeg]) { result in
+            guard case .success(let url) = result else { return }
+            let access = url.startAccessingSecurityScopedResource()
+            defer { if access { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url) else { problem = "That file couldn't be read."; return }
+            let type = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/pdf"
+            file = Endpoint.FilePart(fieldName: "file", filename: url.lastPathComponent, mimeType: type, data: data)
+            problem = nil
+        }
+        PhotosPicker(selection: $photo, matching: .images) {
+            Label("Or choose a photo", systemImage: "photo")
+        }
+        .onChange(of: photo) { _, item in
+            Task {
+                guard let item, let data = try? await item.loadTransferable(type: Data.self) else { return }
+                file = Endpoint.FilePart(fieldName: "file", filename: "photo-\(Int(Date().timeIntervalSince1970)).jpg",
+                                         mimeType: "image/jpeg", data: data)
+                problem = nil
+            }
+        }
+        if PortalDocumentScanner.isAvailable {
+            Button("Or scan paper with the camera", systemImage: "doc.viewfinder") { scanning = true }
+                .fullScreenCover(isPresented: $scanning) {
+                    PortalDocumentScanner { pdf in
+                        file = Endpoint.FilePart(fieldName: "file", filename: "scan-\(Int(Date().timeIntervalSince1970)).pdf",
+                                                 mimeType: "application/pdf", data: pdf)
+                        problem = nil
+                    }
+                    .ignoresSafeArea()
+                }
+                .accessibilityIdentifier("portal.scan")
+        }
+        if let problem { Label(problem, systemImage: "exclamationmark.circle").foregroundStyle(Tone.danger.textColor) }
     }
 }

@@ -2,9 +2,9 @@ import SwiftUI
 
 /// Stores (`/api/v2/stores`, RBAC `stores`): the list, a store's details, edit, delete, and adding one.
 ///
-/// The server reads the tax rate two ways: adding a store takes a percentage (20 → 20%), saving a
-/// store keeps what it is sent as a fraction (0.2 → 20%). So adding has its own form that asks for a
-/// percentage, and the edit form asks for the fraction, saying so plainly.
+/// The tax rate is entered as a percentage (20 → 20%) when adding and saving a store; the server stores
+/// a fraction and reads a value below 1 as one already (0.2 → 20%), so a stored rate saved untouched
+/// stays the same (StoreQueries.taxFraction).
 enum StoreCatalog {
     static let screenID = "workspace.stores"
 
@@ -89,8 +89,9 @@ enum StoreCatalog {
                            + "currency, tax rate and delivery charges."),
         detail: detailSections,
         form: FormSpec(formSections(taxRate: FieldSpec(
-            "tax_rate", "Tax rate as a fraction", .decimal(places: 4),
-            help: "For 20% type 0.2. For 5% type 0.05.")), sendOnlyChanges: true),
+            "tax_rate", "Tax rate (%)", .decimal(places: 4),
+            help: "Type the percentage, e.g. 20 for 20%. A saved rate may show as a fraction (0.2 is 20%).")),
+                       sendOnlyChanges: true),
         actions: [
             // A delete with its own warning: the store's products, categories and orders go with it.
             ActionSpec("delete", "Delete this store", systemImage: "trash", method: .delete, path: "\(path)/{uuid}",
@@ -107,7 +108,7 @@ enum StoreCatalog {
                                          idKeys: ["uuid", "id"])
         descriptor.form = FormSpec(formSections(taxRate: FieldSpec(
             "tax_rate", "Tax rate (%)", .decimal(places: 2), placeholder: "20",
-            help: "Leave empty for 10%.")))
+            help: "Leave empty for 20%.")))
         return descriptor
     }()
 }

@@ -17,12 +17,17 @@ struct HomeView: View {
     @State private var creatingRequest = false
     @State private var createdRequest: ServiceRequestRoute?
     @State private var toast: String?
+    @State private var invitations = InvitationInbox()
+    @State private var notifications = NotificationsModel()
+    @State private var showingNotifications = false
+    @State private var isDeliveryPartner = false
 
     var body: some View {
         let catalog = AppCatalog(menu: session.menu)
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                HomeHero(showingProfile: $showingProfile)
+                HomeHero(showingProfile: $showingProfile, showingNotifications: $showingNotifications,
+                         unread: notifications.unread)
 
                 if let toast {
                     Label(toast, systemImage: "checkmark.circle.fill")
@@ -32,10 +37,25 @@ struct HomeView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
+                if !invitations.items.isEmpty || !invitations.feedback.isNone { invitationsSection }
+                // Delivery partners (no workspace needed): their drops, signed for on delivery.
+                if isDeliveryPartner {
+                    NavigationLink(value: NativeScreenRoute(SalesScreen.myDeliveries)) {
+                        HStack {
+                            MyDeliveries.entryLabel.font(.brandHeadline)
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundStyle(.secondaryText)
+                        }
+                        .brandCard(padding: 16, radius: 16)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("home.myDeliveries")
+                }
                 if !HomeDigest.sources(session: session).isEmpty { todaySection }
                 if !hubs.isEmpty { workSection }
                 quickActions(catalog: catalog)
                 if !catalog.nativeEntries.isEmpty { appsSection(catalog: catalog) }
+                if NoAccessCard.applies(session: session, catalog: catalog, hubs: hubs) { NoAccessCard() }
                 // The AI Navigator, once its native screen is in this person's menu.
                 if let chat = catalog.entry(forKey: AppMenu.aiChatKey) {
                     AppEntryLink(entry: chat) { AssistantCardLabel() }
@@ -46,14 +66,31 @@ struct HomeView: View {
             .padding(.bottom, 32)
         }
         .brandCanvas()
+        // A running task timer, wherever it was started (hidden when none is running).
+        .workRunningTimer()
         .overlay(alignment: .top) { StatusBarBackdrop() }
         .toolbar(.hidden, for: .navigationBar)
         .navigationTitle("Home")
         .refreshable {
             await session.reloadPermissions()
             await digest.load(session: session, services: services)
+            await invitations.load(services.workspace())
+            await notifications.load(services.workspace())
         }
-        .task(id: session.workspace?.uuid) { await digest.load(session: session, services: services) }
+        .task(id: session.workspace?.uuid) {
+            await digest.load(session: session, services: services)
+            await invitations.load(services.workspace())
+            await notifications.load(services.workspace())
+            isDeliveryPartner = await MyDeliveries.isPartner(services)
+        }
+        .sheet(isPresented: $showingNotifications) { NotificationsView(model: notifications) }
+        .onAppear {
+            // Said once after joining or making a workspace (the switch rebuilt Home).
+            if let notice = session.notice {
+                toast = notice
+                session.notice = nil
+            }
+        }
         .sheet(isPresented: $editingHome) {
             let policy = NavigationPolicy(session: session)
             EditHomeSheet(available: policy.available, current: policy.ordered)
@@ -69,6 +106,21 @@ struct HomeView: View {
         }
         .navigationDestination(item: $createdRequest) { ServiceRequestDetailView(requestUuid: $0.uuid) }
         .accessibilityIdentifier("home.dashboard")
+    }
+
+    // MARK: Invitations
+
+    /// Workspaces that have invited this person: join or decline here.
+    private var invitationsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            DashboardSectionHeader("Invitations")
+            FeedbackRow(feedback: invitations.feedback)
+            ForEach(invitations.items) { invitation in
+                InvitationCard(invitation: invitation, inbox: invitations)
+                    .brandCard(padding: 14, radius: 18)
+            }
+        }
+        .accessibilityIdentifier("home.invitations")
     }
 
     // MARK: Your work
@@ -249,6 +301,8 @@ struct HomeView: View {
 /// display face, the workspace, and the person's avatar (their profile and settings).
 private struct HomeHero: View {
     @Binding var showingProfile: Bool
+    @Binding var showingNotifications: Bool
+    let unread: Int
     @Environment(SessionStore.self) private var session
     @Environment(SyncCenter.self) private var sync
     @State private var choosingWorkspace = false
@@ -260,6 +314,26 @@ private struct HomeHero: View {
                     .padding(6)
                     .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 Spacer()
+                Button { showingNotifications = true } label: {
+                    Image(systemName: unread > 0 ? "bell.badge.fill" : "bell")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 40, height: 40)
+                        .background(.white.opacity(0.12), in: Circle())
+                        .overlay(alignment: .topTrailing) {
+                            if unread > 0 {
+                                Text(unread > 99 ? "99+" : "\(unread)")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(Color.red, in: Capsule())
+                                    .offset(x: 6, y: -4)
+                            }
+                        }
+                }
+                .accessibilityLabel(unread > 0 ? "Notifications, \(unread) unread" : "Notifications")
+                .accessibilityIdentifier("home.notifications")
                 Button { showingProfile = true } label: {
                     Text(session.user?.initials ?? "?")
                         .font(BrandFont.font(.semibold, size: 15, relativeTo: .subheadline))
@@ -287,12 +361,12 @@ private struct HomeHero: View {
             HStack(spacing: 8) {
                 if let workspace = session.workspace {
                     Button {
-                        if session.workspaces.count > 1 { choosingWorkspace = true }
+                        choosingWorkspace = true
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "building.2")
                             Text(workspace.name).lineLimit(1)
-                            if session.workspaces.count > 1 { Image(systemName: "chevron.down").imageScale(.small) }
+                            Image(systemName: "chevron.down").imageScale(.small)
                         }
                         .font(.brandCaption)
                         .foregroundStyle(Palette.onDarkInk)
@@ -437,6 +511,36 @@ private struct AssistantCardLabel: View {
                 .accessibilityHidden(true)
         }
         .brandCard(padding: 16)
+    }
+}
+
+/// A role that opens nothing in this workspace: say so, and who can fix it (the web's wording).
+struct NoAccessCard: View {
+    /// The menu loaded, but nothing in it has a screen and there's no work area.
+    @MainActor
+    static func applies(session: SessionStore, catalog: AppCatalog, hubs: [NavigationPolicy.Home]) -> Bool {
+        session.workspace != nil && session.permissionsError == nil && catalog.groups.isEmpty && hubs.isEmpty
+    }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "lock.circle")
+                .font(.system(size: 34))
+                .foregroundStyle(.secondaryText)
+                .accessibilityHidden(true)
+            Text("Nothing to show here yet")
+                .font(.brandHeadline)
+            Text("Your role doesn't give you access to anything in this workspace yet. Ask the person who manages "
+                 + "it to give you a role with access, for example Developer.")
+                .font(.brandFootnote)
+                .foregroundStyle(.secondaryText)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .brandCard(padding: 20)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("home.noAccess")
     }
 }
 

@@ -120,6 +120,11 @@ struct CustomerDetailView: View {
     @State private var deleteError: APIError?
     @State private var notice: String?
     @State private var formResponses: [WebFormRecordResponse] = []
+    @State private var billing = CustomerBilling()
+    @State private var newInvoice = false
+    @State private var newOrder = false
+    @State private var openedInvoice: InvoiceRoute?
+    @State private var openedOrder: CreatedStoreOrder?
 
     var body: some View {
         Group {
@@ -137,6 +142,28 @@ struct CustomerDetailView: View {
         .task(id: customerUuid) {
             formResponses = await WebFormRecordResponsesSection.load(services: services, session: session,
                                                                      entityType: "customer", entityUUID: customerUuid)
+            billing = await CustomerBilling.load(services: services, session: session, customerUuid: customerUuid)
+        }
+        .sheet(isPresented: $newInvoice) {
+            if let customer = state.value {
+                InvoiceCreateSheet(prefill: PickedCustomer(customer)) { body in
+                    let created = try await services.invoices.create(body)
+                    openedInvoice = InvoiceRoute(uuid: created.id)
+                    return created
+                }
+            }
+        }
+        .sheet(isPresented: $newOrder) {
+            if let customer = state.value {
+                CreateStoreOrderView(prefill: PickedCustomer(customer)) { created in openedOrder = created }
+            }
+        }
+        .navigationDestination(item: $openedInvoice) { route in
+            InvoiceDetailView(invoiceUuid: route.uuid, opening: "Invoice created as a draft. Check it, then email it to the customer.")
+        }
+        .navigationDestination(item: $openedOrder) { created in
+            StoreOrderDetailView(uuid: created.uuid, orderNumber: created.orderNumber,
+                                 opening: "Order \(created.orderNumber ?? "") created.")
         }
         .task { await load() }
         .refreshable { await load() }
@@ -177,9 +204,46 @@ struct CustomerDetailView: View {
             if let notice {
                 Section { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
             }
+            if canStartSale {
+                Section {
+                    if session.permissions.can(.create, .invoices) {
+                        Button { newInvoice = true } label: { Label("New invoice", systemImage: "doc.badge.plus") }
+                            .frame(minHeight: 44)
+                            .accessibilityIdentifier("customer.newInvoice")
+                    }
+                    if session.permissions.can(.create, .orders) {
+                        Button { newOrder = true } label: { Label("New order", systemImage: "cart.badge.plus") }
+                            .frame(minHeight: 44)
+                            .accessibilityIdentifier("customer.newOrder")
+                    }
+                    if canQuote {
+                        NavigationLink {
+                            ShopQuoteBuilderView(kind: .quote, customer: PickedCustomer(customer).shopDraft)
+                        } label: {
+                            Label("New quote", systemImage: "doc.text")
+                        }
+                        .accessibilityIdentifier("customer.newQuote")
+                    }
+                } header: {
+                    Text("Sell to \(customer.displayName)")
+                } footer: {
+                    Text("Their name, email and address are filled in for you.")
+                }
+            }
             Section {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 10)], spacing: 10) {
-                    StatTile(title: "Orders", value: "\(customer.ordersCount)", systemImage: "bag")
+                    if canSeeOrders && !customer.email.isEmpty {
+                        NavigationLink {
+                            SalesOrdersView(search: customer.email)
+                        } label: {
+                            StatTile(title: "Orders", value: "\(customer.ordersCount)", systemImage: "bag")
+                                .accessibilityHint("Shows this customer's orders")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("customer.orders")
+                    } else {
+                        StatTile(title: "Orders", value: "\(customer.ordersCount)", systemImage: "bag")
+                    }
                     StatTile(title: "Total spent", value: Formatters.money(customer.totalSpent, currency: nil) ?? "0",
                              systemImage: "sterlingsign.circle")
                     StatTile(title: "Average order", value: Formatters.money(customer.averageOrderValue ?? 0, currency: nil) ?? "0",
@@ -209,6 +273,7 @@ struct CustomerDetailView: View {
             if let notes = customer.notes, !notes.isEmpty {
                 Section("Notes") { Text(notes).textSelection(.enabled) }
             }
+            CustomerBillingSection(billing: billing)
             // What this customer told us in the workspace's forms (as on the web's customer page).
             WebFormRecordResponsesSection(items: formResponses)
             if session.permissions.can(.delete, .customers) {
@@ -229,6 +294,19 @@ struct CustomerDetailView: View {
             }
         }
         .listStyle(.insetGrouped)
+    }
+
+    private var canQuote: Bool {
+        session.permissions.menuKeys.contains("shop") && session.permissions.can(.create, .shop)
+    }
+
+    private var canStartSale: Bool {
+        session.permissions.can(.create, .invoices) || session.permissions.can(.create, .orders) || canQuote
+    }
+
+    /// Sales orders list shop orders with shop.read and store orders with orders.read.
+    private var canSeeOrders: Bool {
+        session.permissions.shows(.orders) || session.permissions.can(.read, .shop)
     }
 
     private func load() async {

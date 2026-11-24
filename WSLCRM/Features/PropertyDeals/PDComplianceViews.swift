@@ -69,16 +69,21 @@ private struct PDComplianceList: View {
     var body: some View {
         PagedList(model: model, searchPrompt: nil, emptyTitle: "No checks match", emptySystemImage: "checkmark.shield",
                   emptyDescription: "AML, ID, source of funds and the other checks on your deals show here.") { check in
-            Button { signing = check } label: { PDCheckRow(check: check) }
-                .foregroundStyle(.primary)
-                .disabled(!canUpdate)
-                .accessibilityHint(canUpdate ? "Opens the check to sign it off" : "")
-                .accessibilityIdentifier("pd.compliance.row.\(check.id)")
-                .contextMenu {
-                    if let deal = check.string("deal_uuid") {
-                        NavigationLink(value: PDDealRoute(uuid: deal)) { Label("Open the deal", systemImage: "house") }
+            VStack(alignment: .leading, spacing: 6) {
+                Button { signing = check } label: { PDCheckRow(check: check) }
+                    .foregroundStyle(.primary)
+                    .disabled(!canUpdate)
+                    .accessibilityHint(canUpdate ? "Opens the check to sign it off" : "")
+                    .accessibilityIdentifier("pd.compliance.row.\(check.id)")
+                // Everyone who can see the check can open its deal, read-only roles included.
+                if let deal = check.string("deal_uuid") {
+                    NavigationLink(value: PDDealRoute(uuid: deal)) {
+                        Label("Open the deal", systemImage: "house").font(.wsSubheadline)
                     }
+                    .accessibilityIdentifier("pd.compliance.openDeal.\(check.id)")
                 }
+            }
+            .buttonStyle(.borderless)
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {

@@ -144,8 +144,15 @@ struct FileMyTaxView: View {
     private var wizard: some View {
         List {
             Section {
-                Text("Check what we read from your bank statements, confirm it, then choose how to file — our accountant "
-                     + "files it for you, or you file directly with HMRC.").font(.wsSubheadline)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Check what we read from your bank statements, confirm it, then choose how to file — our "
+                         + "accountant files it for you, or you file directly with HMRC.").font(.wsSubheadline)
+                    // How much the AI does on its own; the figures it checks change its steering.
+                    TaxAgentModeBadge(regime: TaxAgentMode.selfAssessment, taxYear: year,
+                                      refreshKey: "\(estimate.int("unreviewed") ?? 0)|\(estimate.int("confirmed") ?? 0)") {
+                        notice = .success(TaxAgentMode.doneText($0))
+                    }
+                }
                 TaxYearPicker(year: Binding(get: { year }, set: { changeYear($0) }))
                 Picker("How you want to do it", selection: $mode) {
                     Text("Do it myself").tag("self")

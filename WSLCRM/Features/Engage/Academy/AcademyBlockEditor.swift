@@ -205,18 +205,11 @@ struct AcademyBlockEditor: View {
     private var imageSection: some View {
         Group {
             Section {
-                TextField("https://…/picture.jpg", text: $src)
-                    .keyboardType(.URL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .accessibilityIdentifier("academy.block.imageURL")
+                EngageImageField(url: $src, alt: alt.trimmedOrNil ?? "Picture", previewHeight: 240, id: "academy.block.imageURL")
                 TextField("What the picture shows (for people who can’t see it)", text: $alt, axis: .vertical)
                     .accessibilityIdentifier("academy.block.imageAlt")
             } header: { Text("Picture") } footer: {
-                Text("The picture’s web address. It must start with https:// so learners’ devices can load it.")
-            }
-            if let url = URL(string: src.trimmingCharacters(in: .whitespaces)), src.lowercased().hasPrefix("http") {
-                Section("How it looks") { RichImage(url: url, alt: alt.trimmedOrNil) }
+                Text("Learners see it in the lesson. A pasted link must start with https:// so their devices can load it.")
             }
         }
     }

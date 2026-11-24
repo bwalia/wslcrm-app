@@ -33,7 +33,7 @@ struct MktCampaignsListView: View {
                 .accessibilityIdentifier("mkt.campaigns.help")
             }
             if testMode { Section { MktCampTestModeBanner() } }
-            MktCampJourneySection(progress: progress, askAI: $askAI)
+            MktCampJourneySection(progress: progress, askAI: $askAI, path: MktCampPages.campaigns)
             if canCreate {
                 Section {
                     Button { creating = true } label: {
@@ -209,12 +209,18 @@ struct MktCampCreateSheet: View {
                     ForEach(MktCamp.channels) { Text($0.label).tag($0.value) }
                 }
                 .accessibilityIdentifier("mkt.create.channel")
-                Picker("Kind of message", selection: $messageType) {
-                    ForEach(MktCamp.messageTypes) { Text($0.label).tag($0.value) }
+                if MktCamp.canManage(session.permissions) {
+                    Picker("Kind of message", selection: $messageType) {
+                        ForEach(MktCamp.messageTypes) { Text($0.label).tag($0.value) }
+                    }
+                    .accessibilityIdentifier("mkt.create.type")
+                } else {
+                    LabeledContent("Kind of message", value: "Marketing")
+                        .accessibilityIdentifier("mkt.create.type")
                 }
-                .accessibilityIdentifier("mkt.create.type")
             } footer: {
-                Text(messageType == "marketing"
+                Text(!MktCamp.canManage(session.permissions) ? MktCamp.marketingOnlyNote
+                     : messageType == "marketing"
                      ? "Marketing goes only to people who said yes, outside quiet hours, a few times a week at most."
                      : "Service messages (an order update, a booking reminder) skip permission, quiet hours and the "
                         + "weekly limit, so only workspace admins can send them.")

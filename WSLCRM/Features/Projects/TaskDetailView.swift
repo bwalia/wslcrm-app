@@ -78,10 +78,18 @@ struct TaskDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let task = state.value {
+                ToolbarItem(placement: .topBarTrailing) {
+                    WorkAskAIButton(path: WorkAskAIButton.task(task.uuid, project: task.projectUuid))
+                }
                 ToolbarItem(placement: .topBarTrailing) { toolbarMenu(task) }
             }
         }
+        .workRunningTimer(hiding: uuid)
         .task { await load() }
+        .workReloadOnReturn { await load() }
+        .onReceive(NotificationCenter.default.publisher(for: RunningTimerBar.changed)) { _ in
+            Task { runningTimer = (try? await services.kanban.currentTimer()) ?? nil }
+        }
         .sheet(item: $sheet, onDismiss: applyPickers) { sheet in sheetView(sheet) }
         .workConfirmation($confirm)
         .workPrompt($prompt)
@@ -160,7 +168,8 @@ struct TaskDetailView: View {
 
             Section {
                 if let description = task.description, !RichText.plain(description).isEmpty {
-                    Text(RichText.plain(description)).font(.wsBody).textSelection(.enabled)
+                    // Links in it open in their own apps (Safari, Mail).
+                    Text(RichText.attributed(description)).font(.wsBody).textSelection(.enabled)
                         .accessibilityIdentifier("task.description")
                 } else {
                     Text("No description.").foregroundStyle(.secondaryText)
@@ -537,6 +546,11 @@ struct TaskDetailView: View {
                 Group {
                     if file.isLink {
                         Menu {
+                            // Outside sites open in their own app (Safari), never inside this one.
+                            if let url = RichText.safeURL(file.fileUrl) {
+                                Link(destination: url) { Label("Open", systemImage: "arrow.up.right.square") }
+                                    .accessibilityIdentifier("task.attachment.open.\(file.uuid)")
+                            }
                             Button("Copy link", systemImage: "doc.on.doc") {
                                 UIPasteboard.general.string = file.fileUrl
                                 notice = .done("Link copied.")
@@ -582,7 +596,7 @@ struct TaskDetailView: View {
         } header: {
             Text("Files and links")
         } footer: {
-            if access.canEdit { Text("Photos and documents up to 10 MB. Tap a file to open it.") }
+            if access.canEdit { Text("Photos and documents up to 10 MB. Tap a file or link to open it.") }
         }
     }
 
@@ -610,18 +624,27 @@ struct TaskDetailView: View {
                 }
                 .accessibilityIdentifier("task.timer.running")
                 Button("Stop the timer") {
-                    Task { await perform("Timer stopped and the time logged.") { try await services.kanban.stopTimer() } }
+                    Task {
+                        await perform("Timer stopped and the time logged.") { try await services.kanban.stopTimer() }
+                        NotificationCenter.default.post(name: RunningTimerBar.changed, object: nil)
+                    }
                 }
                 .buttonStyle(LargeButtonStyle(tone: .danger))
                 .accessibilityIdentifier("task.timer.stop")
             } else if access.canEdit {
                 Button("Start a timer", systemImage: "play.circle") {
-                    Task { await perform("Timer started.") { try await services.kanban.startTimer(taskUuid: task.uuid, description: nil) } }
+                    Task {
+                        await perform("Timer started.") { try await services.kanban.startTimer(taskUuid: task.uuid, description: nil) }
+                        NotificationCenter.default.post(name: RunningTimerBar.changed, object: nil)
+                    }
                 }
                 .accessibilityIdentifier("task.timer.start")
-                if let running = runningTimer, running.taskUuid != nil {
-                    Text("A timer is already running on \(running.taskTitle ?? "another task") — starting here stops it.")
-                        .font(.wsCaption).foregroundStyle(.secondaryText)
+                if let running = runningTimer, let other = running.taskUuid {
+                    NavigationLink(value: TaskRoute(uuid: other)) {
+                        Text("A timer is already running on \(running.taskTitle ?? "another task") — starting here stops it. Tap to open that task.")
+                            .font(.wsCaption).foregroundStyle(.secondaryText)
+                    }
+                    .accessibilityIdentifier("task.timer.runningElsewhere")
                 }
             }
             let total = timeSummary?.totalMinutes ?? task.timeSpentMinutes
@@ -718,7 +741,7 @@ struct TaskDetailView: View {
                     Text(Formatters.relative(at) ?? "").font(.wsCaption).foregroundStyle(.secondaryText)
                 }
             }
-            Text(comment.visibleContent).font(.wsSubheadline).textSelection(.enabled)
+            Text(comment.visibleAttributed).font(.wsSubheadline).textSelection(.enabled)
             if !isReply, access.canEdit {
                 Button("Reply") { sheet = .reply(comment) }
                     .font(.wsCaption.weight(.semibold))

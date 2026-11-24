@@ -306,7 +306,7 @@ struct AccountDeleteView: View {
                     .textContentType(.password)
                     .accessibilityIdentifier("deleteAccount.password")
             } footer: {
-                Text("To make sure it’s you. If you signed in with Google or Apple in the last 10 minutes you can leave it empty.")
+                Text("To make sure it’s you.")
             }
             Section {
                 Button(working ? "Deleting…" : "Delete my account", role: .destructive) { confirming = true }

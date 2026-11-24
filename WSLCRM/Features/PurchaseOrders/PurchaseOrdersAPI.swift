@@ -81,11 +81,6 @@ struct PurchaseOrdersAPI: Sendable {
         return try await purchaseOrder(uuid)
     }
 
-    func receive(_ uuid: String, _ body: PurchaseOrderReceiveBody) async throws -> PurchaseOrder {
-        let _: JSONValue = try await data(.post("\(Self.base)/\(uuid)/receive", json: body))
-        return try await purchaseOrder(uuid)
-    }
-
     /// Emails the supplier (the lines go in the email body; a draft is marked sent).
     @discardableResult
     func email(_ uuid: String, to: String?, message: String?, pdf: Data? = nil, filename: String? = nil) async throws -> EmailResult {

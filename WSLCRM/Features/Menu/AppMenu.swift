@@ -113,7 +113,7 @@ enum MenuIcon {
         "Activity": "waveform.path.ecg", "AlertTriangle": "exclamationmark.triangle",
         "AppWindow": "macwindow", "ArrowLeftRight": "arrow.left.arrow.right",
         "BarChart": "chart.bar", "BarChart2": "chart.bar", "BarChart3": "chart.bar", "Bell": "bell",
-        "BookOpen": "book", "Bot": "cpu", "Boxes": "shippingbox", "Briefcase": "briefcase",
+        "Banknote": "banknote", "BookOpen": "book", "Bot": "cpu", "Boxes": "shippingbox", "Briefcase": "briefcase",
         "Building": "building", "Building2": "building.2", "Calculator": "function",
         "Calendar": "calendar", "CalendarDays": "calendar", "CheckSquare": "checkmark.square",
         "ClipboardCheck": "checklist", "ClipboardList": "list.clipboard", "Clock": "clock",

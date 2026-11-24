@@ -77,7 +77,8 @@ enum Action: String, Sendable {
 /// The caller's permissions in the selected workspace, from `GET /api/v2/user/menu`.
 ///
 /// Mirrors the server rule (`middleware/namespace.lua` `hasPermission`):
-/// `allowed = is_admin || namespace.is_owner || grants[module] ∋ action || grants[module] ∋ "manage"`.
+/// `allowed = is_admin || grants[module] ∋ action || grants[module] ∋ "manage"`, role-driven like the server: owning
+/// a workspace is not a bypass, except that an owner with no permissions at all gets everything (no lock-out).
 /// The server remains the authority; this only decides what the UI offers.
 struct PermissionSet: Sendable, Equatable {
     var isAdmin: Bool
@@ -103,18 +104,24 @@ struct PermissionSet: Sendable, Equatable {
                   menuKeys: Set(menu.menu.map(\.key)))
     }
 
+    /// Role-driven, as on the server (NamespaceMemberQueries.getPermissions): an owner's role decides
+    /// what they may do; only an owner left with no permissions at all gets everything, so nobody is
+    /// locked out of their own workspace. Platform admins pass.
     func can(_ action: Action, _ module: Module) -> Bool {
-        if isAdmin || isOwner { return true }
+        if isAdmin || ownerWithoutRole { return true }
         let actions = grants[module.rawValue] ?? []
         return actions.contains(action.rawValue) || actions.contains(Action.manage.rawValue)
     }
 
     /// The same check for a module the app knows only by its server name (module kit screens).
     func can(_ action: Action, moduleName: String) -> Bool {
-        if isAdmin || isOwner { return true }
+        if isAdmin || ownerWithoutRole { return true }
         let actions = grants[moduleName] ?? []
         return actions.contains(action.rawValue) || actions.contains(Action.manage.rawValue)
     }
+
+    /// The server's no-lock-out rule: an owner holding no permissions is given full access.
+    private var ownerWithoutRole: Bool { isOwner && grants.values.allSatisfy(\.isEmpty) }
 
     /// Whether a module is available at all (enabled for the workspace and readable).
     func shows(_ feature: Feature) -> Bool {

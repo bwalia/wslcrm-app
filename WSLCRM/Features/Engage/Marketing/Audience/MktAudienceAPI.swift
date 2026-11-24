@@ -549,12 +549,21 @@ struct MktAudienceAPI: Sendable {
         try await engage.delete(Marketing.path("/lists/\(uuid)"))
     }
 
-    /// The newest 500 people and the real total.
-    func members(_ uuid: String) async throws -> (members: [MktListMember], total: Int) {
-        let answer = try await engage.get(Marketing.path("/lists/\(uuid)/members"))
+    /// People on a list, newest first, and the total matching. `q` searches name, email and phone on the
+    /// server; with `page` the server pages (`meta {total, page, per_page}`). No parameters: the newest 500.
+    func members(_ uuid: String, q: String = "", page: Int? = nil,
+                 perPage: Int = Self.membersPerPage) async throws -> (members: [MktListMember], total: Int) {
+        var query: [String: String?] = ["q": q.trimmedOrNil]
+        if let page {
+            query["page"] = String(page)
+            query["per_page"] = String(perPage)
+        }
+        let answer = try await engage.get(Marketing.path("/lists/\(uuid)/members"), query: query)
         let members = answer.engageRecords.compactMap(MktListMember.init)
         return (members, answer.meta?["total"]?.numberValue.map { Int($0) } ?? members.count)
     }
+
+    static let membersPerPage = 100
 
     func removeMember(list: String, contact: String) async throws {
         try await engage.delete(Marketing.path("/lists/\(list)/members/\(contact)"))

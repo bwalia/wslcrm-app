@@ -438,3 +438,64 @@ enum PDContactLogForm {
         return body
     }
 }
+
+/// Visible buttons beside a task row — "Done" (or "Send for approval") and a "…" menu with the
+/// rest — so nothing is hidden behind a swipe. Uses the screen's `PDTaskActions` sheets.
+struct PDTaskRowActions: View {
+    let task: PDTaskSummary
+    let actions: PDTaskActions
+    @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
+    @Environment(ConnectivityMonitor.self) private var connectivity
+
+    var body: some View {
+        let access = session.propertyDeals
+        let canUpdate = access?.can(.update, .tasks) ?? false
+        let canLog = (access?.can(.create, .tasks) ?? false) && task.dealUuid != nil
+        let canAI = task.agentEligible == true && (access?.can(.create, .ai) ?? false)
+            && ![.agentRunning, .awaitingApproval].contains(task.pdStatus)
+        let open = task.pdStatus.isOpen
+        HStack(spacing: 2) {
+            if canUpdate, open, task.pdStatus != .awaitingApproval {
+                let approval = PDTaskActions.needsApproval(rule: task.approvalRule, access: access)
+                Button(approval ? "Send" : "Done") {
+                    actions.askToComplete(task.ref, compliance: task.compliance ?? false,
+                                          approvalRule: task.approvalRule, access: access)
+                }
+                .buttonStyle(.bordered)
+                .tint(Tone.success.solidColor)
+                .font(.wsSubheadline.weight(.semibold))
+                .accessibilityLabel(approval ? "Send “\(task.title)” for approval" : "Mark “\(task.title)” done")
+                .accessibilityIdentifier("pd.task.done.\(task.taskUuid)")
+            }
+            if open, canUpdate || canLog || canAI {
+                Menu {
+                    if canUpdate {
+                        Button("Snooze", systemImage: "moon.zzz") { actions.askToSnooze(task.ref) }
+                        Button("Assign to someone", systemImage: "person.badge.plus") {
+                            actions.assigning = PDTaskActions.TaskRequest(task: task.ref)
+                        }
+                    }
+                    if canLog {
+                        Button("Log a call or message", systemImage: "phone.arrow.up.right") {
+                            actions.loggingContact = PDTaskActions.TaskRequest(task: task.ref)
+                        }
+                    }
+                    if canAI {
+                        Button("Let AI do it", systemImage: "sparkles") {
+                            Task { await actions.letAIDoIt(task.ref, api: services.propertyDeals, isOnline: connectivity.isOnline) }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.wsTitle3)
+                        .frame(width: 44, height: 44)
+                        .contentShape(.rect)
+                }
+                .accessibilityLabel("More for “\(task.title)”")
+                .accessibilityIdentifier("pd.task.more.\(task.taskUuid)")
+            }
+        }
+        .buttonStyle(.borderless)
+    }
+}

@@ -29,6 +29,7 @@ struct MainTabView: View {
                 HomeView(hubs: policy.ordered, open: { open($0, slots: slots) })
                     .withAppDestinations()
                     .navigationDestination(for: HubScreenRoute.self) { $0.hub.rootView }
+                    .navigationDestination(for: ChatLinkTarget.self) { ChatLinkDestinationView(target: $0) }
                     .safeAreaInset(edge: .top, spacing: 0) { syncBanner }
             }
             .tabItem { Label("Home", systemImage: "house") }
@@ -56,7 +57,9 @@ struct MainTabView: View {
         }
         .onAppear {
             activatePreferences()
+            openLandingPage()
             openPendingLink()
+            openPendingNotification()
         }
         .onChange(of: session.workspace?.uuid) { activatePreferences() }
         .onChange(of: router.pending) { openPendingLink() }
@@ -147,6 +150,29 @@ struct MainTabView: View {
                 homePath = Self.path(for: link.target, startingAtHub: hub)
             }
         }
+    }
+
+    /// Just signed in: the role's landing page (Roles › Opens after sign-in) opens first, on Home.
+    /// The web's home page (`/dashboard`) is Home itself.
+    private func openLandingPage() {
+        guard let path = session.landingPath else { return }
+        session.landingPath = nil
+        guard let item = ChatLinks.menuItem(for: path, in: session.menu), !AppCatalog.hiddenKeys.contains(item.key),
+              let destination = MenuDestination.of(item) else { return }
+        selection = .home
+        var stack = NavigationPath()
+        stack.append(ChatLinkTarget.menu(destination, title: item.name))
+        homePath = stack
+    }
+
+    /// A notification opened from another workspace: the switch rebuilt this view; open its record on Home.
+    private func openPendingNotification() {
+        guard let path = PendingNotificationPage.take(), let url = URL(string: path),
+              case .native(let target) = ChatLinks.resolve(url, dashboardHost: nil, menu: session.menu) else { return }
+        selection = .home
+        var stack = NavigationPath()
+        stack.append(target)
+        homePath = stack
     }
 
     /// The navigation for a link: optionally the hub's own screen first, then the item.

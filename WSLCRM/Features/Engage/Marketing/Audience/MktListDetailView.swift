@@ -12,9 +12,15 @@ struct MktListDetailView: View {
     @State private var list: MktListSummary?
     @State private var members: [MktListMember] = []
     @State private var total = 0
+    /// How many match the search (the whole list when there is none).
+    @State private var found = 0
     @State private var membersState: LoadState<Void> = .idle
     @State private var loadError: APIError?
     @State private var search = ""
+    /// The search the people shown were loaded for, and the last page loaded.
+    @State private var searched = ""
+    @State private var page = 1
+    @State private var loadingMore = false
     @State private var notice: EngageNotice?
     @State private var renaming = false
     @State private var newName = ""
@@ -37,6 +43,7 @@ struct MktListDetailView: View {
         session.permissions.can(action, moduleName: module)
     }
 
+    /// The server searches; this only hides anyone who stops matching while the next search loads.
     private var shownMembers: [MktListMember] { members.filter { $0.matches(search) } }
 
     var body: some View {
@@ -89,6 +96,13 @@ struct MktListDetailView: View {
             }
         }
         .task { await load() }
+        // Big lists: search every member on the server, not only the ones loaded.
+        .task(id: search) {
+            guard search != searched else { return }
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            await loadMembers()
+        }
         .refreshable { await load() }
         .alert("Rename this list", isPresented: $renaming) {
             TextField("List name", text: $newName)
@@ -232,7 +246,7 @@ struct MktListDetailView: View {
             switch membersState {
             case .failed(let error):
                 InlineErrorRow(error: error) { Task { await loadMembers() } }
-            case .loaded where members.isEmpty:
+            case .loaded where members.isEmpty && searched.trimmedOrNil == nil:
                 ContentUnavailableView {
                     Label("Nobody here yet", systemImage: "person.3")
                 } description: {
@@ -248,6 +262,7 @@ struct MktListDetailView: View {
                         MktAudiencePersonView(member: member, list: list) {
                             members.removeAll { $0.contactUUID == member.contactUUID }
                             total = max(0, total - 1)
+                            found = max(0, found - 1)
                         }
                     } label: {
                         MktListMemberRow(member: member, sms: list.isSMS)
@@ -259,9 +274,16 @@ struct MktListDetailView: View {
                         }
                     }
                 }
-                if total > members.count {
-                    Text("Showing the newest \(members.count.formatted()) of \(total.formatted()).")
-                        .font(.wsFootnote).foregroundStyle(.secondaryText)
+                if found > members.count {
+                    Button { Task { await loadMore() } } label: {
+                        HStack {
+                            if loadingMore { ProgressView() }
+                            Text("Show more (\(members.count.formatted()) of \(found.formatted()) shown)")
+                        }
+                    }
+                    .frame(minHeight: 44)
+                    .disabled(loadingMore)
+                    .accessibilityIdentifier("mkt.list.members.more")
                 }
             default:
                 ProgressView().frame(maxWidth: .infinity)
@@ -292,15 +314,35 @@ struct MktListDetailView: View {
 
     private func loadMembers() async {
         if members.isEmpty { membersState = .loading }
+        let query = search
         do {
-            let result = try await api.members(listUUID)
+            let result = try await api.members(listUUID, q: query, page: 1)
             members = result.members
-            total = result.total
+            found = result.total
+            if query.trimmedOrNil == nil { total = result.total }
+            page = 1
+            searched = query
             membersState = .loaded(())
         } catch {
             let apiError = error.asAPIError
             if case .cancelled = apiError { return }
             membersState = .failed(apiError)
+        }
+    }
+
+    private func loadMore() async {
+        loadingMore = true
+        defer { loadingMore = false }
+        do {
+            let result = try await api.members(listUUID, q: searched, page: page + 1)
+            let known = Set(members.map(\.contactUUID))
+            members += result.members.filter { !known.contains($0.contactUUID) }
+            found = result.total
+            page += 1
+            // An older server ignores paging and sends the same people again: stop offering more.
+            if result.members.allSatisfy({ known.contains($0.contactUUID) }) { found = members.count }
+        } catch {
+            notice = .failed(error.asAPIError)
         }
     }
 
@@ -360,6 +402,7 @@ struct MktListDetailView: View {
             try await api.removeMember(list: list.uuid, contact: member.contactUUID)
             members.removeAll { $0.contactUUID == member.contactUUID }
             total = max(0, total - 1)
+            found = max(0, found - 1)
             notice = .done("\(member.address(sms: list.isSMS) ?? "That person") taken off this list (still in your contacts).")
         } catch {
             notice = .failed(error.asAPIError)

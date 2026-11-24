@@ -2,7 +2,10 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(\.services) private var services
     @State private var biometricEnabled = BiometricGate().isEnabled
+    /// Module names as people know them (`crm_accounts` → "CRM Accounts"), from `/api/v2/modules/available`.
+    @State private var moduleNames: [String: String] = [:]
 
     var body: some View {
         Form {
@@ -23,6 +26,18 @@ struct SettingsView: View {
                 Text("Personalise")
             } footer: {
                 Text("Light or dark, your colour, home screen icon and logo; and the shortcuts you use most between Home and Apps.")
+            }
+            if session.permissions.can(.read, moduleName: "themes") {
+                Section {
+                    NavigationLink {
+                        ThemesView()
+                    } label: {
+                        Label("Workspace themes", systemImage: "swatchpalette")
+                    }
+                    .accessibilityIdentifier("settings.themes")
+                } footer: {
+                    Text("The colours, fonts and shapes of your workspace's own pages, for everyone in it.")
+                }
             }
             Section {
                 if session.biometrics.availableKind != .none {
@@ -59,31 +74,62 @@ struct SettingsView: View {
                 LabeledContent("Environment", value: session.environmentName)
                 LabeledContent("Version", value: "\(Bundle.main.shortVersion) (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"))")
                 if let workspace = session.workspace {
-                    CopyableRow(label: "Workspace ID", value: workspace.uuid)
-                }
-                if let user = session.user {
-                    CopyableRow(label: "User ID", value: user.uuid)
+                    LabeledContent("Workspace", value: workspace.name)
                 }
             }
 
-            Section("Permissions in this workspace") {
+            Section {
                 if session.permissions.isAdmin || session.permissions.isOwner {
-                    Label(session.permissions.isAdmin ? "Platform administrator" : "Workspace owner — full access",
-                          systemImage: "checkmark.shield")
-                } else if session.permissions.grants.isEmpty {
-                    Text("No module permissions").foregroundStyle(.secondaryText)
+                    Label(session.permissions.isAdmin ? "Platform administrator: you can do everything"
+                          : "Workspace owner: you can do everything", systemImage: "checkmark.shield")
+                } else if grantedModules.isEmpty {
+                    Text("Your role doesn't give you access to anything in this workspace yet. Ask the person who "
+                         + "manages it to give you a role with access.")
+                        .foregroundStyle(.secondaryText)
                 } else {
-                    ForEach(session.permissions.grants.keys.sorted(), id: \.self) { module in
-                        LabeledContent(module, value: session.permissions.grants[module, default: []].sorted().joined(separator: ", "))
-                            .font(.wsSubheadline)
+                    ForEach(grantedModules, id: \.module) { row in
+                        LabeledContent(row.name, value: row.actions).font(.wsSubheadline)
                     }
                 }
-                Button("Reload permissions") {
+                Button("Check again") {
                     Task { await session.reloadPermissions() }
                 }
+            } header: {
+                Text("Permissions in this workspace")
+            } footer: {
+                Text("What your role lets you do here. Someone who manages the workspace can change it.")
             }
         }
         .navigationTitle("Settings")
+        .task {
+            let json = try? await services.workspace().get("/api/v2/modules/available", namespace: false)
+            for row in json.map({ WorkspaceAPI.object($0).records("modules", idKeys: ["machine_name"]) }) ?? [] {
+                if let key = row.string("machine_name"), let name = row.string("name")?.trimmedOrNil { moduleNames[key] = name }
+            }
+        }
+    }
+}
+
+extension SettingsView {
+    /// Each granted module by name, with what the role may do there in plain words.
+    fileprivate var grantedModules: [(module: String, name: String, actions: String)] {
+        session.permissions.grants.compactMap { module, actions in
+            guard !actions.isEmpty else { return nil }
+            return (module, moduleNames[module] ?? Formatters.humanize(module), Self.plainActions(actions))
+        }
+        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// `["read", "update"]` → "See, change"; `manage` → "Everything".
+    static func plainActions(_ actions: Set<String>) -> String {
+        if actions.contains("manage") { return "Everything" }
+        let words: [(String, String)] = [("read", "see"), ("create", "add"), ("update", "change"), ("delete", "delete"),
+                                          ("approve", "approve"), ("reject", "reject"), ("reply", "reply"),
+                                          ("access", "open")]
+        let known = words.filter { actions.contains($0.0) }.map(\.1)
+        let other = actions.subtracting(words.map(\.0)).sorted().map { Formatters.humanize($0) }
+        let text = (known + other).joined(separator: ", ")
+        return text.prefix(1).uppercased() + text.dropFirst()
     }
 }
 

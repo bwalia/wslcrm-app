@@ -107,14 +107,19 @@ struct BoardView: View {
         }
         .navigationDestination(item: $goTo) { $0.view }
         .workNotice($notice)
+        .workRunningTimer()
         .task { await load() }
         .task(id: projectUuid) { await loadProjectContext() }
+        .workReloadOnReturn { await load() }
     }
 
     // MARK: Toolbar and filters
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            WorkAskAIButton(path: projectUuid.map(WorkAskAIButton.project) ?? WorkAskAIButton.projects)
+        }
         ToolbarItem(placement: .topBarTrailing) {
             if access.canEdit, let first = columns.first {
                 Button("New card", systemImage: "plus") {

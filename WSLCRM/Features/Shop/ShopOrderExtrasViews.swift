@@ -32,6 +32,16 @@ struct ShopOrderPaperworkSection: View {
                     .foregroundStyle(Tone.warning.textColor)
             }
             DetailRow(label: "Payment reference", value: extras.paidReference)
+            if order.status == .pendingPayment && isBankTransfer {
+                ForEach(extras.paymentMethods) { method in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Asked to pay into: \(method.heading)").font(.wsSubheadline.weight(.semibold))
+                        ForEach(method.rows, id: \.0) { row in CopyableRow(label: row.0, value: row.1) }
+                        if let instructions = method.instructions { Text(instructions).font(.wsFootnote) }
+                    }
+                }
+                if let reference = extras.paymentReference { CopyableRow(label: "With the reference", value: reference) }
+            }
             DetailRow(label: "Customer's PO number", value: extras.customerPoNumber)
             if let code = extras.dealCode {
                 NavigationLink {
@@ -57,7 +67,7 @@ struct ShopOrderPaperworkSection: View {
                 .disabled(busy)
                 .accessibilityIdentifier("shopOrder.invoice")
             }
-            if order.status == .pendingPayment && session.shopPolicy.canManage {
+            if order.status == .pendingPayment && session.shopPolicy.canManage && isBankTransfer {
                 Button {
                     markingPaid = true
                 } label: {
@@ -66,6 +76,9 @@ struct ShopOrderPaperworkSection: View {
                 .frame(minHeight: 44)
                 .disabled(busy)
                 .accessibilityIdentifier("shopOrder.markPaid")
+            } else if order.status == .pendingPayment && !isBankTransfer {
+                Text("Waiting for the customer's card payment. The order is marked paid by itself once it goes through.")
+                    .font(.wsFootnote).foregroundStyle(.secondaryText)
             }
             if let notice { Text(notice).font(.wsFootnote).foregroundStyle(.secondaryText) }
             if let error { InlineErrorRow(error: error) }
@@ -79,10 +92,11 @@ struct ShopOrderPaperworkSection: View {
                 }
                 .sheet(isPresented: $markingPaid) {
                     NavigationStack {
-                        ShopMarkPaidForm(order: order) { body in
+                        ShopMarkPaidForm(order: order, reference: extras.paymentReference) { body in
                             do {
                                 try await services.shop.markPaid(orderUuid: order.uuid, body)
-                                notice = "Marked as paid."
+                                notice = "Marked as paid: \(ShopMoney.format(body.amountMinor ?? order.totalMinor, currency: order.currency) ?? "") "
+                                    + "received. The order goes ahead."
                                 error = nil
                                 await onChange()
                                 return nil
@@ -93,11 +107,14 @@ struct ShopOrderPaperworkSection: View {
                     }
                 }
         } footer: {
-            if order.status == .pendingPayment && session.shopPolicy.canManage {
-                Text("Mark as paid when a bank transfer or cheque has arrived: the order then goes ahead like a card payment.")
+            if order.status == .pendingPayment && session.shopPolicy.canManage && isBankTransfer {
+                Text("Mark as paid when the whole amount has arrived: the order then goes ahead like a card payment.")
             }
         }
     }
+
+    /// Card orders are paid through Stripe (the server refuses marking one paid by hand while it is).
+    private var isBankTransfer: Bool { extras.paymentMethod == "bank_transfer" }
 
     static func methodLabel(_ raw: String) -> String {
         switch raw {
@@ -130,10 +147,26 @@ struct ShopMarkPaidForm: View {
     let save: (ShopMarkPaidBody) async -> APIError?
     @Environment(\.dismiss) private var dismiss
     @State private var method = "bank_transfer"
-    @State private var reference = ""
+    @State private var reference: String
+    @State private var amount: String
     @State private var paidOn = Date()
     @State private var saving = false
     @State private var error: APIError?
+
+    init(order: ShopOrder, reference: String? = nil, save: @escaping (ShopMarkPaidBody) async -> APIError?) {
+        self.order = order
+        self.save = save
+        _reference = State(initialValue: reference ?? order.orderNumber)
+        _amount = State(initialValue: ShopMoney.amount(order.totalMinor).map { "\($0)" } ?? "")
+    }
+
+    /// Pence typed, or nil when it isn't an amount.
+    private var amountMinor: Int? { ShopMoney.minor(from: amount) }
+
+    static func shortfall(_ minor: Int?, total: Int) -> Int? {
+        guard let minor, minor < total else { return nil }
+        return total - minor
+    }
 
     var body: some View {
         Form {
@@ -143,11 +176,25 @@ struct ShopMarkPaidForm: View {
                     Text("Cheque").tag("cheque")
                     Text("Other").tag("other")
                 }
-                TextField("Reference (optional)", text: $reference)
+                LabeledContent("Amount received") {
+                    TextField("0.00", text: $amount).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+                        .accessibilityIdentifier("markPaid.amount")
+                }
+                TextField("Reference", text: $reference)
                     .autocorrectionDisabled()
                 DatePicker("Arrived on", selection: $paidOn, in: ...Date(), displayedComponents: .date)
             } footer: {
                 Text("\(order.orderNumber) for \(ShopMoney.format(order.totalMinor, currency: order.currency) ?? ""). The order goes ahead as paid, the same as a card payment.")
+            }
+            if amountMinor == nil {
+                Section { Label("Enter the amount that arrived, like 120.00.", systemImage: "exclamationmark.circle")
+                    .foregroundStyle(Tone.warning.textColor) }
+            } else if let short = Self.shortfall(amountMinor, total: order.totalMinor) {
+                Section {
+                    Label("That's \(ShopMoney.format(short, currency: order.currency) ?? "") less than the order total. "
+                          + "Mark it paid once the whole amount has arrived.", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(Tone.warning.textColor)
+                }
             }
             if let error { Section { InlineErrorRow(error: error) } }
         }
@@ -160,12 +207,12 @@ struct ShopMarkPaidForm: View {
                     saving = true
                     Task {
                         error = await save(ShopMarkPaidBody(method: method, reference: reference.trimmedOrNil,
-                                                            paidAt: Self.paidAt(paidOn)))
+                                                            paidAt: Self.paidAt(paidOn), amountMinor: amountMinor))
                         saving = false
                         if error == nil { dismiss() }
                     }
                 }
-                .disabled(saving)
+                .disabled(saving || amountMinor == nil || Self.shortfall(amountMinor, total: order.totalMinor) != nil)
                 .accessibilityIdentifier("markPaid.save")
             }
         }

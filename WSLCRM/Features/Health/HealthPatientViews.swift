@@ -82,7 +82,7 @@ struct HealthPatientView: View {
     var body: some View {
         List {
             if let loadError {
-                Section { InlineErrorRow(error: loadError) { Task { await load() } } }
+                Section { HealthLoadErrorRow(error: loadError) { Task { await load() } } }
             }
             if let record {
                 header(record)

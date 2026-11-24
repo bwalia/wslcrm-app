@@ -25,14 +25,20 @@ struct AccountingHomeView: View {
             if let notice { Section { TaxNoticeView(notice: notice) { self.notice = nil } } }
             statsSection
             Section("Quick actions") {
-                Button("Import a bank statement", systemImage: "square.and.arrow.down") { sheet = .importCSV }
-                    .accessibilityIdentifier("accounting.import")
-                Button("Add an expense", systemImage: "receipt") { sheet = .expense }
-                    .accessibilityIdentifier("accounting.addExpense")
-                Button("Create a journal entry", systemImage: "book") { sheet = .journal }
-                    .accessibilityIdentifier("accounting.addJournal")
-                Button("Work out a VAT return", systemImage: "percent") { sheet = .vatReturn }
-                    .accessibilityIdentifier("accounting.vatReturn")
+                // Every quick action posts (`accounting.create` on the server).
+                if session.allows(.create, AccountingRights.module) {
+                    Button("Import a bank statement", systemImage: "square.and.arrow.down") { sheet = .importCSV }
+                        .accessibilityIdentifier("accounting.import")
+                    Button("Add an expense", systemImage: "receipt") { sheet = .expense }
+                        .accessibilityIdentifier("accounting.addExpense")
+                    Button("Create a journal entry", systemImage: "book") { sheet = .journal }
+                        .accessibilityIdentifier("accounting.addJournal")
+                    Button("Work out a VAT return", systemImage: "percent") { sheet = .vatReturn }
+                        .accessibilityIdentifier("accounting.vatReturn")
+                } else {
+                    Text(AccountingRights.readOnlyNote).font(.wsFootnote).foregroundStyle(.secondaryText)
+                        .accessibilityIdentifier("accounting.readOnly")
+                }
             }
             Section("Ledgers") {
                 link("Money in", "Record sales and receipts", "arrow.down.left.circle", "accounting.money:in")
@@ -118,7 +124,9 @@ struct AccountingHomeView: View {
     private var recentSection: some View {
         Section {
             if recent.isEmpty {
-                TaxEmptyRow(title: "No transactions yet", message: "Import a bank statement to get started.",
+                TaxEmptyRow(title: "No transactions yet",
+                            message: session.allows(.create, AccountingRights.module)
+                                ? "Import a bank statement to get started." : nil,
                             systemImage: "creditcard")
             }
             ForEach(recent) { tx in BankTransactionRow(tx: tx) }
@@ -187,6 +195,15 @@ struct AccountingHomeView: View {
             notice = .error("The AI couldn’t answer just now: \(error.asAPIError.plainMessage)")
         }
     }
+}
+
+/// Bookkeeping writes need `accounting.create` (import, expenses, journals, VAT returns, money in/out) or
+/// `accounting.update` (reconcile, approve or reject an expense, mark a VAT return submitted), as
+/// `lapis/routes/accounting.lua` checks them. Without them the screens say so instead of offering buttons.
+enum AccountingRights {
+    static let module = "accounting"
+    static let readOnlyNote = "You can look at the books but not change them. Ask an owner or admin for "
+        + "permission to add or change entries."
 }
 
 /// One bank line: money in (+) or out (−), reconciled or not, the AI's category guess.

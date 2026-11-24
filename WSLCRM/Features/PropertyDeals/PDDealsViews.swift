@@ -47,6 +47,7 @@ struct PDDealView: View {
     @State private var renovationsVersion = 0
     @State private var editing = false
     @State private var moving: PDMoveTarget?
+    @State private var fixRoute: NativeScreenRoute?
     @State private var notice: String?
     @State private var renovations: [PDRenovation] = []
     @State private var renovationsLoaded = false
@@ -81,8 +82,18 @@ struct PDDealView: View {
             PDEditDealSheet(dealUuid: dealUuid) { notice = "Deal saved."; Task { await load() } }
         }
         .sheet(item: $moving) { target in
-            PDMoveStageSheet(target: target) { stage in notice = "Moved to \(stage)."; Task { await load() } }
+            PDMoveStageSheet(target: target, onMoved: { stage in notice = "Moved to \(stage)."; Task { await load() } },
+                             onFix: { fix in
+                Task {
+                    try? await Task.sleep(for: .milliseconds(450))  // let the sheet go first
+                    switch fix {
+                    case .screen(let route, _): fixRoute = route
+                    case .editDeal: editing = true
+                    }
+                }
+            })
         }
+        .navigationDestination(item: $fixRoute) { NativeScreenView(route: $0) }
         .task { await load() }
         .task(id: renovationsVersion) { await loadRenovations() }
         .sheet(isPresented: $startingRenovation) {
@@ -129,6 +140,11 @@ struct PDDealView: View {
                     .font(.wsSubheadline).foregroundStyle(.secondaryText)
                 if overview.deal.status != "active" {
                     StatusBadge(text: Formatters.humanize(overview.deal.status), systemImage: "pause.circle", tone: .warning)
+                }
+                if canUpdate {
+                    Button { editing = true } label: { Label("Edit deal", systemImage: "pencil") }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("pd.deal.editHeader")
                 }
                 if let money = health.moneyAtRisk, money > 0 {
                     Text("\(Formatters.money(money, currency: currency) ?? "") at risk")

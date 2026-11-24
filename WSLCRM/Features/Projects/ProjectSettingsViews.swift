@@ -15,6 +15,7 @@ struct ProjectSettingsView: View {
     @State private var editingAI = false
     @State private var confirm: PendingConfirmation?
     @State private var notice: WorkNotice?
+    @State private var customerName: String?
 
     private var access: ProjectAccess { ProjectAccess(project: state.value, session: session) }
     private var me: String? { session.user?.uuid }
@@ -80,12 +81,18 @@ struct ProjectSettingsView: View {
                 DetailRow(label: "Who can see it", value: project.visibility.map { "\($0.label) — \($0.explanation)" })
                 DetailRow(label: "Starts", value: project.startDay.map { $0.date().shortDay } ?? "Not set")
                 DetailRow(label: "Due", value: project.dueDay.map { $0.date().shortDay } ?? "Not set")
-                DetailRow(label: "Billing customer", value: project.customerUuid == nil ? "None — internal project" : "Linked")
+                DetailRow(label: "Billing customer",
+                          value: project.customerUuid == nil ? "None — internal project" : customerName ?? "Finding the customer…")
+                let currency = project.budgetCurrency ?? ProjectMoney.defaultCurrency
                 if let budget = project.budget, budget > 0 {
                     let spent = project.budgetSpent ?? 0
                     LabeledContent("Budget",
-                                   value: "\(Formatters.money(spent, currency: project.budgetCurrency) ?? "") of \(Formatters.money(budget, currency: project.budgetCurrency) ?? "") used")
+                                   value: "\(Formatters.money(spent, currency: currency) ?? "") of \(Formatters.money(budget, currency: currency) ?? "") used")
+                        .accessibilityIdentifier("settings.budget")
+                } else {
+                    DetailRow(label: "Budget", value: "Not set")
                 }
+                DetailRow(label: "Hourly rate", value: project.hourlyRate.flatMap { $0 > 0 ? Formatters.money($0, currency: currency) : nil } ?? "Not set")
                 if access.canAdmin, session.permissions.can(.update, .projects) {
                     Button("Edit details", systemImage: "pencil") { editing = true }
                         .accessibilityIdentifier("settings.edit")
@@ -125,26 +132,36 @@ struct ProjectSettingsView: View {
 
             Section {
                 if access.canAdmin, session.permissions.can(.update, .projects) {
-                    Button(project.status == .archived ? "Already archived" : "Archive the project", systemImage: "archivebox") {
-                        confirm = PendingConfirmation(title: "Archive “\(project.name)”?",
-                                                      message: "It leaves the project list. Set its status back to Active here to bring it back.",
-                                                      button: "Archive") {
-                            await act("Project archived.") {
-                                try await services.kanban.updateProject(project.uuid, ProjectBody(status: KanbanProjectStatus.archived.rawValue))
+                    if project.status == .archived {
+                        Button("Restore the project", systemImage: "arrow.uturn.backward") {
+                            Task {
+                                await act("Project restored. It's back in your project list.") {
+                                    try await services.kanban.updateProject(project.uuid, ProjectBody(status: KanbanProjectStatus.active.rawValue))
+                                }
                             }
                         }
+                        .accessibilityIdentifier("settings.restore")
+                    } else {
+                        Button("Archive the project", systemImage: "archivebox") {
+                            confirm = PendingConfirmation(title: "Archive “\(project.name)”?",
+                                                          message: "It leaves the project list. You can bring it back from Archived on the projects list, or here.",
+                                                          button: "Archive") {
+                                await act("Project archived.") {
+                                    try await services.kanban.updateProject(project.uuid, ProjectBody(status: KanbanProjectStatus.archived.rawValue))
+                                }
+                            }
+                        }
+                        .accessibilityIdentifier("settings.archive")
                     }
-                    .disabled(project.status == .archived)
-                    .accessibilityIdentifier("settings.archive")
                 }
-                if access.canDeleteProject {
+                if access.canDeleteProject, project.status != .archived {
                     Button("Delete the project", systemImage: "trash", role: .destructive) {
                         confirm = PendingConfirmation(title: "Delete “\(project.name)”?",
-                                                      message: "The project, its boards and cards leave everyone's lists.",
+                                                      message: "Deleting archives the project: it leaves everyone's lists with its boards and cards. You can restore it from Archived on the projects list.",
                                                       button: "Delete project") {
                             do {
                                 try await services.kanban.deleteProject(project.uuid)
-                                notice = .done("Project deleted.")
+                                notice = .done("Project deleted. You can restore it from Archived.")
                                 try? await Task.sleep(for: .milliseconds(800))
                                 dismiss()
                             } catch {
@@ -171,9 +188,13 @@ struct ProjectSettingsView: View {
                     .accessibilityIdentifier("settings.leave")
                 }
             } header: {
-                Text("Archive or delete")
+                Text(project.status == .archived ? "Archived" : "Archive or delete")
             } footer: {
-                if !access.canDeleteProject { Text("Only the project's owner can delete it.") }
+                if project.status == .archived {
+                    Text("This project is archived: it's out of everyone's project list until it's restored.")
+                } else if !access.canDeleteProject {
+                    Text("Only the project's owner can delete it. Deleting archives it, so it can be restored.")
+                }
             }
         }
         .refreshable { await load() }
@@ -228,8 +249,16 @@ struct ProjectSettingsView: View {
         if state.value == nil { state = .loading }
         do {
             async let members = services.kanban.members(projectUuid: projectUuid)
-            state = .loaded(try await services.kanban.project(projectUuid))
+            let project = try await services.kanban.project(projectUuid)
+            state = .loaded(project)
             self.members = (try? await members) ?? self.members
+            if let uuid = project.customerUuid {
+                customerName = await ProjectCustomerName.find(uuid, services: services,
+                                                              canReadCustomers: session.permissions.can(.read, .customers))
+                    ?? "A customer you can't see"
+            } else {
+                customerName = nil
+            }
             let ai = services.kanban.ai
             aiSettings = await ai.isEnabled() ? (try? await ai.projectSettings(projectUuid: projectUuid)) : nil
         } catch {
