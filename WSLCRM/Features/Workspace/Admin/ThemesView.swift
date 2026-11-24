@@ -52,15 +52,12 @@ enum ThemesAPI {
     }
 }
 
-/// The `themes` grants, including the module's own actions (`activate`, `publish`).
-private struct ThemeRights {
+/// The `themes` grants, including the module's own actions (`activate`, `publish`), checked as
+/// `routes/themes.lua` does (`requirePermission("themes", …)`: role-driven, platform admins pass).
+struct ThemeRights {
     let permissions: PermissionSet
 
-    func can(_ action: String) -> Bool {
-        if permissions.isAdmin || permissions.isOwner { return true }
-        let actions = permissions.grants["themes"] ?? []
-        return actions.contains(action) || actions.contains("manage")
-    }
+    func can(_ action: String) -> Bool { permissions.workspaceCan(action, module: "themes") }
 }
 
 /// The workspace's themes: which one is in use, starter themes, and the person's own.
@@ -516,6 +513,118 @@ enum ThemeHex {
     }
 }
 
+/// What the editor's preview draws, read from the tokens being edited (else the schema's defaults):
+/// `colors.*` (the primary scale's 600, else 500), `typography.font_family_*`, `radius.md`.
+struct ThemePreviewStyle: Equatable {
+    var primary: String?
+    var accent: String?
+    var background: String?
+    var foreground: String?
+    var surface: String?
+    var success: String?
+    var warning: String?
+    var danger: String?
+    /// The first family named (`"Inter, sans-serif"` → `Inter`).
+    var headingFont: String?
+    var bodyFont: String?
+    var radius: Double
+
+    init(tokens: [String: JSONValue], fields: [ThemeTokenField]) {
+        func value(_ group: String, _ key: String) -> JSONValue? {
+            tokens[group]?.objectFields[key] ?? fields.first { $0.group == group && $0.key == key }?.defaultValue
+        }
+        func color(_ key: String) -> String? {
+            guard let raw = value("colors", key) else { return nil }
+            if let text = raw.stringValue { return text }
+            let scale = raw.objectFields
+            return (scale["600"] ?? scale["500"])?.stringValue
+        }
+        func family(_ key: String) -> String? {
+            value("typography", key)?.stringValue?.split(separator: ",").first
+                .map { $0.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "\"'")) }
+        }
+        primary = color("primary")
+        accent = color("accent")
+        background = color("background")
+        foreground = color("foreground")
+        surface = color("surface")
+        success = color("success")
+        warning = color("warning")
+        danger = color("danger")
+        headingFont = family("font_family_heading")
+        bodyFont = family("font_family_base")
+        // "8px", "0.5rem" (16 px to the rem) or a bare number.
+        let corner = value("radius", "md")?.stringValue?.trimmingCharacters(in: .whitespaces) ?? ""
+        if corner.hasSuffix("rem"), let rem = Double(corner.dropLast(3)) {
+            radius = rem * 16
+        } else {
+            radius = Double(corner.replacingOccurrences(of: "px", with: "")) ?? 8
+        }
+    }
+}
+
+/// A small sample page in the theme: a heading, body text, a button, a link and the status colours.
+private struct ThemePreviewCard: View {
+    let style: ThemePreviewStyle
+
+    var body: some View {
+        let primary = ThemeHex.color(style.primary) ?? .accentColor
+        let foreground = ThemeHex.color(style.foreground) ?? .primary
+        let corner = min(max(style.radius, 0), 24)
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Your heading")
+                .font(font(style.headingFont, size: 22, weight: .bold, relativeTo: .title2))
+                .foregroundStyle(foreground)
+            Text("This is how body text looks on your pages.")
+                .font(font(style.bodyFont, size: 15, weight: .regular, relativeTo: .body))
+                .foregroundStyle(foreground.opacity(0.8))
+            HStack(spacing: 14) {
+                Text("A button")
+                    .font(font(style.bodyFont, size: 15, weight: .semibold, relativeTo: .body))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(primary, in: RoundedRectangle(cornerRadius: corner, style: .continuous))
+                Text("A link")
+                    .font(font(style.bodyFont, size: 15, weight: .medium, relativeTo: .body))
+                    .foregroundStyle(ThemeHex.color(style.accent) ?? primary)
+                    .underline()
+            }
+            HStack(spacing: 6) {
+                swatch("Done", style.success)
+                swatch("Waiting", style.warning)
+                swatch("Problem", style.danger)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ThemeHex.color(style.surface) ?? .white, in: RoundedRectangle(cornerRadius: corner + 4, style: .continuous))
+        .padding(12)
+        .background(ThemeHex.color(style.background) ?? .white)
+        .environment(\.colorScheme, .light)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Preview of the theme's colours and fonts")
+        .accessibilityIdentifier("themeTokens.preview")
+    }
+
+    private func swatch(_ label: String, _ hex: String?) -> some View {
+        Text(label)
+            .font(.wsCaption.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(ThemeHex.color(hex) ?? .gray, in: Capsule())
+    }
+
+    /// A font the phone has (Georgia, Palatino…), else the system font at the same size.
+    private func font(_ family: String?, size: CGFloat, weight: Font.Weight, relativeTo style: Font.TextStyle) -> Font {
+        guard let family, UIFont(name: family, size: size) != nil || !UIFont.fontNames(forFamilyName: family).isEmpty else {
+            return .system(size: size, weight: weight)
+        }
+        return .custom(family, size: size, relativeTo: style).weight(weight)
+    }
+}
+
 /// The theme's colours, fonts, corners, spacing and effects, drawn from the server's schema.
 struct ThemeTokensEditor: View {
     let themeUuid: String
@@ -532,6 +641,16 @@ struct ThemeTokensEditor: View {
         Form {
             if let loadError { Section { InlineErrorRow(error: loadError) { Task { await load() } } } }
             FeedbackSection(feedback: feedback)
+            if !fields.isEmpty {
+                Section {
+                    ThemePreviewCard(style: ThemePreviewStyle(tokens: tokens, fields: fields))
+                        .listRowInsets(EdgeInsets())
+                } header: {
+                    Text("Preview")
+                } footer: {
+                    Text("Changes show here as you make them. Save to use them.")
+                }
+            }
             ForEach(sections, id: \.self) { section in
                 Section(section) {
                     ForEach(fields.filter { $0.section == section }) { field in

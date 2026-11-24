@@ -28,12 +28,10 @@ enum OperationsAccess {
         permissions.can(action, moduleName: "domains")
     }
 
-    /// Deployment services: owner, or `services.<action>` / `services.manage`. There is no platform-admin
-    /// pass here: an admin who isn't a member is refused by the server, so the app doesn't offer it.
+    /// Deployment services: `services.<action>` / `services.manage` (`routes/services.lua` `check_permission`
+    /// = `hasPermission`): role-driven, so owning the workspace isn't enough; platform admins pass.
     static func services(_ permissions: PermissionSet, _ action: String) -> Bool {
-        if permissions.isOwner { return true }
-        let granted = permissions.grants["services"] ?? []
-        return granted.contains(action) || granted.contains("manage")
+        permissions.workspaceCan(action, module: "services")
     }
 
     /// Layouts & formats (render templates): `requirePermission("templates", …)`.
