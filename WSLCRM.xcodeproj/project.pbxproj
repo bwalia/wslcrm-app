@@ -628,6 +628,7 @@
 		FB4A815A0EB65480F3A2B256 /* APIEndpointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9E457F7FE442C96BEBEF047 /* APIEndpointTests.swift */; };
 		FBB93CEACC88AC1E9DDE5808 /* CommerceAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = B32A38849D216BB4D0A7CE42 /* CommerceAPI.swift */; };
 		FBF9F4EE24D7E1395C13E608 /* PDApprovalsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2744F6640F15B5DED7DBA054 /* PDApprovalsViews.swift */; };
+		FD02AD6D219F9EE6F344FCF1 /* SalesDeepAuditTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00E325BA129695E7DB9B5A0 /* SalesDeepAuditTests.swift */; };
 		FD5E7AC753A08BED97B44712 /* MktDesignAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D956A3E5EC911A25D60760C /* MktDesignAPI.swift */; };
 		FDDE129ECD0C491DD8D04C83 /* MktListAddPeopleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDBA42E674CD7794560F4B80 /* MktListAddPeopleView.swift */; };
 		FE3101076CD5F0D1B00F2922 /* TimesheetsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B43AB34F0462ED1D60D69B9 /* TimesheetsViews.swift */; };
@@ -1226,6 +1227,7 @@
 		DF73285E7E715D8B69A02CEC /* CMSWebhooksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CMSWebhooksView.swift; sourceTree = "<group>"; };
 		DF73A81049A8AB629B20332D /* CustomerAssetsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomerAssetsViews.swift; sourceTree = "<group>"; };
 		DF7945EDFC0FE4D29C8F274C /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		E00E325BA129695E7DB9B5A0 /* SalesDeepAuditTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SalesDeepAuditTests.swift; sourceTree = "<group>"; };
 		E015206F003548FB2821FC07 /* AccountingHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountingHomeView.swift; sourceTree = "<group>"; };
 		E11BE34221ABF9835D7D0BC8 /* Prod.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Prod.xcconfig; sourceTree = "<group>"; };
 		E12F6742FB1E43617EB89AAC /* PDTodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDTodayView.swift; sourceTree = "<group>"; };
@@ -1647,6 +1649,7 @@
 				2FB68886C6062E7EE0E5FA46 /* PropertyPATests.swift */,
 				8FE30866D9334250F27C2B44 /* ReliabilityTests.swift */,
 				3C911DFD1AC8AA6FE6D739E6 /* RolePermissionTests.swift */,
+				E00E325BA129695E7DB9B5A0 /* SalesDeepAuditTests.swift */,
 				116111A9D49330CE2FAB77F1 /* SalesModuleTests.swift */,
 				280706477CC0D88E9B102CAA /* SalesTillOrdersTests.swift */,
 				0582F75815E1CE7C44AF8ADF /* ServerErrorTests.swift */,
@@ -3238,6 +3241,7 @@
 				5088700198ACD492A235AA1E /* PropertyPATests.swift in Sources */,
 				B009A06FACC985ECB99675DF /* ReliabilityTests.swift in Sources */,
 				3DDDC84C66796FEFF3A0012A /* RolePermissionTests.swift in Sources */,
+				FD02AD6D219F9EE6F344FCF1 /* SalesDeepAuditTests.swift in Sources */,
 				45CC13814BA1CB326B638481 /* SalesModuleTests.swift in Sources */,
 				98F23E3C389C8F13395652C2 /* SalesTillOrdersTests.swift in Sources */,
 				C6D67B8CC550BFA0B31B6D5E /* ServerErrorTests.swift in Sources */,

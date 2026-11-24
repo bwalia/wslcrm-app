@@ -68,10 +68,10 @@ struct ShopAttributesSection: View {
             } else {
                 ForEach($rows) { $row in
                     HStack {
-                        TextField("Name, e.g. psu_watts", text: $row.name)
+                        TextField("Name, e.g. colour", text: $row.name)
                             .textInputAutocapitalization(.never).autocorrectionDisabled()
                         Divider()
-                        TextField("Value, e.g. 2000", text: $row.value)
+                        TextField("Value, e.g. Blue", text: $row.value)
                             .textInputAutocapitalization(.never).autocorrectionDisabled()
                     }
                 }
@@ -92,7 +92,7 @@ struct ShopAttributesSection: View {
                 }
         } footer: {
             Text(asText ? "This product's attributes hold lists or groups, so they're edited as text."
-                 : "Facts the pricing rules and the shop assistant use, e.g. psu_watts 2000 or memory_type DDR5-RDIMM. "
+                 : "Facts the pricing rules and the shop assistant use, e.g. colour Blue or size Large. "
                      + "Rules refer to the names. Swipe a row to remove it.")
         }
     }

@@ -241,8 +241,8 @@ private struct MktCampDetailContent: View {
     @ViewBuilder
     private func actionsSection(_ campaign: MktCampaign) -> some View {
         let status = model.status
-        let buttons = actionButtons(status)
-        if !buttons.isEmpty {
+        let buttons = actionButtons(status, campaign)
+        if !buttons.isEmpty || MktCamp.waitsForSomeoneElse(status, campaign, me: session.user?.uuid, canManage: can(.manage)) {
             Section {
                 ForEach(buttons, id: \.id) { button in
                     Button(role: button.destructive ? .destructive : nil) { button.run() } label: {
@@ -258,6 +258,8 @@ private struct MktCampDetailContent: View {
             } footer: {
                 if status == .scheduled, let at = campaign.scheduledAt {
                     Text("Sends by itself at \(Formatters.dateTime(at) ?? "the chosen time").")
+                } else if MktCamp.waitsForSomeoneElse(status, campaign, me: session.user?.uuid, canManage: can(.manage)) {
+                    Text("You wrote this campaign, so someone else who can approve campaigns must approve it.")
                 }
             }
         }
@@ -272,13 +274,14 @@ private struct MktCampDetailContent: View {
         let run: () -> Void
     }
 
-    private func actionButtons(_ status: MktCampStatus) -> [ActionButton] {
+    private func actionButtons(_ status: MktCampStatus, _ campaign: MktCampaign) -> [ActionButton] {
         var out: [ActionButton] = []
         if status.canCheck, can(.update) {
             out.append(ActionButton(id: "check", title: status == .validated ? "Check again" : "Check it",
                                     systemImage: "checkmark.seal", busyLabel: "Check") { Task { await model.check() } })
         }
-        if status == .awaitingApproval, can(.manage) {
+        // The server refuses self-approval; non-marketing messages skip consent, so sending them is manage only.
+        if status == .awaitingApproval, can(.manage), !MktCamp.isAuthor(campaign, me: session.user?.uuid) {
             out.append(ActionButton(id: "approve", title: "Approve", systemImage: "checkmark.shield", busyLabel: "Approve") {
                 Task { await model.approve() }
             })
@@ -286,7 +289,7 @@ private struct MktCampDetailContent: View {
                 model.sheet = .reject
             })
         }
-        if status.canSend, can(.update) {
+        if status.canSend, can(.update), campaign.messageType == "marketing" || can(.manage) {
             out.append(ActionButton(id: "schedule", title: status == .scheduled ? "Change the send time" : "Schedule",
                                     systemImage: "calendar") { model.sheet = .schedule })
             out.append(ActionButton(id: "send", title: "Send now", systemImage: "paperplane.fill", busyLabel: "Send") {
@@ -576,4 +579,17 @@ extension MktCampContent {
                                            titleKeys: ["email", "first_name", "uuid"],
                                            subtitleKeys: ["first_name", "last_name"], searchParam: "search",
                                            paging: .pageAndPerPage)
+}
+
+extension MktCamp {
+    /// The server refuses to let a campaign's author approve it (opsapi_marketing/campaigns.lua `self_approval`).
+    static func isAuthor(_ campaign: MktCampaign, me: String?) -> Bool {
+        guard let me, let author = campaign.record.string("created_by") else { return false }
+        return author == me
+    }
+
+    /// Waiting for approval, and the person who could approve it wrote it.
+    static func waitsForSomeoneElse(_ status: MktCampStatus, _ campaign: MktCampaign, me: String?, canManage: Bool) -> Bool {
+        status == .awaitingApproval && canManage && isAuthor(campaign, me: me)
+    }
 }

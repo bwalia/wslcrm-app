@@ -34,6 +34,11 @@ struct ShopQuotesListView: View {
     @State private var filter: ShopQuoteQuickFilter?
     @State private var kind: ShopQuoteKind?
 
+    init(initialFilter: ShopQuoteQuickFilter? = nil, initialStatus: ShopQuoteStatus? = nil) {
+        _filter = State(initialValue: initialFilter)
+        _status = State(initialValue: initialStatus)
+    }
+
     private struct Query: Hashable {
         let status: ShopQuoteStatus?
         let filter: ShopQuoteQuickFilter?
@@ -409,22 +414,27 @@ struct ShopQuoteDetailView: View {
 
     @ViewBuilder
     private var suppliersAndCustomerSections: some View {
-            if session.shopPolicy.canCreate && session.shopPolicy.canUpdate && current.status != .cancelled {
+            // Supplier messages: the draft needs shop.update and sending shop.create; the deal code only shop.update.
+            let canMessage = session.shopPolicy.canCreate && session.shopPolicy.canUpdate && current.status != .cancelled
+            let canLinkDeal = session.shopPolicy.canUpdate && current.status != .cancelled
+            if canMessage || canLinkDeal || current.dealCode != nil {
                 Section {
-                    Button {
-                        messaging = .priceRequest(quoteUuid: current.uuid)
-                    } label: {
-                        Label("Ask a supplier for a price", systemImage: "shippingbox.and.arrow.backward")
+                    if canMessage {
+                        Button {
+                            messaging = .priceRequest(quoteUuid: current.uuid)
+                        } label: {
+                            Label("Ask a supplier for a price", systemImage: "shippingbox.and.arrow.backward")
+                        }
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("shopQuote.askSupplier")
+                        Button {
+                            messaging = .introduction(quoteUuid: current.uuid)
+                        } label: {
+                            Label("Introduce the customer to a supplier", systemImage: "person.2")
+                        }
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("shopQuote.introduce")
                     }
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("shopQuote.askSupplier")
-                    Button {
-                        messaging = .introduction(quoteUuid: current.uuid)
-                    } label: {
-                        Label("Introduce the customer to a supplier", systemImage: "person.2")
-                    }
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("shopQuote.introduce")
                     if let supplierNotice {
                         Label(supplierNotice, systemImage: "checkmark.circle")
                             .font(.wsFootnote).foregroundStyle(Tone.success.textColor)
@@ -437,14 +447,16 @@ struct ShopQuoteDetailView: View {
                         }
                         .accessibilityIdentifier("shopQuote.deal")
                     }
-                    Button {
-                        dealCodeText = ""
-                        linkingDeal = true
-                    } label: {
-                        Label(current.dealCode == nil ? "Link a deal code" : "Change the deal code", systemImage: "link")
+                    if canLinkDeal {
+                        Button {
+                            dealCodeText = ""
+                            linkingDeal = true
+                        } label: {
+                            Label(current.dealCode == nil ? "Link a deal code" : "Change the deal code", systemImage: "link")
+                        }
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("shopQuote.linkDeal")
                     }
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("shopQuote.linkDeal")
                 } header: {
                     Text("Suppliers")
                         // On the header (one view): on the Section it would be copied onto every row.
@@ -459,7 +471,9 @@ struct ShopQuoteDetailView: View {
                                  + "Revisions of this quote move with it.")
                         }
                 } footer: {
-                    Text("By email from here, or WhatsApp or a text from this phone. A price request never names the customer; an introduction shares their details, so only with their agreement.")
+                    if canMessage {
+                        Text("By email from here, or WhatsApp or a text from this phone. A price request never names the customer; an introduction shares their details, so only with their agreement.")
+                    }
                 }
             }
 

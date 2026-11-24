@@ -626,20 +626,29 @@ struct ShopOrderSignature: Hashable, Sendable, Decodable {
     var note: String?
     var signedAt: Date?
     var capturedBy: String?
+    /// The courier's signature on a store order only: where its picture is, and the delivery company.
+    var imageUrl: String?
+    var courier: String?
 }
 
-/// `GET /orders/:uuid/signature`.
+/// `GET /orders/:uuid/signature`. A store order delivered by a delivery partner also carries the signature the
+/// courier took at the door (`courier_signature`, same shape).
 struct ShopOrderSignatureState: Sendable, Decodable {
     var signature: ShopOrderSignature?
     var canSign: Bool
+    var courierSignature: ShopOrderSignature?
 
-    enum CodingKeys: String, CodingKey { case signature, canSign }
+    enum CodingKeys: String, CodingKey { case signature, canSign, courierSignature }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         signature = try? c.decodeIfPresent(ShopOrderSignature.self, forKey: .signature)
         canSign = c.decodeFlexibleBool(forKey: .canSign) ?? false
+        courierSignature = try? c.decodeIfPresent(ShopOrderSignature.self, forKey: .courierSignature)
     }
+
+    /// Nobody has signed yet (here or at the door) and the order can still take a signature.
+    var needsSignature: Bool { canSign && signature == nil && courierSignature == nil }
 }
 
 struct ShopSignatureCapture: Encodable, Sendable {

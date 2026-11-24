@@ -23,6 +23,11 @@ extension SalesAPI {
         try await client.sendRaw(.get("/api/v2/orders/\(uuid)/signature/image")).0
     }
 
+    /// The picture of the signature the courier took at the door (`courier_signature.image_url`, orders.read).
+    func storeOrderCourierSignatureImage(_ uuid: String, path: String?) async throws -> Data {
+        try await client.sendRaw(.get(path ?? "/api/v2/orders/\(uuid)/signature/courier/image")).0
+    }
+
     func signStoreOrder(_ uuid: String, _ body: StoreOrderSignatureBody) async throws -> ShopOrderSignatureState {
         try await client.send(.post("/api/v2/orders/\(uuid)/signature", json: body),
                               as: Envelope.Standard<ShopOrderSignatureState>.self).data
@@ -156,6 +161,9 @@ struct StoreOrderSignatureSection: View {
     let state: ShopOrderSignatureState?
     let image: UIImage?
     let canUpdate: Bool
+    /// The delivery company, for "Signed at the door (for …)".
+    var courier: String?
+    var courierImage: UIImage?
     let sign: () -> Void
     let void: (String) async -> Void
     @State private var voiding = false
@@ -171,6 +179,11 @@ struct StoreOrderSignatureSection: View {
                             .frame(minHeight: 44)
                             .accessibilityIdentifier("storeOrder.voidSignature")
                     }
+                } else if let courierSignature = state.courierSignature {
+                    Label((courierSignature.courier ?? courier).map { "Signed at the door for \($0)" } ?? "Signed at the door",
+                          systemImage: "truck.box.badge.clock")
+                        .font(.wsSubheadline)
+                    SignatureProofRows(signature: courierSignature, image: courierImage)
                 } else if state.canSign && canUpdate {
                     Button(action: sign) { Label("Customer signs", systemImage: "signature") }
                         .frame(minHeight: 44)

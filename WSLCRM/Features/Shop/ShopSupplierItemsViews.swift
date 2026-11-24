@@ -482,7 +482,7 @@ struct ShopSupplierPortalView: View {
             let apiError = error.asAPIError
             if case .cancelled = apiError { return }
             if case .notFound = apiError {
-                state = .failed(ResourceService.problem(404, "The supplier portal isn’t set up on this server yet."))
+                state = .failed(ResourceService.problem(404, "The supplier portal isn’t available for this workspace yet."))
             } else if state.value == nil {
                 state = .failed(apiError)
             } else {

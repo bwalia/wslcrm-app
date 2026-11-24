@@ -250,7 +250,8 @@ struct ReferralRow: View {
             }
             .buttonStyle(.borderless)
             .frame(minHeight: 44)
-        case "won" where referral.invoiceUuid == nil:
+        // The invoice is crm_deals.update and invoices.create (crm-partners.lua).
+        case "won" where referral.invoiceUuid == nil && session.permissions.can(.create, .invoices):
             Button("Invoice the commission", systemImage: "doc.badge.plus") { askingTax = true }
                 .buttonStyle(.borderless)
                 .frame(minHeight: 44)

@@ -315,25 +315,27 @@ struct ShopDealDetailView: View {
             Section("Purchase orders to suppliers") {
                 if deal.purchaseOrders.isEmpty { Text("None yet. Raise one from the paid order.").foregroundStyle(.secondaryText) }
                 ForEach(deal.purchaseOrders) { po in
-                    NavigationLink {
-                        PurchaseOrderDetailView(uuid: po.uuid)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack {
-                                Text(po.poNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
-                                Spacer()
-                                if let status = po.status { Text(Formatters.humanize(status)).font(.wsFootnote).foregroundStyle(.secondaryText) }
-                            }
-                            Text([po.supplierName, po.total.map { Formatters.money(Decimal($0), currency: po.currency) ?? "" }]
-                                .compactMap { $0 }.joined(separator: " · "))
-                                .font(.wsFootnote).foregroundStyle(.secondaryText)
-                            if po.dropShip {
-                                Label(po.legacyDropShip ? "Drop-ship raised before deal codes (no confirmation recorded)"
-                                                        : "Drop-ship, confirmed by staff", systemImage: "truck.box")
-                                    .font(.wsFootnote)
-                                    .foregroundStyle(po.legacyDropShip ? Tone.warning.textColor : .secondaryText)
-                            }
+                    let row = VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text(po.poNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
+                            Spacer()
+                            if let status = po.status { Text(Formatters.humanize(status)).font(.wsFootnote).foregroundStyle(.secondaryText) }
                         }
+                        Text([po.supplierName, po.total.map { Formatters.money(Decimal($0), currency: po.currency) ?? "" }]
+                            .compactMap { $0 }.joined(separator: " · "))
+                            .font(.wsFootnote).foregroundStyle(.secondaryText)
+                        if po.dropShip {
+                            Label(po.legacyDropShip ? "Drop-ship raised before deal codes (no confirmation recorded)"
+                                                    : "Drop-ship, confirmed by staff", systemImage: "truck.box")
+                                .font(.wsFootnote)
+                                .foregroundStyle(po.legacyDropShip ? Tone.warning.textColor : .secondaryText)
+                        }
+                    }
+                    // The PO itself is the purchase-orders module's (purchase_orders.read).
+                    if session.permissions.can(.read, .purchaseOrders) {
+                        NavigationLink { PurchaseOrderDetailView(uuid: po.uuid) } label: { row }
+                    } else {
+                        row
                     }
                 }
             }

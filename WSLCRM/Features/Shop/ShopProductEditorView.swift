@@ -26,6 +26,8 @@ struct ShopProductEditorView: View {
     @State private var pickingMedia = false
     @State private var liveSlug: String?
     @State private var indexed: Bool?
+    /// Product code, web address, specs, attributes, older images and search text: tucked away for beginners.
+    @State private var showMore = false
 
     private var isNew: Bool { uuid == nil }
     private var canSave: Bool { isNew ? session.shopPolicy.canCreate : session.shopPolicy.canUpdate }
@@ -79,36 +81,55 @@ struct ShopProductEditorView: View {
                 }
             }
             basicsSection
+            pricingSection
+            stockSection
+            photosSection
             Section("Description") {
                 TextField("Short description", text: $draft.shortDescription, axis: .vertical).lineLimit(1...3)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Description (Markdown)").font(.wsCaption).foregroundStyle(.secondaryText)
+                    Text("Description").font(.wsCaption).foregroundStyle(.secondaryText)
                     TextEditor(text: $draft.description).frame(minHeight: 140)
                         .accessibilityIdentifier("shopProductEditor.description")
                 }
             }
-            pricingSection
-            stockSection
-            Section("Merchandising") {
-                Toggle("Featured on the shop home page", isOn: $draft.isFeatured)
-                LabeledContent("Sort order") {
-                    TextField("0", text: $draft.sortOrder).keyboardType(.numbersAndPunctuation).multilineTextAlignment(.trailing)
-                }
-            }
-            specsSection
-            ShopAttributesSection(json: $draft.attributes)
-            photosSection
-            imagesSection
-            seoSection
             if draft.priceMode == ShopPriceMode.configurable.rawValue || !draft.groups.isEmpty {
                 ShopOptionGroupsSection(groups: $draft.groups)
-            } else {
-                Section("Option groups") {
-                    Text("Option groups are for configurable products. Change the price mode to Configurable to add options.")
-                        .font(.wsFootnote).foregroundStyle(.secondaryText)
+                ShopRulesSection(rules: $draft.rules, groups: draft.groups)
+            }
+            Section {
+                Button {
+                    withAnimation { showMore.toggle() }
+                } label: {
+                    Label(showMore ? "Hide the extra details" : "More details (optional)",
+                          systemImage: showMore ? "chevron.up.circle" : "chevron.down.circle")
+                }
+                .accessibilityIdentifier("shopProductEditor.more")
+            } footer: {
+                if !showMore {
+                    Text("Product code, web address, brand, specs, attributes and what search engines show. "
+                         + "Leave them and sensible ones are used.")
                 }
             }
-            ShopRulesSection(rules: $draft.rules, groups: draft.groups)
+            if showMore {
+                moreBasicsSection
+                Section("Merchandising") {
+                    Toggle("Featured on the shop home page", isOn: $draft.isFeatured)
+                    LabeledContent("Sort order") {
+                        TextField("0", text: $draft.sortOrder).keyboardType(.numbersAndPunctuation).multilineTextAlignment(.trailing)
+                    }
+                }
+                specsSection
+                ShopAttributesSection(json: $draft.attributes)
+                imagesSection
+                seoSection
+                if draft.priceMode != ShopPriceMode.configurable.rawValue && draft.groups.isEmpty {
+                    Section("Option groups") {
+                        Text("Option groups are for configurable products. Change the price mode to Configurable to add options.")
+                            .font(.wsFootnote).foregroundStyle(.secondaryText)
+                    }
+                    ShopRulesSection(rules: $draft.rules, groups: draft.groups)
+                }
+            }
         }
         .sheet(isPresented: $pickingMedia) {
             NavigationStack {
@@ -132,25 +153,34 @@ struct ShopProductEditorView: View {
             TextField("Name (required)", text: $draft.name)
                 .onChange(of: draft.name) { _, name in if !slugTouched { draft.slug = ShopSlug.make(name) } }
                 .accessibilityIdentifier("shopProductEditor.name")
-            LabeledContent("Web address") {
-                TextField("made from the name", text: Binding(get: { draft.slug }, set: { draft.slug = $0; slugTouched = true }))
-                    .textInputAutocapitalization(.never).autocorrectionDisabled().multilineTextAlignment(.trailing)
-            }
-            TextField("SKU (required)", text: Binding(get: { draft.sku }, set: { draft.sku = $0.uppercased() }))
-                .textInputAutocapitalization(.characters).autocorrectionDisabled()
-                .accessibilityIdentifier("shopProductEditor.sku")
-            TextField("Brand", text: $draft.brand)
             Picker("Category", selection: $draft.categoryUuid) {
                 Text("None").tag("")
                 ForEach(categories) { Text($0.name).tag($0.uuid) }
             }
-            Picker("Product type", selection: $draft.productType) {
-                ForEach(ShopProductType.allCases, id: \.self) { Text(Formatters.humanize($0.rawValue)).tag($0.rawValue) }
-            }
             Picker("Status", selection: $draft.status) {
                 ForEach(ShopProductStatus.allCases, id: \.self) { Text(Formatters.humanize($0.rawValue)).tag($0.rawValue) }
             }
+        }
+    }
+
+    private var moreBasicsSection: some View {
+        Section {
+            TextField("Product code (SKU)", text: Binding(get: { draft.sku }, set: { draft.sku = $0.uppercased() }))
+                .textInputAutocapitalization(.characters).autocorrectionDisabled()
+                .accessibilityIdentifier("shopProductEditor.sku")
+            LabeledContent("Web address") {
+                TextField("made from the name", text: Binding(get: { draft.slug }, set: { draft.slug = $0; slugTouched = true }))
+                    .textInputAutocapitalization(.never).autocorrectionDisabled().multilineTextAlignment(.trailing)
+            }
+            TextField("Brand", text: $draft.brand)
+            Picker("Product type", selection: $draft.productType) {
+                ForEach(ShopProductType.allCases, id: \.self) { Text(Formatters.humanize($0.rawValue)).tag($0.rawValue) }
+            }
             TextField("Tags, separated by commas", text: $draft.tags)
+        } header: {
+            Text("More details")
+        } footer: {
+            Text("A new product without a code gets one made from its name. The web address is the end of the product page's link.")
         }
     }
 
@@ -248,12 +278,16 @@ struct ShopProductEditorView: View {
             }
             .onDelete { draft.photos.remove(atOffsets: $0) }
             .onMove { draft.photos.move(fromOffsets: $0, toOffset: $1) }
-            PhotosPicker(selection: $pickerItems, maxSelectionCount: 10, matching: .images) {
-                Label(uploading ? "Uploading…" : "Upload photos", systemImage: "photo.badge.plus")
+            if session.shopPolicy.canUploadPhotos {
+                PhotosPicker(selection: $pickerItems, maxSelectionCount: 10, matching: .images) {
+                    Label(uploading ? "Uploading…" : "Upload photos", systemImage: "photo.badge.plus")
+                }
+                .disabled(uploading)
+                .accessibilityIdentifier("shopProductEditor.uploadPhotos")
             }
-            .disabled(uploading)
-            .accessibilityIdentifier("shopProductEditor.uploadPhotos")
-            Button { pickingMedia = true } label: { Label("Choose from the media library", systemImage: "photo.on.rectangle") }
+            if session.shopPolicy.canBrowseMedia {
+                Button { pickingMedia = true } label: { Label("Choose from the media library", systemImage: "photo.on.rectangle") }
+            }
         } header: {
             HStack {
                 Text("Photos")
@@ -261,7 +295,12 @@ struct ShopProductEditorView: View {
                 if draft.photos.count > 1 { EditButton().font(.wsCaption) }
             }
         } footer: {
-            Text("The first is the main photo (gallery, sharing, Google Shopping). Drag to reorder. Alt text describes the photo for people who can’t see it.")
+            if session.shopPolicy.canUploadPhotos {
+                Text("The first is the main photo (gallery, sharing, Google Shopping). Drag to reorder. Alt text describes the photo for people who can’t see it.")
+            } else {
+                Text("Your role can't add photos. Under More details you can add pictures that are already online "
+                     + "by their web address.")
+            }
         }
     }
 
@@ -276,9 +315,9 @@ struct ShopProductEditorView: View {
             .onMove { draft.images.move(fromOffsets: $0, toOffset: $1) }
             Button { draft.images.append("") } label: { Label("Add an image address", systemImage: "plus.circle") }
         } header: {
-            Text("Images (older list)")
+            Text("Pictures by web address")
         } footer: {
-            Text("Manufacturer photos and the placeholder drawing, used when there are no photos above.")
+            Text("Pictures already online, such as the maker's own. Used when the product has no photos.")
         }
     }
 
@@ -289,9 +328,9 @@ struct ShopProductEditorView: View {
             }
             .pickerStyle(.segmented)
             let binding = Binding(get: { draft.seo[seoLocale] ?? ShopSeoDraft() }, set: { draft.seo[seoLocale] = $0 })
-            TextField("Target keyword (staff only)", text: binding.targetKeyword)
+            TextField("Main search phrase (staff only)", text: binding.targetKeyword)
             TextField("Page title", text: binding.title)
-            TextField("Meta description", text: binding.description, axis: .vertical).lineLimit(1...4)
+            TextField("Summary search engines show", text: binding.description, axis: .vertical).lineLimit(1...4)
             TextField("Intro (shown above the configurator)", text: binding.intro, axis: .vertical).lineLimit(2...6)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Who it’s for (one per line)").font(.wsCaption).foregroundStyle(.secondaryText)
@@ -308,7 +347,7 @@ struct ShopProductEditorView: View {
         } header: {
             Text("Search and page content")
         } footer: {
-            Text("What Google shows and the text above the configurator, per shop language. The target keyword stays here; the shop never shows it. Empty fields use English or the defaults.")
+            Text("What Google shows and the text above the configurator, per shop language. The main search phrase stays here; the shop never shows it. Empty fields use English or the defaults.")
         }
     }
 
@@ -335,6 +374,7 @@ struct ShopProductEditorView: View {
     private func save() async {
         let (body, errors) = draft.payload(isNew: isNew)
         problems = errors
+        if !errors.isEmpty { showMore = true }
         belowCost = []
         saveError = nil
         guard let body else { return }
@@ -372,9 +412,16 @@ struct ShopProductEditorView: View {
             uploading = false
             pickerItems = []
         }
+        var unreadable = 0
+        defer {
+            if unreadable > 0 {
+                problems = [unreadable == 1 ? "One photo couldn't be read, so it wasn't added. Try it again or pick another."
+                            : "\(unreadable) photos couldn't be read, so they weren't added. Try them again or pick others."]
+            }
+        }
         for (index, item) in items.enumerated() {
             guard let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data),
-                  let jpeg = Self.jpeg(image) else { continue }
+                  let jpeg = Self.jpeg(image) else { unreadable += 1; continue }
             let base = ShopSlug.make(draft.name).isEmpty ? "product-photo" : ShopSlug.make(draft.name)
             do {
                 let asset = try await services.shop.uploadMedia(

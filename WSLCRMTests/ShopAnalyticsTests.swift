@@ -296,11 +296,11 @@ final class ShopAnalyticsTests: XCTestCase {
 
     // MARK: Descriptors
 
-    func testCreditIsGivenWithUpdatePermissionAndPence() throws {
+    func testCreditIsGivenWithManagePermissionAndPence() throws {
         let credits = ModuleCatalog.shopCredits
-        XCTAssertNil(credits.api.create, "the server checks shop.update for POST /credits, so it is not a create form")
+        XCTAssertNil(credits.api.create, "the server checks shop.manage for POST /credits, so it is not a create form")
         let grant = try XCTUnwrap(credits.listActions.first { $0.id == "grant" })
-        XCTAssertEqual(grant.action, .update)
+        XCTAssertEqual(grant.action, .manage)
         XCTAssertEqual(grant.path, "/api/v2/shop/admin/credits")
         let amount = try XCTUnwrap(grant.inputs.first { $0.key == "amount_minor" })
         XCTAssertEqual(FormCoding.json(amount, .text("250"), isNew: true), .number(25000))

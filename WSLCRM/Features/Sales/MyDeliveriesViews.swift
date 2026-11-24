@@ -3,6 +3,8 @@ import SwiftUI
 // "My deliveries" for delivery partners (lapis/routes/delivery-assignments.lua): the jobs assigned to the
 // signed-in person's delivery-partner profile, no workspace needed. Each step moves the delivery on
 // (`PUT /api/v2/delivery-assignments/:uuid/status`); "delivered" takes the customer's signature.
+// A store's request to deliver an order (routes/delivery-requests.lua) only becomes a delivery once the
+// partner accepts it, so the requests waiting for them are listed first ("Requests for you").
 // A person without a partner profile gets 404 from the list, so the entry shows only when it works.
 
 /// `PUT /api/v2/delivery-assignments/:uuid/status` (JSON; the route reads JSON or a form).
@@ -51,6 +53,41 @@ enum MyDeliverySteps {
     }
 
     static let active = ["pending", "accepted", "picked_up", "in_transit"]
+
+    /// Plain words for a failed step. "Cancel the delivery" fails on servers whose table doesn't allow
+    /// `cancelled` yet (a 500), so say what to do instead of "something went wrong".
+    static func failure(_ step: Step, _ error: APIError) -> APIError {
+        guard step.status == "cancelled", let status = error.serverError?.status, status >= 500 else { return error }
+        return ResourceService.problem(400, "This delivery can't be cancelled from the app yet. "
+                                           + "Call the store and ask them to take it back.")
+    }
+}
+
+/// The partner's answer to a delivery request: a store's request (`seller_to_partner`) is accepted or
+/// declined; the partner's own offer (`partner_to_seller`) can be withdrawn (`PUT …/:uuid/<answer>`).
+enum MyDeliveryRequestAnswer: String, Sendable {
+    case accept, reject, cancel
+
+    static func choices(for request: Record) -> [MyDeliveryRequestAnswer] {
+        guard request.string("status") ?? "pending" == "pending" else { return [] }
+        return request.string("request_type") == "partner_to_seller" ? [.cancel] : [.accept, .reject]
+    }
+
+    var title: String {
+        switch self {
+        case .accept: "Accept"
+        case .reject: "Decline"
+        case .cancel: "Withdraw my offer"
+        }
+    }
+
+    func done(_ order: String) -> String {
+        switch self {
+        case .accept: "Accepted. \(order) is now in your deliveries to do."
+        case .reject: "Declined. The store has been told."
+        case .cancel: "Your offer to deliver \(order) is withdrawn."
+        }
+    }
 }
 
 extension DeliveryAPI {
@@ -65,6 +102,22 @@ extension DeliveryAPI {
     func myAssignments(status: String) async throws -> [Record] {
         Self.rows(try await partnerGet("/api/v2/delivery-partner/assignments", query: [URLQueryItem(name: "status", value: status)]),
                   "assignments")
+    }
+
+    /// Requests waiting for the partner's answer (`GET /api/v2/delivery-requests/partner?status=pending`; the
+    /// latest 20, expired ones left out). 404 = not a partner.
+    func myRequests() async throws -> [Record] {
+        Self.rows(try await partnerGet("/api/v2/delivery-requests/partner", query: [URLQueryItem(name: "status", value: "pending")]),
+                  "requests")
+    }
+
+    /// Accept / decline a store's request, or withdraw your own offer. The route reads form fields.
+    func answerMyRequest(_ uuid: String, _ answer: MyDeliveryRequestAnswer, message: String = "") async throws {
+        var form: [(String, String)] = []
+        if answer != .cancel, let message = message.trimmedOrNil { form.append(("response_message", message)) }
+        var endpoint = Endpoint(.put, "/api/v2/delivery-requests/\(Self.path(uuid))/\(answer.rawValue)").withForm(form)
+        endpoint.requiresNamespace = false
+        _ = try await client.sendRaw(endpoint)
     }
 
     func myAssignment(_ uuid: String) async throws -> Record {
@@ -113,9 +166,19 @@ struct MyDeliveriesView: View {
     @Environment(\.services) private var services
     @State private var show = "active"
     @State private var state: LoadState<[Record]> = .idle
+    @State private var requests: [Record] = []
+    @State private var requestsError: APIError?
+    @State private var answering: (request: Record, answer: MyDeliveryRequestAnswer)?
+    @State private var busy = false
+    @State private var notice: String?
+    @State private var answerError: APIError?
 
     var body: some View {
         List {
+            if let notice {
+                Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor)
+            }
+            if show == "active" { requestsSection }
             switch state {
             case .idle, .loading:
                 Section { SkeletonRow() }
@@ -132,7 +195,7 @@ struct MyDeliveriesView: View {
                     ContentUnavailableView(show == "active" ? "No deliveries to do" : "Nothing delivered yet",
                                            systemImage: "truck.box",
                                            description: Text(show == "active"
-                                                             ? "Deliveries a store gives you show here."
+                                                             ? "Deliveries you accept show here."
                                                              : "Finished deliveries show here."))
                         .listRowBackground(Color.clear)
                 }
@@ -146,10 +209,11 @@ struct MyDeliveriesView: View {
                         .accessibilityIdentifier("myDelivery.row.\(row.id)")
                     }
                 } footer: {
-                    if rows.count >= 20 { Text("Showing the latest 20.") }
+                    if rows.count >= 20 { Text("Showing your latest 20 deliveries.") }
                 }
             }
         }
+        .disabled(busy)
         .safeAreaInset(edge: .top, spacing: 0) {
             Picker("Show", selection: $show) {
                 Text("To do").tag("active")
@@ -163,10 +227,40 @@ struct MyDeliveriesView: View {
         .navigationTitle("My deliveries")
         .task(id: show) { await load() }
         .refreshable { await load() }
+        .confirmationDialog(answering.map { $0.answer == .cancel ? "Withdraw your offer?" : "Decline this request?" } ?? "",
+                            isPresented: .init(get: { answering != nil }, set: { if !$0 { answering = nil } }),
+                            titleVisibility: .visible, presenting: answering) { item in
+            Button(item.answer.title, role: .destructive) { Task { await answer(item.request, item.answer) } }
+            Button("Not now", role: .cancel) {}
+        } message: { item in
+            Text(item.answer == .cancel ? "The store won't see your offer any more."
+                 : "\(item.request.string("store_name") ?? "The store") will be told you can't deliver this order.")
+        }
+    }
+
+    /// Stores' requests waiting for an answer (and the partner's own offers waiting for the store).
+    @ViewBuilder
+    private var requestsSection: some View {
+        if !requests.isEmpty || requestsError != nil || answerError != nil {
+            Section {
+                if let requestsError { InlineErrorRow(error: requestsError) { Task { await load() } } }
+                if let answerError { InlineErrorRow(error: answerError) }
+                ForEach(requests) { request in
+                    MyDeliveryRequestRow(request: request) { choice in
+                        if choice == .accept { Task { await answer(request, .accept) } } else { answering = (request, choice) }
+                    }
+                }
+            } header: {
+                Text("Requests for you (\(requests.count))")
+            } footer: {
+                Text("Accept a request to add it to your deliveries. A request you don't answer runs out after a day.")
+            }
+        }
     }
 
     private func load() async {
         if state.value == nil { state = .loading }
+        if show == "active" { await loadRequests() }
         do {
             state = .loaded(try await services.delivery.myAssignments(status: show))
         } catch {
@@ -174,6 +268,84 @@ struct MyDeliveriesView: View {
             if case .cancelled = apiError { return }
             state = .failed(apiError)
         }
+    }
+
+    private func loadRequests() async {
+        do {
+            requests = try await services.delivery.myRequests()
+            requestsError = nil
+        } catch {
+            let apiError = error.asAPIError
+            if case .cancelled = apiError { return }
+            requests = []
+            // Not a partner: the deliveries list says so.
+            requestsError = apiError.serverError?.status == 404 ? nil : apiError
+        }
+    }
+
+    private func answer(_ request: Record, _ answer: MyDeliveryRequestAnswer) async {
+        busy = true
+        defer { busy = false }
+        do {
+            try await services.delivery.answerMyRequest(request.string("uuid") ?? request.id, answer)
+            answerError = nil
+            notice = answer.done(request.string("order_number") ?? "The order")
+            await load()
+        } catch {
+            notice = nil
+            answerError = error.asAPIError
+        }
+    }
+}
+
+/// One request: the order, the store, the fee offered, where it goes, and the partner's choices.
+private struct MyDeliveryRequestRow: View {
+    let request: Record
+    let choose: (MyDeliveryRequestAnswer) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(request.string("order_number") ?? "Order").font(.wsHeadline.monospacedDigit())
+                Spacer()
+                if let fee = DeliveryWords.money(request, "proposed_fee", currency: nil) {
+                    Text("Fee \(fee)").font(.wsSubheadline.monospacedDigit())
+                }
+            }
+            Text([request.string("store_name").map { "From \($0)" },
+                  request.string("request_type") == "partner_to_seller" ? "You offered to deliver" : nil]
+                .compactMap { $0 }.joined(separator: " · "))
+                .font(.wsSubheadline)
+            if let place = Self.address(request) {
+                Label(place, systemImage: "mappin").font(.wsFootnote).foregroundStyle(.secondaryText).lineLimit(2)
+            }
+            if let message = request.string("message") { Text("“\(message)”").font(.wsFootnote) }
+            if let ends = request.date("expires_at") {
+                Text("Answer by \(Formatters.dateTime(ends) ?? "")").font(.wsCaption).foregroundStyle(.secondaryText)
+            }
+            let choices = MyDeliveryRequestAnswer.choices(for: request)
+            if choices == [.cancel] {
+                Text("Waiting for the store to answer your offer.").font(.wsFootnote).foregroundStyle(.secondaryText)
+            }
+            HStack {
+                ForEach(choices, id: \.self) { choice in
+                    Button(choice.title, role: choice == .accept ? nil : .destructive) { choose(choice) }
+                        .buttonStyle(.bordered)
+                        .tint(choice == .accept ? Tone.success.textColor : nil)
+                        .accessibilityIdentifier("myDelivery.request.\(choice.rawValue).\(request.id)")
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// The order's delivery address: `shipping_address` is JSON text (address1, city, zip…).
+    static func address(_ request: Record) -> String? {
+        guard let text = request.string("shipping_address") else { return nil }
+        guard let data = text.data(using: .utf8), let json = try? JSONDecoder().decode(JSONValue.self, from: data) else {
+            return text
+        }
+        return StoreOrderDetailView.address(json)
     }
 }
 
@@ -300,8 +472,11 @@ struct MyDeliveryDetailView: View {
         }
         if let proof, let signature = proof.signature {
             Section("Proof of delivery") { SignatureProofRows(signature: signature, image: proofImage) }
-        } else if let text = a.string("proof_of_delivery")?.trimmedOrNil {
-            Section("Proof of delivery") { Text(text) }
+        } else if let pod = DeliveryProof(a.string("proof_of_delivery")) {
+            Section("Proof of delivery") {
+                DetailRow(label: "Signed for", value: pod.signedLine)
+                DetailRow(label: "Note", value: pod.notes)
+            }
         }
     }
 
@@ -337,7 +512,7 @@ struct MyDeliveryDetailView: View {
             onChange()
             return nil
         } catch {
-            let apiError = error.asAPIError
+            let apiError = MyDeliverySteps.failure(step, error.asAPIError)
             if capture == nil { self.error = apiError; notice = nil }
             return apiError
         }

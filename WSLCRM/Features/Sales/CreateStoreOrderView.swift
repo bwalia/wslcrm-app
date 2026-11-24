@@ -96,8 +96,12 @@ struct CreateStoreOrderView: View {
         Section {
             switch stores {
             case .loaded(let list) where list.isEmpty:
-                Text("Set up a store first: a store order sells a store’s products. Shop orders are made from the shop instead.")
+                Text("A store order sells a store’s products, and this workspace has no store yet. Set one up, "
+                     + "then come back. Online shop orders are made from the shop instead.")
                     .foregroundStyle(.secondaryText)
+                if let link = MenuDestination.of(key: "stores") {
+                    NavigationLink { link.rootView } label: { Label("Set up a store", systemImage: "storefront") }
+                }
             case .loaded(let list):
                 Picker("Store", selection: $storeUuid) {
                     if storeUuid.isEmpty { Text("Choose a store").tag("") }

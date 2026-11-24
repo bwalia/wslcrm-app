@@ -88,8 +88,8 @@ final class SalesModuleTests: XCTestCase {
     func testOwnerMovesLeavePartnerStepsToThePartner() {
         XCTAssertEqual(DeliveryWords.ownerMoves(from: "pending").map { $0.status }, ["rejected"])
         XCTAssertEqual(DeliveryWords.ownerMoves(from: "in_transit").map { $0.status }, ["failed"])
-        // picked_up and delivered are the partner's; accepted → cancelled is refused by the table.
-        XCTAssertTrue(DeliveryWords.ownerMoves(from: "accepted").isEmpty)
+        // picked_up and delivered are the partner's; the store may cancel an accepted delivery (the table allows it now).
+        XCTAssertEqual(DeliveryWords.ownerMoves(from: "accepted").map { $0.status }, ["cancelled"])
         XCTAssertTrue(DeliveryWords.ownerMoves(from: "delivered").isEmpty)
     }
 

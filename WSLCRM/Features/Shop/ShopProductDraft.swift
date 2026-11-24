@@ -521,9 +521,11 @@ struct ShopProductDraft: Equatable, Sendable {
     func payload(isNew: Bool) -> (body: [String: JSONValue]?, errors: [String]) {
         var errors: [String] = []
         if name.shopTrimmed.isEmpty { errors.append("The name is required.") }
-        if sku.shopTrimmed.isEmpty { errors.append("The SKU is required.") }
         let slugValue = slug.shopTrimmed.isEmpty ? ShopSlug.make(name) : slug.shopTrimmed
-        if slugValue.isEmpty { errors.append("The web address (slug) is required.") }
+        if slugValue.isEmpty { errors.append("Give the product a web address under More details (letters, numbers and dashes).") }
+        // The server needs a product code, unique like the web address: a new one without a code gets the address's.
+        let skuValue = sku.shopTrimmed.isEmpty ? String(slugValue.uppercased().prefix(120)) : sku.shopTrimmed
+        if skuValue.isEmpty { errors.append("Give the product a product code (SKU) under More details.") }
         let base = ShopMoney.minor(from: basePrice)
         if base == nil { errors.append("The base price must be an amount of 0 or more.") }
         let costMinor = cost.shopTrimmed.isEmpty ? nil : ShopMoney.minor(from: cost)
@@ -547,7 +549,7 @@ struct ShopProductDraft: Equatable, Sendable {
         var specObject: [String: JSONValue] = [:]
         for spec in specs where !spec.key.shopTrimmed.isEmpty { specObject[spec.key.shopTrimmed] = .string(spec.value.shopTrimmed) }
         var body: [String: JSONValue] = [
-            "name": .string(name.shopTrimmed), "slug": .string(slugValue), "sku": .string(sku.shopTrimmed),
+            "name": .string(name.shopTrimmed), "slug": .string(slugValue), "sku": .string(skuValue),
             "product_type": .string(productType), "price_mode": .string(priceMode), "status": .string(status),
             "category_uuid": categoryUuid.isEmpty ? .null : .string(categoryUuid),
             "short_description": .string(shortDescription.shopTrimmed), "description": .string(description),

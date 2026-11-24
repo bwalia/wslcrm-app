@@ -189,6 +189,7 @@ struct ShopMemberRow: View {
 /// One member: who they are, their membership and fees, and their CRM lead.
 struct ShopMemberDetailView: View {
     let record: Record
+    @Environment(SessionStore.self) private var session
 
     var body: some View {
         List {
@@ -208,7 +209,7 @@ struct ShopMemberDetailView: View {
                         .foregroundStyle(Tone.warning.textColor)
                 }
             }
-            if let lead = record.string("lead_uuid") {
+            if let lead = record.string("lead_uuid"), session.shopPolicy.canOpenLeads {
                 Section {
                     NavigationLink { LeadDetailView(leadUuid: lead) } label: {
                         Label("Open their lead", systemImage: "person.crop.circle.badge.plus")

@@ -99,7 +99,7 @@ struct ShopConfigureOptionsSheet: View {
             Section {
                 Text(productName).font(.wsHeadline)
             } footer: {
-                Text("Prices are ex VAT. The server prices the configuration and checks the rules when you save.")
+                Text("Prices are ex VAT. The configuration is priced and its rules checked when you save.")
             }
             if groups.isEmpty {
                 Section { Text("This product has no options to choose.").foregroundStyle(.secondaryText) }
@@ -128,7 +128,7 @@ struct ShopConfigureOptionsSheet: View {
             }
             let messages = product.rules.filter(\.isActive).compactMap { $0.message?.trimmedOrNil }
             if !messages.isEmpty {
-                Section("Rules the server checks") {
+                Section("Rules checked when you save") {
                     ForEach(messages, id: \.self) { Label($0, systemImage: "checklist").font(.wsFootnote) }
                 }
             }
@@ -284,7 +284,7 @@ struct ShopLineDraftEditor: View {
                             .accessibilityIdentifier("shopLine.override")
                     }
                 } footer: {
-                    Text("Leave empty to use the catalogue price. The server re-prices the line and adds VAT when you save; a price below cost is refused.")
+                    Text("Leave empty to use the catalogue price. The line is re-priced and VAT added when you save; a price below cost is refused.")
                 }
             }
             if !problems.isEmpty {
@@ -369,7 +369,7 @@ struct ShopLineDraftsSection: View {
                 if lines.count > 1 { EditButton().font(.wsCaption) }
             }
         } footer: {
-            Text("Prices are ex VAT. The server prices every line and checks configurations when you save.")
+            Text("Prices are ex VAT. Every line is priced and its configuration checked when you save.")
         }
     }
 }

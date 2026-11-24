@@ -109,7 +109,7 @@ struct AcademyLearningView: View {
         do {
             let status = try await services.academy.instructorStatus()
             guard let namespace = status.namespace else {
-                throw ResourceService.problem(404, "The academy isn’t set up on this server yet.")
+                throw ResourceService.problem(404, "The academy isn’t available for this workspace yet.")
             }
             self.namespace = namespace
             async let mine = services.academy.learning(namespace: namespace.slug)

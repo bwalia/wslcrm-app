@@ -660,7 +660,7 @@ private struct MktPixelPerformanceTab: View {
         } header: {
             Text("Sent on to ad platforms")
         } footer: {
-            Text("Sales passed to ad platforms from the server in the last \(days) days.")
+            Text("Sales passed to ad platforms automatically in the last \(days) days.")
         }
     }
 
@@ -819,7 +819,7 @@ private struct MktPixelSettingsTab: View {
             } header: {
                 Text("Sent on to ad platforms")
             } footer: {
-                Text("Sales can be passed from the server to the Meta Conversions API and Google Analytics 4, which ad "
+                Text("Sales can be passed automatically to the Meta Conversions API and Google Analytics 4, which ad "
                      + "blockers can’t stop. Recent ones from all pixels:")
             }
         }

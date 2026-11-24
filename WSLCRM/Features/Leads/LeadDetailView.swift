@@ -530,7 +530,7 @@ struct LeadDetailView: View {
                 }
                 .accessibilityIdentifier("lead.moveStage")
             }
-            if lead.stage != .converted, lead.permissions?.canConvert ?? session.permissions.can(.create, .crmDeals) {
+            if lead.stage != .converted, LeadPermissions.showsConvert(lead.permissions, session.permissions) {
                 Button { sheet = .convert } label: { Label("Convert to a deal", systemImage: "briefcase.fill") }
                     .buttonStyle(.large(.success, prominent: false))
                     .listRowSeparator(.hidden)

@@ -285,22 +285,26 @@ private struct AcademyCoursesContent: View {
                                 .font(.wsFootnote).foregroundStyle(.secondaryText)
                         }
                     }
-                    HStack {
-                        Button { reviewing = (course, false) } label: { Label("Send back", systemImage: "xmark.circle") }
-                            .buttonStyle(.bordered)
-                            .accessibilityIdentifier("academy.review.reject.\(course.uuid)")
-                        Button { reviewing = (course, true) } label: { Label("Approve", systemImage: "checkmark.circle") }
-                            .buttonStyle(.borderedProminent)
-                            .accessibilityIdentifier("academy.review.approve.\(course.uuid)")
+                    // Approve / send back are courses.update as well as the reviewer rule (academy.lua).
+                    if access.canUpdate {
+                        HStack {
+                            Button { reviewing = (course, false) } label: { Label("Send back", systemImage: "xmark.circle") }
+                                .buttonStyle(.bordered)
+                                .accessibilityIdentifier("academy.review.reject.\(course.uuid)")
+                            Button { reviewing = (course, true) } label: { Label("Approve", systemImage: "checkmark.circle") }
+                                .buttonStyle(.borderedProminent)
+                                .accessibilityIdentifier("academy.review.approve.\(course.uuid)")
+                        }
+                        .disabled(working)
                     }
-                    .disabled(working)
                 }
                 .padding(.vertical, 4)
             }
         } header: {
             Text("Waiting for your review (\(model.pending.count))")
         } footer: {
-            Text("Courses instructors sent for approval. Approving publishes them on the academy site.")
+            Text(access.canUpdate ? "Courses instructors sent for approval. Approving publishes them on the academy site."
+                 : "Courses instructors sent for approval. Your role can't change courses, so it can't approve them.")
         }
     }
 

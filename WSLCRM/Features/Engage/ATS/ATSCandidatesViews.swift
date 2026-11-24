@@ -25,7 +25,9 @@ struct ATSCandidatesView: View {
     private func list(_ model: PagedListModel<ATSCandidate>) -> some View {
         PagedList(model: model, searchPrompt: "Search by name, email or reference", emptyTitle: "No candidates yet",
                   emptySystemImage: "person.2",
-                  emptyDescription: "Add candidates here or from a job’s pipeline, then invite them to an AI interview.") { candidate in
+                  emptyDescription: "Add candidates here or from a job’s pipeline, then invite them to an AI interview.",
+                  emptyActionTitle: "Add a candidate",
+                  emptyAction: session.permissions.can(.create, moduleName: ATSModule.candidates) ? { adding = true } : nil) { candidate in
             NavigationLink(value: ATSScreen.candidate(candidate.uuid)) { ATSCandidateRow(candidate: candidate) }
                 .accessibilityIdentifier("ats.candidate.\(candidate.uuid)")
         }

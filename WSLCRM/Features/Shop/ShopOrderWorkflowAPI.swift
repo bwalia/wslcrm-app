@@ -100,8 +100,8 @@ enum ShopOrderListFilter: Hashable, Sendable {
         case .status(let status): status.label
         case .bankTransferDue: "Bank transfer due"
         case .deliveryChangePending: "Delivery change requested"
-        case .placedDays(let n): "Placed in the last \(n) days"
-        case .paidDays(let n): "Paid in the last \(n) days"
+        case .placedDays(let n): n == 1 ? "Placed in the last day" : "Placed in the last \(n) days"
+        case .paidDays(let n): n == 1 ? "Paid in the last day" : "Paid in the last \(n) days"
         }
     }
 
