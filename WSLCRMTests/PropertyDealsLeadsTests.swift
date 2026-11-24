@@ -193,19 +193,10 @@ final class PurchaseOrderTests: XCTestCase {
         XCTAssertFalse(po.isOverdue)
     }
 
-    func testReceiveBodyIsRunningTotalsPerLine() throws {
-        let body = PurchaseOrderReceiveBody(items: [.init(itemUuid: "i2", receivedQuantity: 2)])
-        let json = try JSONSerialization.jsonObject(with: JSONEncoder.opsAPI().encode(body)) as? [String: Any]
-        let lines = json?["items"] as? [[String: Any]]
-        XCTAssertEqual(lines?.first?["item_uuid"] as? String, "i2")
-        XCTAssertEqual(lines?.first?["received_quantity"] as? Double, 2)
-        XCTAssertNil(json?["receive_all"])
-    }
-
     func testStatsAndUnknownStatus() throws {
-        let stats = try decode(PurchaseOrderStats.self, #"{"open_count": 2, "open_value": 5200.5, "to_bill_count": 1, "to_bill_value": "900"}"#)
+        let stats = try decode(PurchaseOrderStats.self, #"{"open_count": 2, "to_bill_count": 1, "by_currency": [{"currency": "GBP", "open_value": 5200.5, "to_bill_value": 900, "billed_value": 0}]}"#)
         XCTAssertEqual(stats.openCount, 2)
-        XCTAssertEqual(stats.toBillValue, 900)
+        XCTAssertEqual(stats.byCurrency.first?.toBillValue, 900)
         XCTAssertEqual(PurchaseOrderStatus(api: "on_hold"), .unknown)
     }
 

@@ -146,7 +146,7 @@ struct ShopOrderNextStepSection: View {
         receiving = true
         defer { receiving = false }
         do {
-            _ = try await services.purchaseOrders.receive(po.uuid, PurchaseOrderReceiveBody(
+            _ = try await services.purchaseOrders.receiveDelivery(po.uuid, PurchaseOrderDeliveryBody(
                 receiveAll: true, note: "Received for shop order \(order.orderNumber)"))
             error = nil
             notice = "PO \(po.poNumber) marked received."

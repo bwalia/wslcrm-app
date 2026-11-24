@@ -18,6 +18,7 @@ extension ModuleGroup {
             case SalesScreen.delivery: AnyView(DeliveryHomeView())
             case SalesScreen.orders: AnyView(SalesOrdersView())
             case SalesScreen.newQuote: AnyView(ShopQuoteBuilderView())
+            case SalesScreen.myDeliveries: AnyView(MyDeliveriesView())
             default: nil
             }
         })
@@ -30,5 +31,7 @@ enum SalesScreen {
     static let delivery = "sales.delivery"
     static let orders = "sales.orders"
     static let newQuote = "sales.new_quote"
-    static let all = [pos, shopAnalytics, delivery, orders, newQuote]
+    /// A delivery partner's own deliveries (no menu key: shown to people with a partner profile).
+    static let myDeliveries = "sales.my_deliveries"
+    static let all = [pos, shopAnalytics, delivery, orders, newQuote, myDeliveries]
 }

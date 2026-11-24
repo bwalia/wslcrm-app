@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 /// The shop's back office pages that are lists, records and settings (`/api/v2/shop/admin`, RBAC `shop`).
 /// Orders, quotes, products, suppliers and deals have hand-built screens (Features/Shop).
@@ -7,7 +7,15 @@ extension ModuleGroup {
         id: "shop",
         descriptors: ModuleCatalog.shop,
         reports: ModuleCatalog.shopReports,
-        resources: ["purchase_invoices": ModuleCatalog.purchaseInvoices.id])
+        // Purchase invoices are hand-built (totals and "Record a supplier invoice"); rows open the kit's detail.
+        screens: ["purchase_invoices": "shop.purchase_invoices"],
+        screen: { id in
+            switch id {
+            case "shop.purchase_invoices": AnyView(PurchaseInvoicesView())
+            case "shop.price_changes": AnyView(ShopPriceChangesView())
+            default: nil
+            }
+        })
 }
 
 extension ModuleCatalog {
@@ -165,10 +173,10 @@ extension ModuleCatalog {
         actions: [
             ActionSpec("approve", "Use the new price", systemImage: "checkmark.circle",
                        path: "\(shopBase)/price-changes/{uuid}/approve",
-                       visibleWhen: .field("status", in: ["pending", "blocked_below_cost"]), done: "New price in use."),
+                       visibleWhen: .field("status", in: ["pending"]), done: "New price in use."),
             ActionSpec("reject", "Keep the current price", systemImage: "xmark.circle",
                        path: "\(shopBase)/price-changes/{uuid}/reject",
-                       visibleWhen: .field("status", in: ["pending", "blocked_below_cost"]), done: "Price kept."),
+                       visibleWhen: .field("status", in: ["pending"]), done: "Price kept."),
         ],
         links: [LinkSpec("Open the product", key: "product_uuid", target: .shopProduct, systemImage: "shippingbox")])
 
@@ -384,7 +392,8 @@ extension ModuleCatalog {
                           help: "On: suppliers can sign in, see their own purchase orders, upload proformas and invoices, "
                               + "enter dispatch and write to you."),
                 FieldSpec("supplier_portal_emails_enabled", "Supplier portal emails", .bool,
-                          help: "Off: nothing is emailed to suppliers about their purchase orders; they see changes when they sign in."),
+                          help: "On: every supplier with a portal login is emailed straight away about new and changed purchase orders, "
+                              + "so check their email addresses first. Off: nothing is emailed; they see changes when they sign in."),
             ]),
             SectionSpec("Purchase orders: bill to", purchaseOrderParty("po_bill_to")),
             SectionSpec("Purchase orders: deliver to us", purchaseOrderParty("po_deliver_to"),

@@ -762,9 +762,10 @@ struct CreateStoreOrderBody: Encodable, Sendable, Equatable {
 }
 
 /// What `POST /api/v2/orders` sends back (the parts the app shows).
-struct CreatedStoreOrder: Sendable, Decodable {
+struct CreatedStoreOrder: Sendable, Decodable, Hashable, Identifiable {
     var uuid: String
     var orderNumber: String?
+    var id: String { uuid }
 }
 
 // MARK: - Amounts typed at the till

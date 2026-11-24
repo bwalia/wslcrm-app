@@ -41,6 +41,11 @@ struct ShopCustomerFields: View {
 
     var body: some View {
         Section {
+            ChooseCustomerButton { picked in
+                let vat = customer.vatNumber
+                customer = picked.shopDraft
+                customer.vatNumber = vat
+            }
             TextField("Name (required)", text: $customer.name).textContentType(.name)
                 .accessibilityIdentifier("shopCustomer.name")
             HStack {

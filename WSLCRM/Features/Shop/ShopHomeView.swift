@@ -327,7 +327,10 @@ struct ShopHomeView: View {
                 .accessibilityIdentifier("shop.stock")
             NavigationLink { ShopMarketView() } label: { Label("Market prices", systemImage: "chart.line.uptrend.xyaxis") }
                 .accessibilityIdentifier("shop.market")
-            resourceLink(ModuleCatalog.shopPriceChanges, id: "shop.priceChanges")
+            NavigationLink(value: NativeScreenRoute("shop.price_changes")) {
+                Label(ModuleCatalog.shopPriceChanges.title, systemImage: ModuleCatalog.shopPriceChanges.systemImage)
+            }
+            .accessibilityIdentifier("shop.priceChanges")
             NavigationLink(value: ResourceReportRoute(ModuleCatalog.shopBelowCost.id)) {
                 Label(ModuleCatalog.shopBelowCost.title, systemImage: ModuleCatalog.shopBelowCost.systemImage)
             }
@@ -339,7 +342,10 @@ struct ShopHomeView: View {
             if session.permissions.can(.read, .purchaseOrders) {
                 NavigationLink { PurchaseOrdersListView() } label: { Label("Purchase orders", systemImage: "doc.plaintext") }
                     .accessibilityIdentifier("shop.purchaseOrders")
-                resourceLink(ModuleCatalog.purchaseInvoices, id: "shop.purchaseInvoices")
+                NavigationLink(value: NativeScreenRoute("shop.purchase_invoices")) {
+                    Label(ModuleCatalog.purchaseInvoices.title, systemImage: ModuleCatalog.purchaseInvoices.systemImage)
+                }
+                .accessibilityIdentifier("shop.purchaseInvoices")
             }
             NavigationLink { ShopTemplatesView() } label: {
                 Label(ModuleCatalog.shopMessageTemplates.title, systemImage: ModuleCatalog.shopMessageTemplates.systemImage)

@@ -9,8 +9,9 @@ struct SalesAPI: Sendable {
     // MARK: Stores
 
     /// The workspace's stores (`GET /api/v2/stores` is scoped to the workspace when the header is sent).
+    /// The route pages with `perPage` (10 by default, no upper cap in StoreQueries.all).
     func stores() async throws -> [Store] {
-        let endpoint = Endpoint.get("/api/v2/stores", query: [URLQueryItem(name: "limit", value: "100")])
+        let endpoint = Endpoint.get("/api/v2/stores", query: [URLQueryItem(name: "perPage", value: "100")])
         let envelope: Envelope.DataTotal<Store> = try await client.send(endpoint)
         return envelope.data
     }
