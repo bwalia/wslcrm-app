@@ -18,6 +18,9 @@ struct TaxHomeView: View {
         ("tax_categories", "tax.categories", "Categories", "Your own categories for transactions", "tag"),
         ("tax_hmrc", "tax.hmrc", "HMRC settings", "Your connection to HMRC", "link"),
         ("tax_vat", "tax.vat", "VAT", "VAT returns with HMRC", "percent"),
+        ("tax_vat_clients", "tax.vat_clients", "VAT clients", "Your clients’ VAT returns, as their agent", "person.2"),
+        ("corporation_tax", "ct.companies", "Corporation Tax", "Year-end tax for your companies", "building.columns.circle"),
+        ("tax_agent_modes", "tax.agent_modes", "AI agent modes", "How much the AI does on its own", "dial.medium"),
         ("tax_filing_requests", "tax.filing_requests", "Filing requests", "Returns customers asked us to file", "tray.full"),
         ("tax_income_types", "tax.income_types", "Income types", "What My Income asks for", "square.stack.3d.up"),
     ]

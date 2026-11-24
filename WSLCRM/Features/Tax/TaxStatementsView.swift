@@ -111,7 +111,7 @@ struct TaxStatementsView: View {
         .task(id: jobs.isEmpty) { await poll() }
         .sheet(isPresented: $uploading) {
             NavigationStack {
-                StatementUploadView(accounts: accounts) { result in
+                StatementUploadView(accounts: accounts, profile: profile) { result in
                     notice = result
                     Task { await load() }
                 }

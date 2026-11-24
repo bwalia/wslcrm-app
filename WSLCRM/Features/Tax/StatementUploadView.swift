@@ -5,9 +5,12 @@ import SwiftUI
 /// "Read it from each statement" (the default): each file's bank details are read first
 /// (`POST /api/v2/tax/extract/bank-details`) and matched to the person's accounts; a bank that isn't
 /// there yet is added on upload (`POST /api/v2/tax/bank-accounts/find-or-create`). Then each file goes to
-/// `POST /api/v2/tax/upload`. Uploading doesn't read or sort the statement: that is the next step.
+/// `POST /api/v2/tax/upload`. Then the server reads and sorts every uploaded statement in one go, in the
+/// background (`POST /api/v2/tax/statements/process`), as the AI assistant does: no "Read", then "Sort".
 struct StatementUploadView: View {
     let accounts: [Record]
+    /// The kind of business the AI sorts for (the Statements screen's "Sort as").
+    var profile: String?
     let finished: (TaxNotice) -> Void
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
@@ -136,6 +139,7 @@ struct StatementUploadView: View {
         error = nil
         defer { uploading = false }
         var created: [String: String] = [:]
+        var uploaded: [String] = []
         var done = 0
         var failed = 0
         for index in items.indices where items[index].status == .ready || items[index].status == .queued {
@@ -158,7 +162,9 @@ struct StatementUploadView: View {
                 case nil:
                     throw ResourceService.problem(422, "Choose a bank account for this statement.")
                 }
-                try await api.upload("/api/v2/tax/upload", file: items[index].file.part, fields: [("bank_account_id", accountID)])
+                let r = try await api.upload("/api/v2/tax/upload", file: items[index].file.part,
+                                             fields: [("bank_account_id", accountID)])
+                if let id = r["statement_id"]?.stringValue { uploaded.append(id) }
                 items[index].status = .done
                 items[index].message = "Uploaded to \(choice?.label ?? "your account")"
                 done += 1
@@ -169,12 +175,23 @@ struct StatementUploadView: View {
             }
         }
         if done > 0 {
-            let next = "Next: tap ⋯ on a statement and choose “Read transactions”."
+            let reading = (try? await Self.startReading(api, ids: uploaded, profile: profile)) != nil && !uploaded.isEmpty
+            let next = reading ? "Reading and sorting your statements now. It keeps going if you leave this screen."
+                : "Next: tap ⋯ on a statement and choose “Read transactions”."
             finished(failed == 0 ? .success("\(done) statement\(done == 1 ? "" : "s") uploaded. \(next)")
-                     : .warning("\(done) uploaded, \(failed) failed — see the upload list."))
+                     : .warning("\(done) uploaded, \(failed) failed — see the upload list. \(next)"))
         }
         if failed == 0 && done > 0 { dismiss() }
         else if failed > 0 { error = "\(failed) statement\(failed == 1 ? "" : "s") failed — see the list above." }
+    }
+
+    /// Reads and sorts uploaded statements on the server in the background, as the assistant does
+    /// (`statement_ids` comma-joined, `profile_type` = the kind of business; both form fields).
+    static func startReading(_ api: TaxAPI, ids: [String], profile: String?) async throws {
+        guard !ids.isEmpty else { return }
+        var fields = [("statement_ids", ids.joined(separator: ","))]
+        if let profile, !profile.isEmpty { fields.append(("profile_type", profile)) }
+        try await api.form(.post, "/api/v2/tax/statements/process", fields)
     }
 }
 
