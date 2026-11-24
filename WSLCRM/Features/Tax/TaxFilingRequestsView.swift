@@ -51,7 +51,7 @@ struct TaxFilingRequestsView: View {
         }
         .navigationTitle("Filing requests")
         .task(id: tab) { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(item: $opened) { row in
             NavigationStack { FilingRequestDetailView(uuid: row.id) { Task { await load() } } }
         }
@@ -134,7 +134,7 @@ struct FilingRequestDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(item: Binding(get: { action.map { IdentifiedString(value: $0) } }, set: { action = $0?.value })) { item in
             NavigationStack { actionForm(item.value) }
         }

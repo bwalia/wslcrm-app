@@ -173,7 +173,7 @@ struct AssetDetailView: View {
         .navigationTitle("Asset")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $raising) {
             ServiceRequestFormSheet(request: nil, initialProduct: product) { created in
                 createdRequest = ServiceRequestRoute(uuid: created.request.uuid)

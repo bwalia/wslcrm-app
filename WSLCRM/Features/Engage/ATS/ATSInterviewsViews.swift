@@ -284,7 +284,7 @@ struct ATSInterviewReviewView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .task(id: detail?.summary.evaluationStatus) { await pollWhileRunning() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .confirmationDialog("Cancel the interview link?", isPresented: $confirmingRevoke, titleVisibility: .visible) {
             Button("Cancel the link", role: .destructive) { Task { await revoke() } }
         } message: {

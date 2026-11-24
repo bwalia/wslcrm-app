@@ -67,7 +67,7 @@ struct AppsView: View {
                     prompt: "Search apps, customers, invoices…")
         .task(id: search) { await records.search(search, api: services.workspace()) }
         .navigationDestination(for: RecordSearchTarget.self) { RecordSearchDestination(target: $0) }
-        .refreshable { await session.reloadPermissions() }
+        .wsRefreshable { await session.reloadPermissions() }
         .accessibilityIdentifier("apps.list")
     }
 }

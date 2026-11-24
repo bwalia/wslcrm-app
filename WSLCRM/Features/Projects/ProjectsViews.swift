@@ -125,7 +125,7 @@ struct ProjectsListView: View {
                             .listRowBackground(Color.clear)
                     }
                 }
-                .refreshable { await load() }
+                .wsRefreshable { await load() }
                 .onChange(of: tab) { _, new in
                     if new == .archived { Task { await loadArchived() } }
                 }
@@ -883,7 +883,7 @@ struct ProjectDetailView: View {
                 }
             }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {

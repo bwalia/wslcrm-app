@@ -77,7 +77,7 @@ struct WorkspacePickerView: View {
         }
         .searchable(text: $search, prompt: "Find a workspace")
         .task { await load() }
-        .refreshable {
+        .wsRefreshable {
             await session.reloadWorkspaces()
             await load()
         }

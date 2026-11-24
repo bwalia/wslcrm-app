@@ -132,6 +132,25 @@ doesn't mint a new one; Apple caps them per team. When the Fishers keychain
 same team and certificate. Otherwise WSLCRM creates `wslcrm-signing.keychain-db`, with its
 password in `~/.secrets/wslcrm/keychain-password`.
 
+## Mac app
+
+The Mac app (Mac Catalyst) has the same bundle ID, so it is a macOS build on the same App Store
+Connect app, with the same build number as the iPhone build and the same testers. After the
+iPhone upload, the release job runs `fastlane mac prepare_signing`, `mac build_pkg` and
+`mac beta`. It is **off until the repository variable `MAC_TESTFLIGHT` is `true`**, and a Mac
+failure never fails the iPhone release.
+
+Before turning it on, once:
+
+1. **App Store Connect:** open the app and add the **macOS** platform, if it isn't there yet.
+2. **Certificates and profile:** the first run makes a **Mac Installer Distribution** certificate
+   (it signs the installer package) and a **Mac Catalyst App Store** profile for
+   `uk.co.workstation.wslcrm`, and keeps them in the signing keychain for later runs. The app
+   itself is signed with the same Apple Distribution certificate as the iPhone app.
+3. **Turn it on:** Settings → Secrets and variables → Actions → Variables → `MAC_TESTFLIGHT` = `true`.
+
+Testers install it with the TestFlight app for Mac (macOS 14 or later).
+
 ## Local dry run (on the Mac Studio)
 
 ```sh
@@ -146,7 +165,7 @@ VERSION_NAME=1.0.0 bundle exec fastlane ios ci_build_number
 
 | Path | Role |
 |------|------|
-| `fastlane/Fastfile` | Lanes: `test`, `ci_build_number`, `prepare_signing`, `build_ipa`, `beta`, `invite_testers`, `release` |
+| `fastlane/Fastfile` | Lanes: `ios test`, `ci_build_number`, `prepare_signing`, `build_ipa`, `beta`, `invite_testers`, `release`; `mac prepare_signing`, `build_pkg`, `beta` |
 | `fastlane/Appfile` | Bundle id |
 | `Gemfile`, `Gemfile.lock` | fastlane and the gems Ruby 4 no longer ships |
 | `scripts/ci/load-ios-secrets.sh` | GitHub secrets, else Vault, into the job's environment; writes the `.p8` to a temp file |

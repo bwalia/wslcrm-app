@@ -238,7 +238,7 @@ struct NotificationsView: View {
                     }
                 }
             }
-            .refreshable { await model.load(api) }
+            .wsRefreshable { await model.load(api) }
             .task {
                 dashboardHost = DashboardURL.forAPI(await services.client.currentBaseURL)?.host
                 await model.load(api)

@@ -111,7 +111,7 @@ struct AIRunDetailView: View {
             }
             log(d)
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .confirmationDialog("Cancel this run?", isPresented: $confirmingCancel, titleVisibility: .visible) {
             Button("Cancel run", role: .destructive) {
                 Task { await act("cancel", "Cancel sent") { try await api.cancel(uuid) } }

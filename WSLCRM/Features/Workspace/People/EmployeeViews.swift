@@ -393,7 +393,7 @@ private struct EmployeeDetail: View {
         .navigationTitle(shown.string("user_name") ?? "Employee")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             if session.permissions.can(.update, moduleName: "employees") {
                 ToolbarItem(placement: .primaryAction) {

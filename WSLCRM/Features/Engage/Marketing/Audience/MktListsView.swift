@@ -69,7 +69,7 @@ struct MktListsView: View {
                 }
             }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         // Runs again when coming back from a list: it may have been renamed, filled or deleted.
         .task { await load() }
         .sheet(isPresented: $creating) {

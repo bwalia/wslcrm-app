@@ -196,7 +196,7 @@ struct LeadSettingsView: View {
             Text("New leads it matched will go to whoever the other rules or the round robin pick.")
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             if canEdit {
                 ToolbarItem(placement: .confirmationAction) {

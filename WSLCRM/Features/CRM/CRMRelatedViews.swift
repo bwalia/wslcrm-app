@@ -594,7 +594,7 @@ struct PartnersHubView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("Partners")
         .task(id: status) { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {

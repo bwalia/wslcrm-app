@@ -131,7 +131,7 @@ struct FieldServiceHubView: View {
         .navigationTitle("Field Service")
         .brandedNavigationBar()
         .task { await loadStats() }
-        .refreshable { await loadStats() }
+        .wsRefreshable { await loadStats() }
         .sheet(isPresented: $creatingRequest) {
             ServiceRequestFormSheet(request: nil) { created in
                 createdRequest = ServiceRequestRoute(uuid: created.request.uuid)

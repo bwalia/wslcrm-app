@@ -156,7 +156,7 @@ struct SprintsView: View {
             }
         }
         .disabled(busy)
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     // MARK: Actions

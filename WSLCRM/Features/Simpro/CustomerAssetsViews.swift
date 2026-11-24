@@ -171,7 +171,7 @@ struct CustomerAssetDetailView: View {
         .navigationTitle(asset.value?.assetTag ?? "Asset")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             if session.permissions.can(.read, .fsReports) {
                 ToolbarItem(placement: .topBarTrailing) {

@@ -46,7 +46,7 @@ struct CMSHomeView: View {
         }
         .navigationTitle("Content")
         .task { await loadCounts() }
-        .refreshable { await loadCounts() }
+        .wsRefreshable { await loadCounts() }
     }
 
     private func row(_ title: String, _ detail: String, _ symbol: String, count: Int?) -> some View {

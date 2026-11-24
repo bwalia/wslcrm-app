@@ -237,7 +237,7 @@ struct DocTemplatesList: View {
             }
         }
         .searchable(text: $search, prompt: "Search by name")
-        .refreshable { await pager?.reload() }
+        .wsRefreshable { await pager?.reload() }
         .task(id: "\(type)|\(search)") {
             if pager != nil, !search.isEmpty { try? await Task.sleep(for: .milliseconds(350)) }
             guard !Task.isCancelled else { return }
@@ -1264,7 +1264,7 @@ struct RenderTemplatesList: View {
             }
         }
         .searchable(text: $search, prompt: "Search name or slug")
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task(id: "\(type)|\(search)") {
             if !search.isEmpty { try? await Task.sleep(for: .milliseconds(350)) }
             guard !Task.isCancelled else { return }

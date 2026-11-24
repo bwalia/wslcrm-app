@@ -45,7 +45,7 @@ struct SSOProvidersView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(item: $editing) { target in
             NavigationStack {
                 SSOProviderForm(existing: target.provider) { message in

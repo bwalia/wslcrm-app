@@ -36,7 +36,7 @@ struct MyIncomeView: View {
         }
         .navigationTitle("My income")
         .task(id: year) { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .onAppear { if data.value != nil { Task { await load() } } }
     }
 
@@ -197,7 +197,7 @@ struct IncomeTypeView: View {
         .navigationTitle(page.value?.string("type.name") ?? "Income")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load(keep: nil) }
-        .refreshable { await load(keep: selected) }
+        .wsRefreshable { await load(keep: selected) }
         .alert("Rename this \(itemWord)", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $renameText)
             Button("Save") { if let item = renaming { Task { await rename(item) } } }

@@ -159,7 +159,7 @@ struct PDLeadView: View {
         .workConfirmation($confirm)
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $loggingReply) {
             PDLogReplySheet(leadName: state.value?.name ?? "them") { body in
                 let reply = try await services.propertyDeals.logReply(leadUuid: leadUuid, body)

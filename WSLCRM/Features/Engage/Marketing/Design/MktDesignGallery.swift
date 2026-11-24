@@ -104,7 +104,7 @@ struct MktDesignGallery: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func finish(_ design: MktDesign) {

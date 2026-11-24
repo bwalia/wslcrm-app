@@ -37,7 +37,7 @@ struct AcademyJoinView: View {
         .overlay { if state.value == nil, state.error == nil { SkeletonList() } }
         .navigationTitle("Academy")
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: notice) }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task { await load() }
     }
 

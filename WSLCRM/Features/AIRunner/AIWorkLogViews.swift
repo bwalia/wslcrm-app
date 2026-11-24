@@ -65,7 +65,7 @@ struct AIWorkLogView: View {
         }
         .searchable(text: $search, prompt: everyone ? "Person, folder or task" : "Folder or task")
         .onChange(of: filter) { page = 1 }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task(id: "\(filterKey)|\(page)") {
             if !search.isEmpty { try? await Task.sleep(for: .milliseconds(400)) }
             guard !Task.isCancelled else { return }
@@ -449,7 +449,7 @@ struct AIWorkLogSessionView: View {
                 Text("What happened")
             }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {

@@ -215,7 +215,7 @@ private struct ActivityOverviewTab: View {
             }
         }
         .task(id: days) { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     @ViewBuilder
@@ -504,7 +504,7 @@ private struct ActivityLogTab: View {
         }
         .task(id: filterKey) { await load(reset: true) }
         .task(id: days) { await loadAreas() }
-        .refreshable { await load(reset: true) }
+        .wsRefreshable { await load(reset: true) }
     }
 
     private func load(reset: Bool) async {
@@ -658,7 +658,7 @@ private struct ActivityChangesTab: View {
             }
         }
         .task(id: filterKey) { await load(reset: true) }
-        .refreshable { await load(reset: true) }
+        .wsRefreshable { await load(reset: true) }
     }
 
     private func load(reset: Bool) async {
@@ -782,7 +782,7 @@ private struct ActivityAIUsageTab: View {
             }
         }
         .task(id: "\(days)|\(everyWorkspace)") { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     @ViewBuilder

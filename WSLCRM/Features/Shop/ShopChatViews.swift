@@ -93,7 +93,7 @@ struct ShopChatDetailView: View {
         .navigationTitle("Chat transcript")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     @ViewBuilder

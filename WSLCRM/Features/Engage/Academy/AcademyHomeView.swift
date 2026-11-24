@@ -149,7 +149,7 @@ private struct AcademyCoursesContent: View {
         .listStyle(.insetGrouped)
         .navigationTitle("Academy")
         .searchable(text: $model.query.search, prompt: "Search courses")
-        .refreshable { await reload() }
+        .wsRefreshable { await reload() }
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: notice) }
         .toolbar { toolbar }
         .task(id: model.query) {

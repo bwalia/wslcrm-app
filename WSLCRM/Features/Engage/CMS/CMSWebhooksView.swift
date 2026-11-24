@@ -36,7 +36,7 @@ struct CMSWebhooksView: View {
         }
         .overlay { overlay }
         .navigationTitle("Website updates")
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task { if state.value == nil { await load() } }
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: notice) }
         .toolbar {

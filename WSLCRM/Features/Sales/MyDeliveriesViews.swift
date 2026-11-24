@@ -226,7 +226,7 @@ struct MyDeliveriesView: View {
         }
         .navigationTitle("My deliveries")
         .task(id: show) { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .confirmationDialog(answering.map { $0.answer == .cancel ? "Withdraw your offer?" : "Decline this request?" } ?? "",
                             isPresented: .init(get: { answering != nil }, set: { if !$0 { answering = nil } }),
                             titleVisibility: .visible, presenting: answering) { item in
@@ -404,7 +404,7 @@ struct MyDeliveryDetailView: View {
         .navigationTitle(state.value?.string("order_number") ?? "Delivery")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .alert(confirming?.title ?? "", isPresented: .init(get: { confirming != nil }, set: { if !$0 { confirming = nil } })) {
             TextField("Note (optional)", text: $notes)
             Button(confirming?.title ?? "OK", role: confirming?.destructive == true ? .destructive : nil) {

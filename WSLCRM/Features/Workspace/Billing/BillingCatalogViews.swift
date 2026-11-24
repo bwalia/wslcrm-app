@@ -43,7 +43,7 @@ struct BillingFeaturesTab: View {
                 ProgressView().frame(maxWidth: .infinity)
             }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task { await load() }
         .toolbar {
             if permissions.can(.create, moduleName: BillingModule.billing) {
@@ -278,7 +278,7 @@ struct BillingPlansTab: View {
                 ProgressView().frame(maxWidth: .infinity)
             }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task { await load() }
         .toolbar {
             if can(.create) {
@@ -576,7 +576,7 @@ struct BillingUpgradesTab: View {
                 ProgressView().frame(maxWidth: .infinity)
             }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task { await load() }
         .toolbar {
             if permissions.can(.create, moduleName: BillingModule.billing) {

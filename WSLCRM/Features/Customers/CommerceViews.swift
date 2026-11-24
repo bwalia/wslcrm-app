@@ -182,7 +182,7 @@ struct OrderDetailView: View {
         .navigationTitle("Order")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .alert(pendingStatus.map { "Mark \($0.label.lowercased())?" } ?? "", isPresented: .init(get: { pendingStatus != nil }, set: { if !$0 { pendingStatus = nil } }),
                presenting: pendingStatus) { status in
             TextField("Note (optional)", text: $notes)

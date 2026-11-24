@@ -78,7 +78,7 @@ struct CRMHomeView: View {
         }
         .navigationTitle("CRM")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {
@@ -276,7 +276,7 @@ struct CRMAccountDetailView: View {
         .navigationTitle(state.value?.name ?? "Account")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             if session.canUpdate(.crmAccounts), state.value != nil {
                 ToolbarItem(placement: .topBarTrailing) { Button("Edit") { editing = true } }
@@ -635,7 +635,7 @@ struct CRMContactDetailView: View {
         .navigationTitle("Contact")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             if session.canUpdate(.crmContacts), state.value != nil {
                 ToolbarItem(placement: .topBarTrailing) { Button("Edit") { editing = true } }

@@ -77,7 +77,7 @@ struct MktGuideView: View {
         .navigationTitle("Getting started")
         .navigationBarTitleDisplayMode(.inline)
         .task { progress = await MktGuideProgress.load(MktAudienceAPI(services)) }
-        .refreshable { progress = await MktGuideProgress.load(MktAudienceAPI(services)) }
+        .wsRefreshable { progress = await MktGuideProgress.load(MktAudienceAPI(services)) }
     }
 
     private func scroll(_ proxy: ScrollViewProxy, to id: String) {

@@ -325,7 +325,7 @@ struct ShopQuoteDetailView: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {

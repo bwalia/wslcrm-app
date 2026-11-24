@@ -210,7 +210,7 @@ struct FileMyTaxView: View {
             }
             keyDatesSection
         }
-        .refreshable { await loadYear(); await loadStatus() }
+        .wsRefreshable { await loadYear(); await loadStatus() }
     }
 
     // MARK: Summary and progress
@@ -510,7 +510,7 @@ struct FileMyTaxView: View {
         if loadingPreview { HStack { ProgressView(); Text("Adding up your figures…") } }
         if let preview {
             let stats = preview.object("stats") ?? Record([:])
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+            LazyVGrid(columns: .tiles(sizeClass, spacing: 8), spacing: 8) {
                 countTile("Transactions", stats.int("rows"))
                 countTile("In your return", stats.int("applied"))
                 countTile("Still to check", stats.int("excluded_unreviewed"))

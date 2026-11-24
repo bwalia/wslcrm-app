@@ -296,7 +296,7 @@ private struct AdminUserDetail: View {
         .navigationTitle(shown.personName() ?? "User")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $editing) {
             NavigationStack {
                 AdminUserEditForm(api: api, user: shown) {

@@ -79,7 +79,7 @@ struct HomeView: View {
         .overlay(alignment: .top) { StatusBarBackdrop() }
         .toolbar(.hidden, for: .navigationBar)
         .navigationTitle("Home")
-        .refreshable {
+        .wsRefreshable {
             await session.reloadPermissions()
             await digest.load(session: session, services: services)
             await invitations.load(services.workspace())

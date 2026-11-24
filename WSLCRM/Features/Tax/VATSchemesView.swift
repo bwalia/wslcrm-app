@@ -596,7 +596,7 @@ struct VATClientsView: View {
         }
         .navigationTitle("VAT clients")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .confirmationDialog("Stop acting for this client?", isPresented: Binding(get: { stopping != nil },
                                                                               set: { if !$0 { stopping = nil } }),
                             titleVisibility: .visible) {

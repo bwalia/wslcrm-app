@@ -319,7 +319,7 @@ private struct DealBoardContent: View {
             }
         }
         .task { await model.load() }
-        .refreshable { await model.load() }
+        .wsRefreshable { await model.load() }
         .onChange(of: model.selectedPipelineUuid) { _, _ in Task { try? await model.loadDeals() } }
     }
 
@@ -485,7 +485,7 @@ private struct DealPipelineContent: View {
             }
         }
         .task { await model.load() }
-        .refreshable { await model.load() }
+        .wsRefreshable { await model.load() }
         .onChange(of: model.selectedPipelineUuid) { _, _ in
             Task { try? await model.loadDeals() }
         }
@@ -537,7 +537,7 @@ struct CRMDealDetailView: View {
         .navigationTitle("Deal")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             if session.canUpdate(.crmDeals), state.value != nil {
                 ToolbarItem(placement: .topBarTrailing) { Button("Edit") { editing = true } }
@@ -912,7 +912,7 @@ struct CRMPipelinesView: View {
             Text("Its deals stay, with their stage names. This can't be undone.")
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             if session.canCreate(.crmPipelines) {
                 ToolbarItem(placement: .primaryAction) {

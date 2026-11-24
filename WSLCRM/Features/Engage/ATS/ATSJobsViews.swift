@@ -214,12 +214,12 @@ struct ATSJobDetailView: View {
                                  onInvite: { inviting = $0 },
                                  onAdd: session.permissions.can(.create, moduleName: ATSModule.candidates)
                                      ? { adding = true } : nil)
-                    .refreshable { await load() }
+                    .wsRefreshable { await load() }
             case .details:
                 ATSJobDetailsList(job: job, canEdit: session.permissions.can(.update, moduleName: ATSModule.jobs)) { status in
                     Task { await setStatus(status) }
                 }
-                .refreshable { await load() }
+                .wsRefreshable { await load() }
             }
         } else if let loadError {
             ErrorStateView(error: loadError) { Task { await load() } }

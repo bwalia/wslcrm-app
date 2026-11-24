@@ -73,7 +73,7 @@ struct LeadDetailView: View {
             formResponses = await WebFormRecordResponsesSection.load(services: services, session: session,
                                                                      entityType: "lead", entityUUID: leadUuid)
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         // Back from a call made from this page: ask how it went.
         .onChange(of: scenePhase) { _, phase in
             if callFollowUp.phaseChanged(to: phase), let lead = state.value, canLogCall(lead) { sheet = .call }

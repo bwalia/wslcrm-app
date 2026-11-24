@@ -41,7 +41,7 @@ struct PDAccessGate<Content: View>: View {
             }
             .navigationTitle("Property Deals")
             .task { await check() }
-            .refreshable { await check() }
+            .wsRefreshable { await check() }
         }
     }
 

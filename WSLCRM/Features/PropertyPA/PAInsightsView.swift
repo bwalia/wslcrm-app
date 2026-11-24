@@ -44,7 +44,7 @@ struct PAInsightsView: View {
             integrationsSection
             auditSection
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task { await load() }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {

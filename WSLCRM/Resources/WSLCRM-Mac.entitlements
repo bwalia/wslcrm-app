@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The Mac app (Mac Catalyst). The Mac App Store and TestFlight need the App Sandbox; each key below
+	     opens only what a screen uses. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<!-- OpsAPI. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<!-- Attaching a file, saving a PDF or an export where the person chooses. -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<!-- Voice notes and dictated notes. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+	<!-- Site visit check-in/out and a property's address. -->
+	<key>com.apple.security.personal-information.location</key>
+	<true/>
+	<!-- Property Deals alerts. -->
+	<key>com.apple.developer.aps-environment</key>
+	<string>$(APS_ENVIRONMENT)</string>
+</dict>
+</plist>

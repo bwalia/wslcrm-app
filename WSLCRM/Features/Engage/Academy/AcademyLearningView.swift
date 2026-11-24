@@ -25,7 +25,7 @@ struct AcademyLearningView: View {
         }
         .overlay { if loading, learning == nil, error == nil { SkeletonList() } }
         .navigationTitle("My learning")
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task { await load() }
     }
 
@@ -151,7 +151,7 @@ struct AcademyLearnerCourseView: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: notice) }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task { await load() }
     }
 

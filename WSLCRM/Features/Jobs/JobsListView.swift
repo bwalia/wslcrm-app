@@ -140,7 +140,7 @@ private struct JobsListContent: View {
             }
         }
         .searchable(text: $model.query.search, prompt: "Job number, customer, postcode")
-        .refreshable { await model.load() }
+        .wsRefreshable { await model.load() }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {

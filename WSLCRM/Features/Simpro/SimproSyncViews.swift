@@ -51,7 +51,7 @@ struct SimproSyncStatusView: View {
             ToolbarItem(placement: .topBarTrailing) { logFilter }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .confirmationDialog("Send changes to Simpro?", isPresented: .init(get: { confirmingPush != nil },
                                                                            set: { if !$0 { confirmingPush = nil } }),
                             titleVisibility: .visible, presenting: confirmingPush) { run in

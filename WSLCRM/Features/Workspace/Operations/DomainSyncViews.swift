@@ -168,7 +168,7 @@ struct DomainSyncSettingsView: View {
         .navigationTitle("Sync settings")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(item: $editingRepo) { edit in
             NavigationStack {
                 DomainRepoFormView(existing: edit.repo, integrations: integrations) { message in
@@ -909,7 +909,7 @@ struct DomainPipelineHistoryView: View {
         .navigationTitle("Pipeline runs")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {
@@ -936,7 +936,7 @@ private struct DomainPipelineRunScreen: View {
         List { DomainPipelineRunSections(run: run) }
             .navigationTitle("Pipeline run")
             .navigationBarTitleDisplayMode(.inline)
-            .refreshable { await refresh() }
+            .wsRefreshable { await refresh() }
             .task {
                 await refresh()
                 while DomainPipelineStyle.isActive(run.string("status")), !Task.isCancelled {
@@ -995,7 +995,7 @@ struct DomainSyncJobsView: View {
         .navigationTitle("Sync jobs")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             if OperationsAccess.domains(session.permissions, .create) {
                 ToolbarItem(placement: .primaryAction) {

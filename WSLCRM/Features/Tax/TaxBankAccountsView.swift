@@ -67,7 +67,7 @@ struct TaxBankAccountsView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(item: $editing) { draft in
             NavigationStack {
                 BankAccountForm(draft: draft, existing: accounts.value ?? []) { message in

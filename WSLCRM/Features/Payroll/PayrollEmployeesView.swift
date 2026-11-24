@@ -47,7 +47,7 @@ struct PayrollEmployeesView: View {
             guard !Task.isCancelled else { return }
             await load()
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $adding) {
             NavigationStack {
                 PayrollEmployeeFormView(employer: employer, employee: nil) { notice = .success($0); Task { await load() } }

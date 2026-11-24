@@ -82,7 +82,7 @@ private struct PLTemplatesList: View {
         }
         .searchable(text: $filter, prompt: "Filter (A1, booking…)")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .onAppear {
             if hasAppeared { Task { await load() } }
             hasAppeared = true
@@ -336,7 +336,7 @@ private struct PLRulesList: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .confirmationDialog("Turn off \(turningOff?.string("sequence_id") ?? "this sequence")?",
                             isPresented: Binding(get: { turningOff != nil }, set: { if !$0 { turningOff = nil } }),
                             titleVisibility: .visible) {

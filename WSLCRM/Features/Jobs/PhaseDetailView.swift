@@ -119,7 +119,7 @@ struct PhaseDetailView: View {
                 }
             }
         }
-        .refreshable { await model.load() }
+        .wsRefreshable { await model.load() }
     }
 
     private func orderedTargets(_ targets: [PhaseStatus]) -> [PhaseStatus] {

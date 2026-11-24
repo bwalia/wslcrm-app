@@ -55,7 +55,7 @@ struct AIRunsView: View {
         .onChange(of: status) { page = 1 }
         .onChange(of: runnerUuid) { page = 1 }
         .onChange(of: mine) { page = 1 }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task(id: filterKey) {
             while !Task.isCancelled {
                 await load()

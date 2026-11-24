@@ -80,7 +80,7 @@ private struct ResourceDetailContent: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $editing) {
             if let record {
                 NavigationStack {

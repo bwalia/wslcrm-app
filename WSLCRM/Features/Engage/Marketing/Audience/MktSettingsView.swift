@@ -129,7 +129,7 @@ struct MktSettingsView: View {
             }
         }
         .task { if !loaded { await load() } }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     @ViewBuilder

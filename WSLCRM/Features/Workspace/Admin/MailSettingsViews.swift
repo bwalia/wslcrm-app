@@ -36,7 +36,7 @@ struct MailSettingsView: View {
         }
         .navigationTitle("Email")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .onAppear {
             if hasAppeared { Task { await load() } }
             hasAppeared = true

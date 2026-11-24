@@ -74,7 +74,7 @@ struct ShopSupplierItemsView: View {
             guard !Task.isCancelled else { return }
             await reload()
         }
-        .refreshable { await reload() }
+        .wsRefreshable { await reload() }
         .sheet(item: $linking) { item in
             NavigationStack {
                 ShopSupplierLinkSheet(item: item) { message in
@@ -452,7 +452,7 @@ struct ShopSupplierPortalView: View {
             dashboard = DashboardURL.forAPI(await services.shop.client.currentBaseURL)
             await load()
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .confirmationDialog("Switch off \(confirmOff?.email ?? "")?", isPresented: .init(get: { confirmOff != nil }, set: { if !$0 { confirmOff = nil } }),
                             titleVisibility: .visible, presenting: confirmOff) { user in
             Button("Switch off", role: .destructive) { Task { await setEnabled(user, false) } }

@@ -77,7 +77,7 @@ private struct MktCampDetailContent: View {
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: model.notice) }
         .toolbar { toolbar }
-        .refreshable {
+        .wsRefreshable {
             await model.load()
             if model.status.isLive { await model.loadAnalytics() }
         }

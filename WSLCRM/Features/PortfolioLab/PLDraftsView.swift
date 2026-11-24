@@ -57,7 +57,7 @@ struct PLDraftsView: View {
         }
         .navigationTitle("Joy drafts")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .confirmationDialog("Discard draft", isPresented: Binding(get: { discarding != nil },
                                                                  set: { if !$0 { discarding = nil } }),
                             titleVisibility: .visible) {

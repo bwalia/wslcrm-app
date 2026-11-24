@@ -46,7 +46,7 @@ struct MyPayView: View {
         }
         .navigationTitle("My pay")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func jobSection(_ job: Record) -> some View {
@@ -145,7 +145,7 @@ struct PayslipView: View {
         }
         .quickLookPreview($pdf)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     @ViewBuilder

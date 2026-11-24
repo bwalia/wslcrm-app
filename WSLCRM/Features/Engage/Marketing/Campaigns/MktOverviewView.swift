@@ -55,7 +55,7 @@ struct MktOverviewView: View {
         }
         .overlay { if !loaded { SkeletonList() } }
         .navigationTitle("Marketing")
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task { await load() }
         .sheet(item: $askAI) { request in
             NavigationStack { MktCampAskAISheet(request: request) { Task { await load() } } }

@@ -131,7 +131,7 @@ struct LoginView: View {
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("login.brandName")
-            Text("Your whole business, in your pocket.")
+            Text(MacSupport.isMac ? "Your whole business, in one place." : "Your whole business, in your pocket.")
                 .font(.brandCallout)
                 .foregroundStyle(Palette.onDarkMuted)
             if session.environmentName != "Production" {

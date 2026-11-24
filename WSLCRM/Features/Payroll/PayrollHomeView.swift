@@ -30,7 +30,7 @@ struct PayrollHomeView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $adding) {
             NavigationStack { PayrollEmployerFormView(employer: nil) { notice = .success($0); Task { await load() } } }
         }
@@ -162,7 +162,7 @@ struct PayrollRunsView: View {
         }
         .navigationTitle("Pay runs")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {
@@ -202,7 +202,7 @@ struct PayrollEmployerView: View {
         }
         .navigationTitle(employer.value?.string("name") ?? "Employer")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .navigationDestination(item: $opened) { NativeScreenView(route: $0) }
         .sheet(isPresented: $editing) {
             if let e = employer.value {

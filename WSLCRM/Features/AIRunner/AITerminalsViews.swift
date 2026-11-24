@@ -230,7 +230,7 @@ struct AITerminalDetailView: View {
             }
             .disabled(busy)
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .confirmationDialog(confirm == "rotate" ? "New secret for \(name)?" : "Remove \(name)?",
                             isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }),
                             titleVisibility: .visible) {
@@ -498,7 +498,7 @@ struct AITerminalPeopleView: View {
         .navigationTitle("People")
         .navigationBarTitleDisplayMode(.inline)
         .aiNotice($notice)
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task { await load() }
         .sheet(isPresented: $picking) {
             NavigationStack {

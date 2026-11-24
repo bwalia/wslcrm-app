@@ -94,7 +94,7 @@ struct PagedList<Item: Identifiable & Sendable, Row: View>: View where Item.ID: 
         }
         .listStyle(.plain)
         .overlay { overlay }
-        .refreshable { await model.load() }
+        .wsRefreshable { await model.load() }
         .modifier(OptionalSearchable(text: $model.search, prompt: searchPrompt))
         .task(id: model.search) {
             if !model.items.isEmpty { try? await Task.sleep(for: .milliseconds(350)) }

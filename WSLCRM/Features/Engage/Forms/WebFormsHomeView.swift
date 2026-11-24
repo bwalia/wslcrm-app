@@ -58,7 +58,7 @@ struct WebFormsHomeView: View {
         .navigationTitle("Forms")
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: notice) }
         .searchable(text: $search, prompt: "Search forms")
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task(id: "\(search)|\(status)") {
             if hasAppeared { try? await Task.sleep(for: .milliseconds(300)) }
             guard !Task.isCancelled else { return }

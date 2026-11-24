@@ -90,3 +90,33 @@ jobs:
             ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO \
             -quiet
+
+  # The Mac app (Mac Catalyst) is the same code built for macOS: keep it building. Runs beside the
+  # iPhone job, so it adds no time to the checks.
+  mac-build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
+
+      - name: Generate the project
+        run: xcodegen generate
+
+      - name: Build the Mac app (Release-Int, unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project WSLCRM.xcodeproj \
+            -scheme WSLCRM-Int \
+            -configuration Release-Int \
+            -destination "platform=macOS,variant=Mac Catalyst" \
+            ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO \
+            -quiet

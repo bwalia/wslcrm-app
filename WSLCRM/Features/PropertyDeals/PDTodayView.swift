@@ -142,7 +142,7 @@ struct PDTodayView: View {
             approvalsSection(today)
             planningSection
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func summarySection(_ today: PDToday) -> some View {

@@ -93,7 +93,7 @@ struct VisitsScheduleView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { filterMenu }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task(id: VisitSchedule.Key(mine: showsMine, span: span, anchor: anchor, engineer: engineer, status: status)) {
             await load()
         }

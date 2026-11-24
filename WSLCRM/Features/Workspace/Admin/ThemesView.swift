@@ -91,7 +91,7 @@ struct ThemesView: View {
         }
         .navigationTitle("Themes")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             if rights.can("create") {
                 ToolbarItem(placement: .primaryAction) {

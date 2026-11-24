@@ -4,6 +4,7 @@ import SwiftUI
 /// the AI advisor and the "What do I need?" survey, for a period compared with the one before, with CSV exports.
 /// Figures come from the server only (queries/ShopAnalyticsQueries.lua); RBAC `shop_analytics` read.
 struct ShopAnalyticsView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var query = ShopAnalyticsQuery()
@@ -49,7 +50,7 @@ struct ShopAnalyticsView: View {
             ToolbarItem(placement: .primaryAction) { exportMenu }
         }
         .task(id: query) { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(item: $exported) { file in ShopExportSheet(file: file) }
         .alert("Export failed", isPresented: .init(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
             Button("OK") {}
@@ -116,7 +117,7 @@ struct ShopAnalyticsView: View {
             Section { InlineErrorRow(error: refreshError) { Task { await load() } } }
         }
         Section {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            LazyVGrid(columns: .tiles(sizeClass), spacing: 10) {
                 ShopKPITile(label: "Revenue", value: ShopAnalyticsFormat.pounds(r.sales.revenueMinor), change: ch.revenueMinor,
                             sub: "\(ShopAnalyticsFormat.pounds(r.sales.netRevenueMinor)) after refunds",
                             systemImage: "sterlingsign.circle", hint: "Inc VAT and shipping, orders paid in the period")

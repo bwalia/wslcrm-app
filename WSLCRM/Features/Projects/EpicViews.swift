@@ -86,7 +86,7 @@ struct EpicsView: View {
                         }
                     }
                 }
-                .refreshable { await load() }
+                .wsRefreshable { await load() }
             }
         }
         .navigationTitle("Epics")
@@ -243,7 +243,7 @@ struct EpicDetailView: View {
                         }
                     }
                 }
-                .refreshable { await load() }
+                .wsRefreshable { await load() }
             }
         }
         .navigationTitle(state.value?.name ?? "Epic")

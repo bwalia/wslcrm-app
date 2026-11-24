@@ -59,7 +59,7 @@ struct PDDealResearchView: View {
                 await load()
             }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $addingProperty) {
             PDAddPropertySheet(dealUuid: dealUuid) { notice = "Property added to the deal."; Task { await load() } }
         }

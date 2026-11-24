@@ -58,7 +58,7 @@ struct PDApprovalsListView: View {
             }
         }
         .navigationTitle("Approvals")
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task(id: showAll) { await load() }
         .onAppear { if state.value != nil { Task { await load() } } }
     }

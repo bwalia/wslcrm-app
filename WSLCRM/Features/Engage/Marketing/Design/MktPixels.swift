@@ -65,7 +65,7 @@ struct MktPixelsView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {
@@ -345,7 +345,7 @@ private struct MktPixelInstallTab: View {
             }
         }
         .task(id: pixel.publicKey) { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     @ViewBuilder
@@ -595,7 +595,7 @@ private struct MktPixelPerformanceTab: View {
             if let stats { content(stats) }
         }
         .task(id: days) { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     @ViewBuilder

@@ -221,7 +221,7 @@ private struct BillingLicenceDetail: View {
         .navigationTitle("Licence")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .revealOnce($revealed)
         .sheet(isPresented: $editingLimits) {
             NavigationStack {

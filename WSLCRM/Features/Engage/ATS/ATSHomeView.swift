@@ -81,7 +81,7 @@ struct ATSHomeView: View {
             if appeared { Task { await load() } }
             appeared = true
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {

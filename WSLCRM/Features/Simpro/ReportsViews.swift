@@ -42,7 +42,7 @@ struct ReportsListView: View {
         }
         .navigationTitle("Reports")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {
@@ -193,7 +193,7 @@ struct ReportDetailView: View {
                 }
             }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 if let pdf {

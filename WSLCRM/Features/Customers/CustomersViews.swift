@@ -168,7 +168,7 @@ struct CustomerDetailView: View {
                                  opening: "Order \(created.orderNumber ?? "") created.")
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             if session.permissions.can(.update, .customers), state.value != nil {
                 ToolbarItem(placement: .topBarTrailing) { Button("Edit") { editing = true } }

@@ -41,7 +41,7 @@ struct PDReportsView: View {
         }
         .navigationTitle("Deal reports")
         .task(id: "\(PDStartRenovationSheet.day(from))-\(PDStartRenovationSheet.day(to))") { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func report(_ name: String) -> Record? { reports[name] }

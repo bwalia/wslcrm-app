@@ -100,10 +100,11 @@ struct ShopStatCell: View {
 
 /// Two columns of stat cells.
 struct ShopStatGrid: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     let stats: [ShopStatCell]
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+        LazyVGrid(columns: .tiles(sizeClass, spacing: 8), spacing: 8) {
             ForEach(Array(stats.enumerated()), id: \.offset) { _, stat in stat }
         }
     }

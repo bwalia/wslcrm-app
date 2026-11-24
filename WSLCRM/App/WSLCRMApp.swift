@@ -28,6 +28,9 @@ struct WSLCRMApp: App {
         .backgroundTask(.appRefresh(MyWorkRefresh.taskIdentifier)) {
             await environment.refreshMyWorkInBackground()
         }
+        #if targetEnvironment(macCatalyst)
+        .commands { MacCommands() }
+        #endif
     }
 }
 

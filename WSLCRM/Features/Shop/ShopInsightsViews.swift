@@ -128,7 +128,7 @@ struct ShopMarketView: View {
             guard !Task.isCancelled else { return }
             await load()
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {
@@ -242,7 +242,7 @@ struct ShopMarketDetailView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .confirmationDialog(applyTitle, isPresented: .init(get: { pendingApply != nil }, set: { if !$0 { pendingApply = nil } }),
                             titleVisibility: .visible, presenting: pendingApply) { strategy in
             Button("Set price") { Task { await apply(strategy) } }

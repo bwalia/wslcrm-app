@@ -42,7 +42,7 @@ struct PDDueView: View {
             }
         }
         .task(id: "\(days)-\(onlyMine)") { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private var isManager: Bool { session.propertyDeals?.isManager ?? false }
@@ -206,7 +206,7 @@ struct PDRenovationsListView: View {
             }
         }
         .task(id: status) { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $starting) {
             PDStartRenovationSheet(dealName: nil, choosesDeal: true) { body in
                 let created = try await services.propertyDeals.startRenovation(body)

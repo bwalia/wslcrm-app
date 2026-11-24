@@ -59,7 +59,7 @@ private struct POSTillContent: View {
         }
         .safeAreaInset(edge: .bottom) { cartBar }
         .task { if model.stores.value == nil { await model.loadStores() } }
-        .refreshable { await model.loadStores() }
+        .wsRefreshable { await model.loadStores() }
         .sheet(item: $picking) { product in
             POSVariantPicker(product: product, model: model)
                 .presentationDetents([.medium, .large])

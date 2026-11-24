@@ -38,7 +38,7 @@ struct PluginsView: View {
         }
         .navigationTitle("Plugins")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private var canUpdate: Bool { session.permissions.can(.update, moduleName: "namespace") }

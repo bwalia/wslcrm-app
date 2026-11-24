@@ -220,7 +220,7 @@ struct CMSPagesListView: View {
         .overlay { overlay }
         .navigationTitle("Pages")
         .searchable(text: $search, prompt: "Search pages")
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: notice) }
         .task(id: "\(search)|\(status ?? "")") {
             if state.value != nil { try? await Task.sleep(for: .milliseconds(300)) }

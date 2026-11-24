@@ -303,7 +303,7 @@ struct ReviewQueueView: View {
                     }
                 }
                 .listStyle(.insetGrouped)
-                .refreshable { await load() }
+                .wsRefreshable { await load() }
             }
         }
         .navigationTitle("Waiting for me")

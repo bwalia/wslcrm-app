@@ -85,7 +85,7 @@ struct RoleListView: View {
         .searchable(text: $search, prompt: "Search roles")
         .navigationTitle("Roles and permissions")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .onAppear {
             if hasAppeared { Task { await load() } }
             hasAppeared = true
@@ -243,7 +243,7 @@ private struct RoleDetailView: View {
         .navigationTitle("Role")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             if session.permissions.can(.update, moduleName: "roles") {
                 ToolbarItem(placement: .primaryAction) {

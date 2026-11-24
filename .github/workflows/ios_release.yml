@@ -196,6 +196,23 @@ jobs:
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target == 'testflight')
         run: bundle exec fastlane ios beta
 
+      # The Mac app (Mac Catalyst): the same code and build number, uploaded as a macOS build to the
+      # same App Store Connect app. Off until the repo variable MAC_TESTFLIGHT is "true" (see
+      # docs/IOS_RELEASE.md, "Mac app"). A Mac failure never fails the iPhone release.
+      - name: Mac app — sign, build and upload to TestFlight
+        if: >-
+          vars.MAC_TESTFLIGHT == 'true' && env.BUILDS_APP == 'true'
+          && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target == 'testflight'))
+        continue-on-error: true
+        env:
+          BUILD_NUMBER: ${{ steps.build.outputs.build_number }}
+          EXPORT_OPTIONS_PLIST: ${{ runner.temp }}/ExportOptions-Mac.plist
+        run: |
+          set -euo pipefail
+          bundle exec fastlane mac prepare_signing
+          bundle exec fastlane mac build_pkg
+          bundle exec fastlane mac beta
+
       - name: Re-invite testers to the latest build
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'invite_testers'
         run: bundle exec fastlane ios invite_testers
@@ -209,7 +226,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wslcrm-ios-ipa
-          path: build/release/WSLCRM.ipa
+          path: |
+            build/release/WSLCRM.ipa
+            build/release/WSLCRM.pkg
           if-no-files-found: warn
           retention-days: 14
 
@@ -228,6 +247,7 @@ jobs:
           # The keychain is persistent on purpose (see Configure build keychain): lock it,
           # don't delete it, so the certificate survives.
           security lock-keychain "$BUILD_KEYCHAIN_PATH" 2>/dev/null || true
-          rm -f "$EXPORT_OPTIONS_PLIST" "${ASC_KEY_FILEPATH:-}" "${DIST_CERT_KEY_FILEPATH:-}" "${INSTALLED_PROFILE_PATH:-}" 2>/dev/null || true
+          rm -f "$EXPORT_OPTIONS_PLIST" "$RUNNER_TEMP/ExportOptions-Mac.plist" "${ASC_KEY_FILEPATH:-}" "${DIST_CERT_KEY_FILEPATH:-}" \
+            "${INSTALLED_PROFILE_PATH:-}" "${INSTALLED_MAC_PROFILE_PATH:-}" 2>/dev/null || true
           rm -f "$RUNNER_TEMP"/*.cer "$RUNNER_TEMP"/*.p12 2>/dev/null || true
           rm -rf "$RUNNER_TEMP/.ios-secrets" 2>/dev/null || true

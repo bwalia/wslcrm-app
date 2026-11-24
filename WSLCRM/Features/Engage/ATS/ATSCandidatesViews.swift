@@ -138,7 +138,7 @@ struct ATSCandidateDetailView: View {
             if appeared { Task { await load() } }
             appeared = true
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $editing) {
             if let candidate {
                 NavigationStack {

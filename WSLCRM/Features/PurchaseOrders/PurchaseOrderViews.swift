@@ -267,7 +267,7 @@ struct PurchaseOrderDetailView: View {
             if notice == nil, let opening, state.value == nil { notice = opening }
             await load()
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             if let po = state.value {
                 ToolbarItem(placement: .topBarTrailing) {

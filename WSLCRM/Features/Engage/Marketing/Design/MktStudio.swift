@@ -809,7 +809,7 @@ struct MktTemplateMergeFieldsView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {

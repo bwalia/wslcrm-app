@@ -570,7 +570,7 @@ struct TaskAIRunDetailView: View {
             }
         }
         .disabled(busy)
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     @ViewBuilder

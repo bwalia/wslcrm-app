@@ -145,7 +145,7 @@ struct ServiceRequestsListView: View {
             }
         }
         .searchable(text: $model.search, prompt: "Number, title, customer")
-        .refreshable { await model.load() }
+        .wsRefreshable { await model.load() }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Menu {
@@ -355,7 +355,7 @@ private struct ServiceRequestDetailContent: View {
         }
         .navigationTitle(model.state.value?.request.requestNumber ?? "Request")
         .task { await model.load() }
-        .refreshable { await model.load() }
+        .wsRefreshable { await model.load() }
         .alert("Couldn't update the request", isPresented: .init(get: { model.actionError != nil }, set: { if !$0 { model.actionError = nil } }),
                presenting: model.actionError) { _ in
             Button("OK", role: .cancel) {}
