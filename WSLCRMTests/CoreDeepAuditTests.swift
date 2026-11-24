@@ -296,7 +296,7 @@ final class SessionRaceTests: XCTestCase {
 
 @MainActor
 final class PermissionRefreshTests: XCTestCase {
-    private func menu(_ grants: String) -> String {
+    private nonisolated static func menu(_ grants: String) -> String {
         #"{"menu":[{"key":"invoices","name":"Invoices","module":"invoices","priority":1}],"namespace":{"uuid":"ns-1","is_owner":false},"permissions":{\#(grants)},"is_admin":false}"#
     }
 
@@ -310,7 +310,7 @@ final class PermissionRefreshTests: XCTestCase {
                                    case "/api/v2/user/menu":
                                        menuCalls.increment("menu")
                                        guard let text = grants.value else { return .json(500, #"{"error":"boom"}"#) }
-                                       return .json(200, self.menu(text))
+                                       return .json(200, Self.menu(text))
                                    case "/api/v2/invoices":
                                        return .json(403, #"{"error":"Permission denied","required":{"module":"invoices","action":"read"}}"#)
                                    default:
