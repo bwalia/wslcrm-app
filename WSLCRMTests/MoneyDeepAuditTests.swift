@@ -106,7 +106,7 @@ final class MoneyDeepAuditTests: XCTestCase {
 
     private func po(bills: String = "[]") throws -> PurchaseOrder {
         try JSONDecoder.opsAPI().decode(PurchaseOrder.self, from: Data("""
-        {"uuid":"po-1","po_number":"PO-1","status":"received","currency":"GBP","total":"120.00","bills":\(bills),
+        {"uuid":"po-1","po_number":"PO-1","status":"received","currency":"GBP","total":"120.00","metadata":{"bills":\(bills)},
          "items":[{"uuid":"i1","description":"Mug","quantity":"2","unit_price":"50","tax_rate":"20","line_total":"120",
                    "received_quantity":"2","billed_quantity":"0"}]}
         """.utf8))
