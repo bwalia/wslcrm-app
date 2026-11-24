@@ -122,6 +122,7 @@ private struct WorkspaceMembersContent: View {
     @State private var inviting = false
     @State private var adding = false
     @State private var chosenInvitation: WorkspaceInvitation?
+    @State private var revokingInvitation: WorkspaceInvitation?
     @State private var feedback: Feedback = .none
     @State private var hasAppeared = false
 
@@ -219,13 +220,24 @@ private struct WorkspaceMembersContent: View {
                      : "Sending again gives them a fresh link that lasts 7 days.")
             }
         }
+        .confirmationDialog("Cancel the invitation to \(revokingInvitation?.email ?? "them")?", isPresented: Binding(
+            get: { revokingInvitation != nil }, set: { if !$0 { revokingInvitation = nil } }), titleVisibility: .visible) {
+            if let invitation = revokingInvitation {
+                Button("Cancel the invitation", role: .destructive) { Task { await revoke(invitation) } }
+                Button("Keep it", role: .cancel) {}
+            }
+        } message: {
+            Text("The link in their email stops working. You can invite them again later.")
+        }
     }
 
     private var membersList: some View {
         PagedList(model: members, searchPrompt: "Search by name or email", emptyTitle: "No members found",
                   emptySystemImage: "person.2",
                   emptyDescription: memberStatus.isEmpty ? "Invite people to work in this workspace."
-                      : "Nobody here has that status.") { record in
+                      : "Nobody here has that status.",
+                  emptyActionTitle: "Invite someone",
+                  emptyAction: canCreate && memberStatus.isEmpty ? { inviting = true } : nil) { record in
             let member = WorkspaceMember(record)
             NavigationLink {
                 WorkspaceMemberDetailView(member: member, target: target, api: api) {
@@ -241,7 +253,9 @@ private struct WorkspaceMembersContent: View {
     private var invitationsList: some View {
         PagedList(model: invitations, searchPrompt: "Search by email", emptyTitle: "No invitations",
                   emptySystemImage: "envelope.open",
-                  emptyDescription: "Invitations you send by email show here until they’re accepted.") { record in
+                  emptyDescription: "Invitations you send by email show here until they’re accepted.",
+                  emptyActionTitle: "Invite someone",
+                  emptyAction: canCreate && invitationStatus.isEmpty ? { inviting = true } : nil) { record in
             let invitation = WorkspaceInvitation(record)
             Button {
                 if (canCreate && invitation.canResend()) || (canDelete && invitation.canRevoke()) {
@@ -253,7 +267,7 @@ private struct WorkspaceMembersContent: View {
             .foregroundStyle(.primary)
             .swipeActions(allowsFullSwipe: false) {
                 if canDelete, invitation.canRevoke() {
-                    Button("Cancel", role: .destructive) { Task { await revoke(invitation) } }
+                    Button("Cancel", role: .destructive) { revokingInvitation = invitation }
                 }
                 if canCreate, invitation.canResend() {
                     Button("Send again") { Task { await resend(invitation) } }.tint(.accentColor)
@@ -397,6 +411,13 @@ private struct WorkspaceMemberDetailView: View {
     private var isYou: Bool { target == nil && member.userUUID != nil && member.userUUID == session.user?.uuid }
     private var p: PermissionSet { session.permissions }
 
+    /// How ownership would be handed to this member, if this person may (nil: not offered).
+    private var transfer: WorkspaceOwnershipTransfer.Request? {
+        WorkspaceOwnershipTransfer.request(isOwner: p.isOwner, isPlatformAdmin: p.isAdmin,
+                                           target: target?.uuid, current: session.workspace?.uuid,
+                                           memberID: member.id, userUUID: member.userUUID)
+    }
+
     var body: some View {
         List {
             Section {
@@ -439,7 +460,7 @@ private struct WorkspaceMemberDetailView: View {
                 Button(action.button, role: action.destructive ? .destructive : nil) { Task { await run(action) } }
             }
         } message: {
-            Text(confirming?.message(member.name) ?? "")
+            Text(confirming?.message(member.name, youAreTheOwner: transfer?.byOwner ?? false) ?? "")
         }
     }
 
@@ -450,7 +471,7 @@ private struct WorkspaceMemberDetailView: View {
             canUpdate && !member.isOwner && member.status == "active" ? .editRoles : nil,
             canUpdate && !member.isOwner && member.status == "active" ? .suspend : nil,
             canUpdate && !member.isOwner && member.status == "suspended" ? .activate : nil,
-            p.isOwnerOrAdmin && !member.isOwner && member.status == "active" ? .transfer : nil,
+            transfer != nil && !member.isOwner && member.status == "active" ? .transfer : nil,
             p.can(.delete, moduleName: "users") && !member.isOwner && !isYou ? .remove : nil,
         ]
         let rows = candidates.compactMap { $0 }
@@ -488,8 +509,9 @@ private struct WorkspaceMemberDetailView: View {
             }
             changed()
         case .transfer:
+            guard let request = transfer else { return }
             if await perform($feedback, done: "\(member.name) is now the owner of this workspace.", {
-                try await api.send(.post, "\(path)/transfer-ownership")
+                try await api.send(.post, request.path, body: request.body, namespace: request.byOwner)
             }) {
                 changed()
                 if target == nil { await session.reloadPermissions() }
@@ -551,14 +573,42 @@ private enum WorkspaceMemberAction: String, Identifiable {
 
     var destructive: Bool { self == .suspend || self == .remove || self == .transfer }
 
-    func message(_ name: String) -> String {
+    func message(_ name: String, youAreTheOwner: Bool = true) -> String {
         switch self {
         case .editRoles: ""
         case .suspend: "\(name) won’t be able to use this workspace until you let them back in."
         case .activate: "\(name) will be able to use this workspace again with their roles."
-        case .transfer: "\(name) becomes the owner. You stay a member but are no longer the owner. This can only be undone by the new owner."
+        case .transfer:
+            youAreTheOwner
+                ? "\(name) becomes the owner. You stay a member but are no longer the owner. This can only be undone by the new owner."
+                : "\(name) becomes the owner. The current owner stays a member but is no longer the owner."
         case .remove: "\(name) loses access to this workspace straight away. Their account stays."
         }
+    }
+}
+
+/// Handing a workspace to a member. The workspace's own route (`POST /api/v2/namespace/members/:id/transfer-ownership`)
+/// moves ownership away from the caller, so only the real owner can use it (a platform admin who isn't the
+/// owner gets a server error there); a platform admin uses the admin route
+/// (`POST /api/v2/admin/namespaces/:id/transfer-ownership {new_owner_uuid}`) instead.
+enum WorkspaceOwnershipTransfer {
+    struct Request: Equatable {
+        let path: String
+        let body: JSONValue?
+        /// The owner's own route (sent with the workspace header); else the admin route.
+        let byOwner: Bool
+    }
+
+    /// `isOwner` is the signed-in person's ownership of their current workspace; `target` is another
+    /// workspace a platform admin is managing.
+    static func request(isOwner: Bool, isPlatformAdmin: Bool, target: String?, current: String?,
+                        memberID: String, userUUID: String?) -> Request? {
+        if isOwner, target == nil {
+            return Request(path: "/api/v2/namespace/members/\(memberID)/transfer-ownership", body: nil, byOwner: true)
+        }
+        guard isPlatformAdmin, let workspace = target ?? current, let userUUID else { return nil }
+        return Request(path: "/api/v2/admin/namespaces/\(workspace)/transfer-ownership",
+                       body: .object(["new_owner_uuid": .string(userUUID)]), byOwner: false)
     }
 }
 
@@ -571,6 +621,7 @@ struct MemberRolesSheet: View {
     var target: WorkspaceTarget?
     let onSaved: () -> Void
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var roles: [Record] = []
     @State private var chosen: Set<Int> = []
@@ -627,10 +678,22 @@ struct MemberRolesSheet: View {
             .overlay {
                 if !loaded, loadError == nil { SkeletonList() }
                 else if loaded, roles.isEmpty, loadError == nil {
-                    ContentUnavailableView("No roles to give", systemImage: "person.badge.key",
-                                           description: Text("Create a role first under Roles and permissions."))
+                    ContentUnavailableView {
+                        Label("No roles to give", systemImage: "person.badge.key")
+                    } description: {
+                        Text(canMakeRoles ? "This workspace has no roles yet. Make one, then come back to give it."
+                             : "This workspace has no roles yet. Ask the person who manages it to add one.")
+                    } actions: {
+                        if canMakeRoles {
+                            NavigationLink { RoleListView() } label: { Text("Make a role") }
+                                .buttonStyle(.borderedProminent)
+                                .accessibilityIdentifier("memberRoles.makeRole")
+                        }
+                    }
                 }
             }
+            // Back from making a role: show it.
+            .onAppear { if loaded { Task { await load() } } }
             .navigationTitle("Change roles")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -644,6 +707,9 @@ struct MemberRolesSheet: View {
             .task { await load() }
         }
     }
+
+    /// Roles are made in this workspace only (not in one a platform admin is managing from here).
+    private var canMakeRoles: Bool { target == nil && session.permissions.can(.create, moduleName: "roles") }
 
     private func load() async {
         do {
@@ -751,7 +817,8 @@ private struct WorkspaceInviteForm: View {
                 }
                 .accessibilityIdentifier("invite.days")
             } footer: {
-                Text("They get an email with a link to join. If they don’t have an account yet, they make one from the link.")
+                Text("They get an email with a link to join. If they don’t have an account yet, they make one from the link. "
+                     + "“The default role” is the role this workspace gives new members, set under Roles and permissions.")
             }
             Section("A note for them (optional)") {
                 TextField("e.g. Welcome to the team!", text: $message, axis: .vertical)
