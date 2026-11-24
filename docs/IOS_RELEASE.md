@@ -10,6 +10,7 @@ Fishers (`bwalia/fishers`, `ios/fastlane`), adapted to this repo.
 | **TestFlight (tag)** | same | Push a `v1.2.3` tag: ships as version 1.2.3 |
 | **TestFlight (manual)** | same, Run workflow → **testflight** | Any time |
 | **Re-invite testers** | same, Run workflow → **invite_testers** | Re-send invites for the latest build, no rebuild |
+| **App Store build** | same, Run workflow → **testflight**, build **Prod** | Production build for the App Store (see "App Store") |
 | **App Store review** | same, Run workflow → **app_store** | After TestFlight sign-off |
 
 Testers get **Workstation CRM** (scheme `WSLCRM-Int`): the house brand (`docs/brand/`),
@@ -150,6 +151,22 @@ Before turning it on, once:
 3. **Turn it on:** Settings → Secrets and variables → Actions → Variables → `MAC_TESTFLIGHT` = `true`.
 
 Testers install it with the TestFlight app for Mac (macOS 14 or later).
+
+## App Store (production)
+
+The App Store gets **WSLCRM-Prod** (`Release-Prod`), which talks to the production server. That
+address is kept out of this public repo, in the repository variable **`WSLCRM_PROD_API_BASE_URL`**
+(e.g. `https://opsapi.example.com`); a Prod build without it stops with a clear error.
+
+1. Actions → iOS Release → Run workflow: **What to do** `testflight`, **Which build** `Prod`.
+   The iPhone build and (with `MAC_TESTFLIGHT`) the Mac build upload to TestFlight with the next
+   build number. Internal testers get them, so they can check production before Apple does.
+2. App Store Connect → the app → iOS App 1.0.0 and macOS App 1.0.0 → **Build** → pick that build.
+3. **Add for Review** → **Submit to App Review**. Release is manual after approval.
+
+Apple's reviewers sign in, so App Review Information needs a demo login **on the production
+server**, with some sample data in its workspace. The listing itself (name, description,
+screenshots, App Privacy, age rating) lives in App Store Connect, not in this repo.
 
 ## Local dry run (on the Mac Studio)
 
