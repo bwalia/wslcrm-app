@@ -152,11 +152,16 @@ struct WorkspaceAPIKeysView: View {
         self.target = target
     }
 
-    /// The server's rule (`requireAdmin` = namespace.manage; platform admins pass).
+    /// The server's rules (`api-keys.lua`): seeing the list needs `namespace.read` or `settings.read`; making
+    /// and revoking keys `namespace.manage`. Platform admins pass (also for another workspace).
+    private var canList: Bool {
+        if session.permissions.isAdmin { return true }
+        return target == nil && WorkspaceManageAccess.apiKeys(session.permissions)
+    }
+
     private var canManage: Bool {
         if session.permissions.isAdmin { return true }
-        guard target == nil else { return false }
-        return session.permissions.can(.manage, moduleName: "namespace")
+        return target == nil && WorkspaceManageAccess.manageAPIKeys(session.permissions)
     }
 
     var body: some View {
@@ -165,30 +170,43 @@ struct WorkspaceAPIKeysView: View {
                 Section { Label("Keys for \(target.name)", systemImage: "building.2") }
             }
             FeedbackSection(feedback: feedback)
-            switch state {
-            case .failed(let error):
-                Section { InlineErrorRow(error: error) { Task { await load() } } }
-            case .loaded(let keys) where keys.isEmpty:
+            if !canList {
                 Section {
-                    ContentUnavailableView("No API keys yet", systemImage: "key",
-                                           description: Text("An API key lets a script, a website or another app use this workspace without signing in. "
-                                                             + (canManage ? "Tap + to make one." : "Ask an owner or admin to make one.")))
-                }
-            case .loaded(let keys):
-                Section {
-                    ForEach(keys) { key in
-                        NavigationLink {
-                            APIKeyDetailView(key: key, canRevoke: canManage, revoke: revoke)
-                        } label: {
-                            APIKeyRow(key: key)
-                        }
-                        .accessibilityIdentifier("apiKey.row.\(key.id)")
+                    ContentUnavailableView("You can't see this workspace's keys", systemImage: "key",
+                                           description: Text("Your role doesn't include the workspace's API keys. You can "
+                                                             + "still make keys of your own, which can do what you can."))
+                    NavigationLink(value: NativeScreenRoute(WorkspaceScreen.personalAPIKeys)) {
+                        Label("Your own keys", systemImage: "person.badge.key")
                     }
-                } footer: {
-                    Text("Each key is shown in full only once, when it’s made. A key that acts as a team member can only do what that person can.")
+                    .accessibilityIdentifier("apiKey.personal")
                 }
-            default:
-                Section { ProgressView().frame(maxWidth: .infinity) }
+            } else {
+                switch state {
+                case .failed(let error):
+                    Section { InlineErrorRow(error: error) { Task { await load() } } }
+                case .loaded(let keys) where keys.isEmpty:
+                    Section {
+                        ContentUnavailableView("No API keys yet", systemImage: "key",
+                                               description: Text("An API key lets a script, a website or another app use this workspace without signing in. "
+                                                                 + (canManage ? "Tap + to make one."
+                                                                    : "Ask the person who manages this workspace to make one.")))
+                    }
+                case .loaded(let keys):
+                    Section {
+                        ForEach(keys) { key in
+                            NavigationLink {
+                                APIKeyDetailView(key: key, canRevoke: canManage, revoke: revoke)
+                            } label: {
+                                APIKeyRow(key: key)
+                            }
+                            .accessibilityIdentifier("apiKey.row.\(key.id)")
+                        }
+                    } footer: {
+                        Text("Each key is shown in full only once, when it’s made. A key that acts as a team member can only do what that person can.")
+                    }
+                default:
+                    Section { ProgressView().frame(maxWidth: .infinity) }
+                }
             }
         }
         .navigationTitle("API keys")
@@ -216,6 +234,7 @@ struct WorkspaceAPIKeysView: View {
     }
 
     private func load() async {
+        guard canList else { return }
         if state.value == nil { state = .loading }
         do {
             let json = try await services.workspace(target).get("/api/v2/api-keys")
@@ -355,7 +374,7 @@ private struct APIKeyCreateForm: View {
                                                                                  expiry: expires ? expiry : nil, actAs: actAs))
             let made = WorkspaceAPI.record(json) ?? Record([:])
             guard let key = made.string("key") else {
-                error = ResourceService.problem(500, "The key was made but the server didn’t send it. Revoke it and make another.")
+                error = ResourceService.problem(500, "The key was made but didn’t come back to show you. Revoke it and make another.")
                 return
             }
             var details = APIKeyPresentation.scopeLines(made).map { ("Can do", $0) }
@@ -577,7 +596,7 @@ private struct APIKeyPersonalForm: View {
                                                            body: APIKeyPresentation.personalBody(name: trimmed, days: days, preset: preset))
             let made = WorkspaceAPI.record(json) ?? Record([:])
             guard let key = made.string("key") else {
-                error = ResourceService.problem(500, "The key was made but the server didn’t send it. Revoke it and make another.")
+                error = ResourceService.problem(500, "The key was made but didn’t come back to show you. Revoke it and make another.")
                 return
             }
             created(APIKeyNewPersonal(key: key, record: made))

@@ -1,5 +1,26 @@
 import SwiftUI
 
+/// What My Workspace's "Manage" entries need, as each screen's route checks it (role-driven; platform
+/// admins pass; owning the workspace is not enough on its own).
+enum WorkspaceManageAccess {
+    /// Email (`namespace-mail.lua`), AI models (`namespace-ai-providers.lua`), plugins (`plugins.lua`) and
+    /// single sign-on (`saml.lua`) are read with `namespace.read`.
+    static func namespaceRead(_ p: PermissionSet) -> Bool { p.can(.read, moduleName: "namespace") }
+
+    /// Getting paid: `namespace.read`, `invoices.read` or `shop.read` (`namespace-payment-methods.lua`).
+    static func paymentMethods(_ p: PermissionSet) -> Bool {
+        ["namespace", "invoices", "shop"].contains { p.can(.read, moduleName: $0) }
+    }
+
+    /// The workspace's API keys list: `namespace.read` or `settings.read` (`api-keys.lua`); making and
+    /// revoking them need `namespace.manage`.
+    static func apiKeys(_ p: PermissionSet) -> Bool {
+        p.can(.read, moduleName: "namespace") || p.can(.read, moduleName: "settings")
+    }
+
+    static func manageAPIKeys(_ p: PermissionSet) -> Bool { p.can(.manage, moduleName: "namespace") }
+}
+
 /// My Workspace (`/dashboard/namespace`): the workspace at a glance, everything that can be managed in
 /// it (each entry shown only when this person may open it), and the other workspaces they belong to.
 struct WorkspaceHomeView: View {
@@ -133,7 +154,7 @@ struct WorkspaceHomeView: View {
     private var manageSection: some View {
         let p = session.permissions
         Section("Manage") {
-            if p.isOwnerOrAdmin {
+            if WorkspaceSettingsView.canChange(p) {
                 manageLink("Settings", "Name, logo, domain and sign-in codes", "gearshape", WorkspaceScreen.settings)
             }
             if p.can(.read, moduleName: "users") {
@@ -142,7 +163,7 @@ struct WorkspaceHomeView: View {
             if p.can(.read, moduleName: "roles") {
                 manageLink("Roles and permissions", "What each role can do", "person.badge.key", WorkspaceScreen.roles)
             }
-            if p.isOwner || p.can(.manage, moduleName: "namespace") {
+            if WorkspaceManageAccess.apiKeys(p) {
                 manageLink("API keys", "Keys for scripts and other apps", "key", WorkspaceScreen.apiKeys)
             }
             if p.can(.read, moduleName: "activity") {
@@ -152,12 +173,16 @@ struct WorkspaceHomeView: View {
                 manageLink("Audit log", "Changes to members, roles and the workspace", "list.bullet.clipboard",
                            WorkspaceScreen.auditLog)
             }
-            if hasAny("namespace") {
-                manageLink("Email", "Your own mail servers and email wording", "envelope", WorkspaceScreen.email)
+            if WorkspaceManageAccess.namespaceRead(p) {
+                manageLink("Email", "Your own email accounts and email wording", "envelope", WorkspaceScreen.email)
+            }
+            if WorkspaceManageAccess.paymentMethods(p) {
                 NavigationLink(value: ResourceListRoute(WorkspaceAdminCatalog.paymentMethods.id)) {
                     manageLabel("Getting paid", "Bank details on your invoices", "banknote")
                 }
                 .accessibilityIdentifier("workspace.manage.paymentMethods")
+            }
+            if WorkspaceManageAccess.namespaceRead(p) {
                 manageLink("AI models", "AI providers this workspace uses", "cpu", WorkspaceAdminCatalog.aiScreen)
                 manageLink("Plugins", "Turn add-ons on or off", "puzzlepiece.extension", WorkspaceScreen.plugins)
                 manageLink("Single sign-on", "Sign in with your company’s accounts", "person.badge.shield.checkmark",
@@ -169,15 +194,11 @@ struct WorkspaceHomeView: View {
             }
             manageLink("Secret vault", "Your passwords and keys, locked with your own key", "lock.shield",
                        WorkspaceScreen.vault)
+            // The menu-config route itself lets the owner in, or `namespace.manage` (`routes/menu.lua`).
             if p.isOwner || p.can(.manage, moduleName: "namespace") {
                 manageLink("Menu", "Which pages appear in this workspace", "list.bullet.indent", WorkspaceScreen.menuConfig)
             }
         }
-    }
-
-    private func hasAny(_ module: String) -> Bool {
-        let p = session.permissions
-        return p.isAdmin || p.isOwner || !(p.grants[module] ?? []).isEmpty
     }
 
     private func manageLink(_ title: String, _ detail: String, _ symbol: String, _ screen: String) -> some View {
