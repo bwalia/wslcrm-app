@@ -65,7 +65,7 @@ struct VATPartialExemptionView: View {
                     ForEach(r.array("warnings").compactMap(\.stringValue), id: \.self) {
                         Label($0, systemImage: "exclamationmark.triangle").font(.wsFootnote).foregroundStyle(Tone.warning.textColor)
                     }
-                    if r.string("direction") != "none", let period {
+                    if r.string("direction") != "none", let period, context.allows(.create, session.permissions) {
                         Button("Put it on the \(period.label) return") { Task { await apply(period) } }.disabled(busy)
                     }
                 }
@@ -118,6 +118,7 @@ struct VATCapitalGoodsView: View {
     @State private var interval: [String: String] = [:]
     @State private var usePct: [String: String] = [:]
     @State private var deleting: Record?
+    @State private var loadError: APIError?
 
     static let kinds: [Choice] = [
         Choice("building", "Building (£250,000+)"), Choice("land", "Land (£250,000+)"),
@@ -133,6 +134,7 @@ struct VATCapitalGoodsView: View {
                     .font(.wsFootnote)
             }
             if let notice { Section { TaxNoticeView(notice: notice) } }
+            if let loadError { Section { InlineErrorRow(error: loadError) { Task { await load() } } } }
             ForEach(items) { item in
                 Section {
                     Text("\(item.string("description") ?? "") · \(item.string("kind_label") ?? "") · input VAT \(item.money("input_vat")) · "
@@ -143,7 +145,8 @@ struct VATCapitalGoodsView: View {
                              + "\(a.day("period_start") ?? "") to \(a.day("period_end") ?? "") return").font(.wsFootnote)
                     }
                     let next = max(item.records("adjustments").compactMap { $0.int("interval_no") }.max() ?? 1, 1) + 1
-                    if item.string("disposed_on") == nil, next <= (item.int("intervals") ?? 0), let period {
+                    if item.string("disposed_on") == nil, next <= (item.int("intervals") ?? 0), let period,
+                       context.allows(.create, session.permissions) {
                         TextField("Interval", text: Binding(get: { interval[item.id] ?? "\(next)" }, set: { interval[item.id] = $0 }))
                             .keyboardType(.numberPad)
                         TextField("Taxable use %", text: Binding(get: { usePct[item.id] ?? "" }, set: { usePct[item.id] = $0 }))
@@ -153,19 +156,23 @@ struct VATCapitalGoodsView: View {
                         }
                         .disabled((usePct[item.id] ?? "").isEmpty)
                     }
-                    if item.records("adjustments").isEmpty {
+                    if item.records("adjustments").isEmpty, context.allows(.delete, session.permissions) {
                         Button("Delete this item", role: .destructive) { deleting = item }
                     }
                 }
             }
-            Section("Add an item") {
-                TextField("What is it", text: $description)
-                Picker("Kind", selection: $kind) { ForEach(Self.kinds) { Text($0.label).tag($0.value) } }
-                TextField("Cost excluding VAT (£)", text: $cost).keyboardType(.decimalPad)
-                TextField("VAT paid (£)", text: $vat).keyboardType(.decimalPad)
-                TextField("Taxable use when first used (%)", text: $use).keyboardType(.decimalPad)
-                Toggle("Lease under 10 years (5 intervals)", isOn: $shortLease)
-                Button("Add item") { Task { await add() } }.disabled(description.isEmpty || cost.isEmpty)
+            if context.allows(.create, session.permissions) {
+                Section("Add an item") {
+                    TextField("What is it", text: $description)
+                    Picker("Kind", selection: $kind) { ForEach(Self.kinds) { Text($0.label).tag($0.value) } }
+                    TextField("Cost excluding VAT (£)", text: $cost).keyboardType(.decimalPad)
+                    TextField("VAT paid (£)", text: $vat).keyboardType(.decimalPad)
+                    TextField("Taxable use when first used (%)", text: $use).keyboardType(.decimalPad)
+                    Toggle("Lease under 10 years (5 intervals)", isOn: $shortLease)
+                    Button("Add item") { Task { await add() } }.disabled(description.isEmpty || cost.isEmpty)
+                }
+            } else if items.isEmpty && loadError == nil {
+                Section { Text("No items yet. Your role can't add them: ask the workspace owner.").foregroundStyle(.secondaryText) }
             }
         }
         .navigationTitle("Capital goods")
@@ -179,7 +186,14 @@ struct VATCapitalGoodsView: View {
     private var api: TaxAPI { makeTaxAPI(services, user: session.user) }
 
     private func load() async {
-        items = (try? await api.get("/api/v2/vat/capital-items", query: context.query).payload.recordList) ?? []
+        do {
+            items = try await api.get("/api/v2/vat/capital-items", query: context.query).payload.recordList
+            loadError = nil
+        } catch {
+            let apiError = error.asAPIError
+            if case .cancelled = apiError { return }
+            loadError = apiError
+        }
     }
 
     private func add() async {
@@ -231,16 +245,44 @@ struct VATGroupView: View {
     @State private var memberName = ""
     @State private var code = ""
     @State private var confirmLeave = false
+    @State private var removing: Record?
+    @State private var loadError: APIError?
+
+    /// Inviting and removing members, joining and leaving all need `vat.manage` (`vat.lua`).
+    private var canManage: Bool { session.permissions.can(.manage, moduleName: "vat") }
 
     var body: some View {
         Form {
             Section { Text("Companies under common control filing one VAT return.").font(.wsFootnote) }
             if let notice { Section { TaxNoticeView(notice: notice) } }
+            if let loadError {
+                Section { InlineErrorRow(error: loadError) { Task { await load() } } }
+            } else {
+                groupSections
+            }
+        }
+        .navigationTitle("VAT group")
+        .task { await load() }
+        .confirmationDialog("Leave this VAT group?", isPresented: $confirmLeave, titleVisibility: .visible) {
+            Button("Leave group", role: .destructive) { Task { await leave() } }
+        } message: { Text("This workspace will file its own VAT returns again. Tell HMRC too (form VAT56).") }
+        .confirmationDialog("Remove \(removing?.string("member_name") ?? "this member") from the group?",
+                            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+                            titleVisibility: .visible, presenting: removing) { m in
+            Button("Remove", role: .destructive) { Task { await remove(m) } }
+        } message: { _ in Text("Their sales and purchases leave this workspace's VAT return.") }
+    }
+
+    @ViewBuilder
+    private var groupSections: some View {
+        Group {
             if let memberOf = group?.object("member_of") {
                 Section {
                     Text("This workspace is in the VAT group \(memberOf.string("group_name") ?? memberOf.string("member_name") ?? "") "
                          + "(VAT \(memberOf.string("group_vrn") ?? "—")). The group’s representative files one return for every member.")
-                    Button("Leave this group", role: .destructive) { confirmLeave = true }
+                    if canManage {
+                        Button("Leave this group", role: .destructive) { confirmLeave = true }
+                    }
                 }
             } else {
                 Section {
@@ -253,28 +295,40 @@ struct VATGroupView: View {
                                  : "\(m.string("member_name") ?? "") · waiting — give them this code: \(m.string("invite_code") ?? "")")
                                 .textSelection(.enabled)
                             Spacer()
-                            Button("Remove", role: .destructive) { Task { await remove(m) } }.buttonStyle(.borderless)
+                            if canManage {
+                                Button("Remove", role: .destructive) { removing = m }.buttonStyle(.borderless)
+                            }
                         }
                     }
-                    TextField("Member company name (as on its invoices)", text: $memberName)
-                    Button("Invite") { Task { await invite() } }.disabled(memberName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    if canManage {
+                        TextField("Member company name (as on its invoices)", text: $memberName)
+                        Button("Invite") { Task { await invite() } }.disabled(memberName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    } else {
+                        Text("Your role can't change the group: ask the workspace owner.").font(.wsFootnote).foregroundStyle(.secondaryText)
+                    }
                 }
-                Section("Or join another group with its code") {
-                    TextField("32-character code", text: $code).autocorrectionDisabled().textInputAutocapitalization(.never)
-                    Button("Join") { Task { await join() } }.disabled(code.trimmingCharacters(in: .whitespaces).count != 32)
+                if canManage {
+                    Section("Or join another group with its code") {
+                        TextField("32-character code", text: $code).autocorrectionDisabled().textInputAutocapitalization(.never)
+                        Button("Join") { Task { await join() } }.disabled(code.trimmingCharacters(in: .whitespaces).count != 32)
+                    }
                 }
             }
         }
-        .navigationTitle("VAT group")
-        .task { await load() }
-        .confirmationDialog("Leave this VAT group?", isPresented: $confirmLeave, titleVisibility: .visible) {
-            Button("Leave group", role: .destructive) { Task { await leave() } }
-        } message: { Text("This workspace will file its own VAT returns again. Tell HMRC too (form VAT56).") }
     }
 
     private var api: TaxAPI { makeTaxAPI(services, user: session.user) }
 
-    private func load() async { group = try? await api.get("/api/v2/vat/group", query: context.query).payload.record }
+    private func load() async {
+        do {
+            group = try await api.get("/api/v2/vat/group", query: context.query).payload.record
+            loadError = nil
+        } catch {
+            let apiError = error.asAPIError
+            if case .cancelled = apiError { return }
+            loadError = apiError
+        }
+    }
 
     private func invite() async {
         do {
@@ -288,6 +342,7 @@ struct VATGroupView: View {
     private func remove(_ m: Record) async {
         do {
             try await api.delete("/api/v2/vat/group/members/\(m.id)", query: context.query)
+            notice = .success("\(m.string("member_name") ?? "The member") was removed from the group.")
             await load()
         } catch { notice = .error(error) }
     }
@@ -321,6 +376,7 @@ struct VATEInvoiceView: View {
     @State private var picking = false
     @State private var busy = false
     @State private var documents: [Record] = []
+    @State private var documentsError: APIError?
 
     var body: some View {
         Form {
@@ -350,13 +406,16 @@ struct VATEInvoiceView: View {
                     }
                     if let note = r.string("note"), !r.array("recorded").isEmpty {
                         Text(note).foregroundStyle(Tone.success.textColor)
-                    } else if context.isWorkspace, check.bool("valid") == true {
+                    } else if context.isWorkspace, check.bool("valid") == true, context.allows(.create, session.permissions) {
                         Button(r.bool("duplicate") == true ? "Record it (seen before)" : "Record as purchases") {
                             Task { await send(record: true) }
                         }
                         .disabled(busy)
                     }
                 }
+            }
+            if let documentsError {
+                Section { InlineErrorRow(error: documentsError) { Task { await loadDocuments() } } }
             }
             if !documents.isEmpty {
                 Section("E-invoices") {
@@ -372,7 +431,7 @@ struct VATEInvoiceView: View {
             }
         }
         .navigationTitle("E-invoices")
-        .task { documents = (try? await api.get("/api/v2/vat/einvoice/documents", query: context.query).payload.recordList) ?? [] }
+        .task { await loadDocuments() }
         .fileImporter(isPresented: $picking, allowedContentTypes: [.xml]) { result in
             guard case .success(let url) = result else { return }
             let scoped = url.startAccessingSecurityScopedResource()
@@ -384,6 +443,17 @@ struct VATEInvoiceView: View {
     }
 
     private var api: TaxAPI { makeTaxAPI(services, user: session.user) }
+
+    private func loadDocuments() async {
+        do {
+            documents = try await api.get("/api/v2/vat/einvoice/documents", query: context.query).payload.recordList
+            documentsError = nil
+        } catch {
+            let apiError = error.asAPIError
+            if case .cancelled = apiError { return }
+            documentsError = apiError
+        }
+    }
 
     private func send(record: Bool) async {
         guard let xml else { return }
@@ -489,11 +559,14 @@ struct VATClientsView: View {
                 TextField("Agent Reference Number (ARN), e.g. AARN1234567", text: $arn)
                     .textInputAutocapitalization(.characters).autocorrectionDisabled()
                     .accessibilityIdentifier("tax.vatClients.arn")
-                Button("Save") { Task { await act { try await api.json(.put, "/api/v2/vat/agent/profile", ["arn": .string(arn)]) ; notice = .success("Saved.") } } }
-                    .disabled(arn.isEmpty || busy)
+                    .disabled(!session.allows(.update, "vat_agent"))
+                if session.allows(.update, "vat_agent") {
+                    Button("Save") { Task { await act { try await api.json(.put, "/api/v2/vat/agent/profile", ["arn": .string(arn)]) ; notice = .success("Saved.") } } }
+                        .disabled(arn.isEmpty || busy)
+                }
                 Button("Connect to HMRC (agent sign-in)") { Task { await connect() } }
             }
-            if hasArn {
+            if hasArn, session.allows(.create, "vat_agent") {
                 Section {
                     Text("The client must have added their VAT number in OpsAPI. HMRC sends them a link to accept; their VAT "
                          + "registration date proves you know the business.").font(.wsFootnote)
@@ -552,7 +625,9 @@ struct VATClientsView: View {
                 if ["pending", "accepted", "active"].contains(status) {
                     Button("Check with HMRC") { Task { await act { try await api.json(.post, "/api/v2/vat/agent/clients/\(c.id)/refresh") } } }
                         .buttonStyle(.borderless)
-                    Button("Stop", role: .destructive) { stopping = c }.buttonStyle(.borderless)
+                    if session.allows(.delete, "vat_agent") {
+                        Button("Stop", role: .destructive) { stopping = c }.buttonStyle(.borderless)
+                    }
                 }
             }
             .font(.wsFootnote)

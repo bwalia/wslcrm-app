@@ -31,6 +31,16 @@ enum VATContext: Hashable, Sendable {
 
     var isWorkspace: Bool { self == .workspace }
     var isClient: Bool { if case .client = self { true } else { false } }
+
+    /// What the server checks before this VAT is read or changed (`vat.lua` `current_registration`): your own needs
+    /// nothing more; the workspace's needs `vat.<action>`; a client's needs `vat_agent.<action>`.
+    func allows(_ action: Action, _ permissions: PermissionSet) -> Bool {
+        switch self {
+        case .own: true
+        case .workspace: permissions.can(action, moduleName: "vat")
+        case .client: permissions.can(action, moduleName: "vat_agent")
+        }
+    }
 }
 
 /// A VAT period worked out on the phone from the registration's stagger (as the web does).
@@ -180,7 +190,16 @@ struct VATView: View {
                 NavigationLink("Back to your clients", value: NativeScreenRoute("tax.vat_clients"))
             }
         case .own:
-            EmptyView()
+            if VATContext.workspace.allows(.read, session.permissions) {
+                Section {
+                    Text("This is your own VAT. Your business’s VAT, from its invoices and accounts, is kept separately.")
+                        .font(.wsSubheadline)
+                    NavigationLink(value: NativeScreenRoute("tax.vat:namespace")) {
+                        Label("Your business’s VAT", systemImage: "building.2")
+                    }
+                    .accessibilityIdentifier("tax.vat.openWorkspace")
+                }
+            }
         }
     }
 
@@ -211,7 +230,14 @@ struct VATView: View {
                      + (reg.string("scheme") == "flat_rate" ? " (\(reg.string("flat_rate_pct") ?? "")%)" : "")
                      + (reg.bool("partially_exempt") == true ? " · partially exempt (\(reg.string("recovery_pct") ?? "")% recovered)" : ""))
                     .font(.wsSubheadline).foregroundStyle(.secondaryText)
-                Button("Change") { editing = true }.accessibilityIdentifier("tax.vat.changeRegistration")
+                if canWrite {
+                    Button("Change") { editing = true }.accessibilityIdentifier("tax.vat.changeRegistration")
+                }
+            }
+        } else if !canWrite {
+            Section("VAT registration") {
+                Text("No VAT registration has been added yet. Your role can't add one: ask the workspace owner.")
+                    .font(.wsSubheadline)
             }
         } else {
             VATRegistrationForm(context: context, existing: reg, schemes: schemes,
@@ -303,6 +329,7 @@ struct VATView: View {
                 Spacer()
                 if busy { ProgressView() }
             }
+            .disabled(busy || !canWrite)
             HStack {
                 if let current {
                     Button("Looks right") { Task { await setCode(line, code: current, keepPct: true) } }
@@ -367,7 +394,8 @@ struct VATView: View {
                         Text([line.day("date"), line.string("description") ?? line.string("adjustment")].compactMap { $0 }
                             .joined(separator: " · ")).font(.wsCaption)
                         Spacer()
-                        Text("\(line.string("vat_code") ?? "") net \(line.money("net")) · VAT \(line.money("vat"))")
+                        Text([codeLabel(line.string("vat_code")), "net \(line.money("net")) · VAT \(line.money("vat"))"]
+                            .compactMap { $0 }.joined(separator: " · "))
                             .font(.wsCaption.monospacedDigit())
                     }
                 }
@@ -375,11 +403,28 @@ struct VATView: View {
         }
     }
 
+    /// A VAT code ("STD20") in words, from the server's list.
+    private func codeLabel(_ code: String?) -> String? {
+        guard let code else { return nil }
+        return codes.first { $0.string("code") == code }?.string("label") ?? code
+    }
+
     /// Boxes 1–5 in pounds and pence; 6–9 in whole pounds.
     static func boxValue(_ r: Record, _ n: Int) -> String {
         let value = r.decimal("box\(n)") ?? 0
         if n >= 6 { return (Formatters.money(value, currency: "GBP") ?? "£0").replacingOccurrences(of: ".00", with: "") }
         return TaxMoney.text(value)
+    }
+
+    /// What HMRC's receipt says, in words: the period, when HMRC took it, its receipt and payment references.
+    static func receiptText(_ draft: Record) -> String {
+        let receipt = draft.object("hmrc_receipt") ?? Record([:])
+        let period = [draft.day("period_start"), draft.day("period_end")].compactMap { $0 }.joined(separator: " to ")
+        return [period.isEmpty ? nil : "For \(period)",
+                receipt.day("processingDate").map { "Filed on \($0)" },
+                receipt.string("formBundleNumber").map { "HMRC receipt number \($0)" },
+                receipt.string("chargeRefNumber").map { "Payment reference \($0)" }]
+            .compactMap { $0 }.joined(separator: "\n")
     }
 
     private func directionText(_ d: Record) -> String {
@@ -460,12 +505,9 @@ struct VATView: View {
     @ViewBuilder
     private var filedBlock: some View {
         if let draft {
-            let receipt = draft.object("hmrc_receipt") ?? Record([:])
             TaxCallout(tone: .success, systemImage: "checkmark.seal.fill") {
                 Text("Your VAT return has been filed with HMRC.").bold()
-                Text("Period \(draft.string("period_key") ?? "") · receipt \(receipt.string("formBundleNumber") ?? "—")"
-                     + (receipt.string("chargeRefNumber").map { " · charge ref \($0)" } ?? "")
-                     + (receipt.string("processingDate").map { " · \($0)" } ?? "")).textSelection(.enabled)
+                Text(Self.receiptText(draft)).textSelection(.enabled)
             }
             if let copy = hmrcCopy {
                 let keys = ["vatDueSales", "vatDueAcquisitions", "totalVatDue", "vatReclaimedCurrPeriod", "netVatDue",
@@ -498,11 +540,15 @@ struct VATView: View {
                         VStack(alignment: .leading) {
                             Text([a.string("first_name"), a.string("last_name")].compactMap { $0 }.joined(separator: " ")
                                 .trimmedOrNil ?? a.string("email") ?? "An accountant")
-                            Text("agent \(a.string("arn") ?? "") · \(a.string("status") == "active" ? "confirmed by HMRC" : "waiting for you to accept at HMRC")")
+                            Text([a.string("arn").map { "Agent reference \($0)" },
+                                  a.string("status") == "active" ? "confirmed by HMRC" : "waiting for you to accept at HMRC"]
+                                .compactMap { $0 }.joined(separator: " · "))
                                 .font(.wsFootnote).foregroundStyle(.secondaryText)
                         }
                         Spacer()
-                        Button("Stop", role: .destructive) { stopping = a }.buttonStyle(.borderless)
+                        if canWrite {
+                            Button("Stop", role: .destructive) { stopping = a }.buttonStyle(.borderless)
+                        }
                     }
                 }
             }
@@ -515,8 +561,7 @@ struct VATView: View {
             Section("Your VAT returns") {
                 ForEach(returns) { r in
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("\(r.day("period_start") ?? "") to \(r.day("period_end") ?? "")"
-                             + (r.string("period_key").map { " · \($0)" } ?? "")).font(.wsBody)
+                        Text("\(r.day("period_start") ?? "") to \(r.day("period_end") ?? "")").font(.wsBody)
                         HStack {
                             Text("Box 5 \(TaxMoney.text(r.decimal("box5")))").font(.wsFootnote.monospacedDigit())
                             let s = r.string("status") ?? ""
@@ -539,13 +584,8 @@ struct VATView: View {
 
     private var api: TaxAPI { makeTaxAPI(services, user: session.user) }
 
-    private var canWrite: Bool {
-        switch context {
-        case .own: true
-        case .workspace: session.allows(.update, "vat")
-        case .client: session.allows(.update, "vat_agent")
-        }
-    }
+    /// Coding lines, working out and filing a return, the registration: all `update` on the server.
+    private var canWrite: Bool { context.allows(.update, session.permissions) }
 
     private func load() async {
         do {
@@ -649,6 +689,11 @@ struct VATView: View {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             let data = try Data(contentsOf: url)
+            // Sent as text inside JSON (a third bigger), so it must fit the server's 10 MB once encoded.
+            guard data.count <= 7_000_000 else {
+                notice = .error("That receipt is too big to send. The limit is 7 MB: try a smaller photo or PDF.")
+                return
+            }
             let mime = url.pathExtension.lowercased() == "pdf" ? "application/pdf"
                 : url.pathExtension.lowercased() == "png" ? "image/png" : "image/jpeg"
             try await api.json(.post, "/api/v2/vat/transactions/\(line.id)/receipt",
