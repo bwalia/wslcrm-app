@@ -26,7 +26,7 @@ struct ShopChatsListView: View {
             }
         }
         .id(consentOnly)
-        .navigationTitle("Assistant chats")
+        .navigationTitle("AI assistant chats")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
