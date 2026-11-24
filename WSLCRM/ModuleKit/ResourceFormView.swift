@@ -152,6 +152,16 @@ enum FormCoding {
         return body
     }
 
+    /// The server answered (it refused, or the record is gone): the next tap is a new request and needs a
+    /// new Idempotency-Key — the server keeps the first answer for a key and refuses a changed body under it.
+    /// Offline, a timeout or a 5xx: the outcome is unknown (or the key was released), so the same key is reused.
+    static func answered(_ error: APIError) -> Bool {
+        switch error {
+        case .validation, .forbidden, .notFound, .unauthorized, .decoding, .missingNamespace: true
+        case .offline, .transport, .server, .rateLimited, .cancelled: false
+        }
+    }
+
     /// A server message about `quote_valid_days`, said with the field's own label.
     static func readable(_ message: String, field: FieldSpec) -> String {
         let named = message.replacingOccurrences(of: field.saveKey, with: field.label)
@@ -183,6 +193,8 @@ struct ResourceFormView: View {
     @State private var saving = false
     @State private var prepared = false
     @State private var scrollTarget: String?
+    /// Made once per form, so tapping Add again after a lost reply can't add the record twice.
+    @State private var createKey = UUID().uuidString
     private static let errorAnchor = "form.error"
 
     var body: some View {
@@ -259,12 +271,14 @@ struct ResourceFormView: View {
         let body = FormCoding.body(fields: fields, values: values, original: original, isNew: existing == nil,
                                    sendOnlyChanges: descriptor.form?.sendOnlyChanges ?? false)
         do {
-            let saved = try await services.resources.save(descriptor, existing: existing, values: body)
+            let saved = try await services.resources.save(descriptor, existing: existing, values: body,
+                                                          idempotencyKey: existing == nil ? createKey : nil)
             onSaved(saved)
             dismiss()
         } catch {
             let apiError = error.asAPIError
             self.error = apiError
+            if FormCoding.answered(apiError) { createKey = UUID().uuidString }
             // Put the server's field messages next to the fields they're about.
             if let server = apiError.serverError {
                 for field in fields {
@@ -284,14 +298,21 @@ struct ResourceFormView: View {
 /// The inputs an action asks for first (a reason, a date), then runs it.
 struct ActionInputForm: View {
     let action: ActionSpec
-    let run: ([String: JSONValue]) async -> Bool
+    /// Runs the action; true closes the sheet. Throw to keep the sheet open with the error shown in it
+    /// (what was typed stays). Returning false keeps it open without a message here.
+    let run: ([String: JSONValue]) async throws -> Bool
     @Environment(\.dismiss) private var dismiss
     @State private var values: [String: FormValue] = [:]
     @State private var problems: [String: String] = [:]
     @State private var working = false
+    @State private var failure: APIError?
 
     var body: some View {
         Form {
+            if let failure {
+                Section { InlineErrorRow(error: failure) }
+                    .accessibilityIdentifier("resource.action.error")
+            }
             if let confirm = action.confirm { Section { Text(confirm).foregroundStyle(.secondaryText) } }
             Section {
                 ForEach(action.inputs) { field in
@@ -319,13 +340,29 @@ struct ActionInputForm: View {
                         problems = found
                         guard found.isEmpty else { return }
                         working = true
-                        let ok = await run(body)
-                        working = false
-                        if ok { dismiss() }
+                        defer { working = false }
+                        do {
+                            failure = nil
+                            if try await run(body) { dismiss() }
+                        } catch {
+                            show(error.asAPIError)
+                        }
                     }
                 }
                 .disabled(working)
                 .accessibilityIdentifier("resource.action.run")
+            }
+        }
+        .interactiveDismissDisabled(working)
+    }
+
+    /// The error at the top, and the server's field messages next to the fields they're about.
+    private func show(_ apiError: APIError) {
+        failure = apiError
+        guard let server = apiError.serverError else { return }
+        for field in action.inputs {
+            if let message = server.fieldErrors[field.saveKey] ?? server.fieldErrors[field.key] {
+                problems[field.key] = FormCoding.readable(message, field: field)
             }
         }
     }
