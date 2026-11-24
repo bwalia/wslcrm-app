@@ -173,7 +173,9 @@ struct CRMAccountsListView: View {
             PagedListModel<CRMAccount> { search, page in try await crm.accounts(search: search, status: box.status, page: page) }
         }) { model in
             PagedList(model: model, searchPrompt: "Name or email", emptyTitle: "No accounts", emptySystemImage: "building.2",
-                      emptyDescription: "Companies you work with. Tap + to add one.") { account in
+                      emptyDescription: "Companies you work with.",
+                      emptyActionTitle: "New account",
+                      emptyAction: session.canCreate(.crmAccounts) ? { creating = true } : nil) { account in
                 NavigationLink {
                     CRMAccountDetailView(accountUuid: account.uuid) { updated in
                         if let updated { model.replace(updated) } else { model.remove(id: account.id) }
@@ -524,7 +526,9 @@ struct CRMContactsListView: View {
             PagedListModel<CRMContact> { search, page in try await crm.contacts(search: search, status: box.status, page: page) }
         }) { model in
             PagedList(model: model, searchPrompt: "Name or email", emptyTitle: "No contacts", emptySystemImage: "person.crop.circle",
-                      emptyDescription: "The people at your accounts. Tap + to add one.") { contact in
+                      emptyDescription: "The people at your accounts.",
+                      emptyActionTitle: "New contact",
+                      emptyAction: session.canCreate(.crmContacts) ? { creating = true } : nil) { contact in
                 NavigationLink {
                     CRMContactDetailView(contactUuid: contact.uuid)
                 } label: {

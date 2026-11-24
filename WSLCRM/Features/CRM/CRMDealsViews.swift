@@ -85,7 +85,9 @@ struct CRMDealsListView: View {
         }) { model in
             PagedList(model: model, searchPrompt: "Deal or company name", emptyTitle: "No deals", emptySystemImage: "briefcase",
                       emptyDescription: filtered ? "No deals match this filter."
-                                                 : "Deals you are working on show here. Tap + to add one.") { deal in
+                                                 : "Deals you are working on show here.",
+                      emptyActionTitle: "New deal",
+                      emptyAction: !filtered && session.canCreate(.crmDeals) ? { creating = true } : nil) { deal in
                 NavigationLink { CRMDealDetailView(dealUuid: deal.uuid) } label: { DealRow(deal: deal) }
                     .accessibilityIdentifier("crm.deal.\(deal.uuid)")
             }
@@ -841,6 +843,7 @@ struct CRMPipelinesView: View {
     @State private var state: LoadState<[CRMPipeline]> = .idle
     @State private var editing: CRMPipeline?
     @State private var creating = false
+    @State private var deletingPipeline: CRMPipeline?
     @State private var notice: String?
     @State private var actionError: APIError?
 
@@ -857,9 +860,15 @@ struct CRMPipelinesView: View {
                 Section { InlineErrorRow(error: error) { Task { await load() } } }
             case .loaded(let pipelines):
                 if pipelines.isEmpty {
-                    ContentUnavailableView("No pipelines yet", systemImage: "list.number",
-                                           description: Text("A pipeline is the list of stages a deal goes through, "
-                                                             + "e.g. New, Proposal, Negotiation, Won. Tap + to add one."))
+                    ContentUnavailableView {
+                        Label("No pipelines yet", systemImage: "list.number")
+                    } description: {
+                        Text("A pipeline is the list of stages a deal goes through, e.g. New, Proposal, Negotiation, Won.")
+                    } actions: {
+                        if session.canCreate(.crmPipelines) {
+                            Button("New pipeline") { creating = true }.buttonStyle(.borderedProminent)
+                        }
+                    }
                 }
                 ForEach(pipelines) { pipeline in
                     Section {
@@ -886,7 +895,7 @@ struct CRMPipelinesView: View {
                         .accessibilityIdentifier("crm.pipeline.\(pipeline.uuid)")
                         .swipeActions(allowsFullSwipe: false) {
                             if session.canDelete(.crmPipelines) {
-                                Button("Delete", role: .destructive) { Task { await delete(pipeline) } }
+                                Button("Delete", role: .destructive) { deletingPipeline = pipeline }
                             }
                         }
                     }
@@ -895,6 +904,13 @@ struct CRMPipelinesView: View {
         }
         .listStyle(.insetGrouped)
         .navigationTitle("Pipelines")
+        .confirmationDialog("Delete “\(deletingPipeline?.name ?? "")”?",
+                            isPresented: .init(get: { deletingPipeline != nil }, set: { if !$0 { deletingPipeline = nil } }),
+                            titleVisibility: .visible, presenting: deletingPipeline) { pipeline in
+            Button("Delete pipeline", role: .destructive) { Task { await delete(pipeline) } }
+        } message: { _ in
+            Text("Its deals stay, with their stage names. This can't be undone.")
+        }
         .task { await load() }
         .refreshable { await load() }
         .toolbar {

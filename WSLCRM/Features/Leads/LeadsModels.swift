@@ -129,6 +129,13 @@ struct LeadPermissions: Decodable, Sendable, Hashable {
     var isManager: Bool = false
     var canAssignAny: Bool = false
     var canConvert: Bool = false
+
+    /// "Convert to a deal" (POST /crm/leads/:uuid/convert): a lead they may work, crm_leads.update (the lead's
+    /// `can_convert`), and crm_deals.create, which the route checks as well but `can_convert` leaves out.
+    static func showsConvert(_ lead: LeadPermissions?, _ permissions: PermissionSet) -> Bool {
+        (lead?.canConvert ?? permissions.can(.update, .crmLeads)) && (lead?.canWork ?? true)
+            && permissions.can(.create, .crmDeals)
+    }
 }
 
 struct Lead: Identifiable, Hashable, Sendable {
