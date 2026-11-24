@@ -147,9 +147,9 @@ struct TaxReportsView: View {
 
     @ViewBuilder
     private func monthlyReport(_ data: Record) -> some View {
-        let months = data.records("data")
+        let months = Self.months(data.records("data"), taxYear: year)
         if months.isEmpty {
-            Section { TaxEmptyRow(title: "No months to show yet", systemImage: "chart.bar") }
+            Section { TaxEmptyRow(title: "No money in or out in this tax year yet", systemImage: "chart.bar") }
         } else {
             Section {
                 Chart {
@@ -169,7 +169,7 @@ struct TaxReportsView: View {
                 .frame(height: 220)
                 .accessibilityLabel("Money in and out by month")
             } header: {
-                Text("The last \(months.count) months")
+                Text("Month by month · \(TaxYear.title(year))")
             }
             Section {
                 ForEach(months.reversed()) { month in
@@ -254,7 +254,8 @@ struct TaxReportsView: View {
             switch tab {
             case .categories: json = try await api.get("/api/v2/tax/reports/category-breakdown", query: ["tax_year": year])
             case .boxes: json = try await api.get("/api/v2/tax/reports/hmrc-boxes", query: ["tax_year": year])
-            case .monthly: json = try await api.get("/api/v2/tax/reports/monthly-trend", query: ["months": "24"])
+            // Five years back, as the web asks, then the chosen tax year's months are kept.
+            case .monthly: json = try await api.get("/api/v2/tax/reports/monthly-trend", query: ["months": "60"])
             case .calculation:
                 json = try await api.form(.post, "/api/v2/tax/reports/tax-calculation", [("tax_year", year)])
             }
@@ -265,6 +266,13 @@ struct TaxReportsView: View {
             if case .cancelled = apiError { return }
             report = .failed(apiError)
         }
+    }
+
+    /// The months ("2025-04") of a tax year: April to the next March.
+    static func months(_ rows: [Record], taxYear: String) -> [Record] {
+        guard let start = TaxYear.start(of: taxYear) else { return [] }
+        let from = "\(start)-04", to = "\(start + 1)-03"
+        return rows.filter { ($0.string("month") ?? "") >= from && ($0.string("month") ?? "") <= to }
     }
 
     static func monthName(_ raw: String?) -> String {

@@ -52,7 +52,10 @@ private struct BillingLicencesList: View {
 
     var body: some View {
         PagedList(model: model, emptyTitle: "No licences yet", emptySystemImage: "key",
-                  emptyDescription: "A licence is a key a customer types into desktop or self-hosted software. Keys are issued when a licensed app is sold, or by hand here.") { row in
+                  emptyDescription: "A licence is a key a customer types into desktop or self-hosted software. Keys are issued when a licensed app is sold, or by hand here.",
+                  emptyActionTitle: "Issue a licence",
+                  emptyAction: session.permissions.can(.create, moduleName: BillingModule.licences)
+                      && appFilter.isEmpty && statusFilter.isEmpty ? { issuing = true } : nil) { row in
             NavigationLink {
                 BillingLicenceDetail(uuid: row.id, seed: row) { message in
                     feedback = .done(message)

@@ -133,6 +133,9 @@ struct PayrollRights: Equatable, Sendable {
         approve = session.allows(.approve, "payroll_approve")
     }
 
+    /// Setting pay days saves the employer (`PUT`, update) and adds its schedule (`POST …/schedules`, create).
+    var setPayDays: Bool { create && update }
+
     init(create: Bool = false, update: Bool = false, delete: Bool = false, approve: Bool = false) {
         self.create = create
         self.update = update

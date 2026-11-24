@@ -135,16 +135,19 @@ struct InvoiceFilterSheet: View {
     @Binding var issuedTo: Date?
     @Environment(\.dismiss) private var dismiss
 
+    /// The statuses the server can filter on (`InvoiceQueries.list`; "overdue" it works out). "Part paid" is left
+    /// out: a payment keeps the stored status "sent", so the server's filter would find none.
+    static let statuses: [InvoiceStatus] = [.draft, .sent, .overdue, .paid, .cancelled, .void]
+
+    static func label(_ status: InvoiceStatus) -> String { status == .cancelled ? "Cancelled" : status.badge.text }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section("Status") {
                     Picker("Status", selection: $status) {
                         Text("Any status").tag(InvoiceStatus?.none)
-                        Text("Draft").tag(Optional(InvoiceStatus.draft))
-                        Text("Sent").tag(Optional(InvoiceStatus.sent))
-                        Text("Paid").tag(Optional(InvoiceStatus.paid))
-                        Text("Void").tag(Optional(InvoiceStatus.void))
+                        ForEach(Self.statuses, id: \.self) { Text(Self.label($0)).tag(Optional($0)) }
                     }
                     .pickerStyle(.inline)
                     .labelsHidden()

@@ -527,6 +527,8 @@ struct IncomeTypeEditorView: View {
                         Button("Move down") { move(section.id, by: 1) }
                         Button("Delete section", role: .destructive) { deleteSection(section.id) }
                     } label: { Image(systemName: "ellipsis.circle") }
+                    .accessibilityLabel("Section options")
+                    .frame(minWidth: 44, minHeight: 44)
                 }
             }
         }

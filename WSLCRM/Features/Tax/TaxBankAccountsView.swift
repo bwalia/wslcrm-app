@@ -320,6 +320,10 @@ struct BankAccountForm: View {
         defer { reading = false }
         do {
             let file = try StatementFile.load(url)
+            if let problem = file.problem {
+                readMessage = problem
+                return
+            }
             let api = makeTaxAPI(services, user: session.user)
             let result = try await api.upload("/api/v2/tax/extract/bank-details", file: file.part).payload.record
             detection = result

@@ -240,8 +240,13 @@ struct PayrollEmployerView: View {
         }
         Section {
             if schedule == nil {
-                Text("Set this employer’s pay days before starting a pay run.").foregroundStyle(.secondaryText)
-                if rights.update { Button("Set pay days", systemImage: "calendar") { editing = true } }
+                if rights.setPayDays {
+                    Text("Set this employer’s pay days before starting a pay run.").foregroundStyle(.secondaryText)
+                    Button("Set pay days", systemImage: "calendar") { editing = true }
+                } else {
+                    Text("This employer’s pay days aren’t set yet, so no pay run can start. Ask the workspace owner to set them.")
+                        .foregroundStyle(.secondaryText)
+                }
             } else if rights.create {
                 Button { Task { await start() } } label: {
                     if starting { HStack { ProgressView(); Text("Starting…") } } else {
@@ -305,14 +310,20 @@ struct PayrollEmployerFormView: View {
     let employer: Record?
     let done: (String) -> Void
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var form = PayrollEmployerForm()
     @State private var loaded = false
     @State private var busy = false
     @State private var error: String?
 
-    /// A new employer, or one that has no pay days yet, chooses them here.
-    private var setsPayDays: Bool { employer.map { $0.records("schedules").isEmpty } ?? true }
+    /// A new employer, or one that has no pay days yet, chooses them here (adding them to an existing employer
+    /// needs `payroll.create`).
+    private var hasPayDays: Bool { !(employer?.records("schedules").isEmpty ?? true) }
+
+    private var setsPayDays: Bool {
+        employer.map { $0.records("schedules").isEmpty && PayrollRights(session).create } ?? true
+    }
 
     var body: some View {
         Form {
@@ -331,14 +342,17 @@ struct PayrollEmployerFormView: View {
                         ForEach(PayrollEmployerForm.frequencies, id: \.0) { Text($0.1).tag($0.0) }
                     }
                     DatePicker("First payday", selection: $form.firstPayDate, displayedComponents: .date)
-                } else {
+                } else if hasPayDays {
                     LabeledContent("How often you pay", value: PayrollEmployerForm.frequencyLabel(form.frequency))
+                } else {
+                    Text("Not set yet").foregroundStyle(.secondaryText)
                 }
             } header: {
                 Text("Pay days")
             } footer: {
                 Text(setsPayDays ? "The first pay run is paid on this date; the next ones follow on from it."
-                     : "Pay days can’t be changed once they’re set.")
+                     : hasPayDays ? "Pay days can’t be changed once they’re set."
+                     : "Your role can’t set pay days. Ask the workspace owner to set them.")
             }
             Section {
                 Picker("Scheme", selection: $form.pensionBasis) {

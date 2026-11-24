@@ -336,7 +336,10 @@ private struct BillingCouponsList: View {
     var body: some View {
         PagedList(model: model, searchPrompt: "Search codes", emptyTitle: "No coupons yet",
                   emptySystemImage: "ticket",
-                  emptyDescription: "A coupon takes a percentage or an amount off. Customers type its code when they buy.") { coupon in
+                  emptyDescription: "A coupon takes a percentage or an amount off. Customers type its code when they buy.",
+                  emptyActionTitle: "New coupon",
+                  emptyAction: session.permissions.can(.create, moduleName: BillingModule.billing) && appFilter.isEmpty
+                      ? { creating = true } : nil) { coupon in
             NavigationLink {
                 BillingCouponDetailView(coupon: coupon, apps: apps) { Task { await model.load() } }
             } label: {
