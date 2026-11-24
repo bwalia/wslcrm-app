@@ -159,7 +159,7 @@ struct VATView: View {
         }
         .navigationTitle("VAT")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task(id: status?.bool("running") == true) { await pollCoding() }
         .task(id: period?.id) { await loadObligations() }
         .fileImporter(isPresented: Binding(get: { receiptFor != nil }, set: { if !$0 { receiptFor = nil } }),

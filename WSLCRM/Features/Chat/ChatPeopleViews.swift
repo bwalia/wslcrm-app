@@ -533,7 +533,7 @@ struct ChatChannelInfoView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
-            .refreshable { await loadMembers() }
+            .wsRefreshable { await loadMembers() }
             .task { await loadMembers() }
             .sheet(isPresented: $showingAdd) {
                 ChatAddPeopleSheet(channel: channel, existing: Set(members.map(\.userUuid)), api: model.api,

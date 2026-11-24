@@ -149,7 +149,7 @@ struct CTCompaniesView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $adding) {
             NavigationStack {
                 CTCompanyForm(company: nil) { saved in
@@ -292,7 +292,7 @@ struct CTCompanyView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $editing) {
             NavigationStack {
                 CTCompanyForm(company: company.value) { _ in

@@ -62,7 +62,7 @@ struct WorkspaceHomeView: View {
         .overlay { if details == nil, loadError == nil { SkeletonList() } }
         .navigationTitle("My workspace")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .confirmationDialog("Leave \(workspaceName)?", isPresented: $confirmingLeave, titleVisibility: .visible) {
             Button("Leave", role: .destructive) { Task { await leave() } }
         } message: {

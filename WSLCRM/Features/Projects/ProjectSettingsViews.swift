@@ -198,7 +198,7 @@ struct ProjectSettingsView: View {
                 }
             }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func memberRow(_ member: KanbanProjectMember, project: KanbanProject) -> some View {
@@ -424,7 +424,7 @@ struct LabelManagerView: View {
                         }
                     }
                 }
-                .refreshable { await load() }
+                .wsRefreshable { await load() }
             }
         }
         .navigationTitle("Labels")

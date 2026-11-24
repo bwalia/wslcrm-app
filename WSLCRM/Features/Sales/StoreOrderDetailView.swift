@@ -42,7 +42,7 @@ struct StoreOrderDetailView: View {
             if notice == nil, let opening, state.value == nil { notice = opening }
             await load()
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .fullScreenCover(isPresented: .init(get: { signing != nil }, set: { if !$0 { signing = nil } })) {
             if let order = state.value {
                 SignatureCaptureSheet(title: "Sign for the order",

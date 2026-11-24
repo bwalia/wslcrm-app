@@ -41,7 +41,7 @@ struct ATSFairnessView: View {
         }
         .task { jobs = (try? await api.jobs(perPage: 100).items) ?? [] }
         .task(id: "\(question)|\(job)") { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private var questions: [ATSFairnessQuestion] {
@@ -167,7 +167,7 @@ struct ATSSettingsView: View {
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: notice) }
         .navigationTitle("Hiring settings")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .confirmationDialog("Revoke \(revoking?.name ?? "this token")?", isPresented: Binding(
             get: { revoking != nil }, set: { if !$0 { revoking = nil } }), titleVisibility: .visible) {
             Button("Revoke", role: .destructive) { Task { await revoke() } }

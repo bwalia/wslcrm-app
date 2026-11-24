@@ -53,7 +53,7 @@ struct PDTemplatesView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.json, .plainText]) { result in
             if case .success(let url) = result { Task { await importFile(url) } }
         }
@@ -166,7 +166,7 @@ struct PDTemplateDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .top, spacing: 0) { PDNoticeBar(notice: notice, error: actionError) }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $publishing) {
             if let template {
                 PDPublishTemplateSheet(uuid: uuid, definition: template["definition"] ?? .object([:])) { version in
@@ -453,7 +453,7 @@ struct PDAISettingsView: View {
         .navigationTitle("AI models and agents")
         .safeAreaInset(edge: .top, spacing: 0) { PDNoticeBar(notice: notice, error: nil) }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(item: $editingRoute) { edit in
             PDRouteSheet(edit: edit, providers: providers.filter { $0.string("provider_type") != "jobshout" }) {
                 notice = "Saved."; Task { await load() }
@@ -820,7 +820,7 @@ struct PDConnectorsView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(item: $editing) { edit in
             PDConnectorSheet(edit: edit, kinds: kinds, path: path, mailbox: mailboxes) { notice = "Saved."; Task { await load() } }
         }

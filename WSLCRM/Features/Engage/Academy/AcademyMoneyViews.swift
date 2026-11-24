@@ -40,7 +40,7 @@ struct AcademyMonetisationView: View {
         .navigationTitle("Earnings and payments")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: notice) }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task { await load() }
     }
 
@@ -223,7 +223,7 @@ struct AcademyPayoutsView: View {
         .navigationTitle("Payouts and fee")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: notice) }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task { if isPlatformAdmin { await load() } }
         .alert("Instructor’s own cut", isPresented: Binding(get: { overriding != nil }, set: { if !$0 { overriding = nil } })) {
             TextField("Leave empty to use the default", text: $overrideText).keyboardType(.decimalPad)

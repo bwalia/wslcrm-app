@@ -39,7 +39,7 @@ struct PAKnowledgeView: View {
         }
         .navigationTitle("PA knowledge")
         .searchable(text: $search, prompt: "Search the rules")
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task(id: search) {
             if rules.value != nil { try? await Task.sleep(for: .milliseconds(350)) }
             guard !Task.isCancelled else { return }
@@ -304,7 +304,7 @@ struct PAKnowledgeDetailView: View {
                 }
             }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     /// The server's rule: your own personal rules, or company and team rules as a manager.

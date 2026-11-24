@@ -71,7 +71,7 @@ struct WorkspaceAIProvidersView: View {
         }
         .navigationTitle("AI models")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .onAppear {
             if hasAppeared { Task { await load() } }
             hasAppeared = true
@@ -239,7 +239,7 @@ private struct WorkspaceAIProviderDetailView: View {
         .navigationTitle("AI model")
         .navigationBarTitleDisplayMode(.inline)
         .task { await reload() }
-        .refreshable { await reload() }
+        .wsRefreshable { await reload() }
         .toolbar {
             if canEdit {
                 ToolbarItem(placement: .primaryAction) {

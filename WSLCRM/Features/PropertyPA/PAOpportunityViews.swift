@@ -281,7 +281,7 @@ struct PAOpportunityView: View {
             }
             timelineSection
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     @ViewBuilder

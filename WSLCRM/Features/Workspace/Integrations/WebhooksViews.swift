@@ -49,7 +49,7 @@ struct WebhooksView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $creating) {
             NavigationStack {
                 WebhookFormView(existing: nil) { _, secret in
@@ -262,7 +262,7 @@ private struct WebhookDetailView: View {
                 }
             }
         }
-        .refreshable { await reload() }
+        .wsRefreshable { await reload() }
         .sheet(isPresented: $editing) {
             NavigationStack {
                 WebhookFormView(existing: hook) { saved, _ in

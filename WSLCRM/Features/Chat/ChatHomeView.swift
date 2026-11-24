@@ -233,7 +233,7 @@ struct ChatHomeView: View {
         }
         .listStyle(.insetGrouped)
         .searchable(text: $filter, prompt: "Jump to a conversation")
-        .refreshable {
+        .wsRefreshable {
             await model.refresh()
             await model.refreshAssistant()
         }

@@ -104,7 +104,7 @@ struct MktListDetailView: View {
             guard !Task.isCancelled else { return }
             await loadMembers()
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .alert("Rename this list", isPresented: $renaming) {
             TextField("List name", text: $newName)
             Button("Save") { Task { await rename() } }
@@ -544,7 +544,7 @@ struct MktAudiencePersonView: View {
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: notice) }
         .task { await loadConsent() }
-        .refreshable { await loadConsent() }
+        .wsRefreshable { await loadConsent() }
         .alert("Record that they asked to stop?", isPresented: $confirmStop) {
             TextField("How they asked (optional)", text: $evidence)
             Button("They asked to stop", role: .destructive) { Task { await optOut() } }

@@ -329,6 +329,8 @@ struct AppearanceSettingsView: View {
                 Text("Buttons, links and highlights across the app use this colour.")
             }
 
+            // A Mac app can't change its own Dock icon.
+            if UIApplication.shared.supportsAlternateIcons {
             Section {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 12)], spacing: 14) {
                     ForEach(AppIconChoice.all) { icon in
@@ -347,6 +349,7 @@ struct AppearanceSettingsView: View {
                 .padding(.vertical, 6)
             } header: {
                 Text("Home screen icon")
+            }
             }
 
             Section {

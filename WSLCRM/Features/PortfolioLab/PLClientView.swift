@@ -50,7 +50,7 @@ struct PLClientView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $editing) {
             if let current = client.value {
                 NavigationStack {

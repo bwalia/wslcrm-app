@@ -349,7 +349,7 @@ struct ChatConversationView: View {
             }
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
-            .refreshable { await model.refreshLatest() }
+            .wsRefreshable { await model.refreshLatest() }
             .onChange(of: model.messages.last?.uuid) { old, new in
                 guard let new, old != new else { return }
                 let mine = model.messages.last?.userUuid == model.myUuid
@@ -1008,7 +1008,7 @@ struct ChatPinnedView: View {
         }
         .navigationTitle("Pinned")
         .navigationBarTitleDisplayMode(.inline)
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task { await load() }
     }
 

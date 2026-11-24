@@ -88,7 +88,7 @@ struct TaxHomeView: View {
         .brandCanvas()
         .navigationTitle("Tax")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     static let steps = [

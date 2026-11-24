@@ -168,7 +168,7 @@ struct DomainsScreen: View {
         }
         .navigationTitle("Domains")
         .searchable(text: $search, prompt: "Search domain, registrar, notes")
-        .refreshable { await reload() }
+        .wsRefreshable { await reload() }
         .task(id: "\(search)|\(status)") {
             if pager != nil, !search.isEmpty { try? await Task.sleep(for: .milliseconds(350)) }
             guard !Task.isCancelled else { return }
@@ -407,7 +407,7 @@ struct DomainDetailView: View {
         .navigationTitle(domain.string("domain_name") ?? "Domain")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             if OperationsAccess.domains(session.permissions, .update) {
                 ToolbarItem(placement: .primaryAction) {
@@ -967,7 +967,7 @@ struct DomainDNSRecordsView: View {
         .navigationTitle("DNS: \(domain.string("domain_name") ?? "")")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {

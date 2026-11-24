@@ -183,7 +183,7 @@ private struct LeadsPipelinePane: View {
                 if search.trimmingCharacters(in: .whitespaces).isEmpty, parking == nil { await load() }
             }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(item: $parking) { target in
             LeadParkSheet(name: target.card.name, stage: target.stage,
                           lostReasons: bundle?.settings.lostReasons ?? LeadParkSheet.defaultReasons) { body in
@@ -509,7 +509,7 @@ struct LeadListView: View {
         }
         .navigationTitle(title)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {
@@ -626,7 +626,7 @@ struct LeadInsightsView: View {
         }
         .listStyle(.insetGrouped)
         .task(id: days) { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     @ViewBuilder

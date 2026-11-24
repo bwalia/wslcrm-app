@@ -260,7 +260,7 @@ private struct CMSMediaGrid: View {
             }
         }
         .overlay { overlay }
-        .refreshable { await model.load() }
+        .wsRefreshable { await model.load() }
         .searchable(text: $model.search, prompt: "Search by name or description")
         .task(id: model.search) {
             if !model.items.isEmpty { try? await Task.sleep(for: .milliseconds(350)) }

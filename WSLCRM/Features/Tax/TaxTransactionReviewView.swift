@@ -105,7 +105,7 @@ struct TaxTransactionReviewView: View {
             guard !Task.isCancelled else { return }
             await model.load()
         }
-        .refreshable { await reload() }
+        .wsRefreshable { await reload() }
         .sheet(item: $picking) { row in
             NavigationStack {
                 TaxCategoryPicker(categories: categories, direction: row.string("transaction_type")?.uppercased(),

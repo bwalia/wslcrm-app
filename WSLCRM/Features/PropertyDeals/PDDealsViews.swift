@@ -122,7 +122,7 @@ struct PDDealView: View {
             PDDealRenovationSection(renovations: renovations, loaded: renovationsLoaded) { startingRenovation = true }
             moreSection(overview)
         }
-        .refreshable { await load(); await loadRenovations() }
+        .wsRefreshable { await load(); await loadRenovations() }
     }
 
     private func healthSection(_ overview: PDDealOverview, currency: String?) -> some View {

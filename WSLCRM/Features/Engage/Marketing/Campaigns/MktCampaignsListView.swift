@@ -92,7 +92,7 @@ struct MktCampaignsListView: View {
                 .accessibilityIdentifier("mkt.campaigns.filter")
             }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .onAppear {
             if appeared { Task { await load() } }
             appeared = true

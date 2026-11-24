@@ -135,7 +135,7 @@ struct AIChainView: View {
         .overlay { if overview == nil, loadError == nil { SkeletonList() } }
         .navigationTitle("AI fallback order")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {

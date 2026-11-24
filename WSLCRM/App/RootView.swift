@@ -42,6 +42,7 @@ struct RootView: View {
             }
         }
         .animation(.default, value: session.phase)
+        .onAppear { MacSupport.applyWindowLimits() }
         .task { await session.restore() }
         .onOpenURL { router.open($0) }
         .onChange(of: session.phase) { _, phase in

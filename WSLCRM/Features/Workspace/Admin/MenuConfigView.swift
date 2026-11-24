@@ -52,7 +52,7 @@ struct MenuConfigView: View {
         }
         .navigationTitle("Menu")
         .task { if allowed { await load() } }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .alert("Rename this page", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name in the menu", text: $newName)
                 .accessibilityIdentifier("menuConfig.rename.field")

@@ -375,7 +375,7 @@ struct TaxAgentModesSettingsView: View {
         .overlay { if bundle.value == nil, bundle.error == nil { SkeletonList() } }
         .navigationTitle("AI agent modes")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     @ViewBuilder

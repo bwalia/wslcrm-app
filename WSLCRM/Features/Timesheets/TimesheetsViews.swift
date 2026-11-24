@@ -489,7 +489,7 @@ struct TimesheetDetailView: View {
             Section { actions(sheet, isMine: isMine, canChange: canChange) }
         }
         .disabled(busy)
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     static func totals(_ entries: [TimesheetEntry], by key: KeyPath<TimesheetEntry, String?>, empty: String) -> [(String, Double)] {

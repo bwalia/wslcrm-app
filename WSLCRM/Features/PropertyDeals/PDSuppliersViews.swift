@@ -229,7 +229,7 @@ struct PDSupplierDetailView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $editing) {
             if let supplier {
                 PDSupplierFormSheet(supplier: supplier) { _ in notice = "Supplier saved."; Task { await load() } }

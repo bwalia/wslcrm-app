@@ -385,7 +385,7 @@ private struct AdminWorkspaceDetail: View {
         .navigationTitle(shown.string("name") ?? "Workspace")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $editing) {
             NavigationStack {
                 AdminWorkspaceForm(api: api, existing: shown) { message in

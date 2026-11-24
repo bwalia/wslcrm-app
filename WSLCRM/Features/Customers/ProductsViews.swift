@@ -261,7 +261,7 @@ struct ProductDetailView: View {
         .navigationTitle("Product")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             if session.permissions.can(.update, .products), state.value != nil {
                 ToolbarItem(placement: .topBarTrailing) { Button("Edit") { editing = true } }

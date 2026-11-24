@@ -47,7 +47,7 @@ struct AcademyCourseDetailView: View {
         .navigationTitle("Course")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: notice) }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task { await load() }
         .task { academySlug = (try? await services.academy.instructorStatus())?.namespace?.slug ?? session.workspace?.slug }
         .onAppear {

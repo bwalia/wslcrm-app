@@ -107,7 +107,7 @@ struct TaxStatementsView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task(id: jobs.isEmpty) { await poll() }
         .sheet(isPresented: $uploading) {
             NavigationStack {

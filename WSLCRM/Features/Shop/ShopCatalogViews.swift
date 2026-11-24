@@ -346,7 +346,7 @@ struct ShopProductDetailView: View {
                 }
             }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             if policy.canUpdate {
                 ToolbarItem(placement: .primaryAction) {
@@ -493,7 +493,7 @@ struct ShopCategoriesView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {
@@ -861,7 +861,7 @@ struct ShopStockView: View {
             }
         }
         .task(id: lowOnly) { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(item: $adjusting) { target in
             NavigationStack {
                 ShopStockAdjustForm(target: target) { message in
@@ -916,7 +916,7 @@ private struct ShopMovementsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .task { await load() }
-            .refreshable { await load() }
+            .wsRefreshable { await load() }
     }
 
     private func load() async {

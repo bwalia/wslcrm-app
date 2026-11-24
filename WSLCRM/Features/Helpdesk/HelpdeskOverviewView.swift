@@ -113,7 +113,7 @@ struct HelpdeskOverviewView: View {
         }
         .navigationTitle("Support overview")
         .task { await refresh() }
-        .refreshable { await refresh() }
+        .wsRefreshable { await refresh() }
         .sheet(item: $showing) { ticket in
             NavigationStack {
                 HelpdeskTicketSheet(ticket: ticket, canUpdate: canUpdate) { message in

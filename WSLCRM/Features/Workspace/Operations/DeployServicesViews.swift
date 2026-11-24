@@ -157,7 +157,7 @@ struct DeployServicesScreen: View {
         }
         .navigationTitle("Services")
         .searchable(text: $search, prompt: "Search name, description or repository")
-        .refreshable { await reload() }
+        .wsRefreshable { await reload() }
         .task(id: "\(search)|\(status)|\(orderBy)|\(orderDescending)") {
             if pager != nil, !search.isEmpty { try? await Task.sleep(for: .milliseconds(350)) }
             guard !Task.isCancelled else { return }
@@ -335,7 +335,7 @@ struct DeployServiceDetailView: View {
         .navigationTitle(service.string("name") ?? "Service")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         // While a deployment is still running on GitHub, ask for its status every 15 seconds.
         .task(id: pending.map(\.id).joined(separator: ",")) {
             guard !pending.isEmpty else { return }
@@ -1115,7 +1115,7 @@ struct DeploymentHistoryView: View {
         }
         .navigationTitle("Deployments")
         .navigationBarTitleDisplayMode(.inline)
-        .refreshable { await pager?.reload() }
+        .wsRefreshable { await pager?.reload() }
         .task(id: status) {
             let api = services.workspace()
             let path = "/api/v2/namespace/services/\(serviceUUID)/deployments"
@@ -1192,7 +1192,7 @@ private struct DeploymentDetailView: View {
         .navigationTitle("Deployment")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {
@@ -1315,7 +1315,7 @@ struct DeployIntegrationsView: View {
         .navigationTitle("GitHub sign-ins")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             if OperationsAccess.services(permissions, "create") {
                 ToolbarItem(placement: .primaryAction) {

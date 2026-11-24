@@ -56,7 +56,7 @@ struct SalesOrdersView: View {
             }
         }
         .searchable(text: $query.search, prompt: "Order number, customer or company")
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task(id: query) {
             if !orders.isEmpty { try? await Task.sleep(for: .milliseconds(300)) }
             guard !Task.isCancelled else { return }

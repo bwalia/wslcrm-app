@@ -147,7 +147,7 @@ struct AIRulesView: View {
         .navigationTitle("Routing rules")
         .navigationBarTitleDisplayMode(.inline)
         .aiNotice($notice)
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task {
             await load()
             runners = ((try? await api.runners()) ?? []).map { AIChoice(value: $0.uuid, label: $0.name, hint: $0.kind == "source" ? "Source" : nil) }

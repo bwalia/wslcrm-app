@@ -83,7 +83,7 @@ struct ShopMembersView: View {
             }
         }
         .task(id: status) { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $recordingInvoice) {
             if let invoiceAction {
                 NavigationStack {

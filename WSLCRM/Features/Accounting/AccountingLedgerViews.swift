@@ -53,7 +53,7 @@ struct MoneyInOutView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $adding) {
             NavigationStack {
                 MoneyEntryForm(moneyIn: moneyIn, accounts: accounts) { notice = .success($0); Task { await load() } }
@@ -310,7 +310,7 @@ struct SalesLedgerView: View {
             guard !Task.isCancelled else { return }
             await load()
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func balance(_ inv: Record) -> Decimal {
@@ -461,7 +461,7 @@ struct PurchaseLedgerView: View {
             await pager.load()
             stats = try? await api.get("/api/v2/accounting/reports/dashboard-stats").payload.record
         }
-        .refreshable { await pager.load() }
+        .wsRefreshable { await pager.load() }
     }
 
     /// `GET /accounting/expenses` query. `search` is sent as the web sends it, but the server doesn't filter on it

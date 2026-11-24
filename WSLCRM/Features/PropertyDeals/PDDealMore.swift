@@ -207,7 +207,7 @@ struct PDDealTasksView: View {
             actions.onChange = { await load() }
             await load()
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .pdTaskActionSheets(actions)
         .alert("Add a task to this deal", isPresented: $adding) {
             TextField("What needs doing", text: $title)
@@ -309,7 +309,7 @@ struct PDDealEnquiriesView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $raising) {
             PDRaiseEnquirySheet(dealUuid: dealUuid) { notice = "Enquiry raised."; Task { await load() } }
         }
@@ -446,7 +446,7 @@ struct PDDealChasesView: View {
         }
         .navigationTitle("Chase log")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     static func subtitle(_ chase: Record) -> String {
@@ -549,7 +549,7 @@ struct PDDealDocumentsView: View {
         .workConfirmation($confirm)
         .safeAreaInset(edge: .top, spacing: 0) { PDNoticeBar(notice: notice, error: actionError) }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item]) { result in
             if case .success(let url) = result { Task { await uploadFile(url) } }
         }
@@ -727,7 +727,7 @@ struct PDDealComplianceView: View {
         .navigationTitle("Compliance")
         .safeAreaInset(edge: .top, spacing: 0) { PDNoticeBar(notice: notice, error: actionError) }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(item: $signing) { check in
             PDComplianceSignOffSheet(check: check) { message in notice = message; Task { await load() } }
         }
@@ -815,7 +815,7 @@ struct PDPropertyMatchesView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private var canSend: Bool { session.propertyDeals?.can(.update, .buyers) ?? false }

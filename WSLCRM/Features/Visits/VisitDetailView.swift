@@ -452,7 +452,7 @@ private struct VisitDetailContent: View {
             }
         }
         .task { await model.load() }
-        .refreshable { await model.load() }
+        .wsRefreshable { await model.load() }
         .onChange(of: model.pendingWrites, initial: true) { Task { await model.dropUnkeepableSignature() } }
         .sheet(isPresented: $showingCheckOut) {
             if let detail = model.detail {

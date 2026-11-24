@@ -53,7 +53,7 @@ struct TaxReportsView: View {
         .navigationTitle("Tax reports")
         .task(id: "\(year)|\(tab.rawValue)") { await load() }
         .task { await categories.load(makeTaxAPI(services, user: session.user)) }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     @ViewBuilder

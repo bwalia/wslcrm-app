@@ -458,7 +458,7 @@ struct PDDealsBoardView: View {
         .safeAreaInset(edge: .top, spacing: 0) { PDNoticeBar(notice: notice, error: nil) }
         .task { await loadTemplates() }
         .task(id: template) { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(item: $moving) { target in
             PDMoveStageSheet(target: target, onMoved: { stageName in
                 notice = "\(target.dealName) moved to \(stageName)."

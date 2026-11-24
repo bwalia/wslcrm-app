@@ -97,7 +97,7 @@ struct ShopSuppliersListView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func apply(_ change: ShopSupplierChange) {
@@ -245,7 +245,7 @@ struct ShopSupplierDetailView: View {
         .navigationTitle("Supplier")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $editing) {
             NavigationStack {
                 ShopSupplierFormView(supplier: current) { saved in

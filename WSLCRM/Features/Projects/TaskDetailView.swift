@@ -210,7 +210,7 @@ struct TaskDetailView: View {
             }
         }
         .disabled(busy)
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func header(_ task: KanbanTask) -> some View {

@@ -102,7 +102,7 @@ struct ResourceReportView: View {
         .overlay { if state.value == nil, state.error == nil { SkeletonList() } }
         .navigationTitle(spec.title)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {

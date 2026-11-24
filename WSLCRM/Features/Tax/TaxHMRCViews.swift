@@ -60,7 +60,7 @@ struct TaxHMRCSettingsView: View {
         }
         .navigationTitle("HMRC settings")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .confirmationDialog("Disconnect from HMRC?", isPresented: $confirmDisconnect, titleVisibility: .visible) {
             Button("Disconnect", role: .destructive) { Task { await disconnect() } }
         } message: {

@@ -1,5 +1,7 @@
 import SwiftUI
+#if !targetEnvironment(macCatalyst)
 import VisionKit
+#endif
 
 /// The camera as a barcode scanner (VisionKit). Each new code is handed over once; the sheet stays open
 /// so several items can be scanned in a row.
@@ -9,17 +11,24 @@ struct POSScannerView: View {
     @State private var lastMessage: String?
 
     /// Whether this device can scan (a camera with Live Text support, and camera access not refused).
+    /// Never on a Mac: VisionKit's scanner is iPhone/iPad only. A USB scanner types into the search field there.
     @MainActor static var isAvailable: Bool {
+        #if targetEnvironment(macCatalyst)
+        false
+        #else
         DataScannerViewController.isSupported && DataScannerViewController.isAvailable
+        #endif
     }
 
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
+                #if !targetEnvironment(macCatalyst)
                 POSDataScanner { code in
                     lastMessage = onCode(code)
                 }
                 .ignoresSafeArea(edges: .bottom)
+                #endif
                 if let lastMessage {
                     Text(lastMessage)
                         .font(.wsSubheadline.weight(.semibold))
@@ -42,6 +51,7 @@ struct POSScannerView: View {
     }
 }
 
+#if !targetEnvironment(macCatalyst)
 /// `DataScannerViewController` for barcodes, reporting each code when it first appears.
 private struct POSDataScanner: UIViewControllerRepresentable {
     let onCode: (String) -> Void
@@ -89,3 +99,4 @@ private struct POSDataScanner: UIViewControllerRepresentable {
         }
     }
 }
+#endif

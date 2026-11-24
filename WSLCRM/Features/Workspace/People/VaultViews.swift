@@ -633,7 +633,7 @@ private struct VaultHome: View {
             guard !Task.isCancelled else { return }
             await store.loadSecrets()
         }
-        .refreshable { await store.refresh() }
+        .wsRefreshable { await store.refresh() }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -849,7 +849,7 @@ private struct VaultSecretDetail: View {
         .navigationTitle(shown.string("name") ?? "Secret")
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadShares() }
-        .refreshable { await loadShares() }
+        .wsRefreshable { await loadShares() }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Edit") { Task { await startEditing() } }

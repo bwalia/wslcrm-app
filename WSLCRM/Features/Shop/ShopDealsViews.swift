@@ -87,7 +87,7 @@ struct ShopDealsListView: View {
         .navigationTitle("Deals")
         .navigationDestination(item: $openCode) { ShopDealDetailView(code: $0) }
         .task { await loadRecent() }
-        .refreshable { await loadRecent() }
+        .wsRefreshable { await loadRecent() }
     }
 
     private func loadRecent() async {
@@ -356,7 +356,7 @@ struct ShopDealDetailView: View {
                 }
             }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {

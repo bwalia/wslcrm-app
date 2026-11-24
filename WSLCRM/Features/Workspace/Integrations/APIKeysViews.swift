@@ -219,7 +219,7 @@ struct WorkspaceAPIKeysView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $creating) {
             NavigationStack {
                 APIKeyCreateForm(target: target) { created in
@@ -439,7 +439,7 @@ struct PersonalAPIKeysView: View {
         }
         .task { await load() }
         .task { apiURL = await services.client.currentBaseURL.absoluteString }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $creating) {
             NavigationStack {
                 APIKeyPersonalForm { made in

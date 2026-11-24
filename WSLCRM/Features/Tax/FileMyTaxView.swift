@@ -210,7 +210,7 @@ struct FileMyTaxView: View {
             }
             keyDatesSection
         }
-        .refreshable { await loadYear(); await loadStatus() }
+        .wsRefreshable { await loadYear(); await loadStatus() }
     }
 
     // MARK: Summary and progress

@@ -111,7 +111,7 @@ struct PDPlaybookView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(item: $editing) { edit in
             PDPlaybookSheet(edit: edit) { notice = "Saved. The PA uses it from the next message."; Task { await load() } }
         }

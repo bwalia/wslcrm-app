@@ -32,7 +32,7 @@ struct WebFormInsightsTab: View {
             answers
         }
         .task(id: days) { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     @ViewBuilder

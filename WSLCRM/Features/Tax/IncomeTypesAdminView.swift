@@ -59,7 +59,7 @@ struct IncomeTypesAdminView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(item: $editing) { target in
             NavigationStack {
                 IncomeTypeEditorView(type: target.type, meta: meta ?? Record([:]),

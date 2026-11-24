@@ -39,7 +39,7 @@ struct BillingHomeView: View {
             }
         }
         .task { if case .idle = apps { await load() } }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $creating) {
             NavigationStack {
                 BillingNewAppView { app in
@@ -222,7 +222,7 @@ struct BillingPaymentsView: View {
         }
         .navigationTitle("Payments")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     @ViewBuilder

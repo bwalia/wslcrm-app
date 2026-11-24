@@ -313,7 +313,7 @@ private struct MyWorkContent: View {
             .padding(16)
         }
         .background(Color(.systemGroupedBackground))
-        .refreshable { await model.load() }
+        .wsRefreshable { await model.load() }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -583,7 +583,7 @@ private struct NotificationsSheet: View {
             .navigationTitle("Notifications")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .refreshable { await model.loadNotifications() }
+            .wsRefreshable { await model.loadNotifications() }
         }
     }
 }

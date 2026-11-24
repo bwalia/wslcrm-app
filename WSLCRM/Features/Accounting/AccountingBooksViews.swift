@@ -150,7 +150,7 @@ struct AccountingBankView: View {
             pager.query = ["search": search.trimmedOrNil, "is_reconciled": reconciled.isEmpty ? nil : reconciled]
             await pager.load()
         }
-        .refreshable { await pager.load() }
+        .wsRefreshable { await pager.load() }
         .sheet(isPresented: $importing) {
             NavigationStack { BankImportForm { notice = .success($0); Task { await pager.load() } } }
         }
@@ -376,7 +376,7 @@ struct AccountingExpensesView: View {
             await pager.load()
         }
         .onAppear { if pager.state.value != nil { Task { await pager.load() } } }
-        .refreshable { await pager.load() }
+        .wsRefreshable { await pager.load() }
         .sheet(isPresented: $adding) {
             NavigationStack { AddExpenseForm { notice = .success($0); Task { await pager.load() } } }
         }
@@ -689,7 +689,7 @@ struct AccountingReportsView: View {
             }
         }
         .task(id: "\(tab.rawValue)|\(from)|\(to)") { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $newVAT) {
             NavigationStack { NewBookkeepingVATReturnForm { notice = .success($0); Task { await load() } } }
         }

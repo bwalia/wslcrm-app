@@ -72,7 +72,7 @@ struct MyTasksView: View {
                     }
                     if !terminals.isEmpty { terminalSection }
                 }
-                .refreshable { await load() }
+                .wsRefreshable { await load() }
             }
         }
         .navigationTitle("My tasks")

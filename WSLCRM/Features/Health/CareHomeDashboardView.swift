@@ -40,7 +40,7 @@ struct CareHomeDashboardView: View {
         .overlay { if !loaded, loadError == nil { SkeletonList() } }
         .navigationTitle("Care home dashboard")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     // MARK: Sections

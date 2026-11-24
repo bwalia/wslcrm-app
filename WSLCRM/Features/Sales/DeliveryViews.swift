@@ -260,7 +260,7 @@ struct DeliveryPartnersList: View {
             Button("OK") {}
         } message: { Text(notice ?? "") }
         .task(id: store.id) { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {
@@ -620,7 +620,7 @@ struct DeliveryRequestsList: View {
             Button("OK") {}
         } message: { Text(notice ?? "") }
         .task(id: "\(store.id)|\(status)") { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {
@@ -961,7 +961,7 @@ struct DeliveryOrderView: View {
         .navigationTitle("Delivery")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .alert(pending?.title ?? "", isPresented: .init(get: { pending != nil }, set: { if !$0 { pending = nil } })) {
             TextField("Note (optional)", text: $notes)
             Button(pending?.title ?? "OK", role: pending?.destructive == true ? .destructive : nil) {
@@ -1155,7 +1155,7 @@ struct DeliveryPricesList: View {
         }
         .listStyle(.insetGrouped)
         .task { if config.value == nil { await load() } }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {

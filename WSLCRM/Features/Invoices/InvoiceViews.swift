@@ -311,7 +311,7 @@ struct InvoiceDetailView: View {
             if !shownOpening { notice = opening; shownOpening = true }
             await load()
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .toolbar {
             if let invoice = state.value {
                 ToolbarItem(placement: .topBarTrailing) {

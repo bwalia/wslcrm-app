@@ -160,7 +160,7 @@ struct PATodayView: View {
                 }
             }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .safeAreaPadding(.bottom, manager ? 0 : 72)
     }
 

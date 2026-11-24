@@ -196,7 +196,7 @@ struct ShopHomeView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .alert(noticeTitle, isPresented: .init(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
             Button("OK") {}
         } message: {

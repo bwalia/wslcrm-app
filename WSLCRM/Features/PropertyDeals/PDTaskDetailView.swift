@@ -92,7 +92,7 @@ struct PDTaskDetailView: View {
             notesSection(task)
             attachmentsSection
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func headerSection(_ task: PDTask) -> some View {

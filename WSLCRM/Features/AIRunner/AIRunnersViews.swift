@@ -74,7 +74,7 @@ struct AIRunnersView: View {
                     .accessibilityIdentifier("airunner.runners.register")
             }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task {
             while !Task.isCancelled {
                 await load()
@@ -341,7 +341,7 @@ struct AIRunnerDetailView: View {
                 }
             }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .confirmationDialog(confirm == "rotate" ? "Make a new token for \(r.name)?" : "Revoke \(r.name)?",
                             isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }),
                             titleVisibility: .visible) {

@@ -42,7 +42,7 @@ struct ShopTemplatesView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(item: $editing) { draft in
             NavigationStack {
                 ShopTemplateEditor(draft: draft, kinds: kinds, suppliers: suppliers) { name in

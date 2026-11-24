@@ -49,7 +49,7 @@ struct ShopAnalyticsView: View {
             ToolbarItem(placement: .primaryAction) { exportMenu }
         }
         .task(id: query) { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(item: $exported) { file in ShopExportSheet(file: file) }
         .alert("Export failed", isPresented: .init(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
             Button("OK") {}

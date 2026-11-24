@@ -70,7 +70,7 @@ struct AccountingHomeView: View {
         }
         .navigationTitle("Bookkeeping")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(item: $sheet) { which in
             NavigationStack {
                 switch which {

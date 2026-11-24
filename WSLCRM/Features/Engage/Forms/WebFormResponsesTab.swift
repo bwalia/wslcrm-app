@@ -46,7 +46,7 @@ struct WebFormResponsesTab: View {
         .overlay { overlay }
         .searchable(text: $filter.query, placement: .navigationBarDrawer(displayMode: .always),
                     prompt: "Search answers or email")
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task(id: filter) {
             if hasAppeared { try? await Task.sleep(for: .milliseconds(300)) }
             hasAppeared = true
@@ -320,7 +320,7 @@ struct WebFormResponseDetailView: View {
         .navigationTitle("Response")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .quickLookPreview($openedFile)
         .confirmationDialog("Delete this response?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) { Task { await delete() } }

@@ -72,7 +72,7 @@ struct AIMachinesView: View {
         }
         .onChange(of: runnerUuid) { page = 1 }
         .onChange(of: busyOnly) { page = 1 }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task(id: "\(runnerUuid)|\(busyOnly)|\(page)") {
             while !Task.isCancelled {
                 await load()

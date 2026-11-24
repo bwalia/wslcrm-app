@@ -31,7 +31,7 @@ struct PayrollRunView: View {
                                monthly: $0.string("schedule.frequency") == "monthly")
         } ?? "Pay run")
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .confirmationDialog(asking?.confirm?.title ?? "", isPresented: Binding(
             get: { asking != nil }, set: { if !$0 { asking = nil } }), titleVisibility: .visible, presenting: asking) { action in
             Button(action.title, role: action == .delete ? .destructive : nil) { Task { await perform(action) } }

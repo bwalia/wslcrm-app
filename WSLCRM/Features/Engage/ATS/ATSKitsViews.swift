@@ -80,7 +80,7 @@ struct ATSKitsView: View {
             // Opened from a job without a kit: start drafting one for it, once.
             if jobUUID != nil, canCreate, !openedForJob { openedForJob = true; generating = true }
         }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $generating) {
             NavigationStack {
                 ATSGenerateKitSheet(jobUUID: jobUUID) { kit in

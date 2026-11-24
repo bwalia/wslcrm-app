@@ -35,7 +35,7 @@ struct PLDashboardView: View {
         }
         .navigationTitle("Joy dashboard")
         .task { if state.value == nil { await load() } }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private var columns: [GridItem] {

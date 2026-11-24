@@ -179,7 +179,7 @@ struct PDBuyerDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .top, spacing: 0) { PDNoticeBar(notice: notice, error: actionError) }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private var canUpdate: Bool { session.propertyDeals?.can(.update, .buyers) ?? false }

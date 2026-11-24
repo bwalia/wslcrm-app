@@ -140,7 +140,7 @@ private struct BillingAppOverview: View {
                 }
             }
         }
-        .refreshable { await loadReport() }
+        .wsRefreshable { await loadReport() }
         .task {
             prepare()
             dashboard = DashboardURL.forAPI(await services.client.currentBaseURL)

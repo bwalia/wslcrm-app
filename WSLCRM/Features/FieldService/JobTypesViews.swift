@@ -52,7 +52,7 @@ struct JobTypesListView: View {
         }
         .navigationDestination(item: $created) { NativeScreenView(route: $0) }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
     }
 
     private func load() async {
@@ -135,7 +135,7 @@ struct JobTypeDetailView: View {
             }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .sheet(isPresented: $editing) {
             if let type = state.value {
                 JobTypeFormSheet(type: type) { _ in done("Job type saved.") }

@@ -62,7 +62,7 @@ struct ProjectAnalyticsView: View {
             }
         }
         .navigationTitle("Analytics")
-        .refreshable { await load() }
+        .wsRefreshable { await load() }
         .task { await load() }
     }
 

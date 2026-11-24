@@ -74,7 +74,7 @@ private struct JobDetailContent: View {
         content
             .navigationTitle(model.detail?.job.jobNumber ?? "Job")
             .task { await model.load() }
-            .refreshable { await model.load() }
+            .wsRefreshable { await model.load() }
             .onChange(of: sync.syncedGeneration) { _, _ in
                 if sync.lastSyncedJobIds.contains(model.jobUuid) { Task { await model.load() } }
             }
