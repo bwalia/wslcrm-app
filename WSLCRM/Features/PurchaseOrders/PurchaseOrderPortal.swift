@@ -756,6 +756,10 @@ private struct PortalUploadSheet: View {
 
 /// A file for the order: from Files (PDF, PNG, JPG), a photo, or a scan with the camera (one PDF).
 struct PortalFilePicker: View {
+    /// The portal's upload routes take 20 MB (nginx allows 21m on them; `lib/supplier-portal.lua` checks again).
+    static let maxBytes = 20_000_000
+    static let tooBig = "That file is too big to send. The limit is 20 MB."
+
     @Binding var file: Endpoint.FilePart?
     @State private var importing = false
     @State private var photo: PhotosPickerItem?
@@ -771,6 +775,7 @@ struct PortalFilePicker: View {
             let access = url.startAccessingSecurityScopedResource()
             defer { if access { url.stopAccessingSecurityScopedResource() } }
             guard let data = try? Data(contentsOf: url) else { problem = "That file couldn't be read."; return }
+            guard data.count <= Self.maxBytes else { problem = Self.tooBig; return }
             let type = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/pdf"
             file = Endpoint.FilePart(fieldName: "file", filename: url.lastPathComponent, mimeType: type, data: data)
             problem = nil
@@ -780,7 +785,12 @@ struct PortalFilePicker: View {
         }
         .onChange(of: photo) { _, item in
             Task {
-                guard let item, let data = try? await item.loadTransferable(type: Data.self) else { return }
+                guard let item else { return }
+                guard let data = try? await item.loadTransferable(type: Data.self) else {
+                    problem = "That photo couldn't be read. Try another, or choose a file."
+                    return
+                }
+                guard data.count <= Self.maxBytes else { problem = Self.tooBig; return }
                 file = Endpoint.FilePart(fieldName: "file", filename: "photo-\(Int(Date().timeIntervalSince1970)).jpg",
                                          mimeType: "image/jpeg", data: data)
                 problem = nil
