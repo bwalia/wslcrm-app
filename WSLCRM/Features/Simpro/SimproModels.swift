@@ -505,13 +505,12 @@ enum SimproEntities {
     static func label(_ key: String) -> String { all.first { $0.key == key }?.label ?? Formatters.humanize(key) }
 }
 
-/// Who may run a sync. The server allows it with `simpro_sync.manage` (or a platform admin): a push
-/// writes to the customer's system of record, so by default only the Owner role has it. Owning the
-/// workspace alone isn't enough on the server, so it isn't here either.
+/// Who may run a sync. The server allows it with `simpro_sync.manage` (a platform admin passes, and so does
+/// an owner left with no permissions at all — the no-lock-out rule): a push writes to the customer's system
+/// of record, so by default only the Owner role has it. Owning the workspace alone isn't enough.
 enum SimproAccess {
     static func canRunSync(_ permissions: PermissionSet) -> Bool {
-        if permissions.isAdmin { return true }
-        return permissions.grants["simpro_sync"]?.contains(Action.manage.rawValue) ?? false
+        permissions.can(.manage, moduleName: "simpro_sync")
     }
 }
 

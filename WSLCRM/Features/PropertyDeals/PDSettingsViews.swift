@@ -54,6 +54,7 @@ struct PDSettingsView: View {
 struct PDPlaybookView: View {
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
+    @State private var confirm: PendingConfirmation?
     @State private var state: LoadState<[Record]> = .idle
     @State private var editing: PDPlaybookEdit?
     @State private var notice: String?
@@ -87,12 +88,19 @@ struct PDPlaybookView: View {
                     }
                     .padding(.vertical, 4)
                     .swipeActions(allowsFullSwipe: false) {
-                        if canEdit { Button("Delete", role: .destructive) { Task { await delete(section) } } }
+                        if canEdit {
+                            Button("Delete", role: .destructive) {
+                                confirm = PendingConfirmation(title: "Delete \(section.string("title") ?? "this section")?",
+                                                              message: "It comes out of the playbook for everyone.",
+                                                              button: "Delete section") { await delete(section) }
+                            }
+                        }
                     }
                 }
             }
         }
         .navigationTitle("Playbook")
+        .workConfirmation($confirm)
         .safeAreaInset(edge: .top, spacing: 0) { PDNoticeBar(notice: notice, error: actionError) }
         .toolbar {
             if canEdit {

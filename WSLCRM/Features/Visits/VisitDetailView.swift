@@ -110,6 +110,21 @@ final class VisitDetailViewModel {
         return sent
     }
 
+    /// A finish queued offline with the customer's signature, which the server then can't keep (no file storage):
+    /// send it again without the signature, as the online path does, and say so.
+    func dropUnkeepableSignature() async {
+        guard let stuck = pendingWrites.first(where: FieldServiceAPI.Mutations.isStuckOnSignatureStorage),
+              let replacement = FieldServiceAPI.Mutations.withoutSignature(stuck) else { return }
+        sync.discard(stuck)
+        await sync.enqueue(replacement)
+        signatureUnavailable = true
+        warnings = ["The customer's signature couldn't be kept: file storage isn't set up for this workspace. "
+                    + "The job is being finished without it."]
+        // The old write may still have been in the queue when the new one was added: try again shortly.
+        try? await Task.sleep(for: .seconds(1))
+        sync.replaySoon()
+    }
+
     func markNoAccess(reason: String) async -> Bool {
         guard let visit = detail?.visit, let context = session.mutationContext else { return false }
         let reason = reason.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -438,6 +453,7 @@ private struct VisitDetailContent: View {
         }
         .task { await model.load() }
         .refreshable { await model.load() }
+        .onChange(of: model.pendingWrites, initial: true) { Task { await model.dropUnkeepableSignature() } }
         .sheet(isPresented: $showingCheckOut) {
             if let detail = model.detail {
                 CheckOutSheet(visit: detail.visit, phase: detail.phase,

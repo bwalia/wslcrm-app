@@ -8,14 +8,14 @@ struct PDLeadRoute: Hashable { let uuid: String }
 /// "call now" task due in minutes. Call dials them; Called logs the call and closes the task.
 struct PDHotLeadsSection: View {
     let leads: [PDHotLead]
-    /// Called on a lead (the task's done once it syncs).
-    let onCalled: (PDHotLead) -> Void
+    /// Called on a lead (the task's done once it syncs); nil when the role can't log calls.
+    let onCalled: ((PDHotLead) -> Void)?
 
     var body: some View {
         if !leads.isEmpty {
             Section {
                 ForEach(leads) { lead in
-                    PDHotLeadRow(lead: lead, onCalled: { onCalled(lead) })
+                    PDHotLeadRow(lead: lead, onCalled: onCalled.map { called in { called(lead) } })
                 }
             } header: {
                 Label("Hot leads: call now (\(leads.count))", systemImage: "flame.fill")
@@ -28,7 +28,7 @@ struct PDHotLeadsSection: View {
 
 struct PDHotLeadRow: View {
     let lead: PDHotLead
-    let onCalled: () -> Void
+    let onCalled: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -68,7 +68,7 @@ struct PDHotLeadRow: View {
                         .tint(Tone.success.solidColor)
                         .accessibilityIdentifier("pd.hot.call")
                 }
-                if lead.callTaskUuid != nil {
+                if lead.callTaskUuid != nil, let onCalled {
                     Button { onCalled() } label: { Label("Called", systemImage: "checkmark") }
                         .buttonStyle(.bordered)
                         .accessibilityIdentifier("pd.hot.called")
@@ -145,6 +145,7 @@ struct PDLeadView: View {
     @State private var createdDeal: PDDealRoute?
     @State private var notice: String?
     @State private var actionError: APIError?
+    @State private var confirm: PendingConfirmation?
 
     var body: some View {
         Group {
@@ -155,6 +156,7 @@ struct PDLeadView: View {
             }
         }
         .navigationTitle(state.value?.name ?? "Lead")
+        .workConfirmation($confirm)
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .refreshable { await load() }
@@ -270,7 +272,11 @@ struct PDLeadView: View {
                     PDSignalRow(signal: signal)
                         .swipeActions(allowsFullSwipe: false) {
                             if signal.source == "manual", canEditLead {
-                                Button("Delete", role: .destructive) { Task { await deleteSignal(signal) } }
+                                Button("Delete", role: .destructive) {
+                                    confirm = PendingConfirmation(title: "Delete this news?", button: "Delete") {
+                                        await deleteSignal(signal)
+                                    }
+                                }
                             }
                             if signal.usedAt == nil, canFollowUp {
                                 Button("Follow up") { followUp = PDFollowUpTarget(signal: signal) }.tint(.indigo)
@@ -281,7 +287,11 @@ struct PDLeadView: View {
                                 Button("Follow up about this", systemImage: "sparkles") { followUp = PDFollowUpTarget(signal: signal) }
                             }
                             if signal.source == "manual", canEditLead {
-                                Button("Delete", systemImage: "trash", role: .destructive) { Task { await deleteSignal(signal) } }
+                                Button("Delete", systemImage: "trash", role: .destructive) {
+                                    confirm = PendingConfirmation(title: "Delete this news?", button: "Delete") {
+                                        await deleteSignal(signal)
+                                    }
+                                }
                             }
                         }
                 }
@@ -292,7 +302,7 @@ struct PDLeadView: View {
             } header: {
                 Text("Recent news")
             } footer: {
-                Text("Paste a post or link you saw. Social networks are never read by the server.")
+                Text("Paste a post or link you saw. The app never reads your social networks.")
             }
 
             if let notes = lead.notes, !notes.isEmpty {

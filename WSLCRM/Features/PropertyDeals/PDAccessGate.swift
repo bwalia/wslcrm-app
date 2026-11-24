@@ -112,3 +112,56 @@ struct PDAccessGate<Content: View>: View {
         }
     }
 }
+
+/// Property Deals buttons whose work reaches past one module, and every grant the server checks on the way
+/// (a button shown without one of them ends in "Permission denied" halfway through).
+enum PDWriteGates {
+    /// New deal: `POST /properties` (properties.create), then `POST /deals` (deals.create).
+    static func canCreateDeal(_ pd: PDAccess?) -> Bool {
+        (pd?.can(.create, .deals) ?? false) && (pd?.can(.create, .properties) ?? false)
+    }
+
+    /// Research "Add the property": `POST /properties`, then `PUT /deals/:id` (deals.update).
+    static func canAddPropertyToDeal(_ pd: PDAccess?) -> Bool {
+        (pd?.can(.create, .properties) ?? false) && (pd?.can(.update, .deals) ?? false)
+    }
+
+    /// "Make them our solicitor": `POST /deal-parties`, a deals create (sdk.crud module property_deals_deals).
+    static func canAppointSolicitor(_ pd: PDAccess?) -> Bool { pd?.can(.create, .deals) ?? false }
+
+    /// A new buyer is a CRM person (`crm_contacts.create`) or company (`crm_accounts.create`), then a profile
+    /// (buyers.create).
+    static func canAddBuyerPerson(_ pd: PDAccess?, _ permissions: PermissionSet) -> Bool {
+        (pd?.can(.create, .buyers) ?? false) && permissions.can(.create, moduleName: "crm_contacts")
+    }
+
+    static func canAddBuyerCompany(_ pd: PDAccess?, _ permissions: PermissionSet) -> Bool {
+        (pd?.can(.create, .buyers) ?? false) && permissions.can(.create, moduleName: "crm_accounts")
+    }
+
+    /// Quick capture's seller: `POST /api/v2/crm/leads` (crm_leads.create), then the Property Deals details
+    /// (leads.update).
+    static func canCaptureLead(_ pd: PDAccess?, _ permissions: PermissionSet) -> Bool {
+        permissions.can(.create, moduleName: "crm_leads") && (pd?.can(.update, .leads) ?? false)
+    }
+
+    /// Quick capture's property and photos: `POST /properties` and `/documents` (both properties.create).
+    static func canCaptureProperty(_ pd: PDAccess?) -> Bool { pd?.can(.create, .properties) ?? false }
+
+    static func canCapture(_ pd: PDAccess?, _ permissions: PermissionSet) -> Bool {
+        canCaptureLead(pd, permissions) || canCaptureProperty(pd)
+    }
+
+    /// "Called" on a hot lead: a contact log (tasks.create), then the task closed (tasks.update).
+    static func canLogCall(_ pd: PDAccess?) -> Bool {
+        (pd?.can(.create, .tasks) ?? false) && (pd?.can(.update, .tasks) ?? false)
+    }
+
+    /// "Log it" after a call or email: `POST /chases` (sdk.crud module property_deals_tasks).
+    static func canLogChase(_ pd: PDAccess?) -> Bool { pd?.can(.create, .tasks) ?? false }
+
+    /// "Book the nearest": `POST /suppliers/nearest` (suppliers.read), then a booking task (tasks.create).
+    static func canBookNearest(_ pd: PDAccess?) -> Bool {
+        (pd?.can(.read, .suppliers) ?? false) && (pd?.can(.create, .tasks) ?? false)
+    }
+}

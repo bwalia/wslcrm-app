@@ -365,6 +365,7 @@ struct AssignConvertToJobSheet: View {
     @State private var priority: JobPriority
     @State private var jobTypes: [JobType] = []
     @State private var members: [Engineer] = []
+    @State private var membersError: APIError?
     @State private var jobTypeUuid: String?
     @State private var engineerUuid: String?
     @State private var managerUuid: String?
@@ -407,6 +408,9 @@ struct AssignConvertToJobSheet: View {
                         ForEach(members) { Text($0.pickerLabel).tag(Optional($0.uuid)) }
                     }
                     .accessibilityIdentifier("convert.engineer")
+                    if let membersError {
+                        InlineErrorRow(error: membersError) { Task { await loadMembers() } }
+                    }
                     if engineerUuid != nil {
                         DatePicker("First visit", selection: $firstVisit, in: Date().addingTimeInterval(-3600)...)
                             .accessibilityIdentifier("convert.firstVisit")
@@ -443,11 +447,19 @@ struct AssignConvertToJobSheet: View {
             }
             .task {
                 async let types = services.fieldService.jobTypes()
-                async let engineers = services.fieldService.engineers()
+                await loadMembers()
                 jobTypes = (try? await types) ?? []
-                members = (try? await engineers) ?? []
             }
             .interactiveDismissDisabled(submitting)
+        }
+    }
+
+    private func loadMembers() async {
+        do {
+            members = try await services.fieldService.engineers()
+            membersError = nil
+        } catch {
+            membersError = error.asAPIError
         }
     }
 

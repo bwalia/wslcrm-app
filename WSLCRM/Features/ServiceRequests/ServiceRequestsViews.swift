@@ -237,6 +237,8 @@ final class ServiceRequestDetailViewModel {
     private(set) var busy = false
     var actionError: APIError?
     var convertedJobUuid: String?
+    /// The job was made but the request's site couldn't be put on it: offered again before opening the job.
+    var unlinkedSite: (job: String, site: String, error: APIError)?
     private let api: FieldServiceAPI
 
     init(uuid: String, api: FieldServiceAPI) {
@@ -271,13 +273,36 @@ final class ServiceRequestDetailViewModel {
         defer { busy = false }
         do {
             let result = try await api.convertToJob(uuid, body: body, siteUuid: state.value?.request.siteUuid)
-            convertedJobUuid = result.jobUuid
             await load()
+            if let error = result.siteLinkError, let site = state.value?.request.siteUuid {
+                unlinkedSite = (result.jobUuid, site, error)
+            } else {
+                convertedJobUuid = result.jobUuid
+            }
             return result
         } catch {
             actionError = error.asAPIError
             return nil
         }
+    }
+
+    /// "Try again" on the site link; the job opens either way afterwards.
+    func retrySiteLink() async {
+        guard let pending = unlinkedSite else { return }
+        unlinkedSite = nil
+        busy = true
+        defer { busy = false }
+        do {
+            try await api.setJobSite(pending.job, siteUuid: pending.site)
+            convertedJobUuid = pending.job
+        } catch {
+            unlinkedSite = (pending.job, pending.site, error.asAPIError)
+        }
+    }
+
+    func openJobWithoutSite() {
+        convertedJobUuid = unlinkedSite?.job
+        unlinkedSite = nil
     }
 
     func replace(_ detail: ServiceRequestDetail) {
@@ -351,6 +376,14 @@ private struct ServiceRequestDetailContent: View {
             if let detail = model.state.value {
                 AssignConvertToJobSheet(request: detail.request) { body in await model.convert(body) }
             }
+        }
+        .alert("The job was made, but its site wasn't set",
+               isPresented: .init(get: { model.unlinkedSite != nil && !showingConvert }, set: { _ in }),
+               presenting: model.unlinkedSite?.error) { _ in
+            Button("Try again") { Task { await model.retrySiteLink() } }
+            Button("Open the job", role: .cancel) { model.openJobWithoutSite() }
+        } message: { error in
+            Text("\(error.plainMessage) You can also set the site later from the job (Edit job details).")
         }
         .sheet(isPresented: $editing) {
             if let detail = model.state.value {

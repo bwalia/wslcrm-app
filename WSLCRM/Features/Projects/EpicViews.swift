@@ -428,7 +428,7 @@ struct EpicFormSheet: View {
                     Text("Dates")
                 } footer: {
                     if existing?.startDate != nil || existing?.dueDate != nil {
-                        Text("You can move a date, but the server can't remove one once it's set.")
+                        Text("You can move a date, but once it's set it can't be cleared.")
                     }
                 }
                 if let message = error ?? (name.isEmpty ? nil : problem) {

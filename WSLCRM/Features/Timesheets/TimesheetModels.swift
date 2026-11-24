@@ -214,8 +214,20 @@ struct TimesheetEntryBody: Encodable, Sendable {
     var hours: Double?
     var description: String?
     var projectReference: String?
+    var taskReference: String?
     var category: String?
     var isBillable: Bool?
+
+    /// From the entry sheet. The server keeps project/task/category as plain text and only changes
+    /// a field it's sent, so an edit sends "" to clear one; a new entry leaves blanks out.
+    static func make(date: Date, hours: Double, description: String, project: String, task: String,
+                     category: String, billable: Bool, editing: Bool) -> TimesheetEntryBody {
+        func value(_ text: String) -> String? { text.trimmedOrNil ?? (editing ? "" : nil) }
+        return TimesheetEntryBody(date: CalendarDay.string(date), hours: hours,
+                                  description: description.trimmingCharacters(in: .whitespacesAndNewlines),
+                                  projectReference: value(project), taskReference: value(task),
+                                  category: value(category), isBillable: billable)
+    }
 }
 
 /// The invoice made from an approved timesheet.
