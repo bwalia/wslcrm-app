@@ -48,7 +48,7 @@ final class MoneyDeepAuditTests: XCTestCase {
         _ = try await api.invoices(search: "", status: nil, page: 1)
         XCTAssertNil(query(recorder.last("/api/v2/invoices"))["status"])
         XCTAssertTrue(InvoiceFilterSheet.statuses.contains(.overdue))
-        XCTAssertFalse(InvoiceFilterSheet.statuses.contains(.partiallyPaid), "the server never stores part paid")
+        XCTAssertTrue(InvoiceFilterSheet.statuses.contains(.partiallyPaid), "the server works part paid out")
         XCTAssertEqual(InvoiceFilterSheet.label(.overdue), "Overdue")
         XCTAssertEqual(InvoiceFilterSheet.label(.cancelled), "Cancelled")
     }

@@ -135,9 +135,9 @@ struct InvoiceFilterSheet: View {
     @Binding var issuedTo: Date?
     @Environment(\.dismiss) private var dismiss
 
-    /// The statuses the server can filter on (`InvoiceQueries.list`; "overdue" it works out). "Part paid" is left
-    /// out: a payment keeps the stored status "sent", so the server's filter would find none.
-    static let statuses: [InvoiceStatus] = [.draft, .sent, .overdue, .paid, .cancelled, .void]
+    /// The statuses the server can filter on (`InvoiceQueries.list`). "Overdue" and "Part paid" aren't stored; the
+    /// server works them out (part paid: something paid, something still owing — opsapi #1013).
+    static let statuses: [InvoiceStatus] = [.draft, .sent, .partiallyPaid, .overdue, .paid, .cancelled, .void]
 
     static func label(_ status: InvoiceStatus) -> String { status == .cancelled ? "Cancelled" : status.badge.text }
 
