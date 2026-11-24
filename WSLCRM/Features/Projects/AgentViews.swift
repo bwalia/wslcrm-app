@@ -338,16 +338,19 @@ struct ReviewQueueView: View {
 struct ReviewSheet: View {
     let task: KanbanTask
     let columns: [KanbanColumn]
-    let submit: (_ approved: Bool, _ reason: String, _ column: KanbanColumn?) async -> Void
+    /// Nil when it worked; otherwise the reason, shown here with the sheet left open.
+    let submit: (_ approved: Bool, _ reason: String, _ column: KanbanColumn?) async -> String?
     @Environment(\.dismiss) private var dismiss
     @State private var reason = ""
     @State private var approved = true
     @State private var destination: KanbanColumn?
     @State private var busy = false
+    @State private var saveError: String?
 
     var body: some View {
         NavigationStack {
             Form {
+                if let saveError { WorkSaveErrorRow(message: saveError) }
                 if let contract = task.contract {
                     Section { AgentContractCard(contract: contract) }
                     if let result = contract.result {
@@ -384,8 +387,12 @@ struct ReviewSheet: View {
                     Button(approved ? "Approve" : "Send back") {
                         busy = true
                         Task {
-                            await submit(approved, reason, destination)
-                            dismiss()
+                            if let failure = await submit(approved, reason, destination) {
+                                saveError = failure
+                                busy = false
+                            } else {
+                                dismiss()
+                            }
                         }
                     }
                     .disabled(busy || (!approved && reason.trimmingCharacters(in: .whitespaces).isEmpty))

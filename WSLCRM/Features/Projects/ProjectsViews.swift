@@ -467,7 +467,7 @@ struct ProjectFormSheet: View {
                     Text("Timeline")
                 } footer: {
                     if project?.startDay != nil || project?.dueDay != nil {
-                        Text("You can move a date, but the server can't remove one once it's set.")
+                        Text("You can move a date, but once it's set it can't be cleared.")
                     }
                 }
 

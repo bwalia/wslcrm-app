@@ -103,7 +103,8 @@ struct ProjectSettingsView: View {
 
             Section {
                 ForEach(members) { member in memberRow(member, project: project) }
-                if access.canAdmin, session.permissions.can(.manage, .projects) || access.workspacePrivileged {
+                // The route needs projects.manage AND project admin (kanban-projects.lua POST members); owning the workspace isn't enough.
+                if access.canAdmin, session.permissions.can(.manage, .projects) {
                     Button("Add a member", systemImage: "person.badge.plus") { addingMember = true }
                         .accessibilityIdentifier("settings.addMember")
                 }

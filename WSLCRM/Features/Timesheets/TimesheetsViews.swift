@@ -40,7 +40,7 @@ struct TimesheetsView: View {
                 switch tab {
                 case .mine:
                     // The filter is read when the list's model is made, so a new filter makes a new list.
-                    MyTimesheetsList(statusFilter: $statusFilter, summary: summary, reload: reload)
+                    MyTimesheetsList(statusFilter: $statusFilter, summary: summary, reload: reload) { logging = true }
                         .id(statusFilter)
                 case .approvals: ApprovalQueueList(reload: reload, notice: $notice) { await loadSummary() }
                 }
@@ -84,6 +84,8 @@ private struct MyTimesheetsList: View {
     @Binding var statusFilter: TimesheetStatus?
     let summary: TimesheetSummary?
     let reload: Int
+    /// Opens "Log time" (the empty list's way forward).
+    let onLogTime: () -> Void
 
     var body: some View {
         ModelHost(make: { [api = services.timesheets, status = statusFilter] in
@@ -98,7 +100,9 @@ private struct MyTimesheetsList: View {
                           emptyTitle: statusFilter == nil ? "No time logged" : "Nothing here",
                           emptySystemImage: "clock.badge.questionmark",
                           emptyDescription: statusFilter.map { "None of your timesheets are “\($0.label)”. Pick “All” to see every one." }
-                            ?? "Log the hours you have worked and submit them for approval.") { sheet in
+                            ?? "Log the hours you have worked and submit them for approval.",
+                          emptyActionTitle: "Log time",
+                          emptyAction: statusFilter == nil ? onLogTime : nil) { sheet in
                     NavigationLink(value: TimesheetRoute(uuid: sheet.uuid)) {
                         TimesheetRow(timesheet: sheet, showsActor: false)
                     }
@@ -169,7 +173,8 @@ private struct ApprovalQueueList: View {
         }
     }
 
-    private func decide(_ item: QueueDecision, text: String, model: PagedListModel<Timesheet>) async {
+    @discardableResult
+    private func decide(_ item: QueueDecision, text: String, model: PagedListModel<Timesheet>) async -> String? {
         let who = item.sheet.actor.name
         do {
             switch item.decision {
@@ -182,10 +187,14 @@ private struct ApprovalQueueList: View {
             }
             model.remove(id: item.sheet.id)
             await onDecided()
+            await model.load()
+            return nil
         } catch {
-            notice = .failed(error.asAPIError.plainMessage)
+            let message = error.asAPIError.plainMessage
+            notice = .failed(message)
+            await model.load()
+            return message
         }
-        await model.load()
     }
 }
 
@@ -351,6 +360,8 @@ struct TimesheetDetailView: View {
     @ViewBuilder
     private func content(_ sheet: Timesheet) -> some View {
         let isMine = sheet.userUuid == nil || sheet.userUuid == session.user?.uuid
+        // timesheets.lua `guard`: its owner, or someone with timesheets.manage, may change it.
+        let canChange = Self.canChange(isMine: isMine, permissions: session.permissions)
         let editable = sheet.status.isEditable
         List {
             Section {
@@ -417,7 +428,7 @@ struct TimesheetDetailView: View {
                         Text(tags.joined(separator: " · ")).font(.wsCaption).foregroundStyle(.secondaryText)
                     }
                     Group {
-                        if editable, isMine {
+                        if editable, canChange {
                             Button { entryForm = EntryFormTarget(entry: entry) } label: { row.foregroundStyle(.primary) }
                                 .accessibilityHint("Opens the entry to change it")
                         } else {
@@ -426,7 +437,7 @@ struct TimesheetDetailView: View {
                     }
                     .accessibilityIdentifier("timesheet.entry.\(entry.uuid)")
                     .swipeActions(allowsFullSwipe: false) {
-                        if editable, isMine {
+                        if editable, canChange {
                             Button("Delete", systemImage: "trash", role: .destructive) {
                                 confirm = PendingConfirmation(title: "Delete this entry?", button: "Delete entry") {
                                     await run("Entry deleted.") { try await services.timesheets.deleteEntry(entry.uuid) }
@@ -436,7 +447,7 @@ struct TimesheetDetailView: View {
                         }
                     }
                 }
-                if editable, isMine {
+                if editable, canChange {
                     Button("Add an entry", systemImage: "plus") { entryForm = EntryFormTarget(entry: nil) }
                         .accessibilityIdentifier("timesheet.addEntry")
                 }
@@ -475,7 +486,7 @@ struct TimesheetDetailView: View {
                 }
             }
 
-            Section { actions(sheet, isMine: isMine) }
+            Section { actions(sheet, isMine: isMine, canChange: canChange) }
         }
         .disabled(busy)
         .refreshable { await load() }
@@ -487,8 +498,12 @@ struct TimesheetDetailView: View {
         return out.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
     }
 
+    static func canChange(isMine: Bool, permissions: PermissionSet) -> Bool {
+        isMine || permissions.can(.manage, .timesheets)
+    }
+
     @ViewBuilder
-    private func actions(_ sheet: Timesheet, isMine: Bool) -> some View {
+    private func actions(_ sheet: Timesheet, isMine: Bool, canChange: Bool) -> some View {
         if isMine, sheet.status.canSubmit {
             Button("Submit for approval") {
                 Task { await run("Sent for approval.") { try await services.timesheets.submit(uuid) } }
@@ -496,7 +511,7 @@ struct TimesheetDetailView: View {
             .buttonStyle(LargeButtonStyle(tone: .info))
             .accessibilityIdentifier("timesheet.submit")
         }
-        if sheet.status.canReopen {
+        if sheet.status.canReopen, canChange {
             Button("Reopen as a draft") {
                 Task { await run("Reopened as a draft. You can change it and submit it again.") { try await services.timesheets.reopen(uuid) } }
             }
@@ -524,7 +539,7 @@ struct TimesheetDetailView: View {
             }
             .accessibilityIdentifier("timesheet.invoice")
         }
-        if sheet.status.isEditable, isMine {
+        if sheet.status.isEditable, canChange {
             Button("Delete this timesheet", role: .destructive) {
                 confirm = PendingConfirmation(title: "Delete this timesheet?", message: "Its entries go with it.",
                                               button: "Delete timesheet") {
@@ -550,7 +565,7 @@ struct TimesheetDetailView: View {
         }
     }
 
-    private func decide(_ decision: Decision, text: String) async {
+    private func decide(_ decision: Decision, text: String) async -> String? {
         await run(decision == .approve ? "Timesheet approved." : "Timesheet sent back with your reason.") {
             switch decision {
             case .approve: try await services.timesheets.approve(uuid, comments: text.isEmpty ? nil : text)
@@ -571,16 +586,21 @@ struct TimesheetDetailView: View {
         }
     }
 
-    private func run(_ done: String, _ work: () async throws -> Void) async {
+    /// Nil when it worked; otherwise the reason (a sheet shows it and stays open).
+    @discardableResult
+    private func run(_ done: String, _ work: () async throws -> Void) async -> String? {
         busy = true
         defer { busy = false }
+        var failure: String?
         do {
             try await work()
             notice = .done(done)
         } catch {
-            notice = .failed(error.asAPIError.plainMessage)
+            failure = error.asAPIError.plainMessage
+            notice = .failed(failure ?? "")
         }
         await load()
+        return failure
     }
 }
 
@@ -592,20 +612,27 @@ struct EntryFormTarget: Identifiable {
 /// Adding or changing one chunk of work on a draft timesheet.
 private struct TimesheetEntrySheet: View {
     let target: EntryFormTarget
-    let onSave: (TimesheetEntryBody) async -> Void
+    /// Nil when saved; otherwise the reason, shown here with the sheet left open.
+    let onSave: (TimesheetEntryBody) async -> String?
     @Environment(\.dismiss) private var dismiss
     @State private var date = Date()
     @State private var hours = 1.0
     @State private var description = ""
+    /// Project and task names, filled by picking a task (the server keeps them as plain text).
     @State private var project = ""
+    @State private var taskName = ""
+    @State private var picked: TimesheetTaskOption?
+    @State private var pickingTask = false
     @State private var category = ""
     @State private var billable = true
     @State private var busy = false
     @State private var filled = false
+    @State private var saveError: String?
 
     var body: some View {
         NavigationStack {
             Form {
+                if let saveError { WorkSaveErrorRow(message: saveError) }
                 Section {
                     DatePicker("Date", selection: $date, displayedComponents: .date)
                     Stepper(value: $hours, in: 0.25...24, step: 0.25) {
@@ -617,15 +644,23 @@ private struct TimesheetEntrySheet: View {
                         .accessibilityIdentifier("timesheet.entry.description")
                 } footer: {
                     if description.trimmingCharacters(in: .whitespaces).isEmpty {
-                        Text("Say what you worked on — the server needs it.")
+                        Text("Say what you worked on. It's needed to save the entry.")
                     }
                 }
                 Section {
-                    TextField("Project reference, e.g. PROJ-001", text: $project)
-                    TextField("Category, e.g. Development", text: $category)
+                    Button {
+                        pickingTask = true
+                    } label: {
+                        LabeledContent("Task", value: taskName.isEmpty ? "None" : taskName)
+                    }
+                    .accessibilityIdentifier("timesheet.entry.task")
+                    if !project.isEmpty {
+                        LabeledContent("Project", value: project)
+                    }
+                    TextField("Kind of work, e.g. Development (optional)", text: $category)
                     Toggle("Billable", isOn: $billable).accessibilityIdentifier("timesheet.entry.billable")
                 } footer: {
-                    Text("Billable hours are what the client is charged for. Leave it off for internal time.")
+                    Text("Pick the task you worked on and its project is filled in. Billable hours are what the client is charged for. Leave it off for internal time.")
                 }
             }
             .navigationTitle(target.entry == nil ? "Add an entry" : "Edit entry")
@@ -635,11 +670,17 @@ private struct TimesheetEntrySheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         busy = true
-                        let body = TimesheetEntryBody(date: CalendarDay.string(date), hours: hours,
-                                                      description: description.trimmingCharacters(in: .whitespacesAndNewlines),
-                                                      projectReference: project.trimmedOrNil, category: category.trimmedOrNil,
-                                                      isBillable: billable)
-                        Task { await onSave(body); dismiss() }
+                        let body = TimesheetEntryBody.make(date: date, hours: hours, description: description,
+                                                           project: project, task: taskName, category: category,
+                                                           billable: billable, editing: target.entry != nil)
+                        Task {
+                            if let failure = await onSave(body) {
+                                saveError = failure
+                                busy = false
+                            } else {
+                                dismiss()
+                            }
+                        }
                     }
                     .disabled(busy || description.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityIdentifier("timesheet.entry.save")
@@ -652,8 +693,16 @@ private struct TimesheetEntrySheet: View {
                 hours = max(0.25, entry.hours)
                 description = entry.description ?? ""
                 project = entry.projectReference ?? ""
+                taskName = entry.taskReference ?? ""
                 category = entry.category ?? ""
                 billable = entry.isBillable
+            }
+            .sheet(isPresented: $pickingTask) {
+                TimesheetTaskPickerSheet(selection: $picked)
+            }
+            .onChange(of: picked) { _, option in
+                taskName = option?.title ?? ""
+                project = option?.projectName ?? ""
             }
         }
     }
@@ -661,14 +710,17 @@ private struct TimesheetEntrySheet: View {
 
 private struct TimesheetDecisionSheet: View {
     let decision: TimesheetDetailView.Decision
-    let submit: (String) async -> Void
+    /// Nil when it worked; otherwise the reason, shown here with the sheet left open.
+    let submit: (String) async -> String?
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
     @State private var busy = false
+    @State private var saveError: String?
 
     var body: some View {
         NavigationStack {
             Form {
+                if let saveError { WorkSaveErrorRow(message: saveError) }
                 Section(decision == .approve ? "Comments (optional)" : "Why is it going back?") {
                     TextField(decision == .approve ? "Anything to add" : "Reason", text: $text, axis: .vertical)
                         .lineLimit(3...6)
@@ -683,8 +735,12 @@ private struct TimesheetDecisionSheet: View {
                     Button(decision == .approve ? "Approve" : "Send back") {
                         busy = true
                         Task {
-                            await submit(text)
-                            dismiss()
+                            if let failure = await submit(text) {
+                                saveError = failure
+                                busy = false
+                            } else {
+                                dismiss()
+                            }
                         }
                     }
                     .disabled(busy || (decision == .reject && text.trimmingCharacters(in: .whitespaces).isEmpty))
