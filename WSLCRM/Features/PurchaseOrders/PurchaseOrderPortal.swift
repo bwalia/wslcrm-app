@@ -446,8 +446,15 @@ struct PurchaseOrderPortalSections: View {
             }
         case .invoice:
             PortalFormSheet(title: "Record an invoice", action: "Save", fields: PortalText.invoiceFields,
-                            footer: "For a proforma or invoice that came by email. Upload the file under Documents too, if you have it.") { body in
-                try await perform("Invoice recorded.") { try await services.purchaseOrders.portalPost(po.id, "/invoices", body) }
+                            footer: "For a proforma or invoice that came by email.",
+                            fileLabel: "The invoice itself (optional: PDF, photo or scan, up to 20 MB)") { body, file in
+                try await perform(file == nil ? "Invoice recorded." : "Invoice recorded with its file.") {
+                    if let file {
+                        return try await services.purchaseOrders.portalUpload(
+                            po.id, fields: PurchaseOrdersAPI.supplierInvoiceUploadFields(body), file: file)
+                    }
+                    return try await services.purchaseOrders.portalPost(po.id, "/invoices", body)
+                }
             }
         case .payment:
             let invoices = panel.records("invoices", idKeys: ["id"])

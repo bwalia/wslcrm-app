@@ -59,7 +59,13 @@ struct PurchaseOrdersListView: View {
             })
         }) { holder in
             PagedList(model: holder.list, searchPrompt: "PO number, supplier or reference", emptyTitle: "No purchase orders",
-                      emptySystemImage: "shippingbox") { po in
+                      emptySystemImage: "shippingbox",
+                      emptyDescription: filter != nil || !supplier.isEmpty || raisedFrom != nil || raisedTo != nil
+                          ? "No purchase orders match these filters."
+                          : "A purchase order is what you ask a supplier for: what, how many and the price.",
+                      emptyActionTitle: "New purchase order",
+                      emptyAction: session.permissions.can(.create, .purchaseOrders)
+                          && filter == nil && supplier.isEmpty && raisedFrom == nil && raisedTo == nil ? { creating = true } : nil) { po in
                 NavigationLink {
                     PurchaseOrderDetailView(uuid: po.id) { updated in
                         if let updated { holder.list.replace(updated) } else { holder.list.remove(id: po.id) }
@@ -109,8 +115,8 @@ struct PurchaseOrdersListView: View {
                     .presentationDetents([.medium, .large])
             }
             .sheet(isPresented: $creating) {
-                PurchaseOrderCreateSheet(projectUuid: route.projectUuid, projectName: route.projectName) { body in
-                    let created = try await services.purchaseOrders.create(body)
+                PurchaseOrderCreateSheet(projectUuid: route.projectUuid, projectName: route.projectName) { body, key in
+                    let created = try await services.purchaseOrders.create(body, idempotencyKey: key)
                     await holder.list.load()
                     stats = try? await services.purchaseOrders.stats()
                     opened = created
@@ -211,6 +217,8 @@ struct PurchaseOrderDetailView: View {
     @State private var reasonPrompt: ReasonPrompt?
     @State private var reason = ""
     @State private var pdfURL: URL?
+    /// The delivery and bill sheets' Idempotency-Key: one per time the sheet opens, kept for a retry.
+    @State private var retryKey = MoneyRetryKey()
 
     /// What a typed reason is for: cancelling the order, closing it short, or voiding a bill.
     enum ReasonPrompt: Identifiable {
@@ -283,6 +291,7 @@ struct PurchaseOrderDetailView: View {
             PurchaseOrderLineSheet(line: nil) { body in
                 await mutate("Line added.") { try await services.purchaseOrders.addItem(uuid, body) }
             } onDelete: { false }
+            .moneySheetError(actionError)
         }
         .sheet(item: $editingLine) { line in
             PurchaseOrderLineSheet(line: line) { body in
@@ -290,37 +299,47 @@ struct PurchaseOrderDetailView: View {
             } onDelete: {
                 await mutate("Line removed.") { try await services.purchaseOrders.deleteItem(uuid, itemId: line.id) }
             }
+            .moneySheetError(actionError)
         }
         .sheet(isPresented: $editingHeader) {
             if let po = state.value {
                 PurchaseOrderEditSheet(po: po) { body in
                     await mutate("Purchase order saved.") { try await services.purchaseOrders.update(uuid, body) }
                 }
+                .moneySheetError(actionError)
             }
         }
-        .sheet(isPresented: $receiving) {
+        .sheet(isPresented: $receiving, onDismiss: { retryKey = MoneyRetryKey() }) {
             if let po = state.value {
                 PurchaseOrderDeliverySheet(po: po) { body in
-                    await mutate("Delivery recorded.") { try await services.purchaseOrders.receiveDelivery(uuid, body) }
-                }
-            }
-        }
-        .sheet(isPresented: $billing) {
-            if let po = state.value {
-                PurchaseOrderBillSheet(po: po) { body in
-                    await mutate("Billed. If Bookkeeping is on, a pending expense is in the purchase ledger.") {
-                        try await services.purchaseOrders.bill(uuid, body)
+                    await keyedMutate("Delivery recorded.") { key in
+                        try await services.purchaseOrders.receiveDelivery(uuid, body, idempotencyKey: key)
                     }
                 }
+                .moneySheetError(actionError)
             }
+        }
+        .sheet(isPresented: $billing, onDismiss: { retryKey = MoneyRetryKey() }) {
+            if let po = state.value {
+                PurchaseOrderBillSheet(po: po) { body in
+                    await keyedMutate("Billed. If Bookkeeping is on, a pending expense is in the purchase ledger.") { key in
+                        try await services.purchaseOrders.bill(uuid, body, idempotencyKey: key)
+                    }
+                }
+                .moneySheetError(actionError)
+            }
+        }
+        // A sheet shows only its own failure, not one from before it opened.
+        .onChange(of: addingLine || editingLine != nil || editingHeader || receiving || billing) { _, open in
+            if open { actionError = nil }
         }
         .sheet(isPresented: $emailing) {
             if let po = state.value {
-                PurchaseOrderEmailSheet(po: po) { to, message in
+                PurchaseOrderEmailSheet(po: po) { to, message, key in
                     let pdf = PurchaseOrderPDFRenderer.render(po, company: session.workspace?.name)
                     let result = try await services.purchaseOrders.email(uuid, to: to, message: message,
                                                                          pdf: pdf.flatMap { try? Data(contentsOf: $0) },
-                                                                         filename: pdf?.lastPathComponent)
+                                                                         filename: pdf?.lastPathComponent, idempotencyKey: key)
                     notice = "Emailed to \(result.to) with the PDF attached."
                     await load()
                     if let po = state.value { onChange(po) }
@@ -352,7 +371,10 @@ struct PurchaseOrderDetailView: View {
     }
 
     private func content(_ po: PurchaseOrder) -> some View {
-        let canUpdate = session.permissions.can(.update, .purchaseOrders)
+        let permissions = session.permissions
+        let canUpdate = permissions.can(.update, .purchaseOrders)
+        let canDeleteDraft = permissions.can(.delete, .purchaseOrders) && po.canDelete
+        let canBill = PurchaseOrderAccess.canBill(po, permissions)
         return List {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
@@ -379,53 +401,57 @@ struct PurchaseOrderDetailView: View {
             }
 
             if canUpdate && (po.canSend || po.canEmail || po.canAcknowledge || po.canReceive || po.hasSomethingToBill
-                             || po.canCancel || po.canCloseShort) {
+                             || po.canCancel || po.canCloseShort) || canDeleteDraft {
                 Section("Actions") {
-                    if po.canReceive {
+                    if canUpdate && po.canReceive {
                         Button { receiving = true } label: { Label("Record a delivery", systemImage: "shippingbox.fill") }
                             .buttonStyle(.large(.success))
                             .listRowSeparator(.hidden)
                             .accessibilityIdentifier("po.receive")
                     }
-                    if po.hasSomethingToBill, po.status != .cancelled {
-                        Button { billing = true } label: { Label("Bill what's arrived", systemImage: "sterlingsign.circle.fill") }
-                            .buttonStyle(.large(.info))
-                            .listRowSeparator(.hidden)
-                            .accessibilityIdentifier("po.bill")
+                    if canUpdate, po.hasSomethingToBill, po.status != .cancelled {
+                        if canBill {
+                            Button { billing = true } label: { Label("Bill what's arrived", systemImage: "sterlingsign.circle.fill") }
+                                .buttonStyle(.large(.info))
+                                .listRowSeparator(.hidden)
+                                .accessibilityIdentifier("po.bill")
+                        } else {
+                            Text(PurchaseOrderAccess.booksBlocked).font(.wsFootnote).foregroundStyle(.secondaryText)
+                        }
                     }
-                    if po.canEmail && (po.canSend || po.canAcknowledge) {
+                    if canUpdate && po.canEmail && (po.canSend || po.canAcknowledge) {
                         Button { emailing = true } label: { Label("Email to supplier", systemImage: "envelope.fill") }
                             .buttonStyle(.large(.info))
                             .listRowSeparator(.hidden)
                             .accessibilityIdentifier("po.email")
                     }
-                    if po.canSend {
+                    if canUpdate && po.canSend {
                         Button { Task { await mutate("Marked as sent.") { try await services.purchaseOrders.send(uuid) } } } label: {
                             Label("Mark as sent without emailing", systemImage: "paperplane")
                         }
                         .frame(minHeight: 44)
                         .accessibilityIdentifier("po.send")
                     }
-                    if po.canAcknowledge {
+                    if canUpdate && po.canAcknowledge {
                         Button { Task { await mutate("Marked as confirmed by the supplier.") { try await services.purchaseOrders.acknowledge(uuid) } } } label: {
                             Label("Supplier confirmed it", systemImage: "hand.thumbsup")
                         }
                         .frame(minHeight: 44)
                         .accessibilityIdentifier("po.acknowledge")
                     }
-                    if po.canCloseShort {
+                    if canUpdate && po.canCloseShort {
                         Button { reason = ""; reasonPrompt = .closeShort } label: {
                             Label("Close short (the rest won't come)", systemImage: "archivebox")
                         }
                         .frame(minHeight: 44)
                         .accessibilityIdentifier("po.closeShort")
                     }
-                    if po.canCancel {
+                    if canUpdate && po.canCancel {
                         Button("Cancel purchase order", role: .destructive) { reason = ""; reasonPrompt = .cancel }
                             .frame(maxWidth: .infinity, minHeight: 44)
                             .accessibilityIdentifier("po.cancel")
                     }
-                    if session.permissions.can(.delete, .purchaseOrders) && po.canDelete {
+                    if canDeleteDraft {
                         Button("Delete draft", role: .destructive) { confirmDelete = true }
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }
@@ -503,7 +529,7 @@ struct PurchaseOrderDetailView: View {
                                 Text(bill.expenseUuid != nil ? "A pending expense is in the purchase ledger."
                                      : bill.ledgerNote ?? "Not posted to a ledger (Bookkeeping is not on).")
                                     .font(.wsCaption).foregroundStyle(.secondaryText)
-                                if canUpdate, bill.uuid != nil {
+                                if canUpdate, bill.uuid != nil, PurchaseOrderAccess.canVoidBill(po, permissions) {
                                     Button("Void this bill", role: .destructive) { reason = ""; reasonPrompt = .voidBill(bill) }
                                         .buttonStyle(.borderless)
                                         .frame(minHeight: 44)
@@ -581,6 +607,14 @@ struct PurchaseOrderDetailView: View {
         } catch {
             if state.value == nil { state = .failed(error.asAPIError) } else { actionError = error.asAPIError }
         }
+    }
+
+    /// A write that carries the sheet's Idempotency-Key; the key is kept only when the reply may have been lost.
+    private func keyedMutate(_ message: String, _ operation: (String) async throws -> PurchaseOrder) async -> Bool {
+        let key = retryKey.value
+        let ok = await mutate(message) { try await operation(key) }
+        retryKey.settle(ok ? nil : actionError)
+        return ok
     }
 
     @discardableResult
@@ -696,6 +730,7 @@ struct PurchaseOrderLineSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var body_: PurchaseOrderLineBody
     @State private var saving = false
+    @State private var confirmDelete = false
 
     init(line: PurchaseOrderItem?, save: @escaping (PurchaseOrderLineBody) async -> Bool, onDelete: @escaping () async -> Bool) {
         self.line = line
@@ -718,9 +753,14 @@ struct PurchaseOrderLineSheet: View {
                 }
                 if line != nil {
                     Section {
-                        Button("Delete line", role: .destructive) { Task { if await onDelete() { dismiss() } } }
+                        Button("Delete line", role: .destructive) { confirmDelete = true }
                     }
                 }
+            }
+            .confirmationDialog("Delete this line?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button("Delete line", role: .destructive) { Task { if await onDelete() { dismiss() } } }
+            } message: {
+                Text("It comes off the order and the totals are worked out again.")
             }
             .navigationTitle(line == nil ? "Add a line" : "Edit line")
             .navigationBarTitleDisplayMode(.inline)
@@ -746,7 +786,8 @@ struct PurchaseOrderLineSheet: View {
 struct PurchaseOrderCreateSheet: View {
     var projectUuid: String?
     var projectName: String?
-    let create: (PurchaseOrderBody) async throws -> PurchaseOrder
+    /// The body and this form's Idempotency-Key.
+    let create: (PurchaseOrderBody, String) async throws -> PurchaseOrder
     @Environment(\.dismiss) private var dismiss
     @State private var supplierName = ""
     @State private var supplierEmail = ""
@@ -758,17 +799,20 @@ struct PurchaseOrderCreateSheet: View {
     @State private var expected = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
     @State private var deliveryAddress = ""
     @State private var currency = Formatters.fallbackCurrency
-    @State private var lines: [PurchaseOrderLineBody] = [PurchaseOrderLineBody(description: "", quantity: 1, unitPrice: 0, taxRate: 20)]
+    @State private var lines = [MoneyDraftLine(PurchaseOrderLineBody(description: "", quantity: 1, unitPrice: 0, taxRate: 20))]
     @State private var saving = false
     @State private var error: APIError?
+    @State private var retryKey = MoneyRetryKey()
 
     private var validLines: [PurchaseOrderLineBody] {
-        lines.filter { !$0.description.trimmingCharacters(in: .whitespaces).isEmpty && $0.quantity > 0 }
+        lines.map(\.body).filter { !$0.description.trimmingCharacters(in: .whitespaces).isEmpty && $0.quantity > 0 }
     }
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             Form {
+                if let error { Section { InlineErrorRow(error: error) }.id("form.error") }
                 Section("Supplier") {
                     TextField("Supplier name", text: $supplierName).textContentType(.organizationName)
                         .accessibilityIdentifier("po.create.supplier")
@@ -788,29 +832,36 @@ struct PurchaseOrderCreateSheet: View {
                 } header: {
                     Text("Order")
                 }
-                ForEach($lines.indices, id: \.self) { index in
+                // Rows are bound by a stable id: removing a line while another is being typed in can't point at
+                // a row that has gone.
+                ForEach($lines) { $line in
+                    let index = lines.firstIndex { $0.id == line.id } ?? 0
                     Section("Line \(index + 1)") {
-                        TextField("Description", text: $lines[index].description)
+                        TextField("Description", text: $line.body.description)
                             .accessibilityIdentifier("po.create.line\(index).description")
-                        TextField("Quantity", value: $lines[index].quantity, format: .number).keyboardType(.decimalPad)
-                        TextField("Unit price", value: $lines[index].unitPrice, format: .number).keyboardType(.decimalPad)
+                        TextField("Quantity", value: $line.body.quantity, format: .number).keyboardType(.decimalPad)
+                        TextField("Unit price", value: $line.body.unitPrice, format: .number).keyboardType(.decimalPad)
                             .accessibilityIdentifier("po.create.line\(index).price")
-                        TextField("VAT %", value: $lines[index].taxRate, format: .number).keyboardType(.decimalPad)
+                        TextField("VAT %", value: $line.body.taxRate, format: .number).keyboardType(.decimalPad)
                         if lines.count > 1 {
-                            Button("Remove line", role: .destructive) { lines.remove(at: index) }
+                            Button("Remove line", role: .destructive) { lines.removeAll { $0.id == line.id } }
                         }
                     }
                 }
                 Section {
                     Button("Add another line", systemImage: "plus") {
-                        lines.append(PurchaseOrderLineBody(description: "", quantity: 1, unitPrice: 0, taxRate: lines.last?.taxRate ?? 20))
+                        lines.append(MoneyDraftLine(PurchaseOrderLineBody(description: "", quantity: 1, unitPrice: 0,
+                                                                          taxRate: lines.last?.body.taxRate ?? 20)))
                     }
                 }
                 Section("Notes and terms (optional)") {
                     TextField("Notes for the supplier", text: $notes, axis: .vertical)
                     TextField("Payment and delivery terms", text: $terms, axis: .vertical)
                 }
-                if let error { Section { InlineErrorRow(error: error) } }
+            }
+            .onChange(of: error?.plainMessage) { _, message in
+                if message != nil { withAnimation { proxy.scrollTo("form.error", anchor: .top) } }
+            }
             }
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("New purchase order")
@@ -820,6 +871,7 @@ struct PurchaseOrderCreateSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") {
                         saving = true
+                        error = nil
                         Task {
                             do {
                                 _ = try await create(PurchaseOrderBody(
@@ -827,10 +879,11 @@ struct PurchaseOrderCreateSheet: View {
                                     supplierPhone: supplierPhone.trimmedOrNil,
                                     reference: reference.trimmedOrNil, expectedDate: hasExpected ? CalendarDay(date: expected) : nil,
                                     deliveryAddress: deliveryAddress.trimmedOrNil, currency: currency, notes: notes.trimmedOrNil,
-                                    projectUuid: projectUuid, items: validLines, terms: terms.trimmedOrNil))
+                                    projectUuid: projectUuid, items: validLines, terms: terms.trimmedOrNil), retryKey.value)
                                 dismiss()
                             } catch {
                                 self.error = error.asAPIError
+                                retryKey.settle(error.asAPIError)
                             }
                             saving = false
                         }
@@ -839,20 +892,22 @@ struct PurchaseOrderCreateSheet: View {
                     .accessibilityIdentifier("po.create.save")
                 }
             }
+            .interactiveDismissDisabled(saving)
         }
     }
 }
 
 struct PurchaseOrderEmailSheet: View {
     let po: PurchaseOrder
-    let send: (_ to: String, _ message: String) async throws -> Void
+    let send: (_ to: String, _ message: String, _ idempotencyKey: String) async throws -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var to: String
     @State private var message = ""
     @State private var sending = false
     @State private var error: APIError?
+    @State private var retryKey = MoneyRetryKey()
 
-    init(po: PurchaseOrder, send: @escaping (_ to: String, _ message: String) async throws -> Void) {
+    init(po: PurchaseOrder, send: @escaping (_ to: String, _ message: String, _ idempotencyKey: String) async throws -> Void) {
         self.po = po
         self.send = send
         _to = State(initialValue: po.supplierEmail ?? "")
@@ -879,16 +934,63 @@ struct PurchaseOrderEmailSheet: View {
                         sending = true
                         Task {
                             do {
-                                try await send(to, message)
+                                try await send(to, message, retryKey.value)
                                 dismiss()
                             } catch {
                                 self.error = error.asAPIError
+                                retryKey.settle(error.asAPIError)
                             }
                             sending = false
                         }
                     }
                     .disabled(to.trimmingCharacters(in: .whitespaces).isEmpty || sending)
                 }
+            }
+        }
+    }
+}
+
+/// What the purchase-order routes check beyond `purchase_orders` (`routes/purchase-orders.lua` `ledger_denied`):
+/// with Bookkeeping on, billing posts to the purchase ledger, so it also needs `accounting.create`, and voiding a bill
+/// needs `accounting.delete`. The app can tell Bookkeeping is on when it's in the menu or a bill has been posted.
+enum PurchaseOrderAccess {
+    static let booksBlocked = "Billing this order adds it to the books, and your role can't add to the books. "
+        + "Ask the workspace owner if you need to."
+
+    static func bookkeepingOn(_ po: PurchaseOrder, _ permissions: PermissionSet) -> Bool {
+        permissions.menuKeys.contains("accounting") || po.bills.contains { $0.expenseUuid != nil }
+    }
+
+    static func canBill(_ po: PurchaseOrder, _ permissions: PermissionSet) -> Bool {
+        permissions.can(.update, .purchaseOrders)
+            && (!bookkeepingOn(po, permissions) || permissions.can(.create, moduleName: "accounting"))
+    }
+
+    static func canVoidBill(_ po: PurchaseOrder, _ permissions: PermissionSet) -> Bool {
+        permissions.can(.update, .purchaseOrders)
+            && (!bookkeepingOn(po, permissions) || permissions.can(.delete, moduleName: "accounting"))
+    }
+}
+
+/// A line being typed into a new invoice or purchase order. The id stays with the line, so removing one while
+/// another is being edited can't point at a row that has gone (binding by index could crash).
+struct MoneyDraftLine<Body>: Identifiable {
+    let id = UUID()
+    var body: Body
+
+    init(_ body: Body) { self.body = body }
+}
+
+extension View {
+    /// A money sheet whose save runs on the screen underneath: its failure is shown in the sheet too, so the person
+    /// sees why it didn't close (what they typed stays).
+    func moneySheetError(_ error: APIError?) -> some View {
+        safeAreaInset(edge: .bottom, spacing: 0) {
+            if let error {
+                InlineErrorRow(error: error)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.bar)
             }
         }
     }
