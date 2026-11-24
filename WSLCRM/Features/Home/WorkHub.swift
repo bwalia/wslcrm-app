@@ -118,3 +118,50 @@ extension NavigationPolicy.Home {
         }
     }
 }
+
+extension NavigationPolicy.Home {
+    /// The menu key of the area this hub shows, for its page assistant (nil: the all-round one).
+    var menuKey: String? {
+        switch self {
+        case .shop: "shop"
+        case .leads: "crm_leads"
+        case .tasks: "my_tasks"
+        case .fieldService: "field_service_jobs"
+        case .myWork: "field_service_visits"
+        case .propertyDeals: "plugin:property_deals:today"
+        case .propertyPA: "plugin:property_pa:today"
+        case .projects: AppMenu.projectsKey
+        default: nil
+        }
+    }
+}
+
+extension View {
+    /// "Ask AI" in the navigation bar of a tab's first screen: that area's assistant, which knows the page, can
+    /// answer questions about it and do the work in it. Hidden for anyone without the assistant in their menu.
+    func askAIButton(path: String?) -> some View {
+        modifier(AskAIButton(path: path))
+    }
+}
+
+private struct AskAIButton: ViewModifier {
+    let path: String?
+    @Environment(SessionStore.self) private var session
+
+    func body(content: Content) -> some View {
+        content.toolbar {
+            if session.permissions.menuKeys.contains(AppMenu.aiChatKey) {
+                ToolbarItem(placement: .topBarLeading) {
+                    NavigationLink(value: NativeScreenRoute(ChatAssistantRoute.screenID(path: path))) {
+                        Label("Ask AI", systemImage: "sparkles")
+                            .labelStyle(.titleAndIcon)
+                            .font(.brandCallout.weight(.semibold))
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    .accessibilityIdentifier("tab.askAI")
+                }
+            }
+        }
+    }
+}
+

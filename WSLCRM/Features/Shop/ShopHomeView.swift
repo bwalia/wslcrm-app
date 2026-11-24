@@ -168,6 +168,7 @@ struct ShopHomeView: View {
             manageSection
         }
         .listStyle(.insetGrouped)
+        .wsReadableWidth(1200)
         .overlay {
             if state.value == nil, state.error == nil { SkeletonList() }
         }

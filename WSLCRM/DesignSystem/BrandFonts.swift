@@ -42,12 +42,18 @@ enum BrandFont {
         UIFont(name: face.rawValue, size: 12) != nil
     }
 
+    /// The Mac reads from further away than a phone, and a Mac window is wide: every size steps up
+    /// there, so text isn't left looking tiny on a big screen (the system's own Mac text styles
+    /// don't apply to the brand's custom faces).
+    static let platformScale: CGFloat = ProcessInfo.processInfo.isMacCatalystApp ? 1.18 : 1
+
     static func font(_ face: Face, size: CGFloat, relativeTo style: Font.TextStyle) -> Font {
-        .custom(face.rawValue, size: size, relativeTo: style)
+        .custom(face.rawValue, size: (size * platformScale).rounded(), relativeTo: style)
     }
 
     static func uiFont(_ face: Face, size: CGFloat, style: UIFont.TextStyle) -> UIFont {
-        let base = UIFont(name: face.rawValue, size: size) ?? .systemFont(ofSize: size)
+        let scaled = (size * platformScale).rounded()
+        let base = UIFont(name: face.rawValue, size: scaled) ?? .systemFont(ofSize: scaled)
         return UIFontMetrics(forTextStyle: style).scaledFont(for: base)
     }
 }
@@ -63,12 +69,12 @@ extension Font {
     static let brandHeadline = BrandFont.font(.semibold, size: 17, relativeTo: .headline)
     static let brandBody = BrandFont.font(.regular, size: 16, relativeTo: .body)
     static let brandCallout = BrandFont.font(.medium, size: 15, relativeTo: .callout)
-    static let brandSubheadline = BrandFont.font(.regular, size: 14, relativeTo: .subheadline)
-    static let brandFootnote = BrandFont.font(.medium, size: 13, relativeTo: .footnote)
-    static let brandCaption = BrandFont.font(.medium, size: 12, relativeTo: .caption)
+    static let brandSubheadline = BrandFont.font(.regular, size: 15, relativeTo: .subheadline)
+    static let brandFootnote = BrandFont.font(.medium, size: 14, relativeTo: .footnote)
+    static let brandCaption = BrandFont.font(.medium, size: 13, relativeTo: .caption)
 
     // Data (JetBrains Mono): eyebrows, references, amounts.
-    static let brandEyebrow = BrandFont.font(.monoMedium, size: 12, relativeTo: .caption)
+    static let brandEyebrow = BrandFont.font(.monoMedium, size: 12.5, relativeTo: .caption)
     static let brandMono = BrandFont.font(.mono, size: 14, relativeTo: .subheadline)
 }
 
@@ -105,9 +111,9 @@ extension Font {
     static let wsHeadline = BrandFont.font(.semibold, size: 16, relativeTo: .headline)
     static let wsBody = BrandFont.font(.regular, size: 16, relativeTo: .body)
     static let wsCallout = BrandFont.font(.regular, size: 15, relativeTo: .callout)
-    static let wsSubheadline = BrandFont.font(.regular, size: 14, relativeTo: .subheadline)
-    static let wsFootnote = BrandFont.font(.medium, size: 12.5, relativeTo: .footnote)
+    static let wsSubheadline = BrandFont.font(.regular, size: 15, relativeTo: .subheadline)
+    static let wsFootnote = BrandFont.font(.medium, size: 13.5, relativeTo: .footnote)
     // Small Poppins Regular is thin; Medium keeps captions and footnotes legible (HIG › Typography).
-    static let wsCaption = BrandFont.font(.medium, size: 12, relativeTo: .caption)
-    static let wsCaption2 = BrandFont.font(.medium, size: 11, relativeTo: .caption2)
+    static let wsCaption = BrandFont.font(.medium, size: 13, relativeTo: .caption)
+    static let wsCaption2 = BrandFont.font(.medium, size: 12, relativeTo: .caption2)
 }

@@ -55,6 +55,10 @@ struct MacCommands: Commands {
             Button("Refresh") { MacRefreshCenter.shared.refresh() }
                 .keyboardShortcut("r", modifiers: .command)
         }
+        CommandGroup(after: .textEditing) {
+            Button("Ask AI…") { NotificationCenter.default.post(name: .wsAskAI, object: nil) }
+                .keyboardShortcut("k", modifiers: .command)
+        }
     }
 }
 
@@ -115,3 +119,27 @@ private struct MacRefreshButton: View {
     }
 }
 #endif
+
+extension Notification.Name {
+    /// "Ask AI" from anywhere (⌘K): Home's command box takes the focus.
+    static let wsAskAI = Notification.Name("ws.askAI")
+}
+
+extension View {
+    /// Keeps a scrolling screen (a `List` or `ScrollView`) to a readable column in a wide window, centred, instead of
+    /// running rows edge to edge across a Mac display. No effect when the window is narrower than `maxWidth`.
+    func wsReadableWidth(_ maxWidth: CGFloat = 1100) -> some View {
+        modifier(ReadableWidth(maxWidth: maxWidth))
+    }
+}
+
+private struct ReadableWidth: ViewModifier {
+    let maxWidth: CGFloat
+    @State private var width: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .contentMargins(.horizontal, max(0, (width - maxWidth) / 2), for: .scrollContent)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+    }
+}
