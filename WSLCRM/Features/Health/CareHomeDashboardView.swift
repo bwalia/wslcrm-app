@@ -4,6 +4,7 @@ import SwiftUI
 /// high risk of wandering, dementia reassessments that are due, and the care homes themselves.
 struct CareHomeDashboardView: View {
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @State private var loaded = false
     @State private var loadError: APIError?
     @State private var homes: [Record] = []
@@ -151,7 +152,7 @@ struct CareHomeDashboardView: View {
     private func linked<Content: View>(_ row: Record, descriptor: (String) -> ResourceDescriptor,
                                        @ViewBuilder content: () -> Content) -> some View {
         if let patient = HealthPatientRef.uuid(row, directory: patients) {
-            NavigationLink(value: HealthScope.record(descriptor(patient), row)) { content() }
+            NavigationLink(value: HealthScope.record(descriptor(patient), row, for: session.permissions)) { content() }
         } else {
             content()
         }

@@ -17,22 +17,24 @@ enum HealthScope {
         ]
     }
 
-    /// Registers the descriptor (idempotent) and returns it.
+    /// Registers the descriptor, its writes checked for this person (`HealthCatalog.forPerson`), and returns it.
     @discardableResult
-    static func register(_ descriptor: ResourceDescriptor) -> ResourceDescriptor {
-        RuntimeDescriptors.register(descriptor)
-        return descriptor
+    static func register(_ descriptor: ResourceDescriptor, for permissions: PermissionSet) -> ResourceDescriptor {
+        let mine = HealthCatalog.forPerson(descriptor, permissions)
+        RuntimeDescriptors.register(mine)
+        return mine
     }
 
     /// A link value for the kit's list of these records (`query` narrows it: `status=active`).
-    static func list(_ descriptor: ResourceDescriptor, query: [String: String] = [:], title: String? = nil) -> ResourceListRoute {
-        register(descriptor)
+    static func list(_ descriptor: ResourceDescriptor, for permissions: PermissionSet, query: [String: String] = [:],
+                     title: String? = nil) -> ResourceListRoute {
+        register(descriptor, for: permissions)
         return ResourceListRoute(descriptor.id, query: query, title: title)
     }
 
     /// A link value for one of these records.
-    static func record(_ descriptor: ResourceDescriptor, _ record: Record) -> ResourceRoute {
-        register(descriptor)
+    static func record(_ descriptor: ResourceDescriptor, _ record: Record, for permissions: PermissionSet) -> ResourceRoute {
+        register(descriptor, for: permissions)
         return ResourceRoute(descriptorID: descriptor.id, recordID: record.id, seed: record)
     }
 }
