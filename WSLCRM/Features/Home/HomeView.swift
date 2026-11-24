@@ -222,7 +222,7 @@ struct HomeView: View {
             actions.append(QuickAction(id: "ai", title: "Ask AI", systemImage: "sparkles",
                                        color: Palette.tileColors[1], destination: chat))
         }
-        if let access = session.propertyDeals, access.can(.create, .deals) || access.can(.create, .properties) {
+        if let access = session.propertyDeals, PDWriteGates.canCapture(access, session.permissions) {
             actions.append(QuickAction(id: "capture", title: "Capture", systemImage: "camera.viewfinder",
                                        color: Palette.tileColors[0]) { showingCapture = true })
         }
