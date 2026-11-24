@@ -9,17 +9,29 @@ struct POSScannerView: View {
     @State private var lastMessage: String?
 
     /// Whether this device can scan (a camera with Live Text support, and camera access not refused).
+    /// Never on a Mac: VisionKit's live scanner is iPhone and iPad only, so the Scan button is hidden
+    /// there and a code is typed (or read by a USB scanner, which types it) into the search field.
     @MainActor static var isAvailable: Bool {
+        #if targetEnvironment(macCatalyst)
+        false
+        #else
         DataScannerViewController.isSupported && DataScannerViewController.isAvailable
+        #endif
     }
 
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
+                #if targetEnvironment(macCatalyst)
+                ContentUnavailableView("Scanning needs an iPhone or iPad",
+                                       systemImage: "barcode.viewfinder",
+                                       description: Text("Type the code into search, or use a USB barcode scanner."))
+                #else
                 POSDataScanner { code in
                     lastMessage = onCode(code)
                 }
                 .ignoresSafeArea(edges: .bottom)
+                #endif
                 if let lastMessage {
                     Text(lastMessage)
                         .font(.wsSubheadline.weight(.semibold))
@@ -42,6 +54,7 @@ struct POSScannerView: View {
     }
 }
 
+#if !targetEnvironment(macCatalyst)
 /// `DataScannerViewController` for barcodes, reporting each code when it first appears.
 private struct POSDataScanner: UIViewControllerRepresentable {
     let onCode: (String) -> Void
@@ -89,3 +102,4 @@ private struct POSDataScanner: UIViewControllerRepresentable {
         }
     }
 }
+#endif

@@ -1,19 +1,8 @@
 package uk.co.workstation.wslcrm.core.auth
 
 import android.util.Log
-import kotlinx.serialization.Serializable
 import uk.co.workstation.wslcrm.core.networking.OpsJson
 import uk.co.workstation.wslcrm.core.storage.KeystoreStore
-
-/** The JWT access token and its refresh token. */
-@Serializable
-data class AuthTokens(val accessToken: String, val refreshToken: String)
-
-/** Persistence for [AuthTokens]. Production uses the Keystore; tests and the stub use memory. */
-interface TokenStore {
-    fun load(): AuthTokens?
-    fun save(tokens: AuthTokens?)
-}
 
 /** Mirrors `KeychainTokenStore`. Failures are logged, never thrown: a lost token means "sign in again". */
 class KeystoreTokenStore(private val keystore: KeystoreStore) : TokenStore {
@@ -40,13 +29,5 @@ class KeystoreTokenStore(private val keystore: KeystoreStore) : TokenStore {
 
     private companion object {
         const val TAG = "WSLCRM.auth"
-    }
-}
-
-class InMemoryTokenStore(initial: AuthTokens? = null) : TokenStore {
-    @Volatile private var tokens: AuthTokens? = initial
-    override fun load(): AuthTokens? = tokens
-    override fun save(tokens: AuthTokens?) {
-        this.tokens = tokens
     }
 }

@@ -76,10 +76,21 @@ targets:
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Attach existing photos to a job or a property."
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Record a voice note for your PA, or dictate a note about a lead or property. PA voice notes go to Workstation's private speech service, never a public AI; dictated notes stay on this device."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Turn a dictated note into text on this device. That audio isn't uploaded."
-        # iPhone and iPad.
+        # iPhone and iPad; the Mac build is the iPad app through Mac Catalyst (docs/DESKTOP.md).
         TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: YES
+        # The Mac app keeps the iOS bundle ID (one App Store record, universal purchase) and
+        # replaces the "Designed for iPad" build. Its idiom stays the default "Scaled to match
+        # iPad", so iPad layouts are used as they are.
+        DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        # The Mac App Store needs a category; iOS ignores it.
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.business
         # Push (Property Deals alerts). Needs Push Notifications enabled on the App ID.
         CODE_SIGN_ENTITLEMENTS: WSLCRM/Resources/WSLCRM.entitlements
+        # The Mac build adds the App Sandbox and its device permissions (docs/DESKTOP.md).
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": WSLCRM/Resources/WSLCRM-macOS.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: $(BRAND_APP_ICON)
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: $(BRAND_ACCENT_COLOR)
         # Home-screen icons a person can pick in Settings › Appearance (ThemeStore.icons).
