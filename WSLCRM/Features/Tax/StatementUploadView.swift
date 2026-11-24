@@ -47,7 +47,7 @@ struct StatementUploadView: View {
                         .accessibilityIdentifier("tax.upload.scan")
                 }
             } footer: {
-                Text("PDF, CSV or photos (JPG, PNG, GIF, WebP) · up to 25MB each · several at once.")
+                Text("PDF, CSV or photos (JPG, PNG, GIF, WebP) · up to 10 MB each · several at once.")
             }
             if !items.isEmpty {
                 Section("Statements") {

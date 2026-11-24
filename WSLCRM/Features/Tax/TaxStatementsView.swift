@@ -177,7 +177,7 @@ struct TaxStatementsView: View {
         } header: {
             Text("Working on \(jobs.count) statement\(jobs.count == 1 ? "" : "s")")
         } footer: {
-            Text("This keeps going on the server if you leave this screen.")
+            Text("This keeps going if you leave this screen.")
         }
     }
 
