@@ -211,7 +211,7 @@ struct JobTypeDetailView: View {
                 }
                 .foregroundStyle(.primary)
                 .disabled(!canUpdate)
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if canUpdate {
                         Button("Remove", role: .destructive) { deletingTemplate = template }
                     }

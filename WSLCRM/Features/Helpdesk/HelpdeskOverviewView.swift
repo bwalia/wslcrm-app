@@ -191,7 +191,7 @@ struct HelpdeskOverviewView: View {
                     Button { showing = ticket } label: { HelpdeskTicketRow(ticket: ticket) }
                         .foregroundStyle(.primary)
                         .accessibilityIdentifier("helpdesk.row.\(ticket.id)")
-                        .swipeActions {
+                        .swipeActions(allowsFullSwipe: false) {
                             if canUpdate, ticket.int("priority") != 5 {
                                 Button("Escalate") { escalating = ticket }.tint(.orange)
                             }

@@ -456,7 +456,7 @@ private struct DealPipelineContent: View {
                                     }
                                 }
                             }
-                            .swipeActions(edge: .trailing) {
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 if session.canUpdate(.crmDeals), let next = nextStage(after: stage) {
                                     Button("Move to \(Formatters.humanize(next))") {
                                         Task { await move(deal, to: next) }
@@ -884,7 +884,7 @@ struct CRMPipelinesView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .accessibilityIdentifier("crm.pipeline.\(pipeline.uuid)")
-                        .swipeActions {
+                        .swipeActions(allowsFullSwipe: false) {
                             if session.canDelete(.crmPipelines) {
                                 Button("Delete", role: .destructive) { Task { await delete(pipeline) } }
                             }

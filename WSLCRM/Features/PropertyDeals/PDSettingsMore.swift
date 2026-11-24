@@ -793,7 +793,7 @@ struct PDConnectorsView: View {
                         }
                     }
                     .padding(.vertical, 4)
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if canEdit { Button("Delete", role: .destructive) { Task { await delete(row) } } }
                     }
                 }

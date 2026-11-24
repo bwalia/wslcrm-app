@@ -251,7 +251,7 @@ private struct WorkspaceMembersContent: View {
                 WorkspaceInvitationRow(invitation: invitation)
             }
             .foregroundStyle(.primary)
-            .swipeActions {
+            .swipeActions(allowsFullSwipe: false) {
                 if canDelete, invitation.canRevoke() {
                     Button("Cancel", role: .destructive) { Task { await revoke(invitation) } }
                 }

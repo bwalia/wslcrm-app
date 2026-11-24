@@ -32,7 +32,7 @@ struct TaxBankAccountsView: View {
                     ForEach(rows) { account in
                         Button { editing = BankAccountDraft(account) } label: { BankAccountRow(account: account) }
                             .buttonStyle(.plain)
-                            .swipeActions {
+                            .swipeActions(allowsFullSwipe: false) {
                                 Button("Delete", role: .destructive) { deleting = account }
                             }
                             .contextMenu {

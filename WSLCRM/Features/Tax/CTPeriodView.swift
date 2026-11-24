@@ -350,7 +350,7 @@ struct CTPeriodView: View {
                         }
                     }
                 }
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if editable(p, needLocked: false) {
                         Button("Remove", role: .destructive) {
                             removing = CTRemoval(path: "\(CT.base)/periods/\(uuid)/assets/\(a.id)", label: a.string("description") ?? "Item")
@@ -444,7 +444,7 @@ struct CTPeriodView: View {
                          + TaxMoney.text(l.decimal("repaid_within_9_months")))
                         .font(.wsFootnote).foregroundStyle(.secondaryText)
                 }
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if editable(p, needLocked: false) {
                         Button("Remove", role: .destructive) {
                             removing = CTRemoval(path: "\(CT.base)/periods/\(uuid)/loans/\(l.id)",

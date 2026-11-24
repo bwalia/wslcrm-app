@@ -57,7 +57,7 @@ struct MktTemplatesListView: View {
                 MktTemplateRow(template: template)
             }
             .accessibilityIdentifier("mkt.template.\(template.uuid)")
-            .swipeActions(edge: .trailing) {
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 if can(.delete) {
                     Button(role: .destructive) { deleting = template } label: { Label("Delete", systemImage: "trash") }
                 }
@@ -66,7 +66,7 @@ struct MktTemplatesListView: View {
                         .tint(.indigo)
                 }
             }
-            .swipeActions(edge: .leading) {
+            .swipeActions(edge: .leading, allowsFullSwipe: false) {
                 if can(.update), template.status != "published" {
                     Button { Task { await publish(template, model) } } label: { Label("Publish", systemImage: "paperplane") }
                         .tint(.green)

@@ -988,7 +988,7 @@ struct ChatPinnedView: View {
                         .font(.wsFootnote.weight(.semibold))
                         .buttonStyle(.borderless)
                 }
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if channel.canManage {
                         Button("Unpin", systemImage: "pin.slash") { Task { await unpin(message) } }
                             .tint(.orange)

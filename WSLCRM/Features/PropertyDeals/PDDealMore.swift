@@ -532,7 +532,7 @@ struct PDDealDocumentsView: View {
                     }
                     .frame(minHeight: 44)
                     .accessibilityIdentifier("pd.documents.row.\(doc.id)")
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if session.propertyDeals?.can(.delete, .properties) ?? false {
                             Button("Delete", role: .destructive) { Task { await delete(doc) } }
                         }

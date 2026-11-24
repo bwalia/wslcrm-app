@@ -282,12 +282,12 @@ struct AcademyContentEditorView: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("academy.content.block.\(index)")
                 .contextMenu { blockMenu(index) }
-                .swipeActions(edge: .trailing) {
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) { mutate { $0.blocks.remove(at: index) } } label: {
                         Label("Remove", systemImage: "trash")
                     }
                 }
-                .swipeActions(edge: .leading) {
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
                     Button { mutate { $0.blocks.insert(AcademyBlock(block.kind, source: block.source), at: index + 1) } } label: {
                         Label("Duplicate", systemImage: "plus.square.on.square")
                     }

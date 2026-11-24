@@ -225,7 +225,7 @@ struct WebFormBuildTab: View {
                 }
                 .foregroundStyle(.primary)
                 .accessibilityIdentifier("forms.build.field.\(field.key ?? field.type.rawValue)")
-                .swipeActions(edge: .trailing) {
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     if !readOnly && !field.isLocked {
                         Button(role: .destructive) { model.remove(field.id) } label: { Label("Delete", systemImage: "trash") }
                     }

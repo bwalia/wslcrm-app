@@ -270,7 +270,7 @@ private struct LeadsPipelinePane: View {
                         ForEach(column.leads) { card in
                             NavigationLink(value: LeadRoute(uuid: card.uuid)) { LeadRow(card: card, currency: currency, showsStage: false) }
                                 .contextMenu { moveMenu(card) }
-                                .swipeActions(edge: .trailing) { swipeMenu(card) }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) { swipeMenu(card) }
                         }
                         if column.count > column.leads.count, let stage = column.stage {
                             NavigationLink {
@@ -295,7 +295,7 @@ private struct LeadsPipelinePane: View {
                             ForEach(column.leads) { card in
                                 NavigationLink(value: LeadRoute(uuid: card.uuid)) { LeadRow(card: card, currency: currency) }
                                     .contextMenu { moveMenu(card) }
-                                    .swipeActions(edge: .trailing) { swipeMenu(card) }
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) { swipeMenu(card) }
                             }
                         }
                     } label: {

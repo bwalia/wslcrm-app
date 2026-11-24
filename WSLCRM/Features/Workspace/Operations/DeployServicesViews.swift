@@ -137,7 +137,7 @@ struct DeployServicesScreen: View {
                         } label: {
                             DeployServiceRow(service: service)
                         }
-                        .swipeActions {
+                        .swipeActions(allowsFullSwipe: false) {
                             if OperationsAccess.services(permissions, "delete") {
                                 Button("Delete", role: .destructive) { deleting = service }
                             }
@@ -502,7 +502,7 @@ struct DeployServiceDetailView: View {
                     }
                 }
                 .disabled(!OperationsAccess.services(permissions, "update"))
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if OperationsAccess.services(permissions, "delete") {
                         Button("Delete", role: .destructive) { removing = DeployRemoval(kind: kind, record: row) }
                     }
@@ -534,7 +534,7 @@ struct DeployServiceDetailView: View {
             }
             ForEach(deployments) { deployment in
                 DeploymentRow(deployment: deployment)
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if DeployStyle.pendingStatuses.contains(deployment.string("status") ?? "") {
                             Button("Check") { Task { await sync(deployment) } }
                         }
@@ -1270,7 +1270,7 @@ struct DeployIntegrationsView: View {
                             }
                         }
                         .disabled(!OperationsAccess.services(permissions, "update"))
-                        .swipeActions {
+                        .swipeActions(allowsFullSwipe: false) {
                             if OperationsAccess.services(permissions, "delete") {
                                 Button("Delete", role: .destructive) { deleting = integration }
                             }

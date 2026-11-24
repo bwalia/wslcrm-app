@@ -436,7 +436,7 @@ struct TaskDetailView: View {
                                 .strikethrough(subtask.status == .completed)
                         }
                     }
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if access.canEdit {
                             Button("Delete", systemImage: "trash", role: .destructive) {
                                 confirm = PendingConfirmation(title: "Delete the subtask “\(subtask.title)”?", button: "Delete subtask") {
@@ -493,7 +493,7 @@ struct TaskDetailView: View {
                     .disabled(!access.canEdit)
                     .accessibilityIdentifier("task.checklist.\(item.uuid)")
                     .accessibilityValue(item.isCompleted ? "Done" : "Not done")
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if access.canEdit {
                             Button("Delete", systemImage: "trash", role: .destructive) {
                                 Task { await perform("Item deleted.") { try await services.kanban.deleteChecklistItem(item.uuid) } }
@@ -570,7 +570,7 @@ struct TaskDetailView: View {
                     }
                 }
                 .accessibilityIdentifier("task.attachment.\(file.uuid)")
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if canDelete {
                         Button("Delete", systemImage: "trash", role: .destructive) {
                             confirm = PendingConfirmation(title: "Remove “\(file.fileName)”?", button: "Remove") {
@@ -673,7 +673,7 @@ struct TaskDetailView: View {
                     Text(Minutes.format(entry.durationMinutes)).font(.wsSubheadline.monospacedDigit())
                 }
                 .accessibilityIdentifier("task.timeEntry.\(entry.uuid)")
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if entry.userUuid == session.user?.uuid {
                         Button("Delete", systemImage: "trash", role: .destructive) {
                             Task { await perform("Time entry deleted.") { try await services.kanban.deleteTimeEntry(entry.uuid) } }
@@ -751,7 +751,7 @@ struct TaskDetailView: View {
         }
         .padding(.leading, isReply ? 24 : 0)
         .accessibilityIdentifier("task.comment.\(comment.uuid)")
-        .swipeActions {
+        .swipeActions(allowsFullSwipe: false) {
             if isMine || access.canAdmin {
                 Button("Delete", systemImage: "trash", role: .destructive) {
                     confirm = PendingConfirmation(title: "Delete this comment?", button: "Delete comment") {

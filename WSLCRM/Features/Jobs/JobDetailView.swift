@@ -338,7 +338,7 @@ private struct JobDetailContent: View {
                                 }
                             }
                         }
-                        .swipeActions { visitActions(visit, detail: detail) }
+                        .swipeActions(allowsFullSwipe: false) { visitActions(visit, detail: detail) }
                         .contextMenu { visitActions(visit, detail: detail) }
                     }
                 } header: {
@@ -678,7 +678,7 @@ private struct JobDetailContent: View {
                         }
                     }
                 }
-                .swipeActions { phaseActions(display.phase, detail: detail) }
+                .swipeActions(allowsFullSwipe: false) { phaseActions(display.phase, detail: detail) }
                 .contextMenu { phaseActions(display.phase, detail: detail) }
             }
             .onMove { source, destination in
@@ -746,13 +746,13 @@ private struct JobDetailContent: View {
                 }
                 .padding(.vertical, 4)
                 .contextMenu { itemActions(item, detail: detail, policy: policy) }
-                .swipeActions(edge: .leading) {
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
                     if canEditItem(item, detail: detail) {
                         Button("Edit") { editingItem = item }.tint(.blue)
                         Button("Remove", role: .destructive) { deletingItem = item }
                     }
                 }
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if policy.canApproveItems(in: detail), !item.invoiced {
                         if item.approvalStatus != .approved {
                             Button("Approve") { Task { await model.setApproval(item, approve: true) } }

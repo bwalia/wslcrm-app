@@ -746,7 +746,7 @@ private struct VisitDetailContent: View {
                         item.approvalStatus.badge
                     }
                     .accessibilityElement(children: .combine)
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if model.canEdit(item) {
                             Button("Remove", role: .destructive) { deletingItem = item }
                             Button("Edit") { editingItem = item }

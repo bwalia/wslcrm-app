@@ -231,7 +231,7 @@ struct ProjectSettingsView: View {
                 Text(member.memberRole?.label ?? member.role.capitalized).font(.wsCaption).foregroundStyle(.secondaryText)
             }
         }
-        .swipeActions {
+        .swipeActions(allowsFullSwipe: false) {
             if canChange {
                 Button("Remove", systemImage: "person.badge.minus", role: .destructive) {
                     confirm = PendingConfirmation(title: "Remove \(member.actor.name)?",
@@ -404,7 +404,7 @@ struct LabelManagerView: View {
                             Text("\(label.usageCount) card\(label.usageCount == 1 ? "" : "s")").font(.wsCaption).foregroundStyle(.secondaryText)
                         }
                         .accessibilityIdentifier("label.row.\(label.name)")
-                        .swipeActions {
+                        .swipeActions(allowsFullSwipe: false) {
                             if access.canAdmin {
                                 Button("Delete", systemImage: "trash", role: .destructive) {
                                     confirm = PendingConfirmation(title: "Delete the label “\(label.name)”?",

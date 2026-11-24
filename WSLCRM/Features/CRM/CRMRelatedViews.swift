@@ -32,7 +32,7 @@ struct CRMActivitiesSection: View {
                     NavigationLink(value: ResourceRoute(descriptorID: descriptor.id, recordID: record.id, seed: record)) {
                         RecordRow(record: record, list: descriptor.list)
                     }
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if canUpdate, ["pending", "planned"].contains(record.string("status") ?? "") {
                             Button("Done") { Task { await complete(record) } }.tint(.green)
                         }

@@ -504,7 +504,7 @@ struct ShopOrderCustomerUpdatesSection: View {
                 }
                 .padding(.vertical, 2)
                 .accessibilityElement(children: .combine)
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if update.removable && update.kind == "comment" && session.shopPolicy.canUpdate {
                         Button("Remove", role: .destructive) { removing = update }
                     }

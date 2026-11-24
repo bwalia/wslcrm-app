@@ -126,7 +126,7 @@ struct WorkspacePickerView: View {
             .frame(minHeight: 56)
         }
         .disabled(switchingTo != nil)
-        .swipeActions(edge: .leading) {
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
             if directory.defaultUuid != workspace.uuid {
                 Button("Make default") { Task { await makeDefault(workspace) } }
                     .tint(.accentColor)

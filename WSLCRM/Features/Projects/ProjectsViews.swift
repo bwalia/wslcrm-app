@@ -175,13 +175,13 @@ struct ProjectsListView: View {
             ProjectRow(project: project)
         }
         .accessibilityIdentifier("project.row.\(project.name)")
-        .swipeActions(edge: .leading) {
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
             Button(project.isStarred ? "Unstar" : "Star", systemImage: project.isStarred ? "star.slash" : "star") {
                 Task { await star(project) }
             }
             .tint(.orange)
         }
-        .swipeActions(edge: .trailing) {
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if project.status == .archived {
                 if canRestore(project, access: access) {
                     Button("Restore", systemImage: "arrow.uturn.backward") { Task { await restore(project) } }.tint(.green)
@@ -816,7 +816,7 @@ struct ProjectDetailView: View {
                         }
                     }
                     .accessibilityIdentifier("board.row.\(board.name)")
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if access.canAdmin {
                             if !board.isDefault {
                                 Button("Archive", systemImage: "archivebox", role: .destructive) { archivingBoard = board }

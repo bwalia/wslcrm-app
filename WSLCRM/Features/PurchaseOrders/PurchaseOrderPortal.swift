@@ -253,7 +253,7 @@ struct PurchaseOrderPortalSections: View {
                         if let note = doc.string("note") { Text(note).font(.wsCaption) }
                     }
                 }
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if canDelete {
                         Button("Remove", role: .destructive) { reason = ""; removing = .document(doc.id) }
                     }
@@ -288,7 +288,7 @@ struct PurchaseOrderPortalSections: View {
                             .font(.wsCaption).foregroundStyle(Tone.warning.textColor)
                     }
                 }
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if canDelete {
                         Button("Remove", role: .destructive) { reason = ""; removing = .invoice(invoice.id) }
                     }
@@ -334,7 +334,7 @@ struct PurchaseOrderPortalSections: View {
                         .frame(minHeight: 44)
                     }
                 }
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if canUpdate, payment.bool("voided") != true {
                         Button("Void", role: .destructive) { reason = ""; removing = .payment(payment.id) }
                     }

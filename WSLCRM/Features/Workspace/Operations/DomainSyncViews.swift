@@ -143,7 +143,7 @@ struct DomainSyncSettingsView: View {
                         }
                     }
                     .disabled(!canChange)
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if OperationsAccess.domains(session.permissions, .delete) {
                             Button("Remove", role: .destructive) { deletingRepo = repo }
                         }

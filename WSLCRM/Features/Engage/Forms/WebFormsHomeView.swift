@@ -41,12 +41,12 @@ struct WebFormsHomeView: View {
                 }
                 .accessibilityIdentifier("forms.row.\(form.uuid)")
                 .contextMenu { menu(form) }
-                .swipeActions(edge: .trailing) {
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     if canDelete {
                         Button(role: .destructive) { deleting = form } label: { Label("Delete", systemImage: "trash") }
                     }
                 }
-                .swipeActions(edge: .leading) {
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
                     Button { copy(form) } label: { Label("Copy link", systemImage: "link") }.tint(.blue)
                 }
                 .task { await loadMoreIfNeeded(form) }

@@ -409,7 +409,7 @@ private struct ProductVariationsSection: View {
                         }
                     }
                     .disabled(!canEdit)
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if canEdit {
                             Button("Delete", role: .destructive) { Task { await delete(variant) } }
                         }

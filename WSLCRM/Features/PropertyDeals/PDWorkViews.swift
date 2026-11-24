@@ -165,7 +165,7 @@ struct PDRenovationsListView: View {
                     if let cachedAt { CachedDataNotice(savedAt: cachedAt) }
                     ForEach(renovations) { renovation in
                         PDRenovationLink(renovation: renovation)
-                            .swipeActions(edge: .trailing) {
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 if canAddBuilders, renovation.projectUuid != nil {
                                     Button("Add builders") { addingBuilders = renovation }.tint(.indigo)
                                 }

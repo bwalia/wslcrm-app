@@ -117,7 +117,7 @@ struct ServiceRequestsListView: View {
                 }
                 .accessibilityIdentifier("requests.row.\(request.title)")
                 .task { await model.loadMoreIfNeeded(request) }
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if session.permissions.can(.delete, .fsServiceRequests) {
                         Button("Delete", role: .destructive) { deleting = request }
                     }

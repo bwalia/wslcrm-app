@@ -31,7 +31,7 @@ struct BillingFeaturesTab: View {
                     }
                     .foregroundStyle(.primary)
                     .accessibilityIdentifier("billing.feature.row.\(feature.key)")
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if permissions.can(.delete, moduleName: BillingModule.billing) {
                             Button("Delete", role: .destructive) { deleting = feature }
                         }
@@ -564,7 +564,7 @@ struct BillingUpgradesTab: View {
                         }
                     }
                     .padding(.vertical, 2)
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if permissions.can(.delete, moduleName: BillingModule.billing) {
                             Button("Remove", role: .destructive) { deleting = path }
                         }

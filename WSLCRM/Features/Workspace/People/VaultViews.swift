@@ -599,7 +599,7 @@ private struct VaultHome: View {
                                 .foregroundStyle(.secondaryText)
                         }
                     }
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         Button("Delete", role: .destructive) { deletingFolder = folder }
                     }
                     .accessibilityIdentifier("vault.folder.\(folder.id)")

@@ -462,7 +462,7 @@ private struct PDSavedSearchesSection: View {
                         .labelStyle(.iconOnly).buttonStyle(.borderless)
                         .accessibilityLabel("Run \(search.string("name") ?? "search") now")
                 }
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if session.propertyDeals?.can(.delete, .properties) ?? false {
                         Button("Delete", role: .destructive) { Task { await delete(search) } }
                     }

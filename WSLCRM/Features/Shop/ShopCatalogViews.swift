@@ -453,7 +453,7 @@ struct ShopCategoriesView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if session.shopPolicy.canDelete {
                         Button("Delete", role: .destructive) { deleting = category }
                     }
@@ -808,11 +808,11 @@ struct ShopStockView: View {
                         ShopStockRowView(row: row)
                     }
                     .buttonStyle(.plain)
-                    .swipeActions(edge: .trailing) {
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button { historyOf = row } label: { Label("History", systemImage: "clock.arrow.circlepath") }
                             .tint(.blue)
                     }
-                    .swipeActions(edge: .leading) {
+                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
                         if let product = row.isOption ? row.productUuid : row.uuid {
                             Button { openProduct = product } label: { Label("Open product", systemImage: "shippingbox") }
                                 .tint(.indigo)

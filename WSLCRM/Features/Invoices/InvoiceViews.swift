@@ -502,7 +502,7 @@ struct InvoiceDetailView: View {
                             }
                             Spacer()
                         }
-                        .swipeActions {
+                        .swipeActions(allowsFullSwipe: false) {
                             if permissions.can(.delete, .payments) {
                                 Button("Delete", role: .destructive) {
                                     Task {

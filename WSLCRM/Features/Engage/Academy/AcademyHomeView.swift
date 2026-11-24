@@ -320,7 +320,7 @@ private struct AcademyCoursesContent: View {
                 }
                 .accessibilityIdentifier("academy.course.\(course.uuid)")
                 .task { await model.loadMoreIfNeeded(course) }
-                .swipeActions(edge: .trailing) {
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     if access.canDelete {
                         Button(role: .destructive) { deleting = course } label: { Label("Delete", systemImage: "trash") }
                     }
@@ -328,7 +328,7 @@ private struct AcademyCoursesContent: View {
                         Button { editing = course } label: { Label("Edit", systemImage: "pencil") }.tint(.indigo)
                     }
                 }
-                .swipeActions(edge: .leading) {
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
                     if !access.isReviewer, access.canUpdate,
                        course.statusValue == .draft || course.statusValue == .archived {
                         Button { submitting = course } label: { Label("Send for review", systemImage: "paperplane") }

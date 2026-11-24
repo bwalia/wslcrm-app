@@ -328,7 +328,7 @@ struct ShopMarketDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityHint(policy.canUpdate ? "Edit this source" : "")
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if policy.canDelete {
                         Button("Delete", role: .destructive) { deletingSource = source }
                     }

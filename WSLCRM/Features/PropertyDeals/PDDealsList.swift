@@ -432,7 +432,7 @@ struct PDDealsBoardView: View {
                         ForEach(deals) { deal in
                             NavigationLink(value: PDDealRoute(uuid: deal.id)) { PDBoardDealRow(deal: deal) }
                                 .accessibilityIdentifier("pd.board.deal.\(deal.id)")
-                                .swipeActions(edge: .trailing) {
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                     if canMove {
                                         Button("Move") { moving = target(deal, board: board) }.tint(.indigo)
                                     }

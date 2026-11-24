@@ -142,7 +142,7 @@ private struct ApprovalQueueList: View {
                     TimesheetRow(timesheet: sheet, showsActor: true)
                 }
                 .accessibilityIdentifier("timesheet.approval.\(sheet.uuid)")
-                .swipeActions(edge: .trailing) {
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     // The same rights the server checks (timesheet_approvals.approve / .reject).
                     if sheet.status.canDecide, policy.canDecideTimesheets(as: me) {
                         if policy.canRejectTimesheets {
@@ -425,7 +425,7 @@ struct TimesheetDetailView: View {
                         }
                     }
                     .accessibilityIdentifier("timesheet.entry.\(entry.uuid)")
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if editable, isMine {
                             Button("Delete", systemImage: "trash", role: .destructive) {
                                 confirm = PendingConfirmation(title: "Delete this entry?", button: "Delete entry") {

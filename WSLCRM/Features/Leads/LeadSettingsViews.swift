@@ -371,7 +371,7 @@ struct LeadSettingsView: View {
                     Text(rule.name).font(.wsHeadline)
                     Text(ruleSummary(rule)).font(.wsCaption).foregroundStyle(.secondaryText)
                 }
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if canEdit {
                         Button("Delete", role: .destructive) { Task { await deleteRule(rule) } }
                     }

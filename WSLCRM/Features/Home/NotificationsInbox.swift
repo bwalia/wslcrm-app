@@ -280,12 +280,12 @@ struct NotificationsView: View {
             }
             .padding(.vertical, 4)
         }
-        .swipeActions(edge: .leading) {
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
             if !notification.isRead {
                 Button("Mark read") { Task { await model.markRead(notification, api: api) } }.tint(.accentColor)
             }
         }
-        .swipeActions(edge: .trailing) {
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button("Remove", role: .destructive) { Task { await model.delete(notification, api: api) } }
         }
         .accessibilityIdentifier("notification.\(notification.uuid)")

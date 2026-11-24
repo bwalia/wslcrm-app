@@ -61,7 +61,7 @@ struct TaxStatementsView: View {
                                          busy: busy.contains(statement.id))
                                 .contentShape(Rectangle())
                                 .onTapGesture { if canView(statement) { viewing = statement } }
-                                .swipeActions { Button("Delete", role: .destructive) { confirmDelete = statement } }
+                                .swipeActions(allowsFullSwipe: false) { Button("Delete", role: .destructive) { confirmDelete = statement } }
                                 .contextMenu { menu(for: statement) }
                                 .overlay(alignment: .trailing) {
                                     Menu { menu(for: statement) } label: {

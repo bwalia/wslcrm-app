@@ -267,7 +267,7 @@ struct MktListDetailView: View {
                     } label: {
                         MktListMemberRow(member: member, sms: list.isSMS)
                     }
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if !list.isSmart, can(.update) {
                             Button("Remove", role: .destructive) { Task { await remove(member, from: list) } }
                                 .accessibilityIdentifier("mkt.list.member.remove.\(member.contactUUID)")

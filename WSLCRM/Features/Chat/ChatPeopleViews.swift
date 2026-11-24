@@ -659,7 +659,7 @@ struct ChatChannelInfoView: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .swipeActions {
+        .swipeActions(allowsFullSwipe: false) {
             if channel.canManage, !isMe {
                 Button("Remove", systemImage: "person.badge.minus", role: .destructive) { removing = member }
             }

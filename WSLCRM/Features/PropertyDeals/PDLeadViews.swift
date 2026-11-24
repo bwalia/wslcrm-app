@@ -268,7 +268,7 @@ struct PDLeadView: View {
                 }
                 ForEach(signals) { signal in
                     PDSignalRow(signal: signal)
-                        .swipeActions {
+                        .swipeActions(allowsFullSwipe: false) {
                             if signal.source == "manual", canEditLead {
                                 Button("Delete", role: .destructive) { Task { await deleteSignal(signal) } }
                             }

@@ -37,13 +37,13 @@ struct ShopPriceChangesView: View {
                 NavigationLink(value: ResourceRoute(descriptorID: descriptor.id, recordID: record.id, seed: record)) {
                     RecordRow(record: record, list: descriptor.list)
                 }
-                .swipeActions(edge: .leading) {
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
                     if canDecide(record) {
                         Button("Use new price", systemImage: "checkmark.circle") { Task { await decide(record, approve: true, model) } }
                             .tint(.green)
                     }
                 }
-                .swipeActions(edge: .trailing) {
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     if canDecide(record) {
                         Button("Keep price", systemImage: "xmark.circle") { Task { await decide(record, approve: false, model) } }
                             .tint(.orange)
