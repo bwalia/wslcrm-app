@@ -168,7 +168,8 @@ struct WebFormsHomeView: View {
                 Label(search.isEmpty && status.isEmpty ? "No forms yet" : "No forms match", systemImage: "list.clipboard")
             } description: {
                 if search.isEmpty && status.isEmpty {
-                    Text("Contact forms, quote requests, sign-ups, applications — share the link and responses arrive here.")
+                    Text("Contact forms, quote requests, sign-ups, applications — share the link and responses arrive here."
+                         + (canCreate ? "" : " Your role can’t create forms; ask the workspace owner if you need one."))
                 }
             } actions: {
                 if canCreate && search.isEmpty && status.isEmpty {

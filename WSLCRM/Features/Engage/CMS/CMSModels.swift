@@ -216,7 +216,7 @@ enum CMSMedia {
         Choice("largest", "Largest files"),
     ]
 
-    static let notSetUp = "Uploading is switched off: this server has no image storage set up yet. Ask your "
+    static let notSetUp = "Uploading is switched off: image storage isn’t set up yet. Ask your "
         + "administrator to set up file storage. You can still use images already in the library."
 
     /// An address the app can load: full addresses as they are; site paths (`/img/x.jpg`) on the public website.
