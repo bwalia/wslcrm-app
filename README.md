@@ -31,6 +31,22 @@ open `docs/brand/index.html` for the visual guide.
 
 ---
 
+## The Mac app
+
+The same app also runs on a Mac (Mac Catalyst, macOS 14+): same code, same screens, same
+permissions. In Xcode pick **My Mac (Mac Catalyst)** as the destination, or:
+
+```bash
+xcodebuild build -scheme WSLCRM-Int -destination 'platform=macOS,variant=Mac Catalyst'
+```
+
+What a Mac lacks is handled in `WSLCRM/DesignSystem/MacSupport.swift`: screens refresh with a
+Refresh button or ⌘R (there's no pull to refresh), windows have a minimum size, and camera-only
+features (the till's barcode camera, document and photo capture) hide themselves; a USB barcode
+scanner types into the till's search. The Mac build is sandboxed
+(`WSLCRM/Resources/WSLCRM-Mac.entitlements`). CI builds it on every change; TestFlight for Mac is
+in [docs/IOS_RELEASE.md](docs/IOS_RELEASE.md#mac-app).
+
 ## Requirements
 
 - Xcode 26 or later (Swift 6 toolchain), iOS 17+ simulator or device
