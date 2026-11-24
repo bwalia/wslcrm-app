@@ -16,7 +16,7 @@ struct PluginsView: View {
             case .loaded(let plugins) where plugins.isEmpty:
                 Section {
                     ContentUnavailableView("No plugins installed", systemImage: "puzzlepiece.extension",
-                                           description: Text("Plugins add extra features. Your server operator installs them; then they appear here to turn on."))
+                                           description: Text("Plugins add extra features. Once your provider installs one, it appears here for you to turn on."))
                 }
             case .loaded(let plugins):
                 Section {
