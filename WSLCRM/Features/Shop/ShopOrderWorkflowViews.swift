@@ -17,6 +17,8 @@ struct ShopOrderNextStepSection: View {
     @Environment(SessionStore.self) private var session
     @State private var raisingPO = false
     @State private var receiving = false
+    /// One key per receive attempt series, so a retry after a lost reply can't record the goods twice.
+    @State private var receiveKey = MoneyRetryKey()
     @State private var printFile: URL?
     @State private var notice: String?
     @State private var error: APIError?
@@ -157,11 +159,13 @@ struct ShopOrderNextStepSection: View {
         defer { receiving = false }
         do {
             _ = try await services.purchaseOrders.receiveDelivery(po.uuid, PurchaseOrderDeliveryBody(
-                receiveAll: true, note: "Received for shop order \(order.orderNumber)"))
+                receiveAll: true, note: "Received for shop order \(order.orderNumber)"), idempotencyKey: receiveKey.value)
+            receiveKey.settle(nil)
             error = nil
             notice = "PO \(po.poNumber) marked received."
             await onChange()
         } catch {
+            receiveKey.settle(error.asAPIError)
             self.error = error.asAPIError
             notice = "Could not mark the goods received. Open the PO to record a part delivery."
         }

@@ -148,8 +148,8 @@ struct CustomerDetailView: View {
         }
         .sheet(isPresented: $newInvoice) {
             if let customer = state.value {
-                InvoiceCreateSheet(prefill: PickedCustomer(customer)) { body in
-                    let created = try await services.invoices.create(body)
+                InvoiceCreateSheet(prefill: PickedCustomer(customer)) { body, key in
+                    let created = try await services.invoices.create(body, idempotencyKey: key)
                     openedInvoice = InvoiceRoute(uuid: created.id)
                     return created
                 }
