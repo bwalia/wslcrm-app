@@ -5,6 +5,8 @@ import SwiftUI
 /// with "Web terminal work logs" see everyone (and a summary per person); everyone else sees their own.
 /// Runner managers can sign someone out from Now (Suspend; they resume them in Machines → the terminal → People).
 struct AIWorkLogView: View {
+    /// Only this card's sessions (opened from a task's terminal sessions).
+    var taskUuid: String?
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var from = Calendar.current.date(byAdding: .day, value: -6, to: Date()) ?? Date()
@@ -25,9 +27,15 @@ struct AIWorkLogView: View {
 
     private var api: AIRunnerAPI { AIRunnerAPI(client: services.client) }
 
+    init(taskUuid: String? = nil) {
+        self.taskUuid = taskUuid
+        // A task's log reaches back as far as prompts are kept (90 days); the general one starts at the last week.
+        _from = State(initialValue: Calendar.current.date(byAdding: .day, value: taskUuid == nil ? -6 : -89, to: Date()) ?? Date())
+    }
+
     private var filter: AIRunnerAPI.WorkLogFilter {
         AIRunnerAPI.WorkLogFilter(from: AIFormat.day(from), to: AIFormat.day(to), userUuid: person, terminalUuid: terminal,
-                                  state: state, agent: agent, search: search)
+                                  state: state, agent: agent, search: search, taskUuid: taskUuid ?? "")
     }
 
     private var everyone: Bool { tabs.value?.seesEveryone == true }
@@ -40,7 +48,7 @@ struct AIWorkLogView: View {
                 AINoAccess()
             }
         }
-        .navigationTitle("Work log")
+        .navigationTitle(taskUuid == nil ? "Work log" : "This task's work log")
         .aiNotice($notice)
     }
 

@@ -728,6 +728,8 @@ struct KanbanComment: Decodable, Sendable, Identifiable, Hashable {
     /// The comment as a person should read it: without the marker, and without the web editor's
     /// HTML (mentions become "@Name").
     var visibleContent: String { RichText.plain(IdempotencyMarker.strip(from: content)) }
+    /// The same, with its links tappable.
+    var visibleAttributed: AttributedString { RichText.attributed(IdempotencyMarker.strip(from: content)) }
 
     enum CodingKeys: String, CodingKey {
         case uuid, id, parentCommentId, content, userUuid, user, isEdited, replyCount, replies, createdAt
