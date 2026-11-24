@@ -138,7 +138,9 @@ private struct PDDealsListContent: View {
     var body: some View {
         PagedList(model: model, searchPrompt: "Name, address or postcode",
                   emptyTitle: Self.emptyTitle(query.show), emptySystemImage: "house",
-                  emptyDescription: Self.emptyDescription(query.show)) { deal in
+                  emptyDescription: Self.emptyDescription(query.show),
+                  emptyActionTitle: "New deal",
+                  emptyAction: PDWriteGates.canCreateDeal(session.propertyDeals) ? { creating = true } : nil) { deal in
             NavigationLink(value: PDDealRoute(uuid: deal.uuid)) {
                 PDDealRow(deal: deal, fallbackCurrency: session.propertyDeals?.me.settings?.currency)
             }
@@ -175,7 +177,7 @@ private struct PDDealsListContent: View {
             if query.show == .all {
                 ToolbarItem(placement: .topBarTrailing) { filterMenu }
             }
-            if session.propertyDeals?.can(.create, .deals) ?? false {
+            if PDWriteGates.canCreateDeal(session.propertyDeals) {
                 ToolbarItem(placement: .primaryAction) {
                     Button { creating = true } label: { Label("New deal", systemImage: "plus") }
                         .accessibilityIdentifier("pd.deals.new")
@@ -432,7 +434,7 @@ struct PDDealsBoardView: View {
                         ForEach(deals) { deal in
                             NavigationLink(value: PDDealRoute(uuid: deal.id)) { PDBoardDealRow(deal: deal) }
                                 .accessibilityIdentifier("pd.board.deal.\(deal.id)")
-                                .swipeActions(edge: .trailing) {
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                     if canMove {
                                         Button("Move") { moving = target(deal, board: board) }.tint(.indigo)
                                     }

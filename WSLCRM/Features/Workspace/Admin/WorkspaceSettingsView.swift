@@ -1,20 +1,27 @@
 import PhotosUI
 import SwiftUI
 
-/// Workspace settings (`/dashboard/namespace/settings`), for the owner: name and type of business,
-/// logo and banner (uploaded from the phone), the name on emails, the custom domain, whether everyone
-/// gets a sign-in code, and the plan and limits the platform set.
+/// Workspace settings (`/dashboard/namespace/settings`): name and type of business, logo and banner
+/// (uploaded from the phone), the name on emails, the custom domain (owner only), whether everyone gets
+/// a sign-in code (owner only), and the plan and limits the platform set. Saving needs `namespace.update`
+/// (`PUT /api/v2/namespace`), whoever owns the workspace.
 struct WorkspaceSettingsView: View {
     @Environment(SessionStore.self) private var session
 
+    /// The server's check for saving (`requirePermission("namespace", "update")`).
+    static func canChange(_ permissions: PermissionSet) -> Bool {
+        permissions.can(.update, moduleName: "namespace")
+    }
+
     var body: some View {
-        if session.permissions.isOwnerOrAdmin {
+        if Self.canChange(session.permissions) {
             WorkspaceSettingsForm()
         } else {
             ContentUnavailableView {
-                Label("Only the owner can change these", systemImage: "lock")
+                Label("You can't change these", systemImage: "lock")
             } description: {
-                Text("Only the workspace owner can change these settings. Ask them if something needs changing.")
+                Text("Your role doesn't let you change the workspace's settings. Ask the person who manages "
+                     + "this workspace if something needs changing.")
             }
             .navigationTitle("Workspace settings")
         }

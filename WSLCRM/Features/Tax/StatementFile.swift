@@ -10,7 +10,9 @@ struct StatementFile: Identifiable, Sendable {
     let data: Data
     let mimeType: String
 
-    static let maxBytes = 25 * 1024 * 1024
+    /// The server takes 10 MB a request (nginx `client_max_body_size 10M`); a little is left for the form around it.
+    static let maxBytes = 10_000_000
+    static let tooBig = "That file is too big to send. The limit is 10 MB."
     /// The server accepts statements by extension only.
     static let extensions = ["pdf", "csv", "jpg", "jpeg", "png", "gif", "webp"]
     static let contentTypes: [UTType] = [.pdf, .commaSeparatedText, .jpeg, .png, .gif, .webP, .plainText]
@@ -24,7 +26,7 @@ struct StatementFile: Identifiable, Sendable {
             return "Use a PDF, CSV or photo (JPG, PNG, GIF, WebP)."
         }
         if data.isEmpty { return "The file is empty." }
-        if data.count > Self.maxBytes { return "The file is larger than 25MB." }
+        if data.count > Self.maxBytes { return Self.tooBig }
         return nil
     }
 

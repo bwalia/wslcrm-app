@@ -312,7 +312,7 @@ private struct WebhookDetailView: View {
         do {
             let json = try await services.workspace().send(.post, "/api/v2/namespace/webhooks/\(hook.id)/rotate-secret")
             guard let secret = (WorkspaceAPI.record(json) ?? Record([:])).string("secret") else {
-                feedback = .failed(ResourceService.problem(500, "The secret was changed but the server didn’t send it. Rotate it again."))
+                feedback = .failed(ResourceService.problem(500, "The secret was changed but didn’t come back to show you. Change it again."))
                 return
             }
             feedback = .done("New secret made. The old one has stopped working.")

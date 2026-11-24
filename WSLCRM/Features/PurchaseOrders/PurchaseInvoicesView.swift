@@ -55,9 +55,24 @@ extension PurchaseOrdersAPI {
                 PurchaseInvoiceTotals.parse(json))
     }
 
-    /// A supplier's proforma, invoice or credit note that came by email (no file).
-    func recordSupplierInvoice(poUuid: String, _ body: [String: JSONValue]) async throws {
-        _ = try await portalPost(poUuid, "/invoices", body)
+    /// A supplier's proforma, invoice or credit note that came by email. With its file, it's uploaded as the order's
+    /// document carrying the invoice (`POST …/portal/documents`), as the web does; without, just the invoice.
+    func recordSupplierInvoice(poUuid: String, _ body: [String: JSONValue], file: Endpoint.FilePart? = nil) async throws {
+        if let file {
+            _ = try await portalUpload(poUuid, fields: Self.supplierInvoiceUploadFields(body), file: file)
+        } else {
+            _ = try await portalPost(poUuid, "/invoices", body)
+        }
+    }
+
+    /// The upload's text fields: the document type for the kind (`KIND_DOC_TYPE` on the web), the invoice as JSON
+    /// text, and shown to the supplier (the web's default).
+    static func supplierInvoiceUploadFields(_ body: [String: JSONValue]) -> [(String, String)] {
+        let kind = body["kind"]?.stringValue ?? "invoice"
+        var invoice = body
+        invoice["kind"] = nil
+        let json = (try? JSONEncoder.sorted.encode(JSONValue.object(invoice))).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
+        return [("doc_type", kind == "invoice" ? "vat_invoice" : kind), ("invoice", json), ("visible_to_supplier", "true")]
     }
 }
 
@@ -92,8 +107,10 @@ struct PurchaseInvoicesView: View {
         }) { model in
             PagedList(model: model, searchPrompt: "Supplier or invoice number", emptyTitle: "No purchase invoices",
                       emptySystemImage: descriptor.systemImage,
-                      emptyDescription: canRecord ? "Bills from your suppliers. Tap + to record one that came by email."
-                          : "Bills from your suppliers, recorded by your team or sent through the supplier portal.") { record in
+                      emptyDescription: canRecord ? "Bills from your suppliers. Record one that came by email."
+                          : "Bills from your suppliers, recorded by your team or sent through the supplier portal.",
+                      emptyActionTitle: "Record a supplier invoice",
+                      emptyAction: canRecord && state.isEmpty ? { recording = true } : nil) { record in
                 NavigationLink(value: ResourceRoute(descriptorID: descriptor.id, recordID: record.id, seed: record)) {
                     RecordRow(record: record, list: descriptor.list)
                 }
@@ -171,8 +188,9 @@ private struct RecordSupplierInvoiceSheet: View {
         if let chosen {
             PortalFormSheet(title: "Invoice for \(chosen.poNumber)", action: "Save", fields: PortalText.invoiceFields,
                             footer: "For a proforma, invoice or credit note from \(chosen.supplierName ?? "the supplier") "
-                                + "that came by email. Add the file on the purchase order under Documents, if you have it.") { body in
-                try await services.purchaseOrders.recordSupplierInvoice(poUuid: chosen.id, body)
+                                + "that came by email.",
+                            fileLabel: "The invoice itself (optional: PDF, photo or scan, up to 20 MB)") { body, file in
+                try await services.purchaseOrders.recordSupplierInvoice(poUuid: chosen.id, body, file: file)
                 onDone(chosen)
             }
         } else {

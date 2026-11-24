@@ -20,6 +20,8 @@ struct StoreOrderDetailView: View {
     /// Proof of delivery (nil until loaded, or when the server has no signatures).
     @State private var signature: ShopOrderSignatureState?
     @State private var signatureImage: UIImage?
+    /// The courier's picture of the customer's signature at the door.
+    @State private var courierImage: UIImage?
     /// The customer is signing: also hand the order over (true) or only sign (false).
     @State private var signing: Bool?
 
@@ -106,6 +108,7 @@ struct StoreOrderDetailView: View {
         if canUpdate { actionsSection(order) }
 
         StoreOrderSignatureSection(state: signature, image: signatureImage, canUpdate: canUpdate,
+                                   courier: order.record.string("delivery_partner.company_name"), courierImage: courierImage,
                                    sign: { signing = false }, void: { reason in await voidSignature(reason) })
 
         Section("Customer") {
@@ -158,12 +161,13 @@ struct StoreOrderDetailView: View {
                 Text("No delivery address").foregroundStyle(.secondaryText)
             }
             DetailRow(label: "Bill to", value: Self.address(order.record["billing_address"]))
-            DetailRow(label: "Fulfilment", value: order.fulfillmentStatus.map(Formatters.humanize))
+            DetailRow(label: "Handed over", value: order.fulfillmentStatus.map { $0 == "fulfilled" ? "Yes" : Formatters.humanize($0) })
             DetailRow(label: "Carrier", value: order.record.string("carrier"))
+            DetailRow(label: "Tracking number", value: order.record.string("tracking_number"))
             if let link = order.record.string("tracking_url").flatMap(URL.init(string:)), link.scheme != nil {
                 Link(destination: link) { Label("Track the parcel", systemImage: "location") }
             }
-            DetailRow(label: "Expected", value: order.record.string("estimated_delivery_date") ?? order.record.string("estimated_delivery"))
+            DetailRow(label: "Expected", value: StoreOrderEdit.expectedDay(order.record).flatMap(Formatters.day))
             if canUpdate {
                 Button { editing = .tracking(order) } label: { Label("Edit tracking", systemImage: "shippingbox") }
                     .accessibilityIdentifier("storeOrder.editTracking")
@@ -259,7 +263,7 @@ struct StoreOrderDetailView: View {
                     .accessibilityIdentifier("storeOrder.markPaid")
                 }
                 if unfulfilled {
-                    if signature?.canSign == true && signature?.signature == nil {
+                    if signature?.needsSignature == true {
                         Button { signing = true } label: {
                             Label("Customer signs and hand over", systemImage: "signature")
                         }
@@ -272,7 +276,7 @@ struct StoreOrderDetailView: View {
                         changeNote = ""
                         pendingChange = StoreOrderStatusChange(fulfillmentStatus: "fulfilled")
                     } label: {
-                        Label(signature?.canSign == true && signature?.signature == nil ? "Hand over without a signature"
+                        Label(signature?.needsSignature == true ? "Hand over without a signature"
                               : "Mark handed over", systemImage: "hand.raised")
                     }
                     .disabled(busy)
@@ -329,7 +333,13 @@ struct StoreOrderDetailView: View {
     private func load() async {
         await loadSignature()
         do {
-            state = .loaded(try await services.sales.storeOrder(uuid))
+            let order = try await services.sales.storeOrder(uuid)
+            state = .loaded(order)
+            courierImage = nil
+            if let courier = signature?.courierSignature,
+               let data = try? await services.sales.storeOrderCourierSignatureImage(uuid, path: courier.imageUrl) {
+                courierImage = UIImage(data: data)
+            }
         } catch {
             let apiError = error.asAPIError
             if case .cancelled = apiError { return }
@@ -414,6 +424,9 @@ struct StoreOrderDetailView: View {
         if let money = entry.string("new_financial_status"), money != entry.string("old_financial_status") {
             parts.append("Payment: \(Formatters.humanize(money))")
         }
+        if let handed = entry.string("new_fulfillment_status"), handed != entry.string("old_fulfillment_status") {
+            parts.append(handed == "fulfilled" ? "Handed over" : "Hand-over: \(Formatters.humanize(handed))")
+        }
         if parts.isEmpty { parts.append(Formatters.humanize(entry.string("action") ?? "Updated")) }
         return parts.joined(separator: " · ")
     }
@@ -452,6 +465,26 @@ enum StoreOrderEdit: Identifiable {
         case .address(_, let key): key == "shipping_address" ? "Delivery address" : "Billing address"
         }
     }
+
+    private static let dayStyle = Date.ISO8601FormatStyle(timeZone: .current).year().month().day()
+
+    /// The expected delivery day (`estimated_delivery_date`, else the older `estimated_delivery`), a date only.
+    static func expectedDay(_ order: Record) -> Date? {
+        guard let text = order.string("estimated_delivery_date") ?? order.string("estimated_delivery") else { return nil }
+        return try? dayStyle.parse(String(text.prefix(10)))
+    }
+
+    /// `PUT /api/v2/orders/:uuid` fields for the tracking form. A tracking number is sent when typed, or as ""
+    /// when one was saved and the person cleared it (an order without one has no `tracking_number` in the
+    /// reply, so a blank form never wipes a number this screen couldn't see). The date column can't be cleared.
+    static func trackingFields(carrier: String, trackingURL: String, trackingNumber: String, savedTrackingNumber: String?,
+                               expected: Date?) -> [(String, String)] {
+        var out = [("carrier", carrier), ("tracking_url", trackingURL)]
+        let number = trackingNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !number.isEmpty || savedTrackingNumber != nil { out.append(("tracking_number", number)) }
+        if let expected { out.append(("estimated_delivery_date", expected.formatted(dayStyle))) }
+        return out
+    }
 }
 
 private struct StoreOrderEditForm: View {
@@ -463,7 +496,8 @@ private struct StoreOrderEditForm: View {
     @State private var carrier = ""
     @State private var trackingNumber = ""
     @State private var trackingURL = ""
-    @State private var expected = ""
+    @State private var savedTrackingNumber: String?
+    @State private var expected: Date?
     @State private var address = StoreOrderAddress()
     @State private var saving = false
     @State private var error: APIError?
@@ -485,8 +519,20 @@ private struct StoreOrderEditForm: View {
                         TextField("Tracking number", text: $trackingNumber).autocorrectionDisabled()
                         TextField("Tracking link (https://…)", text: $trackingURL)
                             .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
-                        TextField("Expected delivery date (YYYY-MM-DD)", text: $expected)
-                            .keyboardType(.numbersAndPunctuation)
+                    }
+                    Section {
+                        if let expected {
+                            DatePicker("Expected delivery", selection: Binding(get: { expected }, set: { self.expected = $0 }),
+                                       displayedComponents: .date)
+                                .accessibilityIdentifier("storeOrder.edit.expected")
+                        } else {
+                            Button { expected = Calendar.current.startOfDay(for: .now) } label: {
+                                Label("Add an expected delivery date", systemImage: "calendar.badge.plus")
+                            }
+                            .accessibilityIdentifier("storeOrder.edit.addExpected")
+                        }
+                    } footer: {
+                        if savedTrackingNumber != nil { Text("Clear the tracking number to remove it.") }
                     }
                 case .address:
                     StoreOrderAddressFields(address: $address)
@@ -522,7 +568,9 @@ private struct StoreOrderEditForm: View {
         case .tracking(let order):
             carrier = order.record.string("carrier") ?? ""
             trackingURL = order.record.string("tracking_url") ?? ""
-            expected = order.record.string("estimated_delivery_date") ?? ""
+            savedTrackingNumber = order.record.string("tracking_number")
+            trackingNumber = savedTrackingNumber ?? ""
+            expected = StoreOrderEdit.expectedDay(order.record)
         case .address(let order, let key):
             let r = order.record
             address = StoreOrderAddress(name: r.string("\(key).name"), company: r.string("\(key).company"),
@@ -540,10 +588,8 @@ private struct StoreOrderEditForm: View {
         case .notes:
             return [("internal_notes", internalNotes), ("customer_notes", customerNotes)]
         case .tracking:
-            var out = [("carrier", carrier), ("tracking_url", trackingURL)]
-            if let number = trackingNumber.trimmedOrNil { out.append(("tracking_number", number)) }
-            if let day = expected.trimmedOrNil { out.append(("estimated_delivery_date", day)) }
-            return out
+            return StoreOrderEdit.trackingFields(carrier: carrier, trackingURL: trackingURL, trackingNumber: trackingNumber,
+                                                 savedTrackingNumber: savedTrackingNumber, expected: expected)
         case .address(_, let key):
             let data = (try? JSONEncoder.opsAPI().encode(address.cleaned ?? StoreOrderAddress())) ?? Data("{}".utf8)
             return [(key, String(decoding: data, as: UTF8.self))]

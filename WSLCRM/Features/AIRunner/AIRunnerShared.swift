@@ -94,9 +94,10 @@ struct AINoAccess: View {
 }
 
 extension PermissionSet {
-    /// Any grant at all on an AI Runs module (the web's `canAccess`).
+    /// Any grant at all on an AI Runs module (the web's `canAccess`). Owning the workspace isn't access by
+    /// itself: only an owner left with no permissions at all gets everything (the server's no-lock-out rule).
     func aiAny(_ module: String) -> Bool {
-        isAdmin || isOwner || !(grants[module] ?? []).isEmpty
+        isAdmin || !(grants[module] ?? []).isEmpty || (isOwner && grants.values.allSatisfy(\.isEmpty))
     }
 
     func ai(_ action: Action, _ module: String) -> Bool { can(action, moduleName: module) }

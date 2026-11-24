@@ -298,7 +298,7 @@ struct MktDesignAI: View {
 
     /// The server's words when it has them (the daily AI limit), else plain ones.
     static func message(_ error: APIError, fallback: String) -> String {
-        if error.isConnectivityProblem { return "Can’t reach the server. Check your internet connection and try again." }
+        if error.isConnectivityProblem { return "Can’t connect. Check your internet connection and try again." }
         if let server = error.serverError, !server.message.isEmpty, server.status != 500 { return server.message }
         return fallback
     }

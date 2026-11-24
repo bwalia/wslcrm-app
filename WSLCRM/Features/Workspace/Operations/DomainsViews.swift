@@ -939,7 +939,7 @@ struct DomainDNSRecordsView: View {
                             DomainDNSRow(record: record)
                         }
                         .disabled(!canChange)
-                        .swipeActions {
+                        .swipeActions(allowsFullSwipe: false) {
                             if canChange {
                                 Button("Delete", role: .destructive) { deleting = record }
                             }

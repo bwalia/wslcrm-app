@@ -35,6 +35,10 @@ struct ShopOrdersListView: View {
         _filter = State(initialValue: initialStatus.map { .status($0) })
     }
 
+    init(initialFilter: ShopOrderListFilter) {
+        _filter = State(initialValue: initialFilter)
+    }
+
     var body: some View {
         ModelHost(make: { [shop = services.shop, filter, counts] in
             PagedListModel<ShopOrder> { search, page in
@@ -244,7 +248,8 @@ struct ShopOrderDetailView: View {
                 if let received = extras.paidAmountMinor {
                     DetailRow(label: "Received", value: ShopMoney.format(received, currency: current.currency))
                 }
-                if current.status.isRefundable && session.shopPolicy.canUpdate && order != nil {
+                // A Stripe refund is money back: shop.manage (POST /orders/:uuid/refund).
+                if current.status.isRefundable && session.shopPolicy.canManage && order != nil {
                     Button { refunding = true } label: {
                         Label("Refund the customer", systemImage: "arrow.uturn.backward.circle")
                     }
@@ -330,7 +335,7 @@ struct ShopOrderDetailView: View {
     private func changeStatus(_ status: ShopOrderStatus) {
         switch status {
         case .shipped: shipping = true
-        case .refunded where current.status.isRefundable && session.shopPolicy.canUpdate: refunding = true
+        case .refunded where current.status.isRefundable && session.shopPolicy.canManage: refunding = true
         case .cancelled, .refunded: pendingStatus = status
         default:
             Task { if await save(ShopOrderUpdate(status: status.rawValue)) { notice = "Order marked \(status.label.lowercased())." } }

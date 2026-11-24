@@ -101,7 +101,7 @@ struct HealthHospitalView: View {
                 }
                 patientsSection
                 placeSection
-                if session.permissions.allows(.delete, HealthCatalog.module) {
+                if HealthCatalog.can(.delete, .hospital, session.permissions) {
                     Section {
                         if let deleteError { InlineErrorRow(error: deleteError) }
                         DeleteButton(title: "Delete \(record.string("name") ?? "this place")",
@@ -117,7 +117,7 @@ struct HealthHospitalView: View {
         .navigationTitle(record?.string("name") ?? "Hospital or care home")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if session.permissions.allows(.update, HealthCatalog.module) {
+            if HealthCatalog.can(.update, .hospital, session.permissions) {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Edit") { editing = true }
                         .disabled(record == nil)
@@ -201,7 +201,7 @@ struct HealthHospitalView: View {
             Section {
                 ForEach(alerts) { alert in
                     if let patient = HealthPatientRef.uuid(alert, directory: patientsByNumber) {
-                        NavigationLink(value: HealthScope.record(HealthCatalog.alerts(patient: patient), alert)) {
+                        NavigationLink(value: HealthScope.record(HealthCatalog.alerts(patient: patient), alert, for: session.permissions)) {
                             HealthAlertRow(alert: alert, patientName: HealthPatientRef.name(alert, directory: patientsByNumber))
                         }
                     } else {
@@ -232,7 +232,7 @@ struct HealthHospitalView: View {
             }
             .frame(minHeight: 44)
             .accessibilityIdentifier("health.hospital.allPatients")
-            if session.permissions.allows(.create, HealthCatalog.module) {
+            if HealthCatalog.can(.create, .patient, session.permissions) {
                 Button { addingPatient = true } label: { Label("Add a patient here", systemImage: "person.badge.plus") }
                     .frame(minHeight: 44)
                     .accessibilityIdentifier("health.hospital.addPatient")
@@ -244,12 +244,12 @@ struct HealthHospitalView: View {
 
     private var placeSection: some View {
         Section("Departments and wards") {
-            NavigationLink(value: HealthScope.list(HealthCatalog.departments(hospital: uuid))) {
+            NavigationLink(value: HealthScope.list(HealthCatalog.departments(hospital: uuid), for: session.permissions)) {
                 Label("Departments", systemImage: "square.grid.2x2")
             }
             .frame(minHeight: 44)
             .accessibilityIdentifier("health.hospital.departments")
-            NavigationLink(value: HealthScope.list(HealthCatalog.wards(hospital: uuid))) {
+            NavigationLink(value: HealthScope.list(HealthCatalog.wards(hospital: uuid), for: session.permissions)) {
                 Label("Wards", systemImage: "bed.double")
             }
             .frame(minHeight: 44)

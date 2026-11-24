@@ -425,6 +425,7 @@ struct StartAIRunSheet: View {
 struct TaskAIRunDetailView: View {
     let uuid: String
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @State private var state: LoadState<TaskAIRunDetail> = .idle
     @State private var message = ""
     @State private var confirm: PendingConfirmation?
@@ -575,8 +576,8 @@ struct TaskAIRunDetailView: View {
     @ViewBuilder
     private func actions(_ detail: TaskAIRunDetail) -> some View {
         let run = detail.run
-        if (run.status == .pendingApproval && detail.canApprove) || (!run.status.isEnded && run.status != .cancelling && detail.canMessage)
-            || (run.status.isEnded && detail.canMessage) {
+        let control = AIRunControl(run: run, me: session.user?.uuid, permissions: session.permissions)
+        if (run.status == .pendingApproval && detail.canApprove) || control.canStop || control.canRetry {
             Section {
                 if run.status == .pendingApproval, detail.canApprove {
                     Button("Approve and start") { Task { await act("Approved; the run is queued.") { try await services.kanban.ai.approve(run.uuid) } } }
@@ -590,7 +591,7 @@ struct TaskAIRunDetailView: View {
                     }
                     .accessibilityIdentifier("airun.reject")
                 }
-                if !run.status.isEnded, run.status != .cancelling, detail.canMessage {
+                if control.canStop {
                     Button("Stop this run", role: .destructive) {
                         confirm = PendingConfirmation(title: "Stop this AI run?", message: "The AI stops at its next step.",
                                                       button: "Stop the run") {
@@ -599,7 +600,7 @@ struct TaskAIRunDetailView: View {
                     }
                     .accessibilityIdentifier("airun.cancel")
                 }
-                if run.status.isEnded, detail.canMessage {
+                if control.canRetry {
                     Button("Try again", systemImage: "arrow.clockwise") {
                         Task { await retry(run, confirmSimilar: false) }
                     }
@@ -664,5 +665,29 @@ struct TaskAIRunDetailView: View {
                 notice = .failed(apiError.plainMessage)
             }
         }
+    }
+}
+
+/// Who may stop or retry a run, as the AI runner checks it (`R.may_control`: the person who started it, or
+/// `ai_runs.manage`). Stopping also needs `ai_runs.read` and works while waiting for approval or queued too;
+/// retrying needs `ai_runs.create` and an ended run. (`can_message` only covers running work.)
+struct AIRunControl {
+    let canStop: Bool
+    let canRetry: Bool
+
+    init(run: TaskAIRun, me: String?, permissions: PermissionSet) {
+        let mine = me != nil && run.requestedBy == me
+        let mayControl = mine || permissions.can(.manage, moduleName: "ai_runs")
+        canStop = mayControl && permissions.can(.read, moduleName: "ai_runs")
+            && !run.status.isEnded && run.status != .cancelling
+        canRetry = mayControl && permissions.can(.create, moduleName: "ai_runs") && run.status.isEnded
+    }
+
+    /// `R.can_start`: `ai_runs.create`, and the card's assignee, `ai_runs.manage`, or owner/admin of its project
+    /// (the project role itself; workspace rights don't count here).
+    static func canStart(assignees: [String], me: String?, projectRole: KanbanMemberRole?, permissions: PermissionSet) -> Bool {
+        guard permissions.can(.create, moduleName: "ai_runs") else { return false }
+        let assigned = me.map(assignees.contains) ?? false
+        return assigned || permissions.can(.manage, moduleName: "ai_runs") || projectRole == .owner || projectRole == .admin
     }
 }

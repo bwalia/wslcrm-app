@@ -357,14 +357,27 @@ final class WorkspaceIntegrationsTests: XCTestCase {
         XCTAssertNil(AccountPasswordView.problem(current: "old", new: "longenough", confirm: "longenough"))
     }
 
+    @MainActor
     func testProfileBodyAndPermissionMessage() {
-        let body = object(AccountProfileView.body(firstName: " Ann ", lastName: "Lee", email: "ann@example.com",
-                                                  phone: "", address: "1 High St"))
+        let body = object(AccountProfileView.body([" Ann ", "Lee", "ann@example.com", "", "1 High St"],
+                                                  original: ["Anne", "Lee", "ann@example.com", "07700 900123", ""]))
         XCTAssertEqual(body["first_name"], .string("Ann"))
         XCTAssertEqual(body["phone_no"], .string(""), "a blank phone clears it")
         XCTAssertEqual(body["address"], .string("1 High St"))
+        XCTAssertNil(body["email"], "an unchanged email isn't sent")
+        XCTAssertNil(body["last_name"])
         let forbidden = APIError.from(status: 403, data: Data(#"{"error":"Permission denied","required":{"module":"users","action":"update"}}"#.utf8),
                                       headers: [:])
-        XCTAssertTrue(AccountProfileView.explain(forbidden).localizedDescription.contains("Users update permission"))
+        let message = AccountProfileView.explain(forbidden).localizedDescription
+        XCTAssertTrue(message.contains("Ask the person who manages the workspace"))
+        XCTAssertFalse(message.contains("permission"), "no jargon")
+        // The server's own plain refusal (an email change without users.update) is kept as it is.
+        let plain = APIError.from(status: 403, data: Data(#"{"error":"You can change your name, phone and address here. To change your email or username, ask a workspace admin."}"#.utf8),
+                                  headers: [:])
+        XCTAssertTrue(AccountProfileView.explain(plain).localizedDescription.hasPrefix("You can change your name"))
+        // Name, phone and address are your own; the email needs users.update.
+        XCTAssertFalse(AccountProfileView.canChangeEmail(PermissionSet(isAdmin: false, isOwner: false, grants: [:], menuKeys: [])))
+        XCTAssertTrue(AccountProfileView.canChangeEmail(PermissionSet(isAdmin: false, isOwner: false,
+                                                                      grants: ["users": ["update"]], menuKeys: [])))
     }
 }

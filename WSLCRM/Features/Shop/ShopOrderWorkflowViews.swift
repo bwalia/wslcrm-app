@@ -17,11 +17,16 @@ struct ShopOrderNextStepSection: View {
     @Environment(SessionStore.self) private var session
     @State private var raisingPO = false
     @State private var receiving = false
+    /// One key per receive attempt series, so a retry after a lost reply can't record the goods twice.
+    @State private var receiveKey = MoneyRetryKey()
     @State private var printFile: URL?
     @State private var notice: String?
     @State private var error: APIError?
 
     private var editable: Bool { session.shopPolicy.canUpdate }
+    /// Supplier POs are the purchase-orders module's own (`purchase_orders.read` / `.update`).
+    private var canOpenPO: Bool { session.permissions.can(.read, .purchaseOrders) }
+    private var canReceivePO: Bool { session.permissions.can(.update, .purchaseOrders) }
 
     var body: some View {
         let next = ShopOrderWorkflow.next(status: order.status, orderNumber: order.orderNumber,
@@ -52,7 +57,7 @@ struct ShopOrderNextStepSection: View {
                         .accessibilityIdentifier("shopOrder.raiseAnotherPO")
                 }
             }
-            if let po, next.step != .sendPO {
+            if let po, next.step != .sendPO, canOpenPO {
                 NavigationLink {
                     PurchaseOrderDetailView(uuid: po.uuid) { _ in Task { await onChange() } }
                 } label: {
@@ -95,16 +100,23 @@ struct ShopOrderNextStepSection: View {
                 .buttonStyle(.large(.brand))
                 .accessibilityIdentifier("shopOrder.raisePO")
         case .sendPO:
-            if let po {
+            if let po, canOpenPO {
                 NavigationLink {
                     PurchaseOrderDetailView(uuid: po.uuid) { _ in Task { await onChange() } }
                 } label: {
                     Label("Open PO \(po.poNumber) to check and send it", systemImage: "arrow.right.circle")
                 }
                 .accessibilityIdentifier("shopOrder.openPO")
+            } else if let po {
+                Text("Purchase order \(po.poNumber) needs checking and sending. Your role can't open purchase orders, "
+                     + "so ask someone who looks after them.")
+                    .font(.wsFootnote).foregroundStyle(.secondaryText)
             }
         case .receive:
-            if let po {
+            if let po, !canReceivePO {
+                Text("When the goods for PO \(po.poNumber) arrive, someone who looks after purchase orders marks them received.")
+                    .font(.wsFootnote).foregroundStyle(.secondaryText)
+            } else if let po {
                 Button {
                     Task { await receiveAll(po) }
                 } label: {
@@ -147,11 +159,13 @@ struct ShopOrderNextStepSection: View {
         defer { receiving = false }
         do {
             _ = try await services.purchaseOrders.receiveDelivery(po.uuid, PurchaseOrderDeliveryBody(
-                receiveAll: true, note: "Received for shop order \(order.orderNumber)"))
+                receiveAll: true, note: "Received for shop order \(order.orderNumber)"), idempotencyKey: receiveKey.value)
+            receiveKey.settle(nil)
             error = nil
             notice = "PO \(po.poNumber) marked received."
             await onChange()
         } catch {
+            receiveKey.settle(error.asAPIError)
             self.error = error.asAPIError
             notice = "Could not mark the goods received. Open the PO to record a part delivery."
         }

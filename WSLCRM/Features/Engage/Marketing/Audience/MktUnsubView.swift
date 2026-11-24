@@ -33,7 +33,7 @@ struct MktUnsubView: View {
                         + "bounces, they appear here and are never sent marketing again."
                       : "Nobody matches these filters. Choose “All” to see everyone.") { entry in
             MktUnsubRow(entry: entry)
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if entry.canUnblock && canUnblock {
                         Button("Unblock") { unblocking = entry }
                             .tint(.orange)

@@ -85,12 +85,13 @@ struct SalesOrdersView: View {
             SalesOrderFiltersView(query: $query, sources: meta?.sources ?? [])
                 .presentationDetents([.medium, .large])
         }
-        .confirmationDialog("What kind of order?", isPresented: $choosingKind, titleVisibility: .visible) {
-            if canShopOrder { Button("Shop order") { openShopOrder() } }
-            Button("Store order") { creatingStoreOrder = true }
-            Button("Sale at the counter") { pushNative(SalesScreen.pos) }
+        .confirmationDialog("How are you selling?", isPresented: $choosingKind, titleVisibility: .visible) {
+            if canShopOrder { Button("Online shop order (quote, then pay)") { openShopOrder() } }
+            Button("Phone or email order") { creatingStoreOrder = true }
+            Button("Sale at the counter (till)") { pushNative(SalesScreen.pos) }
         } message: {
-            Text("A shop order is built like a quote and paid online or by transfer. A store order sells a store’s products by phone, email or in person. A sale at the counter uses the till.")
+            Text("An online shop order is built like a quote and paid online or by bank transfer. A phone or email order "
+                 + "sells one of your store’s products. A sale at the counter uses the till.")
         }
         .sheet(isPresented: $creatingStoreOrder) {
             CreateStoreOrderView { created in

@@ -371,6 +371,7 @@ private struct ProductVariationsSection: View {
     @State private var variants: LoadState<[ProductVariant]> = .idle
     @State private var editing: ProductVariant?
     @State private var adding = false
+    @State private var deleting: ProductVariant?
     @State private var notice: String?
     @State private var error: APIError?
 
@@ -409,9 +410,9 @@ private struct ProductVariationsSection: View {
                         }
                     }
                     .disabled(!canEdit)
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if canEdit {
-                            Button("Delete", role: .destructive) { Task { await delete(variant) } }
+                            Button("Delete", role: .destructive) { deleting = variant }
                         }
                     }
                     .accessibilityIdentifier("product.variant.\(variant.uuid)")
@@ -437,7 +438,15 @@ private struct ProductVariationsSection: View {
                     }
             }
         } header: {
-            Text("Variations").task { await load() }
+            Text("Variations")
+                .task { await load() }
+                // On the header (one view): on the Section it would be copied onto every row.
+                .confirmationDialog("Delete “\(deleting?.title ?? "")”?", isPresented: .init(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+                                    titleVisibility: .visible, presenting: deleting) { variant in
+                    Button("Delete variation", role: .destructive) { Task { await delete(variant) } }
+                } message: { _ in
+                    Text("Past orders keep its name. To stop selling it for now, switch it off instead.")
+                }
         } footer: {
             Text("Sizes, colours or other options, each with its own SKU, price and stock."
                  + (product.trackInventory ? "" : " Stock is only counted when stock tracking is on for this product.")

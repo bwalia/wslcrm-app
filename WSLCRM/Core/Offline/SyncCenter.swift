@@ -18,6 +18,8 @@ final class SyncCenter {
     /// Incremented whenever a queued write is accepted, so screens can refresh.
     private(set) var syncedGeneration = 0
     private(set) var lastSyncedJobIds: Set<String> = []
+    /// Set while the queue can't be saved to disk: shown in the sync banner.
+    private(set) var saveProblem: String?
 
     @ObservationIgnored private let queue: MutationQueue
     @ObservationIgnored private let client: APIClient
@@ -35,6 +37,9 @@ final class SyncCenter {
         Task { [weak self, queue] in
             await queue.setObserver { items in
                 Task { @MainActor in self?.mutations = items }
+            }
+            await queue.setOnSaveProblem { problem in
+                Task { @MainActor in self?.saveProblem = problem }
             }
             await queue.setOnSynced { mutation in
                 Task { @MainActor in

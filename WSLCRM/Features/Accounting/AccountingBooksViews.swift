@@ -307,6 +307,7 @@ struct AccountingExpensesView: View {
     @State private var notice: TaxNotice?
     @State private var adding = false
     @State private var busy: Set<String> = []
+    @State private var rejecting: Record?
 
     var body: some View {
         let canAdd = session.allows(.create, AccountingRights.module)
@@ -345,7 +346,7 @@ struct AccountingExpensesView: View {
                                 HStack {
                                     Button("Approve", systemImage: "checkmark") { Task { await decide(e, "approve") } }
                                         .accessibilityIdentifier("accounting.expense.approve.\(e.id)")
-                                    Button("Reject", systemImage: "xmark", role: .destructive) { Task { await decide(e, "reject") } }
+                                    Button("Reject", systemImage: "xmark", role: .destructive) { rejecting = e }
                                 }
                                 .buttonStyle(.bordered)
                                 .font(.wsFootnote)
@@ -378,6 +379,13 @@ struct AccountingExpensesView: View {
         .refreshable { await pager.load() }
         .sheet(isPresented: $adding) {
             NavigationStack { AddExpenseForm { notice = .success($0); Task { await pager.load() } } }
+        }
+        .confirmationDialog("Reject this expense?", isPresented: Binding(get: { rejecting != nil },
+                                                                         set: { if !$0 { rejecting = nil } }),
+                            titleVisibility: .visible, presenting: rejecting) { e in
+            Button("Reject expense", role: .destructive) { Task { await decide(e, "reject") } }
+        } message: { e in
+            Text("It's marked as rejected and stays out of the books.")
         }
     }
 

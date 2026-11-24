@@ -303,7 +303,7 @@ struct IncomeTypeView: View {
                     }
                 }
                 .accessibilityAddTraits(entity.id == selected ? .isSelected : [])
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     Button("Remove", role: .destructive) { removing = entity }
                     Button("Rename") { renameText = entity.string("label") ?? ""; renaming = entity }
                 }

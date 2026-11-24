@@ -201,12 +201,12 @@ struct AcademyCourseDetailView: View {
                     AcademyLessonRow(lesson: lesson)
                 }
                 .accessibilityIdentifier("academy.lesson.\(lesson.uuid)")
-                .swipeActions(edge: .trailing) {
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     if access.canDelete {
                         Button(role: .destructive) { deletingLesson = lesson } label: { Label("Delete", systemImage: "trash") }
                     }
                 }
-                .swipeActions(edge: .leading) {
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
                     NavigationLink {
                         AcademyLessonLoader(uuid: lesson.uuid, namespaceSlug: academySlug)
                     } label: {

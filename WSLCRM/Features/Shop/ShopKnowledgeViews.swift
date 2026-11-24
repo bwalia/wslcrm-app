@@ -27,7 +27,7 @@ struct ShopKnowledgeView: View {
                 } label: {
                     ShopKnowledgeRow(entry: entry)
                 }
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if session.shopPolicy.canDelete {
                         Button("Remove", role: .destructive) { removing = entry }
                     }

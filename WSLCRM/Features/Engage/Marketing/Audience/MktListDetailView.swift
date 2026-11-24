@@ -30,6 +30,7 @@ struct MktListDetailView: View {
     @State private var addingSMS = false
     @State private var busy = false
     @State private var removing: String?
+    @State private var confirmingRemove: MktListMember?
     @State private var campaign: NativeScreenRoute?
 
     init(listUUID: String, seed: MktListSummary? = nil, onDeleted: ((String) -> Void)? = nil) {
@@ -116,6 +117,13 @@ struct MktListDetailView: View {
             Button("Delete list", role: .destructive) { Task { await delete() } }
         } message: {
             Text("The people stay in your contacts — only this list is removed. Emails already sent are not affected.")
+        }
+        .confirmationDialog("Take \(confirmingRemove?.name ?? confirmingRemove?.email ?? "them") off this list?",
+                            isPresented: .init(get: { confirmingRemove != nil }, set: { if !$0 { confirmingRemove = nil } }),
+                            titleVisibility: .visible, presenting: confirmingRemove) { member in
+            Button("Take them off", role: .destructive) { if let list { Task { await remove(member, from: list) } } }
+        } message: { _ in
+            Text("They stay in your contacts and can be added again. It doesn't stop other emails to them.")
         }
         .confirmationDialog("Make it a regular list?", isPresented: $confirmRegular, titleVisibility: .visible) {
             Button("Make it a regular list") { Task { await makeRegular() } }
@@ -267,9 +275,9 @@ struct MktListDetailView: View {
                     } label: {
                         MktListMemberRow(member: member, sms: list.isSMS)
                     }
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if !list.isSmart, can(.update) {
-                            Button("Remove", role: .destructive) { Task { await remove(member, from: list) } }
+                            Button("Remove", role: .destructive) { confirmingRemove = member }
                                 .accessibilityIdentifier("mkt.list.member.remove.\(member.contactUUID)")
                         }
                     }

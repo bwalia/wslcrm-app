@@ -114,7 +114,7 @@ final class HealthModuleTests: XCTestCase {
     }
 
     func testOpeningAChildListRegistersItsDescriptor() {
-        let route = HealthScope.list(HealthCatalog.medications(patient: "p-9"), query: ["status": "active"])
+        let route = HealthScope.list(HealthCatalog.medications(patient: "p-9"), for: .none, query: ["status": "active"])
         XCTAssertEqual(route.descriptorID, "health.medications@p-9")
         XCTAssertEqual(route.query, ["status": "active"])
         XCTAssertEqual(ModuleCatalog.descriptor("health.medications@p-9")?.api.list, "/api/v2/patients/p-9/medications",

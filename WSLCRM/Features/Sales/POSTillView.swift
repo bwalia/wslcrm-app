@@ -240,7 +240,8 @@ private struct POSTillContent: View {
             ContentUnavailableView {
                 Label("No products in this store yet", systemImage: "shippingbox")
             } description: {
-                Text("Add products with a price (and a barcode to scan them). Turn on stock tracking to sell only what you have.")
+                Text("The till sells this store’s products (Apps › Products), not the online shop’s. Add products with a price "
+                     + "(and a barcode to scan them). Turn on stock tracking to sell only what you have.")
             } actions: {
                 if let link = MenuDestination.of(key: "products") {
                     MenuDestinationLink(destination: link) { Text("Add products") }
@@ -249,8 +250,15 @@ private struct POSTillContent: View {
         case .loaded:
             let shown = model.shown
             if shown.isEmpty {
-                Text("Nothing matches. Clear the search or pick another category.")
-                    .font(.wsSubheadline).foregroundStyle(.secondaryText).padding(.horizontal)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Nothing matches. Clear the search or pick another category. The till lists this store’s products, "
+                         + "not the online shop’s.")
+                        .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                    if let link = MenuDestination.of(key: "products") {
+                        MenuDestinationLink(destination: link) { Text("Open the store’s products") }
+                    }
+                }
+                .padding(.horizontal)
             } else {
                 LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(shown) { product in

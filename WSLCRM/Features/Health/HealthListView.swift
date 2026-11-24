@@ -108,12 +108,18 @@ struct HealthListView<Row: View>: View {
         })
     }
 
+    private var canCreate: Bool {
+        createDescriptor.map { HealthCatalog.can(.create, .of($0), session.permissions) } ?? false
+    }
+
     var body: some View {
         PagedList(model: model,
                   searchPrompt: descriptor.api.searchParam == nil ? nil : descriptor.list.searchPrompt,
                   emptyTitle: isFiltered ? "Nothing matches these filters" : (descriptor.list.emptyTitle ?? "Nothing here yet"),
                   emptySystemImage: descriptor.systemImage,
-                  emptyDescription: isFiltered ? "Change or clear the filters to see more." : descriptor.list.emptyDescription) { record in
+                  emptyDescription: isFiltered ? "Change or clear the filters to see more." : descriptor.list.emptyDescription,
+                  emptyActionTitle: createDescriptor.map { "New \($0.noun)" },
+                  emptyAction: canCreate && !isFiltered ? { creating = true } : nil) { record in
             NavigationLink(value: destination(record)) { row(record) }
                 .accessibilityIdentifier("health.row.\(record.id)")
         }
@@ -140,7 +146,7 @@ struct HealthListView<Row: View>: View {
                     .accessibilityIdentifier("health.filter")
                 }
             }
-            if let createDescriptor, session.permissions.allows(.create, createDescriptor.permissions.module) {
+            if let createDescriptor, canCreate {
                 ToolbarItem(placement: .primaryAction) {
                     Button { creating = true } label: { Label("New \(createDescriptor.noun)", systemImage: "plus") }
                         .accessibilityIdentifier("health.new")

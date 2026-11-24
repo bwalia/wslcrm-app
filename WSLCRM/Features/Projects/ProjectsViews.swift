@@ -175,13 +175,13 @@ struct ProjectsListView: View {
             ProjectRow(project: project)
         }
         .accessibilityIdentifier("project.row.\(project.name)")
-        .swipeActions(edge: .leading) {
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
             Button(project.isStarred ? "Unstar" : "Star", systemImage: project.isStarred ? "star.slash" : "star") {
                 Task { await star(project) }
             }
             .tint(.orange)
         }
-        .swipeActions(edge: .trailing) {
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if project.status == .archived {
                 if canRestore(project, access: access) {
                     Button("Restore", systemImage: "arrow.uturn.backward") { Task { await restore(project) } }.tint(.green)
@@ -467,7 +467,7 @@ struct ProjectFormSheet: View {
                     Text("Timeline")
                 } footer: {
                     if project?.startDay != nil || project?.dueDay != nil {
-                        Text("You can move a date, but the server can't remove one once it's set.")
+                        Text("You can move a date, but once it's set it can't be cleared.")
                     }
                 }
 
@@ -816,7 +816,7 @@ struct ProjectDetailView: View {
                         }
                     }
                     .accessibilityIdentifier("board.row.\(board.name)")
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if access.canAdmin {
                             if !board.isDefault {
                                 Button("Archive", systemImage: "archivebox", role: .destructive) { archivingBoard = board }

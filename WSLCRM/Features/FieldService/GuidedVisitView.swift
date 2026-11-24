@@ -45,6 +45,7 @@ private struct GuidedVisitContent: View {
         .navigationTitle(model.displayedVisit?.jobNumber ?? "Job")
         .task { await model.load() }
         .refreshable { await model.load() }
+        .onChange(of: model.pendingWrites, initial: true) { Task { await model.dropUnkeepableSignature() } }
         .sheet(item: $quoteKind) { kind in
             QuoteLineSheet(kind: kind, showsPrices: model.showsPrices) { body in
                 await model.addItem(body)
@@ -239,6 +240,7 @@ private struct GuidedVisitContent: View {
                         Text("Job complete").font(.wsTitle3.bold())
                         if let summary = visit.workSummary { Text(summary).multilineTextAlignment(.center) }
                         if let hours = visit.labourHours { Text("\(hours.formatted()) h on site").font(.wsFootnote).foregroundStyle(.secondaryText) }
+                        timesheetNote(visit)
                         if visit.hasCustomerSignature { VisitSignatureCard(visitUuid: visit.uuid) }
                     }
                     .frame(maxWidth: .infinity)
@@ -261,6 +263,23 @@ private struct GuidedVisitContent: View {
             if photos == nil, !visit.jobUuid.isEmpty {
                 photos = JobPhotosModel(jobUuid: visit.jobUuid, visitUuid: visit.uuid, api: services.fieldService)
             }
+        }
+    }
+
+    /// Check-out puts the hours on the engineer's timesheet (field-service-visits.lua). Say so, and offer to log
+    /// them here when that didn't happen.
+    @ViewBuilder
+    private func timesheetNote(_ visit: Visit) -> some View {
+        if visit.timesheetUuid != nil {
+            Label("Your hours are on your timesheet.", systemImage: "clock.badge.checkmark")
+                .font(.wsFootnote).foregroundStyle(.secondaryText)
+                .accessibilityIdentifier("guided.timesheetLogged")
+        } else if model.canLogTimesheet {
+            Text("Your hours aren't on your timesheet yet.").font(.wsFootnote).foregroundStyle(.secondaryText)
+            Button("Log to timesheet", systemImage: "clock.badge.checkmark") { Task { await model.logTimesheet() } }
+                .buttonStyle(.bordered)
+                .disabled(model.busy)
+                .accessibilityIdentifier("guided.logTimesheet")
         }
     }
 

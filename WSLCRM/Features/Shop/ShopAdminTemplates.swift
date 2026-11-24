@@ -66,7 +66,7 @@ struct ShopTemplatesView: View {
         Section {
             ForEach(rows) { template in
                 ShopTemplateRow(template: template)
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if session.shopPolicy.canDelete {
                             Button("Delete", role: .destructive) { deleting = template }
                         }

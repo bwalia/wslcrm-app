@@ -41,7 +41,9 @@ struct CustomersListView: View {
         }) { model in
             PagedList(model: model, searchPrompt: "Name or email", emptyTitle: "No customers",
                       emptySystemImage: "person.crop.rectangle.stack",
-                      emptyDescription: "People who buy from you. Tap + to add one.") { customer in
+                      emptyDescription: "People who buy from you.",
+                      emptyActionTitle: "Add a customer",
+                      emptyAction: session.permissions.can(.create, .customers) ? { creating = true } : nil) { customer in
                 NavigationLink {
                     CustomerDetailView(customerUuid: customer.uuid) { updated in
                         if let updated { model.replace(updated) } else { model.remove(id: customer.id) }
@@ -146,8 +148,8 @@ struct CustomerDetailView: View {
         }
         .sheet(isPresented: $newInvoice) {
             if let customer = state.value {
-                InvoiceCreateSheet(prefill: PickedCustomer(customer)) { body in
-                    let created = try await services.invoices.create(body)
+                InvoiceCreateSheet(prefill: PickedCustomer(customer)) { body, key in
+                    let created = try await services.invoices.create(body, idempotencyKey: key)
                     openedInvoice = InvoiceRoute(uuid: created.id)
                     return created
                 }
@@ -332,8 +334,8 @@ struct CustomerForm: View {
 
     static let states = [Choice("enabled", "Enabled"), Choice("disabled", "Disabled"), Choice("invited", "Invited"),
                          Choice("declined", "Declined")]
-    static let optInLevels = [Choice("single_opt_in", "Single opt-in"), Choice("confirmed_opt_in", "Confirmed opt-in"),
-                              Choice("unknown", "Unknown")]
+    static let optInLevels = [Choice("single_opt_in", "Said yes once"), Choice("confirmed_opt_in", "Said yes and confirmed by email"),
+                              Choice("unknown", "Not known")]
 
     init(customer: Customer?, save: @escaping (CustomerBody) async throws -> Customer) {
         self.customer = customer
@@ -376,12 +378,12 @@ struct CustomerForm: View {
                     }
                 }
                 Section {
-                    TextField("Email (needed)", text: $body_.email)
+                    TextField("Email (required)", text: $body_.email)
                         .keyboardType(.emailAddress).textContentType(.emailAddress).textInputAutocapitalization(.never)
                         .accessibilityIdentifier("customerForm.email")
                     OptionalTextField("Phone", text: $body_.phone).keyboardType(.phonePad).textContentType(.telephoneNumber)
                 } footer: {
-                    Text("Email addresses must be unique.")
+                    Text("Each customer needs their own email address: two customers can’t share one.")
                 }
                 Section("Primary address") {
                     OptionalTextField("Address line 1", text: $address.address1).textContentType(.streetAddressLine1)
@@ -393,16 +395,20 @@ struct CustomerForm: View {
                 }
                 Section("Preferences") {
                     OptionalTextField("Tags, e.g. vip, wholesale", text: $body_.tags)
-                    Picker("Account status", selection: Binding(get: { body_.state ?? "enabled" }, set: { body_.state = $0 })) {
-                        ForEach(Self.states) { Text($0.label).tag($0.value) }
+                    Toggle("Happy to get marketing emails", isOn: Binding(get: { body_.acceptsMarketing ?? false },
+                                                                         set: { body_.acceptsMarketing = $0 }))
+                    Toggle("Doesn’t pay VAT (tax exempt)", isOn: Binding(get: { body_.taxExempt ?? false }, set: { body_.taxExempt = $0 }))
+                    DisclosureGroup("More options") {
+                        Picker("Account status", selection: Binding(get: { body_.state ?? "enabled" }, set: { body_.state = $0 })) {
+                            ForEach(Self.states) { Text($0.label).tag($0.value) }
+                        }
+                        Picker("How they agreed to marketing", selection: Binding(get: { body_.marketingOptInLevel ?? "single_opt_in" },
+                                                                                  set: { body_.marketingOptInLevel = $0 })) {
+                            ForEach(Self.optInLevels) { Text($0.label).tag($0.value) }
+                        }
+                        Toggle("Email address checked", isOn: Binding(get: { body_.verifiedEmail ?? false },
+                                                                      set: { body_.verifiedEmail = $0 }))
                     }
-                    Picker("Marketing opt-in level", selection: Binding(get: { body_.marketingOptInLevel ?? "single_opt_in" },
-                                                                        set: { body_.marketingOptInLevel = $0 })) {
-                        ForEach(Self.optInLevels) { Text($0.label).tag($0.value) }
-                    }
-                    Toggle("Accepts marketing", isOn: Binding(get: { body_.acceptsMarketing ?? false }, set: { body_.acceptsMarketing = $0 }))
-                    Toggle("Email verified", isOn: Binding(get: { body_.verifiedEmail ?? false }, set: { body_.verifiedEmail = $0 }))
-                    Toggle("Tax exempt", isOn: Binding(get: { body_.taxExempt ?? false }, set: { body_.taxExempt = $0 }))
                 }
                 Section("Notes") {
                     TextField("Internal notes about this customer", text: Binding(get: { body_.notes ?? "" }, set: { body_.notes = $0 }),

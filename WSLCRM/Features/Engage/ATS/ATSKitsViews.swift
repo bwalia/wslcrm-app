@@ -43,7 +43,7 @@ struct ATSKitsView: View {
                     ForEach(list) { kit in
                         NavigationLink { ATSKitEditorView(uuid: kit.uuid) } label: { ATSKitRow(kit: kit) }
                             .accessibilityIdentifier("ats.kit.\(kit.uuid)")
-                            .swipeActions {
+                            .swipeActions(allowsFullSwipe: false) {
                                 if session.permissions.can(.delete, moduleName: ATSModule.kits) {
                                     Button("Delete", role: .destructive) { deleting = kit }
                                 }

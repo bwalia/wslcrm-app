@@ -9,8 +9,23 @@ enum JobSheetPDF {
         "Job-sheet-\(job.jobNumber.isEmpty ? "job" : job.jobNumber).pdf"
     }
 
-    static func file(for detail: JobDetail, company: String?) -> URL? {
-        DocumentPDF.file(named: filename(for: detail.job)) { canvas in draw(detail, company: company, on: canvas) }
+    /// The customer's sign-off from the visit where they signed at "Finish job".
+    struct CustomerSignature {
+        var name: String?
+        var signedAt: Date?
+        var image: UIImage?
+    }
+
+    static func file(for detail: JobDetail, company: String?, customerSignature: CustomerSignature? = nil) -> URL? {
+        DocumentPDF.file(named: filename(for: detail.job)) { canvas in
+            draw(detail, company: company, customerSignature: customerSignature, on: canvas)
+        }
+    }
+
+    /// "Signed by Jo Bloggs · 12 Nov 2026 at 14:05".
+    nonisolated static func signatureCaption(name: String?, signedAt: Date?) -> String {
+        ["Signed by \(name?.trimmedOrNil ?? "the customer")", Formatters.dateTime(signedAt)].compactMap { $0 }
+            .joined(separator: " · ")
     }
 
     /// Visits that recorded refrigerant, for the F-Gas log.
@@ -18,7 +33,8 @@ enum JobSheetPDF {
         detail.visits.filter(\.hasFGasRecord)
     }
 
-    private static func draw(_ detail: JobDetail, company: String?, on canvas: DocumentPDF.Canvas) {
+    private static func draw(_ detail: JobDetail, company: String?, customerSignature: CustomerSignature?,
+                             on canvas: DocumentPDF.Canvas) {
         let job = detail.job
         let small = UIFont.systemFont(ofSize: 10)
         let body = UIFont.systemFont(ofSize: 11)
@@ -169,11 +185,27 @@ enum JobSheetPDF {
             row("Materials value", money(totals.itemsValue))
         }
 
-        canvas.pageBreakIfNeeded(keeping: 80)
+        guard let signed = customerSignature else {
+            canvas.pageBreakIfNeeded(keeping: 80)
+            canvas.y += 40
+            canvas.text("Engineer signature / date", x: 48, font: small, color: .darkGray, width: 230)
+            canvas.text("Customer signature / date", x: 317, font: small, color: .darkGray, width: 230)
+            canvas.y += 30
+            canvas.rule()
+            return
+        }
+        // Signed at "Finish job": draw the signature, who signed and when, instead of a blank line.
+        canvas.pageBreakIfNeeded(keeping: 140)
         canvas.y += 40
         canvas.text("Engineer signature / date", x: 48, font: small, color: .darkGray, width: 230)
-        canvas.text("Customer signature / date", x: 317, font: small, color: .darkGray, width: 230)
-        canvas.y += 30
+        canvas.text("Customer signature", x: 317, font: small, color: .darkGray, width: 230)
+        canvas.y += 14
+        if let image = signed.image, image.size.width > 0, image.size.height > 0 {
+            let scale = min(230 / image.size.width, 60 / image.size.height, 1)
+            image.draw(in: CGRect(x: 317, y: canvas.y, width: image.size.width * scale, height: image.size.height * scale))
+        }
+        canvas.y += 64
+        canvas.y += canvas.text(signatureCaption(name: signed.name, signedAt: signed.signedAt), x: 317, font: small, width: 230) + 4
         canvas.rule()
     }
 }

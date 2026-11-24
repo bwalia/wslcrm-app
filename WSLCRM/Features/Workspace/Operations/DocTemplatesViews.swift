@@ -217,10 +217,10 @@ struct DocTemplatesList: View {
                             DocTemplateRow(template: template)
                         }
                         .contextMenu { actions(for: template) }
-                        .swipeActions(edge: .trailing) {
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button("Delete", role: .destructive) { deleting = template }
                         }
-                        .swipeActions(edge: .leading) {
+                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
                             Button("Copy") { cloning = template }.tint(.indigo)
                             if template.bool("is_default") != true {
                                 Button("Default") { Task { await makeDefault(template) } }.tint(.orange)
@@ -1239,7 +1239,7 @@ struct RenderTemplatesList: View {
                             RenderTemplateRow(template: template)
                         }
                         .disabled(!OperationsAccess.renderTemplates(permissions, .update))
-                        .swipeActions {
+                        .swipeActions(allowsFullSwipe: false) {
                             if OperationsAccess.renderTemplates(permissions, .delete) {
                                 Button("Delete", role: .destructive) { deleting = template }
                             }

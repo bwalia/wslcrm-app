@@ -71,7 +71,7 @@ struct PDDealResearchView: View {
             Label(Self.runStatus(research.object("run")), systemImage: research.string("run.status") == "running" ? "hourglass" : "sparkles")
                 .accessibilityIdentifier("pd.research.status")
             if research.object("property") == nil || research.string("property.lat") == nil {
-                if session.propertyDeals?.can(.create, .properties) ?? false {
+                if PDWriteGates.canAddPropertyToDeal(session.propertyDeals) {
                     Button("Add the property", systemImage: "house.badge.plus") { addingProperty = true }
                         .accessibilityIdentifier("pd.research.addProperty")
                 }
@@ -222,7 +222,7 @@ struct PDDealResearchView: View {
             if let phone = supplier.string("phone") { PhoneLinkRow(name: "Call", phone: phone) }
             if isOurs {
                 Label("Our solicitor on this deal", systemImage: "checkmark.seal.fill").foregroundStyle(Tone.success.textColor)
-            } else if session.propertyDeals?.can(.update, .deals) ?? false, let account = supplier.string("account_uuid") {
+            } else if PDWriteGates.canAppointSolicitor(session.propertyDeals), let account = supplier.string("account_uuid") {
                 Button("Make them our solicitor") { Task { await makeSolicitor(account: account, role: role, name: supplier.string("name")) } }
                     .buttonStyle(.bordered)
                     .disabled(busy != nil)

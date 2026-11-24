@@ -744,6 +744,7 @@ struct PDConnectorsView: View {
     let mailboxes: Bool
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
+    @State private var confirm: PendingConfirmation?
     @State private var state: LoadState<[Record]> = .idle
     @State private var editing: PDConnectorEdit?
     @State private var running: Record?
@@ -793,13 +794,20 @@ struct PDConnectorsView: View {
                         }
                     }
                     .padding(.vertical, 4)
-                    .swipeActions {
-                        if canEdit { Button("Delete", role: .destructive) { Task { await delete(row) } } }
+                    .swipeActions(allowsFullSwipe: false) {
+                        if canEdit {
+                            Button("Delete", role: .destructive) {
+                                confirm = PendingConfirmation(title: "Delete \(row.string("name") ?? (mailboxes ? "this mailbox" : "this connector"))?",
+                                                              message: mailboxes ? "Mail stops being read from it." : "Its data stops coming in.",
+                                                              button: "Delete") { await delete(row) }
+                            }
+                        }
                     }
                 }
             }
         }
         .navigationTitle(mailboxes ? "Mailboxes" : "Data connectors")
+        .workConfirmation($confirm)
         .safeAreaInset(edge: .top, spacing: 0) { PDNoticeBar(notice: notice, error: actionError) }
         .toolbar {
             if canEdit {

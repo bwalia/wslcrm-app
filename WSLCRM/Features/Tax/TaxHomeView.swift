@@ -18,6 +18,7 @@ struct TaxHomeView: View {
         ("tax_categories", "tax.categories", "Categories", "Your own categories for transactions", "tag"),
         ("tax_hmrc", "tax.hmrc", "HMRC settings", "Your connection to HMRC", "link"),
         ("tax_vat", "tax.vat", "VAT", "VAT returns with HMRC", "percent"),
+        ("tax_vat", "tax.vat:namespace", "Business VAT", "Your business’s VAT, from its invoices and accounts", "building.2"),
         ("tax_vat_clients", "tax.vat_clients", "VAT clients", "Your clients’ VAT returns, as their agent", "person.2"),
         ("corporation_tax", "ct.companies", "Corporation Tax", "Year-end tax for your companies", "building.columns.circle"),
         ("tax_agent_modes", "tax.agent_modes", "AI agent modes", "How much the AI does on its own", "dial.medium"),
@@ -53,7 +54,7 @@ struct TaxHomeView: View {
 
                 DashboardSectionHeader("Get it done")
                 VStack(spacing: 10) {
-                    ForEach(visiblePages, id: \.key) { page in
+                    ForEach(visiblePages, id: \.screen) { page in
                         NavigationLink(value: NativeScreenRoute(page.screen)) {
                             HStack(spacing: 14) {
                                 AppIconTile(systemImage: page.image, color: Palette.tile(for: page.key), size: 40)
@@ -67,7 +68,7 @@ struct TaxHomeView: View {
                             .brandCard(padding: 12, radius: 16)
                         }
                         .buttonStyle(.pressableCard)
-                        .accessibilityIdentifier("tax.home.\(page.key)")
+                        .accessibilityIdentifier("tax.home.\(page.screen == "tax.vat:namespace" ? "business_vat" : page.key)")
                     }
                 }
 
@@ -103,8 +104,11 @@ struct TaxHomeView: View {
     /// Pages in the person's menu (the server decides what they may open).
     private var visiblePages: [(key: String, screen: String, title: String, detail: String, image: String)] {
         let keys = session.permissions.menuKeys
-        guard !keys.isEmpty else { return Self.pages }
-        return Self.pages.filter { keys.contains($0.key) }
+        return Self.pages.filter {
+            (keys.isEmpty || keys.contains($0.key))
+                // The business's VAT needs the "vat" permission (`vat.lua` `?scope=namespace`).
+                && ($0.screen != "tax.vat:namespace" || VATContext.workspace.allows(.read, session.permissions))
+        }
     }
 
     private func statLink(_ title: String, _ value: String, _ image: String, _ tone: Tone, screen: String) -> some View {

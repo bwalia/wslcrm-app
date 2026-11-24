@@ -487,6 +487,7 @@ struct PDDealDocumentsView: View {
     @State private var actionError: APIError?
     @State private var preview: URL?
     @State private var opening: String?
+    @State private var confirm: PendingConfirmation?
 
     static let categories = ["title", "lease", "survey", "valuation", "epc", "searches", "id", "proof_of_funds", "aml",
                              "contract", "completion_statement", "photo", "correspondence", "other"]
@@ -508,7 +509,7 @@ struct PDDealDocumentsView: View {
                     .accessibilityIdentifier("pd.documents.photo")
                     if uploading { HStack { ProgressView(); Text("Uploading…") } }
                 } footer: {
-                    Text("Up to 25 MB. Stored privately; identity, AML and proof-of-funds papers need compliance access.")
+                    Text("Up to 10 MB. Stored privately; identity, AML and proof-of-funds papers need compliance access.")
                 }
             }
             switch state {
@@ -532,15 +533,20 @@ struct PDDealDocumentsView: View {
                     }
                     .frame(minHeight: 44)
                     .accessibilityIdentifier("pd.documents.row.\(doc.id)")
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if session.propertyDeals?.can(.delete, .properties) ?? false {
-                            Button("Delete", role: .destructive) { Task { await delete(doc) } }
+                            Button("Delete", role: .destructive) {
+                                confirm = PendingConfirmation(title: "Delete \(doc.string("filename") ?? "this document")?",
+                                                              message: "It's removed from the deal for everyone.",
+                                                              button: "Delete document") { await delete(doc) }
+                            }
                         }
                     }
                 }
             }
         }
         .navigationTitle("Documents")
+        .workConfirmation($confirm)
         .safeAreaInset(edge: .top, spacing: 0) { PDNoticeBar(notice: notice, error: actionError) }
         .task { await load() }
         .refreshable { await load() }
@@ -599,8 +605,9 @@ struct PDDealDocumentsView: View {
     }
 
     private func upload(data: Data, filename: String, mime: String, category: String) async {
-        guard data.count <= 25 * 1024 * 1024 else {
-            actionError = ResourceService.problem(413, "That file is larger than 25 MB.")
+        // The server's upload limit (nginx client_max_body_size) is 10 MB: stop before sending.
+        guard data.count <= 10 * 1024 * 1024 else {
+            actionError = ResourceService.problem(413, "That file is too big to send. The limit is 10 MB.")
             return
         }
         uploading = true

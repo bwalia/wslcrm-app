@@ -41,12 +41,12 @@ struct WebFormsHomeView: View {
                 }
                 .accessibilityIdentifier("forms.row.\(form.uuid)")
                 .contextMenu { menu(form) }
-                .swipeActions(edge: .trailing) {
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     if canDelete {
                         Button(role: .destructive) { deleting = form } label: { Label("Delete", systemImage: "trash") }
                     }
                 }
-                .swipeActions(edge: .leading) {
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
                     Button { copy(form) } label: { Label("Copy link", systemImage: "link") }.tint(.blue)
                 }
                 .task { await loadMoreIfNeeded(form) }
@@ -168,7 +168,8 @@ struct WebFormsHomeView: View {
                 Label(search.isEmpty && status.isEmpty ? "No forms yet" : "No forms match", systemImage: "list.clipboard")
             } description: {
                 if search.isEmpty && status.isEmpty {
-                    Text("Contact forms, quote requests, sign-ups, applications — share the link and responses arrive here.")
+                    Text("Contact forms, quote requests, sign-ups, applications — share the link and responses arrive here."
+                         + (canCreate ? "" : " Your role can’t create forms; ask the workspace owner if you need one."))
                 }
             } actions: {
                 if canCreate && search.isEmpty && status.isEmpty {

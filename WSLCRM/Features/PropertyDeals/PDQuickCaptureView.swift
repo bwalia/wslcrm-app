@@ -27,8 +27,8 @@ struct PDQuickCaptureView: View {
     @State private var error: String?
 
     private var access: PDAccess? { session.propertyDeals }
-    private var canCaptureLead: Bool { access?.can(.create, .deals) ?? false }
-    private var canCaptureProperty: Bool { access?.can(.create, .properties) ?? false }
+    private var canCaptureLead: Bool { PDWriteGates.canCaptureLead(access, session.permissions) }
+    private var canCaptureProperty: Bool { PDWriteGates.canCaptureProperty(access) }
 
     var body: some View {
         NavigationStack {

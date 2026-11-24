@@ -78,7 +78,7 @@ struct EpicsView: View {
                             EpicRow(epic: epic)
                         }
                         .accessibilityIdentifier("epic.row.\(epic.name)")
-                        .swipeActions {
+                        .swipeActions(allowsFullSwipe: false) {
                             if access.canAdmin {
                                 Button("Delete", systemImage: "trash", role: .destructive) { askDelete(epic) }
                                 Button("Edit", systemImage: "pencil") { form = .edit(epic) }.tint(.blue)
@@ -209,7 +209,7 @@ struct EpicDetailView: View {
                                         .font(.wsCaption).foregroundStyle(.secondaryText)
                                 }
                             }
-                            .swipeActions {
+                            .swipeActions(allowsFullSwipe: false) {
                                 if access.canEdit {
                                     Button("Take out", systemImage: "minus.circle", role: .destructive) {
                                         Task { await detach(task) }
@@ -428,7 +428,7 @@ struct EpicFormSheet: View {
                     Text("Dates")
                 } footer: {
                     if existing?.startDate != nil || existing?.dueDate != nil {
-                        Text("You can move a date, but the server can't remove one once it's set.")
+                        Text("You can move a date, but once it's set it can't be cleared.")
                     }
                 }
                 if let message = error ?? (name.isEmpty ? nil : problem) {

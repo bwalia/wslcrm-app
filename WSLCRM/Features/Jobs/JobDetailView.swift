@@ -205,8 +205,8 @@ private struct JobDetailContent: View {
             .toolbar {
                 if let detail = model.detail {
                     let policy = model.policy
-                    let canBook = detail.job.status.isOpen
-                        && (session.permissions.can(.create, .fsVisits) || policy.isDispatcherForJobs)
+                    // POST /jobs/:uuid/visits checks fs_visits.create only.
+                    let canBook = detail.job.status.isOpen && session.permissions.can(.create, .fsVisits)
                     let editable = detail.job.status != .completed && detail.job.status != .cancelled
                     ToolbarItem(placement: .topBarTrailing) {
                         Menu {
@@ -225,7 +225,7 @@ private struct JobDetailContent: View {
                                 Button("Invoice job", systemImage: "doc.text") { invoicing = true }
                             }
                             Button("Job sheet (PDF)", systemImage: "printer") {
-                                jobSheet = JobSheetPDF.file(for: detail, company: session.workspace?.name)
+                                Task { jobSheet = await jobSheetFile(detail) }
                             }
                             if policy.isDispatcherForJobs {
                                 Button("Edit job details", systemImage: "pencil") { editingJob = true }
@@ -327,9 +327,16 @@ private struct JobDetailContent: View {
                                 NavigationLink(value: GuidedVisitRoute(uuid: visit.uuid)) {
                                     VisitSummaryRow(visit: visit, showsJob: false)
                                 }
-                            } else {
+                            } else if policy.isDispatcherForVisits {
                                 NavigationLink(value: VisitRoute(uuid: visit.uuid)) {
                                     VisitSummaryRow(visit: visit, showsJob: false)
+                                }
+                            } else {
+                                // GET /visits/:uuid is for the visit's own engineer or fs_visits.update.
+                                VStack(alignment: .leading, spacing: 2) {
+                                    VisitSummaryRow(visit: visit, showsJob: false)
+                                    Text("Only \(visit.engineerName ?? "its engineer") or a manager can open this visit.")
+                                        .font(.wsCaption).foregroundStyle(.secondaryText)
                                 }
                             }
                             if hasVisitActions(visit, detail: detail) {
@@ -338,7 +345,7 @@ private struct JobDetailContent: View {
                                 }
                             }
                         }
-                        .swipeActions { visitActions(visit, detail: detail) }
+                        .swipeActions(allowsFullSwipe: false) { visitActions(visit, detail: detail) }
                         .contextMenu { visitActions(visit, detail: detail) }
                     }
                 } header: {
@@ -470,15 +477,33 @@ private struct JobDetailContent: View {
 
     // MARK: Managing the job
 
+    /// The job sheet, carrying the customer's signature from the latest visit they signed at (best effort: without
+    /// read access to that visit's signature, the sheet keeps the blank line to sign by hand).
+    private func jobSheetFile(_ detail: JobDetail) async -> URL? {
+        var signed: JobSheetPDF.CustomerSignature?
+        let visits = detail.visits.filter(\.hasCustomerSignature)
+            .sorted { ($0.checkedOutAt ?? .distantPast) > ($1.checkedOutAt ?? .distantPast) }
+        for visit in visits {
+            guard let status = try? await services.fieldService.visitSignature(visit.uuid),
+                  let signature = status.signature else { continue }
+            let image = (try? await services.fieldService.visitSignatureImage(visit.uuid)).flatMap(UIImage.init(data:))
+            signed = .init(name: signature.signerName ?? visit.customerSignoffName, signedAt: signature.signedAt, image: image)
+            break
+        }
+        return JobSheetPDF.file(for: detail, company: session.workspace?.name, customerSignature: signed)
+    }
+
+    /// Reschedule / reassign (PUT /visits/:uuid beyond the engineer's report fields) and cancel need
+    /// fs_visits.update; delete needs fs_visits.delete (field-service-visits.lua).
     private func canManageVisits(_ detail: JobDetail) -> Bool {
-        model.policy.isDispatcherForJobs || session.permissions.can(.create, .fsVisits)
+        session.permissions.can(.update, .fsVisits) || session.permissions.can(.delete, .fsVisits)
     }
 
     @ViewBuilder
     private func visitActions(_ visit: Visit, detail: JobDetail) -> some View {
         let preStart = visit.status == .scheduled || visit.status == .enRoute
         let editable = detail.job.status != .completed && detail.job.status != .cancelled
-        if canManageVisits(detail) && preStart && editable {
+        if session.permissions.can(.update, .fsVisits) && preStart && editable {
             Button { visitForm = VisitFormTarget(visit: visit) } label: { Label("Reschedule", systemImage: "calendar") }
                 .tint(.blue)
             Button {
@@ -487,7 +512,7 @@ private struct JobDetailContent: View {
             } label: { Label("Cancel visit", systemImage: "xmark.circle") }
                 .tint(.orange)
         }
-        if canManageVisits(detail) && !visit.invoiced && visit.timesheetUuid == nil && visit.status != .onSite {
+        if session.permissions.can(.delete, .fsVisits) && !visit.invoiced && visit.timesheetUuid == nil && visit.status != .onSite {
             Button(role: .destructive) { deletingVisit = visit } label: { Label("Delete", systemImage: "trash") }
         }
     }
@@ -495,8 +520,8 @@ private struct JobDetailContent: View {
     private func hasVisitActions(_ visit: Visit, detail: JobDetail) -> Bool {
         let preStart = visit.status == .scheduled || visit.status == .enRoute
         let editable = detail.job.status != .completed && detail.job.status != .cancelled
-        return canManageVisits(detail)
-            && ((preStart && editable) || (!visit.invoiced && visit.timesheetUuid == nil && visit.status != .onSite))
+        return (session.permissions.can(.update, .fsVisits) && preStart && editable)
+            || (session.permissions.can(.delete, .fsVisits) && !visit.invoiced && visit.timesheetUuid == nil && visit.status != .onSite)
     }
 
     private func hasPhaseActions(_ detail: JobDetail) -> Bool {
@@ -678,7 +703,7 @@ private struct JobDetailContent: View {
                         }
                     }
                 }
-                .swipeActions { phaseActions(display.phase, detail: detail) }
+                .swipeActions(allowsFullSwipe: false) { phaseActions(display.phase, detail: detail) }
                 .contextMenu { phaseActions(display.phase, detail: detail) }
             }
             .onMove { source, destination in
@@ -746,13 +771,13 @@ private struct JobDetailContent: View {
                 }
                 .padding(.vertical, 4)
                 .contextMenu { itemActions(item, detail: detail, policy: policy) }
-                .swipeActions(edge: .leading) {
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
                     if canEditItem(item, detail: detail) {
                         Button("Edit") { editingItem = item }.tint(.blue)
                         Button("Remove", role: .destructive) { deletingItem = item }
                     }
                 }
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if policy.canApproveItems(in: detail), !item.invoiced {
                         if item.approvalStatus != .approved {
                             Button("Approve") { Task { await model.setApproval(item, approve: true) } }

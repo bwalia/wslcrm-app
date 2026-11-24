@@ -5,6 +5,7 @@ import SwiftUI
 /// into every other marketing screen.
 struct MktOverviewView: View {
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @State private var stats: Record?
     @State private var pixels: [Record]?
     @State private var unattributed: Record?
@@ -61,18 +62,22 @@ struct MktOverviewView: View {
         }
     }
 
+    /// A screen the role can't read is left out (it would only answer "Permission denied").
+    @ViewBuilder
     private func navRow(_ screen: String, _ title: String, _ detail: String, _ image: String) -> some View {
-        NavigationLink(value: NativeScreenRoute(screen)) {
-            Label {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.wsHeadline)
-                    Text(detail).font(.wsFootnote).foregroundStyle(.secondaryText)
+        if Marketing.canOpen(screen, session.permissions) {
+            NavigationLink(value: NativeScreenRoute(screen)) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title).font(.wsHeadline)
+                        Text(detail).font(.wsFootnote).foregroundStyle(.secondaryText)
+                    }
+                } icon: {
+                    Image(systemName: image)
                 }
-            } icon: {
-                Image(systemName: image)
             }
+            .accessibilityIdentifier("mkt.overview.nav.\(screen)")
         }
-        .accessibilityIdentifier("mkt.overview.nav.\(screen)")
     }
 
     // MARK: Sections

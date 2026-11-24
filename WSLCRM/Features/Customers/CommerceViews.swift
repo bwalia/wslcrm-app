@@ -79,6 +79,7 @@ struct OrdersListView: View {
 struct OrderDetailView: View {
     let summary: Order
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @State private var order: Order?
     @State private var detailError: APIError?
     @State private var history: [OrderStatusHistoryEntry] = []
@@ -106,7 +107,8 @@ struct OrderDetailView: View {
                 .padding(.vertical, 4)
             }
 
-            if !transitions.isEmpty {
+            // PUT /orders/:id/update-status is orders.update.
+            if !transitions.isEmpty, session.permissions.can(.update, .orders) {
                 Section("Update status") {
                     ForEach(transitions, id: \.self) { status in
                         Button {
@@ -134,7 +136,7 @@ struct OrderDetailView: View {
             Section("Items") {
                 if current.items.isEmpty {
                     if detailError != nil {
-                        Label("Item details couldn't be loaded from the server.", systemImage: "exclamationmark.triangle")
+                        Label("Item details couldn't be loaded. Pull down to try again.", systemImage: "exclamationmark.triangle")
                             .foregroundStyle(.secondaryText)
                     } else if order == nil {
                         ProgressView()

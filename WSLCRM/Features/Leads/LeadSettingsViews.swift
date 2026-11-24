@@ -155,6 +155,7 @@ struct LeadSettingsView: View {
     @State private var attemptPlan = ""
     @State private var lostReasons = ""
     @State private var newRule = NewRule()
+    @State private var deletingRule: LeadAssignmentRule?
 
     struct NewRule: Equatable {
         var name = ""
@@ -187,6 +188,13 @@ struct LeadSettingsView: View {
         }
         .navigationTitle("Lead settings")
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Delete the rule “\(deletingRule?.name ?? "")”?",
+                            isPresented: .init(get: { deletingRule != nil }, set: { if !$0 { deletingRule = nil } }),
+                            titleVisibility: .visible, presenting: deletingRule) { rule in
+            Button("Delete rule", role: .destructive) { Task { await deleteRule(rule) } }
+        } message: { _ in
+            Text("New leads it matched will go to whoever the other rules or the round robin pick.")
+        }
         .task { await load() }
         .refreshable { await load() }
         .toolbar {
@@ -371,9 +379,9 @@ struct LeadSettingsView: View {
                     Text(rule.name).font(.wsHeadline)
                     Text(ruleSummary(rule)).font(.wsCaption).foregroundStyle(.secondaryText)
                 }
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if canEdit {
-                        Button("Delete", role: .destructive) { Task { await deleteRule(rule) } }
+                        Button("Delete", role: .destructive) { deletingRule = rule }
                     }
                 }
             }

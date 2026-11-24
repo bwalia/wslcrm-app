@@ -389,7 +389,8 @@ struct CMSEntryEditorView: View {
             onSaved(message)
             notice = .done(message)
             // On publish, offer to update the website (never automatic), as the web does.
-            if kind == .post, effective == .published, !webhooks.isEmpty {
+            // Sending a website update is cms.update (routes/cms-webhooks.lua trigger).
+            if kind == .post, effective == .published, !webhooks.isEmpty, session.permissions.can(.update, moduleName: CMS.module) {
                 websiteUpdate = CMSPublished(uuid: result.string("uuid"), slug: result.string("slug"))
             } else {
                 dismiss()

@@ -14,6 +14,21 @@ enum Marketing {
         screen == WorkspaceScreen.email && !permissions.can(.read, moduleName: "namespace") ? Screen.settings : screen
     }
 
+    /// Whether the person may open a screen: the read permission its first request needs (the plugin's api/*.lua).
+    static func canOpen(_ screen: String, _ permissions: PermissionSet) -> Bool {
+        let module: String? = switch screen {
+        case Screen.studio, Screen.templates: RBAC.templates
+        case Screen.campaigns, Screen.campaign: RBAC.campaigns
+        case Screen.lists, Screen.list: RBAC.lists
+        case Screen.unsubscribed: RBAC.consent
+        case Screen.conversations: RBAC.conversations
+        case Screen.pixels: RBAC.analytics
+        case Screen.settings: RBAC.settings
+        default: nil
+        }
+        return module.map { permissions.can(.read, moduleName: $0) } ?? true
+    }
+
     /// The plugin's RBAC modules (`project.lua`), checked as `module.action` by the server.
     enum RBAC {
         static let campaigns = "opsapi_marketing_campaigns"

@@ -121,14 +121,14 @@ struct AIChainView: View {
                             Text(scope.label).font(.wsHeadline)
                             Text(scope.effective.isEmpty ? "No model set" : scope.effective.joined(separator: " → "))
                                 .font(.wsSubheadline).foregroundStyle(.secondaryText)
-                            Text(scope.saved ? "Your order" : "The server's own order")
+                            Text(scope.saved ? "Your order" : "The standard order")
                                 .font(.wsCaption).foregroundStyle(.secondaryText)
                         }
                     }
                     .accessibilityIdentifier("aiChain.scope.\(scope.key)")
                 }
             } footer: {
-                Text("If a model doesn't answer, the next one is tried. Keys stay on the server; only the order "
+                Text("If a model doesn't answer, the next one is tried. Keys stay safely stored; only the order "
                      + "is changed here. This applies to every workspace.")
             }
         }
@@ -203,7 +203,7 @@ private struct AIChainEditor: View {
                 Button("Test this order") { Task { await test() } }
                     .disabled(working || hops.isEmpty)
                 if scope.saved {
-                    Button("Go back to the server's own order", role: .destructive) { confirmingReset = true }
+                    Button("Go back to the standard order", role: .destructive) { confirmingReset = true }
                         .disabled(working)
                 }
             }
@@ -218,11 +218,11 @@ private struct AIChainEditor: View {
                     .accessibilityIdentifier("aiChain.save")
             }
         }
-        .confirmationDialog("Go back to the server's own order?", isPresented: $confirmingReset,
+        .confirmationDialog("Go back to the standard order?", isPresented: $confirmingReset,
                             titleVisibility: .visible) {
             Button("Go back", role: .destructive) { Task { await reset() } }
         } message: {
-            Text("Your order for \(scope.label) is forgotten and the order set on the server is used again.")
+            Text("Your order for \(scope.label) is forgotten and the standard order is used again.")
         }
         .onAppear {
             guard !prepared else { return }
@@ -254,7 +254,7 @@ private struct AIChainEditor: View {
         working = true
         defer { working = false }
         var updated: JSONValue = .null
-        if await perform($feedback, done: "Back to the server's own order.", {
+        if await perform($feedback, done: "Back to the standard order.", {
             updated = try await api.send(.delete, "\(AIChainOverview.path)/config/\(scope.key)", namespace: false)
         }) {
             let fresh = AIChainOverview(json: updated)

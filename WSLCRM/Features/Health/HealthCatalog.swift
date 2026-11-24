@@ -3,7 +3,7 @@ import Foundation
 /// Hospitals, care homes and the people in their care (OpsAPI `routes/hospitals.lua`, `patients.lua`
 /// and the per-patient / per-hospital records gated by `routes/hospital-scope.lua`).
 ///
-/// Every write is checked by the server against one RBAC module, `hospital_patients`, with the
+/// Every write is checked by the server against the area's modules (any of them, see `Area`), with the
 /// action taken from the HTTP verb (POST = create, PUT = update, DELETE = delete): so recording an
 /// alert as seen (a POST) needs `create`, as it does on the server.
 ///
@@ -13,6 +13,56 @@ import Foundation
 enum HealthCatalog {
     static let module = "hospital_patients"
     static let permissions = ResourcePermissions(module: module)
+
+    // MARK: Who may write (helper/health-care.lua)
+
+    /// The server takes any of an area's modules: the menu's newer `hospitals` / `patients` / `care_home`,
+    /// or the older `hospital_patients`. Hospitals and what's under them are one area; patients, their care
+    /// records and the care home lists are the other.
+    enum Area {
+        case hospital, patient
+
+        var modules: [String] {
+            switch self {
+            case .hospital: ["hospitals", HealthCatalog.module]
+            case .patient: ["patients", "care_home", HealthCatalog.module]
+            }
+        }
+
+        /// From where the records live (`/api/v2/hospitals/...` or anything else).
+        static func of(_ descriptor: ResourceDescriptor) -> Area {
+            descriptor.api.list.hasPrefix("/api/v2/hospitals") ? .hospital : .patient
+        }
+    }
+
+    static func can(_ action: Action, _ area: Area, _ permissions: PermissionSet) -> Bool {
+        area.modules.contains { permissions.can(action, moduleName: $0) }
+    }
+
+    /// The descriptor with each write (and each button) checked against whichever of its area's modules
+    /// this person holds, so the kit's screens offer exactly what the server will accept.
+    static func forPerson(_ descriptor: ResourceDescriptor, _ permissions: PermissionSet) -> ResourceDescriptor {
+        let area = Area.of(descriptor)
+        func granting(_ action: Action) -> String {
+            area.modules.first { permissions.can(action, moduleName: $0) } ?? module
+        }
+        var copy = descriptor
+        copy.permissions = ResourcePermissions(module: granting(.read),
+                                               writes: [.create: .init(granting(.create), .create),
+                                                        .update: .init(granting(.update), .update),
+                                                        .delete: .init(granting(.delete), .delete)])
+        copy.actions = descriptor.actions.map { action in
+            var action = action
+            if action.module == nil || action.module == module { action.module = granting(action.action) }
+            return action
+        }
+        copy.listActions = descriptor.listActions.map { action in
+            var action = action
+            if action.module == nil || action.module == module { action.module = granting(action.action) }
+            return action
+        }
+        return copy
+    }
 
     // MARK: Words and colours
 

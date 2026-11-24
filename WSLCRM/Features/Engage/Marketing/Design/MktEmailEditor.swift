@@ -245,7 +245,7 @@ struct MktEmailEditor: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("mkt.editor.block.\(index)")
                 .accessibilityHint("Opens this \(block.kindLabel.lowercased()) to change it")
-                .swipeActions(edge: .leading) {
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
                     Button { duplicate(index) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
                         .tint(.indigo)
                 }

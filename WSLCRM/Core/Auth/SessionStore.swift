@@ -14,6 +14,10 @@ final class SessionStore {
         /// Signed in, but the user belongs to several workspaces and none is selected.
         case choosingWorkspace
         case signedIn
+        /// A stored session exists but the workspace couldn't be reached at launch (offline with
+        /// nothing saved, a server error, the rate limiter, a secure-connection problem). The
+        /// session is kept: the person can try again or sign out. Only a rejected sign-in signs out.
+        case unreachable
     }
 
     private(set) var phase: Phase = .restoring
@@ -35,6 +39,8 @@ final class SessionStore {
     private(set) var workspaceGeneration = 0
     /// Explains why the user was returned to the sign-in screen.
     var signedOutReason: String?
+    /// Why the workspace couldn't be reached (`phase == .unreachable`).
+    private(set) var unreachableError: APIError?
 
     /// Changes when the app is repointed at another environment from the sign-in screen.
     private(set) var environmentName: String
@@ -66,7 +72,12 @@ final class SessionStore {
         eventsTask = Task { [weak self, client] in
             for await event in client.events {
                 guard let self else { return }
-                if event == .sessionExpired { self.handleSessionExpired() }
+                switch event {
+                case .sessionExpired: self.handleSessionExpired()
+                // Refused: the role may have changed on the web. Check again soon, at most every 15 s.
+                case .forbidden: self.refreshPermissionsIfStale(olderThan: 15)
+                case .tokensRefreshed: break
+                }
             }
         }
     }
@@ -109,6 +120,13 @@ final class SessionStore {
         }
     }
 
+    /// "Try again" on the can't-reach-your-workspace screen.
+    func retryRestore() async {
+        guard phase == .unreachable else { return }
+        phase = .restoring
+        await loadSessionContext()
+    }
+
     /// Loads user + memberships (network, else last cached copy), then the workspace and permissions.
     private func loadSessionContext() async {
         do {
@@ -120,20 +138,25 @@ final class SessionStore {
                let me = try? JSONDecoder.opsAPI().decode(MeResponse.self, from: entry.data) {
                 apply(user: me.user, workspaces: me.namespaces, current: me.currentNamespace)
             } else {
-                // Tokens exist but nothing cached: we cannot show anything useful offline.
-                permissionsError = error
-                phase = .signedOut
-                signedOutReason = "You're offline. Connect to sign in."
+                // Tokens exist but nothing is saved to show offline: keep the session, offer Try again.
+                becomeUnreachable(error)
                 return
             }
         } catch {
-            // `unauthorized` has already cleared tokens via the session-expired event.
-            if case .unauthorized = error.asAPIError { return }
-            permissionsError = error.asAPIError
-            phase = .signedOut
+            let apiError = error.asAPIError
+            // A rejected sign-in has already cleared the tokens via the session-expired event.
+            if case .unauthorized = apiError, !(await client.hasTokens) { return }
+            becomeUnreachable(apiError)
             return
         }
+        unreachableError = nil
         await chooseInitialWorkspace()
+    }
+
+    private func becomeUnreachable(_ error: APIError) {
+        permissionsError = error
+        unreachableError = error
+        phase = .unreachable
     }
 
     // MARK: - Sign in
@@ -323,15 +346,10 @@ final class SessionStore {
 
     func reloadPermissions() async {
         guard let workspace else { return }
+        permissionsCheckedAt = now()
         do {
             let (menu, data) = try await auth.menu()
-            await cache.store(data, key: "menu", namespaceId: workspace.uuid)
-            permissions = PermissionSet(menu: menu)
-            self.menu = AppMenu(menu)
-            if menu.namespace?.isOwner == true, let index = workspaces.firstIndex(where: { $0.uuid == workspace.uuid }) {
-                workspaces[index].isOwner = true
-            }
-            permissionsError = nil
+            await apply(menu: menu, data: data, for: workspace)
         } catch {
             let apiError = error.asAPIError
             if let entry = await cache.load(key: "menu", namespaceId: workspace.uuid),
@@ -347,6 +365,37 @@ final class SessionStore {
         await reloadPropertyDealsAccess()
         await reloadPropertyPAAccess()
     }
+
+    private func apply(menu: MenuResponse, data: Data, for workspace: Workspace) async {
+        await cache.store(data, key: "menu", namespaceId: workspace.uuid)
+        permissions = PermissionSet(menu: menu)
+        self.menu = AppMenu(menu)
+        if menu.namespace?.isOwner == true, let index = workspaces.firstIndex(where: { $0.uuid == workspace.uuid }) {
+            workspaces[index].isOwner = true
+        }
+        permissionsError = nil
+    }
+
+    /// When permissions were last asked for (loaded or tried), so quiet refreshes stay rare.
+    @ObservationIgnored private var permissionsCheckedAt: Date?
+    @ObservationIgnored private var quietPermissionsRefresh: Task<Void, Never>?
+    @ObservationIgnored var now: () -> Date = { Date() }
+
+    /// Back in the app, or a request was refused: a role changed on the web shows without pulling to
+    /// refresh. Quiet: at most once per `interval`, and a failure leaves what's on screen as it is.
+    func refreshPermissionsIfStale(olderThan interval: TimeInterval = 60) {
+        guard phase == .signedIn, let workspace, quietPermissionsRefresh == nil else { return }
+        if let checked = permissionsCheckedAt, now().timeIntervalSince(checked) < interval { return }
+        permissionsCheckedAt = now()
+        quietPermissionsRefresh = Task {
+            defer { quietPermissionsRefresh = nil }
+            guard let (menu, data) = try? await auth.menu(), self.workspace?.uuid == workspace.uuid else { return }
+            await apply(menu: menu, data: data, for: workspace)
+        }
+    }
+
+    /// The quiet refresh in flight, for tests.
+    var pendingPermissionsRefresh: Task<Void, Never>? { quietPermissionsRefresh }
 
     private func reloadPropertyPAAccess() async {
         propertyPA = try? await PropertyPAAPI(client: client, cache: cache).me()
@@ -405,6 +454,7 @@ final class SessionStore {
         landingDue = false
         propertyDeals = nil
         propertyPA = nil
+        unreachableError = nil
         phase = .signedOut
     }
 }

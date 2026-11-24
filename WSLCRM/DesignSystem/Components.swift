@@ -460,9 +460,14 @@ struct SyncStatusBanner: View {
     let isOnline: Bool
     let pendingCount: Int
     let failedCount: Int
+    /// Read here (not passed in) so every screen that shows the banner also says when unsent changes
+    /// can't be saved on the phone.
+    @Environment(SyncCenter.self) private var sync: SyncCenter?
+
+    private var saveProblem: String? { sync?.saveProblem }
 
     var body: some View {
-        if !isOnline || pendingCount > 0 || failedCount > 0 {
+        if !isOnline || pendingCount > 0 || failedCount > 0 || saveProblem != nil {
             HStack(spacing: 10) {
                 Image(systemName: icon)
                     .accessibilityHidden(true)
@@ -473,17 +478,19 @@ struct SyncStatusBanner: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .foregroundStyle(.white)
-            .background(failedCount > 0 ? Tone.danger.color : (isOnline ? Tone.progress.color : Color.gray))
+            .background(failedCount > 0 || saveProblem != nil ? Tone.danger.color : (isOnline ? Tone.progress.color : Color.gray))
             .accessibilityElement(children: .combine)
         }
     }
 
     private var icon: String {
+        if saveProblem != nil { return "exclamationmark.triangle.fill" }
         if failedCount > 0 { return "exclamationmark.icloud.fill" }
         return isOnline ? "arrow.triangle.2.circlepath.icloud" : "wifi.slash"
     }
 
     private var message: String {
+        if let saveProblem { return saveProblem }
         var parts: [String] = []
         if !isOnline { parts.append("Offline") }
         if pendingCount > 0 { parts.append("\(pendingCount) change\(pendingCount == 1 ? "" : "s") waiting to sync") }

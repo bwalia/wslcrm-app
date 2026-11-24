@@ -99,7 +99,7 @@ struct HealthPatientView: View {
                 ForEach(HealthCatalog.patientDetail) { section in
                     FieldSection(section: section, record: record)
                 }
-                if session.permissions.allows(.delete, HealthCatalog.module) {
+                if HealthCatalog.can(.delete, .patient, session.permissions) {
                     Section {
                         if let deleteError { InlineErrorRow(error: deleteError) }
                         DeleteButton(title: "Delete \(PatientText.name(record))",
@@ -115,7 +115,7 @@ struct HealthPatientView: View {
         .navigationTitle(record.map(PatientText.name) ?? "Patient")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if session.permissions.allows(.update, HealthCatalog.module) {
+            if HealthCatalog.can(.update, .patient, session.permissions) {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Edit") { editing = true }
                         .disabled(record == nil)
@@ -203,7 +203,7 @@ struct HealthPatientView: View {
             let alerts = HealthCatalog.alerts(patient: uuid)
             Section {
                 ForEach(openAlerts) { alert in
-                    NavigationLink(value: HealthScope.record(alerts, alert)) {
+                    NavigationLink(value: HealthScope.record(alerts, alert, for: session.permissions)) {
                         HealthAlertRow(alert: alert, patientName: nil)
                     }
                 }
@@ -217,7 +217,7 @@ struct HealthPatientView: View {
 
     @ViewBuilder
     private var quickActions: some View {
-        if session.permissions.allows(.create, HealthCatalog.module) {
+        if HealthCatalog.can(.create, .patient, session.permissions) {
             Section {
                 Button { writingNote = true } label: { Label("Write a daily log", systemImage: "square.and.pencil") }
                     .frame(minHeight: 44)
@@ -233,24 +233,24 @@ struct HealthPatientView: View {
         let records = HealthScope.patientRecords(uuid)
         return Section("Care records") {
             ForEach(records, id: \.id) { descriptor in
-                NavigationLink(value: HealthScope.list(descriptor)) {
+                NavigationLink(value: HealthScope.list(descriptor, for: session.permissions)) {
                     Label(descriptor.title, systemImage: descriptor.systemImage)
                 }
                 .frame(minHeight: 44)
                 .accessibilityIdentifier("health.patient.records.\(descriptor.id.split(separator: "@").first ?? "")")
             }
-            NavigationLink(value: HealthScope.list(HealthCatalog.medications(patient: uuid), query: ["status": "active"],
+            NavigationLink(value: HealthScope.list(HealthCatalog.medications(patient: uuid), for: session.permissions, query: ["status": "active"],
                                                    title: "Medicines being taken")) {
                 Label(activeMedicines.map { "Medicines being taken (\($0))" } ?? "Medicines being taken",
                       systemImage: "pills.circle")
             }
             .frame(minHeight: 44)
-            NavigationLink(value: HealthScope.list(HealthCatalog.careLogs(patient: uuid), query: ["log_type": "incident"],
+            NavigationLink(value: HealthScope.list(HealthCatalog.careLogs(patient: uuid), for: session.permissions, query: ["log_type": "incident"],
                                                    title: "Incidents")) {
                 Label("Incidents", systemImage: "exclamationmark.triangle")
             }
             .frame(minHeight: 44)
-            NavigationLink(value: HealthScope.list(HealthCatalog.dailyLogs(patient: uuid),
+            NavigationLink(value: HealthScope.list(HealthCatalog.dailyLogs(patient: uuid), for: session.permissions,
                                                    query: ["log_date": CalendarDay(date: Date()).isoString],
                                                    title: "Today’s daily logs")) {
                 Label("Today’s daily logs", systemImage: "sun.max")

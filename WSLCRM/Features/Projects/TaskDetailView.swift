@@ -60,6 +60,11 @@ struct TaskDetailView: View {
         }
     }
 
+    private func canStartAI(_ task: KanbanTask) -> Bool {
+        AIRunControl.canStart(assignees: task.assignees?.map(\.userUuid) ?? [], me: session.user?.uuid,
+                              projectRole: project?.role, permissions: session.permissions)
+    }
+
     private var me: WorkActor {
         WorkActor(uuid: session.user?.uuid ?? "", name: session.user?.displayName ?? "Me", kind: .person)
     }
@@ -121,7 +126,7 @@ struct TaskDetailView: View {
                     .disabled(columns.isEmpty)
                 Button("Edit details", systemImage: "pencil") { sheet = .details }
             }
-            if aiEnabled, session.permissions.can(.create, moduleName: "ai_runs") {
+            if aiEnabled, canStartAI(task) {
                 Button("Start with AI", systemImage: "sparkles") { sheet = .startAI }
             }
             if access.canEdit {
@@ -190,7 +195,7 @@ struct TaskDetailView: View {
 
             if aiEnabled, session.permissions.can(.read, moduleName: "ai_runs") {
                 TaskAIPanel(task: task, work: aiWork, runs: aiRuns,
-                            canStart: session.permissions.can(.create, moduleName: "ai_runs"),
+                            canStart: canStartAI(task),
                             canReview: session.permissions.can(.manage, moduleName: "ai_runs")
                                 || session.permissions.can(.manage, moduleName: "ai_runs_approvals"),
                             start: { sheet = .startAI },
@@ -259,7 +264,8 @@ struct TaskDetailView: View {
             }
         }
 
-        if contract != nil {
+        // Claiming, taking over and asking to stop write the card, so they need the project's editor role.
+        if contract != nil, access.canEdit {
             switch claim {
             case .live(let held) where held.kind == .agent:
                 Button("Take it over") {
@@ -436,7 +442,7 @@ struct TaskDetailView: View {
                                 .strikethrough(subtask.status == .completed)
                         }
                     }
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if access.canEdit {
                             Button("Delete", systemImage: "trash", role: .destructive) {
                                 confirm = PendingConfirmation(title: "Delete the subtask “\(subtask.title)”?", button: "Delete subtask") {
@@ -493,10 +499,12 @@ struct TaskDetailView: View {
                     .disabled(!access.canEdit)
                     .accessibilityIdentifier("task.checklist.\(item.uuid)")
                     .accessibilityValue(item.isCompleted ? "Done" : "Not done")
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if access.canEdit {
                             Button("Delete", systemImage: "trash", role: .destructive) {
-                                Task { await perform("Item deleted.") { try await services.kanban.deleteChecklistItem(item.uuid) } }
+                                confirm = PendingConfirmation(title: "Delete this item?", button: "Delete item") {
+                                    await perform("Item deleted.") { try await services.kanban.deleteChecklistItem(item.uuid) }
+                                }
                             }
                         }
                     }
@@ -570,7 +578,7 @@ struct TaskDetailView: View {
                     }
                 }
                 .accessibilityIdentifier("task.attachment.\(file.uuid)")
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if canDelete {
                         Button("Delete", systemImage: "trash", role: .destructive) {
                             confirm = PendingConfirmation(title: "Remove “\(file.fileName)”?", button: "Remove") {
@@ -631,7 +639,8 @@ struct TaskDetailView: View {
                 }
                 .buttonStyle(LargeButtonStyle(tone: .danger))
                 .accessibilityIdentifier("task.timer.stop")
-            } else if access.canEdit {
+            } else if access.canRead {
+                // kanban-time-tracking.lua: any project member (viewers too) may time their own work.
                 Button("Start a timer", systemImage: "play.circle") {
                     Task {
                         await perform("Timer started.") { try await services.kanban.startTimer(taskUuid: task.uuid, description: nil) }
@@ -673,10 +682,14 @@ struct TaskDetailView: View {
                     Text(Minutes.format(entry.durationMinutes)).font(.wsSubheadline.monospacedDigit())
                 }
                 .accessibilityIdentifier("task.timeEntry.\(entry.uuid)")
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if entry.userUuid == session.user?.uuid {
                         Button("Delete", systemImage: "trash", role: .destructive) {
-                            Task { await perform("Time entry deleted.") { try await services.kanban.deleteTimeEntry(entry.uuid) } }
+                            confirm = PendingConfirmation(title: "Delete this time entry?",
+                                                          message: "\(Minutes.format(entry.durationMinutes)) comes off the card.",
+                                                          button: "Delete entry") {
+                                await perform("Time entry deleted.") { try await services.kanban.deleteTimeEntry(entry.uuid) }
+                            }
                         }
                         Button("Edit", systemImage: "pencil") { sheet = .editEntry(entry) }.tint(.blue)
                     }
@@ -751,7 +764,7 @@ struct TaskDetailView: View {
         }
         .padding(.leading, isReply ? 24 : 0)
         .accessibilityIdentifier("task.comment.\(comment.uuid)")
-        .swipeActions {
+        .swipeActions(allowsFullSwipe: false) {
             if isMine || access.canAdmin {
                 Button("Delete", systemImage: "trash", role: .destructive) {
                     confirm = PendingConfirmation(title: "Delete this comment?", button: "Delete comment") {
@@ -944,8 +957,10 @@ struct TaskDetailView: View {
     }
 
     /// Runs a write, says what happened, then reloads. A conflict is surfaced, never resolved
-    /// behind the person's back.
-    private func perform(_ done: String, _ work: () async throws -> Void) async {
+    /// behind the person's back. Returns nil when it worked, else the reason (a sheet shows it and
+    /// stays open so nothing typed is lost).
+    @discardableResult
+    private func perform(_ done: String, _ work: () async throws -> Void) async -> String? {
         busy = true
         defer { busy = false }
         actionError = nil
@@ -954,14 +969,20 @@ struct TaskDetailView: View {
             conflict = false
             notice = .done(done)
             await load()
+            return nil
         } catch let error as KanbanAPI.ConflictError {
             state = .loaded(error.latest)
             conflict = true
+            return "Someone else changed this card meanwhile, so this wasn't saved. Cancel, look at the card, then try again."
         } catch let error as KanbanAPI.ClaimedError {
-            notice = .failed("\(error.claim.name ?? "Someone else") is working on this.")
+            let message = "\(error.claim.name ?? "Someone else") is working on this."
+            notice = .failed(message)
+            return message
         } catch {
-            notice = .failed(error.asAPIError.plainMessage)
+            let message = error.asAPIError.plainMessage
+            notice = .failed(message)
             await load()
+            return message
         }
     }
 
@@ -1055,7 +1076,7 @@ struct TaskDetailView: View {
 
     private func upload(_ task: KanbanTask, data: Data, filename: String, mime: String) async {
         guard data.count <= KanbanAPI.maxUploadBytes else {
-            notice = .failed("That file is over 10 MB, the most the server takes.")
+            notice = .failed("That file is over 10 MB, the most that can be attached.")
             return
         }
         uploading = true

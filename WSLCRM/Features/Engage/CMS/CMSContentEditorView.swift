@@ -133,12 +133,12 @@ struct CMSContentEditorView: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("cms.block.\(index)")
                 .contextMenu { blockMenu(index) }
-                .swipeActions(edge: .trailing) {
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) { mutate { $0.blocks.remove(at: index) } } label: {
                         Label("Delete", systemImage: "trash")
                     }
                 }
-                .swipeActions(edge: .leading) {
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
                     Button { duplicate(index) } label: { Label("Copy", systemImage: "plus.square.on.square") }
                         .tint(.indigo)
                 }

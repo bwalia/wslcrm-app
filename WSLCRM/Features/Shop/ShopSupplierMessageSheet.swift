@@ -308,7 +308,7 @@ struct ShopSupplierMessageSheet: View {
         loadingDraft = true
         defer { loadingDraft = false }
         do {
-            let template = templateId.isEmpty || templateId == "builtin" ? nil : templateId
+            let template = Self.draftTemplate(templateId)
             let d = try await services.shop.supplierMessageDraft(kind, supplierUuid: requested, templateUuid: template,
                                                                qty: isStockEnquiry ? qty : nil)
             guard requested == supplierUuid else { return }
@@ -322,6 +322,12 @@ struct ShopSupplierMessageSheet: View {
             if case .cancelled = apiError { return }
             self.error = apiError
         }
+    }
+
+    /// The draft's `template`: none chosen yet = the supplier's own or the default; "Built-in wording" must be
+    /// asked for as the literal `builtin` (ShopMessageTemplateQueries.pick), or the default comes back instead.
+    static func draftTemplate(_ templateId: String) -> String? {
+        templateId.isEmpty ? nil : templateId
     }
 
     private func send(_ channel: ShopMessageChannel) async {

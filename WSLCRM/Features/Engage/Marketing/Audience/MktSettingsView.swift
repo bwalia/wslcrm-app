@@ -89,16 +89,18 @@ struct MktSettingsView: View {
                 }
             }
             Section {
-                NavigationLink(value: NativeScreenRoute(Marketing.Screen.pixels)) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label("Track sales on your website (advanced)", systemImage: "dot.radiowaves.left.and.right")
-                            .font(.wsHeadline)
-                        Text("See which emails lead to visits, sign-ups and sales on your website. You add a small piece "
-                             + "of code to your site. You don’t need it to send emails.")
-                            .font(.wsFootnote).foregroundStyle(.secondaryText)
+                if Marketing.canOpen(Marketing.Screen.pixels, session.permissions) {
+                    NavigationLink(value: NativeScreenRoute(Marketing.Screen.pixels)) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label("Track sales on your website (advanced)", systemImage: "dot.radiowaves.left.and.right")
+                                .font(.wsHeadline)
+                            Text("See which emails lead to visits, sign-ups and sales on your website. You add a small piece "
+                                 + "of code to your site. You don’t need it to send emails.")
+                                .font(.wsFootnote).foregroundStyle(.secondaryText)
+                        }
                     }
+                    .accessibilityIdentifier("mkt.settings.pixels")
                 }
-                .accessibilityIdentifier("mkt.settings.pixels")
                 NavigationLink {
                     MktGuideView(focus: "connect-email")
                 } label: {
@@ -195,7 +197,7 @@ struct MktSettingsView: View {
         do {
             plugin = try await pluginTask
             pluginError = plugin == nil
-                ? ResourceService.problem(404, "Marketing Cloud isn’t installed on this server.") : nil
+                ? ResourceService.problem(404, "Marketing Cloud isn’t part of this workspace yet.") : nil
             if let plugin { apply(plugin) }
         } catch {
             let apiError = error.asAPIError

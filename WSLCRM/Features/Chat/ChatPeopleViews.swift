@@ -7,8 +7,8 @@ enum ChatAccessText {
 }
 
 extension SessionStore {
-    /// Who can give people Chat access (`helper/chat-access.lua` `can_grant`): a platform admin,
-    /// the workspace owner, or a role that manages the workspace or its roles.
+    /// Who can give people Chat access (`helper/chat-access.lua` `can_grant`): a platform admin, or a role
+    /// that manages the workspace or its roles. Owning the workspace counts only through the owner's role.
     var canGrantChatAccess: Bool {
         user?.isPlatformAdmin == true || permissions.can(.manage, moduleName: "namespace")
             || permissions.can(.manage, moduleName: "roles")
@@ -659,7 +659,7 @@ struct ChatChannelInfoView: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .swipeActions {
+        .swipeActions(allowsFullSwipe: false) {
             if channel.canManage, !isMe {
                 Button("Remove", systemImage: "person.badge.minus", role: .destructive) { removing = member }
             }

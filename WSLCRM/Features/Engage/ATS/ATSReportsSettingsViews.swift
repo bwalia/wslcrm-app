@@ -342,13 +342,13 @@ private struct ATSActivationSection: View {
                 }
             } else {
                 StatusBadge(text: "Not active", systemImage: "exclamationmark.triangle", tone: .warning)
-                Text("Activate the module to invite candidates to AI interviews and receive interviews from Snazzy Pro. "
+                Text("Switch on AI interviews to invite candidates to them and receive interviews from Snazzy Pro. "
                      + "Without it you can still read, review and export everything here.")
                     .font(.wsSubheadline)
                 Text(activation?.checkoutAvailable == true
                      ? "Activation is paid by card through Stripe’s secure payment page, which the app can’t show. "
                         + "Ask a workspace owner or your administrator to activate it."
-                     : "Online checkout isn’t set up on this server. Ask your administrator to activate it.")
+                     : "Online checkout isn’t set up for this workspace. Ask your administrator to switch it on.")
                     .font(.wsFootnote).foregroundStyle(.secondaryText)
             }
         } header: {

@@ -772,6 +772,8 @@ struct ConvertToJobResult: Decodable, Sendable {
     let jobNumber: String?
     let visitUuid: String?
     let engineerAssigned: Bool
+    /// Set by the app when the request's site couldn't be put on the new job.
+    var siteLinkError: APIError?
 
     enum CodingKeys: String, CodingKey { case jobUuid, jobNumber, visitUuid, engineerAssigned }
 

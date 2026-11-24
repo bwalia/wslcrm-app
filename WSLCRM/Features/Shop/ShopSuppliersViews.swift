@@ -335,27 +335,29 @@ struct ShopSupplierDetailView: View {
         Section {
             if let orders {
                 if !ordersAvailable {
-                    Text("Purchase orders aren’t switched on in this workspace. Ask an administrator to turn on the Purchase Orders module.")
+                    Text("Purchase orders aren’t part of this workspace yet. The workspace owner can add them.")
                         .foregroundStyle(.secondaryText)
                 } else if orders.isEmpty {
                     Text("No purchase orders with \(current.name) yet. Raise one from a paid shop order.")
                         .foregroundStyle(.secondaryText)
                 }
                 ForEach(orders) { po in
-                    NavigationLink {
-                        PurchaseOrderDetailView(uuid: po.uuid)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack {
-                                Text(po.poNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
-                                Spacer()
-                                Text(Formatters.money(po.total, currency: po.currency) ?? "").font(.wsSubheadline.monospacedDigit())
-                            }
-                            Text([po.status.map(Formatters.humanize), po.shopOrderNumber.map { "order \($0)" } ?? po.reference,
-                                  po.endCustomerPo.map { "customer PO \($0)" }, Formatters.day(po.createdAt)]
-                                .compactMap { $0 }.joined(separator: " · "))
-                                .font(.wsFootnote).foregroundStyle(.secondaryText)
+                    let row = VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text(po.poNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
+                            Spacer()
+                            Text(Formatters.money(po.total, currency: po.currency) ?? "").font(.wsSubheadline.monospacedDigit())
                         }
+                        Text([po.status.map(Formatters.humanize), po.shopOrderNumber.map { "order \($0)" } ?? po.reference,
+                              po.endCustomerPo.map { "customer PO \($0)" }, Formatters.day(po.createdAt)]
+                            .compactMap { $0 }.joined(separator: " · "))
+                            .font(.wsFootnote).foregroundStyle(.secondaryText)
+                    }
+                    // The PO itself is the purchase-orders module's (purchase_orders.read).
+                    if session.permissions.can(.read, .purchaseOrders) {
+                        NavigationLink { PurchaseOrderDetailView(uuid: po.uuid) } label: { row }
+                    } else {
+                        row
                     }
                 }
             } else {

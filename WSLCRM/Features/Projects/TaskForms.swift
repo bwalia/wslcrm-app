@@ -337,7 +337,8 @@ struct LabelPickerSheet: View {
 struct TaskDetailsSheet: View {
     let task: KanbanTask
     let epics: [KanbanEpic]
-    let onSave: (UpdateTaskBody) async -> Void
+    /// Nil when saved; otherwise what went wrong, shown in the sheet (which stays open with what was typed).
+    let onSave: (UpdateTaskBody) async -> String?
     @Environment(\.dismiss) private var dismiss
     @State private var title = ""
     @State private var description = ""
@@ -350,6 +351,7 @@ struct TaskDetailsSheet: View {
     @State private var epicId: Int?
     @State private var coverColor = ""
     @State private var busy = false
+    @State private var saveError: String?
     @State private var filled = false
 
     private var problem: String? {
@@ -360,9 +362,20 @@ struct TaskDetailsSheet: View {
         return nil
     }
 
+    /// Closes on success; on failure keeps the sheet (and what was typed) open with the reason.
+    private func finish(_ failure: String?) {
+        if let failure {
+            saveError = failure
+            busy = false
+        } else {
+            dismiss()
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
+                if let saveError { WorkSaveErrorRow(message: saveError) }
                 Section {
                     TextField("Title", text: $title).accessibilityIdentifier("task.edit.title")
                     TextField("Description", text: $description, axis: .vertical)
@@ -389,7 +402,7 @@ struct TaskDetailsSheet: View {
                     Text("Dates")
                 } footer: {
                     if task.startDate != nil || task.dueDate != nil {
-                        Text("You can move a date, but the server can't remove one once it's set.")
+                        Text("You can move a date, but once it's set it can't be cleared.")
                     }
                 }
                 Section("Effort") {
@@ -426,8 +439,8 @@ struct TaskDetailsSheet: View {
                     Button("Save") {
                         busy = true
                         Task {
-                            if let body = changes { await onSave(body) }
-                            dismiss()
+                            guard let body = changes else { return dismiss() }
+                            finish(await onSave(body))
                         }
                     }
                     .disabled(busy || problem != nil)
@@ -482,20 +495,32 @@ struct TaskDetailsSheet: View {
 }
 
 struct AddLinkSheet: View {
-    let onSave: (String, String) async -> Void
+    let onSave: (String, String) async -> String?
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var url = ""
     @State private var busy = false
+    @State private var saveError: String?
 
     private var isValid: Bool {
         guard let link = URL(string: url.trimmingCharacters(in: .whitespaces)), let scheme = link.scheme?.lowercased() else { return false }
         return ["http", "https"].contains(scheme) && link.host != nil
     }
 
+    /// Closes on success; on failure keeps the sheet (and what was typed) open with the reason.
+    private func finish(_ failure: String?) {
+        if let failure {
+            saveError = failure
+            busy = false
+        } else {
+            dismiss()
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
+                if let saveError { WorkSaveErrorRow(message: saveError) }
                 Section {
                     TextField("Name, e.g. Design brief", text: $name).accessibilityIdentifier("task.link.name")
                     TextField("https://…", text: $url)
@@ -514,7 +539,7 @@ struct AddLinkSheet: View {
                         busy = true
                         let link = url.trimmingCharacters(in: .whitespaces)
                         let title = name.trimmedOrNil ?? URL(string: link)?.host ?? link
-                        Task { await onSave(title, link); dismiss() }
+                        Task { finish(await onSave(title, link)) }
                     }
                     .disabled(busy || !isValid)
                     .accessibilityIdentifier("task.link.save")
@@ -527,7 +552,7 @@ struct AddLinkSheet: View {
 /// Logging time by hand on a card, or changing an entry.
 struct TimeEntrySheet: View {
     let entry: KanbanTimeEntry?
-    let onSave: (TimeEntryBody) async -> Void
+    let onSave: (TimeEntryBody) async -> String?
     @Environment(\.dismiss) private var dismiss
     @State private var hours = 0
     @State private var minutes = 30
@@ -535,13 +560,25 @@ struct TimeEntrySheet: View {
     @State private var description = ""
     @State private var billable = true
     @State private var busy = false
+    @State private var saveError: String?
     @State private var filled = false
 
     private var total: Int { hours * 60 + minutes }
 
+    /// Closes on success; on failure keeps the sheet (and what was typed) open with the reason.
+    private func finish(_ failure: String?) {
+        if let failure {
+            saveError = failure
+            busy = false
+        } else {
+            dismiss()
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
+                if let saveError { WorkSaveErrorRow(message: saveError) }
                 Section {
                     Stepper("\(hours) h", value: $hours, in: 0...24).accessibilityIdentifier("time.hours")
                     Stepper("\(minutes) min", value: $minutes, in: 0...55, step: 5).accessibilityIdentifier("time.minutes")
@@ -576,7 +613,7 @@ struct TimeEntrySheet: View {
                         let body = TimeEntryBody(description: description.trimmedOrNil ?? (entry == nil ? nil : ""),
                                                  durationMinutes: total, isBillable: billable,
                                                  startedAt: entry == nil ? started : nil)
-                        Task { await onSave(body); dismiss() }
+                        Task { finish(await onSave(body)) }
                     }
                     .disabled(busy || total == 0 || total > 1440)
                     .accessibilityIdentifier("time.save")
@@ -597,7 +634,7 @@ struct TimeEntrySheet: View {
 struct ChecklistItemSheet: View {
     let projectUuid: String?
     let checklistName: String
-    let onSave: (ChecklistItemBody) async -> Void
+    let onSave: (ChecklistItemBody) async -> String?
     @Environment(\.dismiss) private var dismiss
     @State private var content = ""
     @State private var assignee: [WorkspacePerson] = []
@@ -605,10 +642,22 @@ struct ChecklistItemSheet: View {
     @State private var due = Date()
     @State private var picking = false
     @State private var busy = false
+    @State private var saveError: String?
+
+    /// Closes on success; on failure keeps the sheet (and what was typed) open with the reason.
+    private func finish(_ failure: String?) {
+        if let failure {
+            saveError = failure
+            busy = false
+        } else {
+            dismiss()
+        }
+    }
 
     var body: some View {
         NavigationStack {
             Form {
+                if let saveError { WorkSaveErrorRow(message: saveError) }
                 Section {
                     TextField("What needs doing?", text: $content, axis: .vertical)
                         .lineLimit(1...4)
@@ -636,7 +685,7 @@ struct ChecklistItemSheet: View {
                         let body = ChecklistItemBody(content: content.trimmingCharacters(in: .whitespacesAndNewlines),
                                                      assigneeUserUuid: assignee.last?.uuid,
                                                      dueDate: hasDue ? CalendarDay.string(due) : nil)
-                        Task { await onSave(body); dismiss() }
+                        Task { finish(await onSave(body)) }
                     }
                     .disabled(busy || content.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityIdentifier("checklist.item.save")
@@ -660,16 +709,28 @@ struct CommentEditorSheet: View {
     let title: String
     let initial: String
     let projectUuid: String?
-    let onSave: (String, MentionPicks) async -> Void
+    let onSave: (String, MentionPicks) async -> String?
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
     @State private var people: [WorkspacePerson] = []
     @State private var picking = false
     @State private var busy = false
+    @State private var saveError: String?
+
+    /// Closes on success; on failure keeps the sheet (and what was typed) open with the reason.
+    private func finish(_ failure: String?) {
+        if let failure {
+            saveError = failure
+            busy = false
+        } else {
+            dismiss()
+        }
+    }
 
     var body: some View {
         NavigationStack {
             Form {
+                if let saveError { WorkSaveErrorRow(message: saveError) }
                 Section {
                     TextField("Comment", text: $text, axis: .vertical)
                         .lineLimit(3...12)
@@ -686,7 +747,7 @@ struct CommentEditorSheet: View {
                         busy = true
                         let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
                         let picks = MentionPicks(people: people.filter { body.contains("@\($0.name)") })
-                        Task { await onSave(body, picks); dismiss() }
+                        Task { finish(await onSave(body, picks)) }
                     }
                     .disabled(busy || text.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityIdentifier("comment.editor.save")
@@ -702,6 +763,19 @@ struct CommentEditorSheet: View {
     private func insertMentions() {
         for person in people where !text.contains("@\(person.name)") {
             text += (text.isEmpty || text.hasSuffix(" ") ? "" : " ") + "@\(person.name) "
+        }
+    }
+}
+
+/// Why a save in a sheet didn't work, at the top of the sheet so it's seen; the sheet stays open.
+struct WorkSaveErrorRow: View {
+    let message: String
+
+    var body: some View {
+        Section {
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(Tone.danger.textColor)
+                .accessibilityIdentifier("work.saveError")
         }
     }
 }

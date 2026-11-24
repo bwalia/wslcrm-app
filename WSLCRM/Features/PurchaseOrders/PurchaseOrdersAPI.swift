@@ -31,8 +31,9 @@ struct PurchaseOrdersAPI: Sendable {
         try await data(.get("\(Self.base)/stats"))
     }
 
-    func create(_ body: PurchaseOrderBody) async throws -> PurchaseOrder {
-        let created: PurchaseOrder = try await data(Endpoint.post(Self.base, json: body).withIdempotencyKey(UUID().uuidString))
+    /// `idempotencyKey`: one per form (`MoneyRetryKey`), so a retry after a lost reply doesn't make a second order.
+    func create(_ body: PurchaseOrderBody, idempotencyKey: String = UUID().uuidString) async throws -> PurchaseOrder {
+        let created: PurchaseOrder = try await data(Endpoint.post(Self.base, json: body).withIdempotencyKey(idempotencyKey))
         return try await purchaseOrder(created.id)
     }
 
@@ -49,16 +50,18 @@ struct PurchaseOrdersAPI: Sendable {
     func convertToBill(_ uuid: String) async throws -> PurchaseOrder { try await action(uuid, "convert-to-bill") }
 
     /// Bills what's received and not billed yet; can be called again as more arrives.
-    func bill(_ uuid: String, _ body: PurchaseOrderBillBody) async throws -> PurchaseOrder {
+    func bill(_ uuid: String, _ body: PurchaseOrderBillBody,
+              idempotencyKey: String = UUID().uuidString) async throws -> PurchaseOrder {
         let _: JSONValue = try await data(Endpoint.post("\(Self.base)/\(uuid)/convert-to-bill", json: body)
-            .withIdempotencyKey(UUID().uuidString))
+            .withIdempotencyKey(idempotencyKey))
         return try await purchaseOrder(uuid)
     }
 
     /// Records a delivery: what arrived now, per line.
-    func receiveDelivery(_ uuid: String, _ body: PurchaseOrderDeliveryBody) async throws -> PurchaseOrder {
+    func receiveDelivery(_ uuid: String, _ body: PurchaseOrderDeliveryBody,
+                         idempotencyKey: String = UUID().uuidString) async throws -> PurchaseOrder {
         let _: JSONValue = try await data(Endpoint.post("\(Self.base)/\(uuid)/receive", json: body)
-            .withIdempotencyKey(UUID().uuidString))
+            .withIdempotencyKey(idempotencyKey))
         return try await purchaseOrder(uuid)
     }
 
@@ -83,12 +86,13 @@ struct PurchaseOrdersAPI: Sendable {
 
     /// Emails the supplier (the lines go in the email body; a draft is marked sent).
     @discardableResult
-    func email(_ uuid: String, to: String?, message: String?, pdf: Data? = nil, filename: String? = nil) async throws -> EmailResult {
+    func email(_ uuid: String, to: String?, message: String?, pdf: Data? = nil, filename: String? = nil,
+               idempotencyKey: String = UUID().uuidString) async throws -> EmailResult {
         struct Body: Encodable, Sendable { let to: String?; let message: String?; let pdfBase64: String?; let filename: String? }
         return try await data(Endpoint.post("\(Self.base)/\(uuid)/email",
                                             json: Body(to: to?.trimmedOrNil, message: message?.trimmedOrNil,
                                                        pdfBase64: pdf?.base64EncodedString(), filename: filename))
-            .withIdempotencyKey(UUID().uuidString))
+            .withIdempotencyKey(idempotencyKey))
     }
 
     func delete(_ uuid: String) async throws {
@@ -118,5 +122,28 @@ struct PurchaseOrdersAPI: Sendable {
     private func data<T: Decodable & Sendable>(_ endpoint: Endpoint) async throws -> T {
         let envelope: Envelope.Invoices<T> = try await client.send(endpoint)
         return envelope.data
+    }
+}
+
+/// One `Idempotency-Key` per money form (`helper/idempotency.lua`). A retry after a lost reply (offline, a timeout, a
+/// 5xx, or 409 "the first is still running") sends the same key, so the server answers with the first result instead
+/// of making a second order, bill or invoice. Once the server has really answered, the next try gets a new key: the
+/// server keeps that answer, and the same key with a changed form would be refused.
+struct MoneyRetryKey: Sendable, Equatable {
+    private(set) var value = UUID().uuidString
+
+    /// After an attempt: keep the key only when the reply may have been lost.
+    mutating func settle(_ error: APIError?) {
+        if let error, Self.replyMayBeLost(error) { return }
+        value = UUID().uuidString
+    }
+
+    static func replyMayBeLost(_ error: APIError) -> Bool {
+        switch error {
+        // `decoding`: the server said yes but the answer couldn't be read, so the record exists.
+        case .offline, .transport, .server, .cancelled, .decoding: true
+        case .validation(let e): e.status == 409
+        default: false
+        }
     }
 }

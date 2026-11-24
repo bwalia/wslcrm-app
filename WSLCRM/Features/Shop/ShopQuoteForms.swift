@@ -425,7 +425,7 @@ struct ShopFormProblems: View {
             Section {
                 ForEach(problems, id: \.self) { Label($0, systemImage: "exclamationmark.triangle").foregroundStyle(Tone.warning.textColor) }
                 if failed {
-                    Label("Couldn’t save. The server may have refused the change; see the message on the quote.", systemImage: "xmark.octagon")
+                    Label("Couldn’t save the change. The reason is shown on the quote.", systemImage: "xmark.octagon")
                         .foregroundStyle(Tone.danger.textColor)
                 }
             }

@@ -55,7 +55,8 @@ struct PDBuyersView: View {
     @Environment(SessionStore.self) private var session
 
     var body: some View {
-        PDBuyersList(raw: services.pdRaw, canCreate: session.propertyDeals?.can(.create, .buyers) ?? false)
+        PDBuyersList(raw: services.pdRaw, canCreate: PDWriteGates.canAddBuyerPerson(session.propertyDeals, session.permissions)
+                        || PDWriteGates.canAddBuyerCompany(session.propertyDeals, session.permissions))
     }
 }
 
@@ -91,7 +92,8 @@ private struct PDBuyersList: View {
 
     var body: some View {
         PagedList(model: model, searchPrompt: "Search buyers by name or email", emptyTitle: "No buyers yet",
-                  emptySystemImage: "person.2", emptyDescription: "Add a buyer profile to start matching homes.") { buyer in
+                  emptySystemImage: "person.2", emptyDescription: "Add a buyer profile to start matching homes.",
+                  emptyActionTitle: "New buyer", emptyAction: canCreate ? { adding = true } : nil) { buyer in
             NavigationLink(value: NativeScreenRoute("pd.buyer", buyer.id)) { PDBuyerRow(buyer: buyer) }
                 .accessibilityIdentifier("pd.buyers.row.\(buyer.id)")
         }
@@ -368,6 +370,7 @@ extension PDMatchRow {
 struct PDNewBuyerSheet: View {
     let onCreated: () -> Void
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var entity = "person"
     @State private var name = ""
@@ -390,7 +393,7 @@ struct PDNewBuyerSheet: View {
                 if let error { Section { InlineErrorRow(error: error) } }
                 Section {
                     Picker("Buyer is", selection: $entity) {
-                        ForEach(PDBuyerWords.entityTypes) { Text($0.label).tag($0.value) }
+                        ForEach(entityChoices) { Text($0.label).tag($0.value) }
                     }
                     TextField(entity == "person" ? "Full name (needed)" : "Company name (needed)", text: $name)
                         .accessibilityIdentifier("pd.newBuyer.name")
@@ -420,6 +423,9 @@ struct PDNewBuyerSheet: View {
                 Section("Strategies") { PDMultiChoice(choices: PDBuyerWords.strategies, selected: $strategies) }
                 Section("Deal-breakers") { PDMultiChoice(choices: PDBuyerWords.dealBreakers, selected: $breakers) }
             }
+            .onAppear {
+                if !entityChoices.contains(where: { $0.value == entity }), let first = entityChoices.first { entity = first.value }
+            }
             .navigationTitle("New buyer")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -432,6 +438,13 @@ struct PDNewBuyerSheet: View {
             }
             .interactiveDismissDisabled(saving)
         }
+    }
+
+    /// A person is saved as a CRM contact, a company as a CRM account: offer only what the role can create.
+    private var entityChoices: [Choice] {
+        let person = PDWriteGates.canAddBuyerPerson(session.propertyDeals, session.permissions)
+        let company = PDWriteGates.canAddBuyerCompany(session.propertyDeals, session.permissions)
+        return PDBuyerWords.entityTypes.filter { $0.value == "person" ? person : company }
     }
 
     private func save() async {

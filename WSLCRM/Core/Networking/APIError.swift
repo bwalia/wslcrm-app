@@ -34,7 +34,7 @@ struct ServerError: Sendable, Equatable {
         let raw = String(decoding: data.prefix(4_000), as: UTF8.self)
         var result = ServerError(
             status: status,
-            message: HTTPURLResponse.localizedString(forStatusCode: status).capitalized,
+            message: plainStatusMessage(status),
             fieldErrors: [:],
             rawBody: raw)
 
@@ -69,6 +69,10 @@ struct ServerError: Sendable, Equatable {
         }
         // Plugin routes put the code beside a plain-string error (`"code": "PLUGIN_DISABLED"`).
         if result.code == nil, let code = top["code"]?.stringValue { result.code = code }
+        // nginx's own 413/502/503/504 page as JSON (lib/nginx-error.lua): the app's words, as for the HTML page.
+        if let code = result.code, ["PAYLOAD_TOO_LARGE", "BAD_GATEWAY", "SERVICE_UNAVAILABLE", "GATEWAY_TIMEOUT"].contains(code) {
+            result.message = plainStatusMessage(status)
+        }
         if let reason = top["reason"]?.stringValue { result.reason = reason }
         if result.reason == nil, let details = top["details"]?.stringValue { result.reason = details }
         if let retry = top["retry_after"]?.stringValue.flatMap(TimeInterval.init) { result.retryAfter = retry }
@@ -116,6 +120,22 @@ struct ServerError: Sendable, Equatable {
             result.fieldErrors[field] = reason
         }
         return result
+    }
+
+    /// What to say when the answer has no message of its own (a proxy's HTML error page, an empty body).
+    static func plainStatusMessage(_ status: Int) -> String {
+        switch status {
+        case 400, 422: "That couldn't be done. Check the details and try again."
+        case 401: "Unauthorized"   // read as "your session ended" (APIError.isSessionMessage)
+        case 403: APIError.roleRefusal
+        case 404: APIError.goneMessage
+        case 409: "This was changed somewhere else meanwhile. Refresh and try again."
+        case 413: "That file is too big to send. The limit is 10 MB."
+        case 429: "Too many attempts. Please wait a moment and try again."
+        case 502, 503, 504: "The service is being updated or is busy. Try again in a minute."
+        case 500...599: "Something went wrong on our side. Try again in a minute."
+        default: "Something went wrong. Try again."
+        }
     }
 
     /// True when the server is telling us the action can be retried with `force: true`.
@@ -193,6 +213,16 @@ enum APIError: Error, Sendable {
 }
 
 extension APIError: LocalizedError {
+    /// A 403 from the role check, in plain words (never the module's internal name).
+    static let roleRefusal = "Your role doesn't allow this. Ask the workspace owner if you need it."
+    static let goneMessage = "This item no longer exists."
+
+    /// The server's RBAC refusal (`{error: "Permission denied", required: {module, action}}`), as opposed
+    /// to a 403 that explains itself ("Only the person this timesheet belongs to can change it").
+    private static func isRoleRefusal(_ error: ServerError) -> Bool {
+        error.requiredPermission != nil || error.message == "Permission denied" || error.message == "Forbidden"
+    }
+
     private static func isSessionMessage(_ message: String) -> Bool {
         let lower = message.lowercased()
         return lower.isEmpty || lower == "unauthorized" || lower.contains("token") || lower.contains("authorization")
@@ -201,32 +231,44 @@ extension APIError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        case .offline(let e) where e.code == .timedOut:
+            "The service took too long to answer. Try again."
         case .offline:
             "You're offline. Check your connection and try again."
         case .transport(let e):
-            e.localizedDescription
+            Self.plainTransportMessage(e)
         case .unauthorized(let e):
             // Login and 2FA failures are 401s too; only token problems mean the session ended.
             Self.isSessionMessage(e.message) ? "Your session has expired. Please sign in again." : e.message
         case .forbidden(let e):
-            e.requiredPermission.map { required in
-                let module = Module(rawValue: required.module)?.displayName
-                    ?? required.module.replacingOccurrences(of: "_", with: " ")
-                return "You don't have permission to \(required.action) \(module)."
-            } ?? e.message
+            Self.isRoleRefusal(e) ? Self.roleRefusal : e.message
         case .notFound(let e):
-            e.message == "Not Found" ? "This item no longer exists." : e.message
+            e.message == "Not Found" ? Self.goneMessage : e.message
         case .validation(let e), .server(let e):
             e.message
         case .rateLimited(_, let retry):
             retry.map { "Too many attempts. Please wait \(Int($0)) seconds and try again." }
                 ?? "Too many attempts. Please wait a moment and try again."
         case .decoding:
-            "The server sent a response the app didn't understand."
+            "Something unexpected came back. Try again, and update the app if it keeps happening."
         case .missingNamespace:
             "Choose a workspace first."
         case .cancelled:
             "The request was cancelled."
+        }
+    }
+
+    /// A connection that failed for a reason other than being offline, in plain words (never Apple's
+    /// raw text, which names hosts and certificates).
+    static func plainTransportMessage(_ error: URLError) -> String {
+        switch error.code {
+        case .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate,
+             .serverCertificateNotYetValid, .serverCertificateHasUnknownRoot, .clientCertificateRejected,
+             .clientCertificateRequired, .appTransportSecurityRequiresSecureConnection:
+            "We couldn't make a safe connection. If you're on public Wi-Fi it may need you to sign in to it "
+                + "first, or try mobile data. Then try again."
+        default:
+            "The connection didn't work. Check your internet and try again."
         }
     }
 }
@@ -234,8 +276,8 @@ extension APIError: LocalizedError {
 extension APIError {
     /// What to tell a person: the server's own words when it gave some, else a plain explanation.
     var plainMessage: String {
-        if let message = serverError?.message, !message.isEmpty, message != "Permission denied" { return message }
-        if case .forbidden = self { return "You don't have permission to do that." }
+        if case .forbidden(let e) = self, Self.isRoleRefusal(e) { return Self.roleRefusal }
+        if let message = serverError?.message, !message.isEmpty { return message }
         return errorDescription ?? "Something went wrong. Try again."
     }
 }

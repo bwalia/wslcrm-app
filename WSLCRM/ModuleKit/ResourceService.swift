@@ -58,8 +58,10 @@ struct ResourceService: Sendable {
     // MARK: - Writing
 
     /// Creates or saves a record; returns what the server sent back (or nil when it sent nothing usable).
+    /// `idempotencyKey` (creates): the same key on a retry means a lost reply can't create the record twice.
     @discardableResult
-    func save(_ descriptor: ResourceDescriptor, existing: Record?, values: [String: JSONValue]) async throws -> Record? {
+    func save(_ descriptor: ResourceDescriptor, existing: Record?, values: [String: JSONValue],
+              idempotencyKey: String? = nil) async throws -> Record? {
         let api = descriptor.api
         var body = values
         for (key, value) in descriptor.form?.constants ?? [:] where body[key] == nil { body[key] = value }
@@ -71,7 +73,7 @@ struct ResourceService: Sendable {
             endpoint = Endpoint(api.updateMethod, existing.fill(template))
         } else {
             guard let path = api.create else { throw Self.problem(403, "New \(descriptor.title.lowercased()) can’t be added here.") }
-            endpoint = Endpoint(.post, path)
+            endpoint = Endpoint(.post, path).withIdempotencyKey(idempotencyKey)
         }
         endpoint.requiresNamespace = api.requiresNamespace
         endpoint = endpoint.withRawBody(try JSONEncoder.sorted.encode(payload))

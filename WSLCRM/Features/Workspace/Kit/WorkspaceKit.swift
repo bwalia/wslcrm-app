@@ -166,6 +166,8 @@ struct PermissionCatalog: Sendable, Equatable {
     struct ActionInfo: Sendable, Equatable, Identifiable {
         let name: String
         let displayName: String
+        /// A module's own action (approve, deploy, publish…): only offered where the module lists it.
+        var special = false
         var id: String { name }
     }
 
@@ -199,7 +201,8 @@ struct PermissionCatalog: Sendable, Equatable {
         let listed = source.records("actions", idKeys: ["name"]).compactMap { row -> ActionInfo? in
             guard let name = row.string("name") else { return nil }
             return ActionInfo(name: name, displayName: name == "manage" ? "Full access"
-                                  : (row.string("display_name") ?? Formatters.humanize(name)))
+                                  : (row.string("display_name") ?? Formatters.humanize(name)),
+                              special: row.bool("special") ?? false)
         }
         actions = listed.isEmpty ? Self.standardActions : listed
     }
@@ -208,8 +211,10 @@ struct PermissionCatalog: Sendable, Equatable {
         PermissionCatalog(json: try await api.get("/api/v2/namespace/roles/meta/permissions"))
     }
 
+    /// The actions a module offers: its `allowed_actions` (plus Full access), or every ordinary action when
+    /// it lists none. A special action shows only where the module lists it, as on the web's Roles page.
     func actions(for module: ModuleInfo) -> [ActionInfo] {
-        guard let allowed = module.allowedActions else { return actions }
+        guard let allowed = module.allowedActions else { return actions.filter { !$0.special } }
         return actions.filter { allowed.contains($0.name) || $0.name == "manage" }
     }
 
@@ -275,13 +280,13 @@ struct PermissionMatrixEditor: View {
 
     var body: some View {
         Section {
-            TextField("Find a module", text: $search)
+            TextField("Find an area", text: $search)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .accessibilityIdentifier("permissions.search")
         } footer: {
             Text(readOnly ? "These permissions can’t be changed." :
-                    "Tick what this can do in each module. Full access covers everything in that module.")
+                    "Tick what this can do in each area. Full access covers everything in that area.")
         }
         ForEach(catalog.grouped(excluding: excluded, matching: search), id: \.0) { category, modules in
             Section(category) {
@@ -402,6 +407,14 @@ struct MetricGrid: View {
 }
 
 extension PermissionSet {
-    /// The server's `requireOwner` (owner or platform admin).
+    /// The server's `requireOwner` (owner or platform admin). Only for routes that check ownership
+    /// itself; everything else is role-driven (`can`).
     var isOwnerOrAdmin: Bool { isOwner || isAdmin }
+
+    /// `module.action` for a module's own actions (`themes.publish`, `services.deploy`), as the server's
+    /// `hasPermission` checks them: platform admins pass, `manage` covers everything, owning the workspace
+    /// doesn't (unless the owner has no permissions at all).
+    func workspaceCan(_ action: String, module: String) -> Bool {
+        can(.manage, moduleName: module) || (grants[module] ?? []).contains(action)
+    }
 }

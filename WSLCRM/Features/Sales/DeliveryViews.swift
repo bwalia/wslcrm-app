@@ -11,7 +11,7 @@ enum DeliveryWords {
 
     static let assignmentStatus = StatusStyle(
         tones: ["pending": .warning, "accepted": .info, "rejected": .danger, "picked_up": .progress,
-                "in_transit": .progress, "delivered": .success, "failed": .danger],
+                "in_transit": .progress, "delivered": .success, "failed": .danger, "cancelled": .neutral],
         symbols: ["picked_up": "shippingbox", "in_transit": "truck.box", "delivered": "checkmark.seal.fill"],
         labels: ["pending": "Waiting for the partner", "rejected": "Declined", "in_transit": "On the way"])
 
@@ -51,17 +51,51 @@ enum DeliveryWords {
     }
 
     /// What the store owner may do with a delivery at each step (the partner marks picked up and delivered).
-    /// `accepted → cancelled` is in the route's state machine but the table refuses it, so it isn't offered.
+    /// (An older server's table refused `cancelled`; the partner's app explains that failure in plain words.)
     static func ownerMoves(from status: String) -> [(status: String, title: String, destructive: Bool)] {
         switch status {
         case "pending": [("rejected", "Mark as declined", true)]
+        case "accepted": [("cancelled", "Cancel the delivery", true)]
         case "picked_up": [("in_transit", "Mark on the way", false)]
         case "in_transit": [("failed", "Mark as failed", true)]
         default: []
         }
     }
 
-    static let onlyTheOwner = "Only the person who set up a store can manage its delivery partners, requests and deliveries."
+    static let onlyTheOwner = "Your role doesn’t let you see this store’s deliveries. Ask the workspace owner if you need to."
+
+    /// The store side (helper/store-access.lua): `delivery.<action>` in the store's workspace; platform admins pass.
+    static func can(_ action: Action, _ permissions: PermissionSet) -> Bool {
+        permissions.can(action, moduleName: "delivery")
+    }
+}
+
+/// A delivery's `proof_of_delivery`: JSON text `{signer_name, signed_at, notes, …}` when the customer signed
+/// (DeliverySignatureQueries.proof_of_delivery), or plain text.
+struct DeliveryProof: Equatable {
+    var signerName: String?
+    var signedAt: Date?
+    var notes: String?
+
+    init?(_ raw: String?) {
+        guard let raw = raw?.trimmedOrNil else { return nil }
+        if let data = raw.data(using: .utf8), case .object(let fields)? = try? JSONDecoder().decode(JSONValue.self, from: data) {
+            let pod = Record(fields)
+            signerName = pod.string("signer_name")
+            signedAt = pod.date("signed_at")
+            notes = pod.string("notes")
+        } else {
+            notes = raw
+        }
+        if signerName == nil && notes == nil { return nil }
+    }
+
+    /// "Jo Bloggs at 14:05 on 3 Mar 2026".
+    var signedLine: String? {
+        guard let signerName else { return nil }
+        guard let signedAt else { return signerName }
+        return "\(signerName), \(Formatters.dateTime(signedAt) ?? "")"
+    }
 }
 
 // MARK: - Home
@@ -74,6 +108,7 @@ struct DeliveryHomeView: View {
     }
 
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @AppStorage("delivery.store") private var savedStore = ""
     @State private var stores: LoadState<[Record]> = .idle
     @State private var tab: Tab = .partners
@@ -97,8 +132,15 @@ struct DeliveryHomeView: View {
             } else if let error = stores.error {
                 List { InlineErrorRow(error: error) { Task { await load() } } }
             } else if let list = stores.value, list.isEmpty {
-                ContentUnavailableView("No stores yet", systemImage: "storefront",
-                                       description: Text("Delivery partners deliver a store's orders. Set up a store first, then come back to link a delivery company to it."))
+                ContentUnavailableView {
+                    Label("No stores yet", systemImage: "storefront")
+                } description: {
+                    Text("Delivery partners deliver a store's orders. Set up a store first, then come back to link a delivery company to it.")
+                } actions: {
+                    if let link = MenuDestination.of(key: "stores") {
+                        MenuDestinationLink(destination: link) { Text("Set up a store") }
+                    }
+                }
             } else if stores.value != nil {
                 ContentUnavailableView("Choose a store", systemImage: "storefront",
                                        description: Text("Pick the store whose deliveries you want to manage, above."))
@@ -156,6 +198,7 @@ struct DeliveryHomeView: View {
 struct DeliveryPartnersList: View {
     let store: Record
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @State private var state: LoadState<[Record]> = .idle
     @State private var adding = false
     @State private var notice: String?
@@ -172,9 +215,16 @@ struct DeliveryPartnersList: View {
                 }
             } else if let partners = state.value {
                 if partners.isEmpty {
-                    ContentUnavailableView("No delivery partners yet", systemImage: "truck.box",
-                                           description: Text("Link a delivery company to \(store.string("name") ?? "this store") so you can ask them to deliver its orders."))
-                        .listRowBackground(Color.clear)
+                    ContentUnavailableView {
+                        Label("No delivery partners yet", systemImage: "truck.box")
+                    } description: {
+                        Text("Link a delivery company to \(store.string("name") ?? "this store") so you can ask them to deliver its orders.")
+                    } actions: {
+                        if DeliveryWords.can(.create, session.permissions) {
+                            Button("Add a partner") { adding = true }.buttonStyle(.borderedProminent)
+                        }
+                    }
+                    .listRowBackground(Color.clear)
                 } else {
                     Section {
                         ForEach(partners) { partner in
@@ -193,9 +243,11 @@ struct DeliveryPartnersList: View {
         .listStyle(.insetGrouped)
         .overlay { if state.value == nil, state.error == nil { SkeletonList() } }
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button { adding = true } label: { Label("Add a partner", systemImage: "plus") }
-                    .accessibilityIdentifier("delivery.addPartner")
+            if DeliveryWords.can(.create, session.permissions) {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { adding = true } label: { Label("Add a partner", systemImage: "plus") }
+                        .accessibilityIdentifier("delivery.addPartner")
+                }
             }
         }
         .sheet(isPresented: $adding) {
@@ -271,6 +323,7 @@ struct DeliveryPartnerDetailView: View {
     @State var partner: Record
     let onChanged: () async -> Void
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var busy = false
     @State private var actionError: APIError?
@@ -313,22 +366,26 @@ struct DeliveryPartnerDetailView: View {
             }
             Section {
                 DetailRow(label: "Linked", value: Formatters.dateTime(partner.date("linked_at")))
-                if partner.bool("is_preferred") != true {
-                    Button { Task { await run(.prefer) } } label: { Label("Make them the preferred partner", systemImage: "star") }
-                        .accessibilityIdentifier("delivery.prefer")
-                }
-                Button { Task { await run(.toggle) } } label: {
-                    if partner.bool("is_active") == false {
-                        Label("Use them again", systemImage: "play.circle")
-                    } else {
-                        Label("Pause them for this store", systemImage: "pause.circle")
+                if DeliveryWords.can(.update, session.permissions) {
+                    if partner.bool("is_preferred") != true {
+                        Button { Task { await run(.prefer) } } label: { Label("Make them the preferred partner", systemImage: "star") }
+                            .accessibilityIdentifier("delivery.prefer")
                     }
+                    Button { Task { await run(.toggle) } } label: {
+                        if partner.bool("is_active") == false {
+                            Label("Use them again", systemImage: "play.circle")
+                        } else {
+                            Label("Pause them for this store", systemImage: "pause.circle")
+                        }
+                    }
+                    .accessibilityIdentifier("delivery.toggle")
                 }
-                .accessibilityIdentifier("delivery.toggle")
-                Button(role: .destructive) { confirmingRemove = true } label: {
-                    Label("Remove from this store", systemImage: "trash")
+                if DeliveryWords.can(.delete, session.permissions) {
+                    Button(role: .destructive) { confirmingRemove = true } label: {
+                        Label("Remove from this store", systemImage: "trash")
+                    }
+                    .accessibilityIdentifier("delivery.remove")
                 }
-                .accessibilityIdentifier("delivery.remove")
             } header: {
                 Text("For \(store.string("name") ?? "this store")")
             } footer: {
@@ -393,6 +450,7 @@ struct DeliveryPartnerSearchSheet: View {
     let linked: Set<String>
     let onLinked: (String) async -> Void
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var search = DeliveryPartnerSearch()
     @State private var results: LoadState<[Record]> = .idle
@@ -497,6 +555,7 @@ struct DeliveryPartnerSearchSheet: View {
 struct DeliveryRequestsList: View {
     let store: Record
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @State private var state: LoadState<[Record]> = .idle
     @State private var status = ""
     @State private var asking = false
@@ -544,9 +603,11 @@ struct DeliveryRequestsList: View {
         .listStyle(.insetGrouped)
         .overlay { if state.value == nil, state.error == nil { SkeletonList() } }
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button { asking = true } label: { Label("Ask a partner to deliver", systemImage: "paperplane") }
-                    .accessibilityIdentifier("delivery.ask")
+            if DeliveryWords.can(.create, session.permissions) {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { asking = true } label: { Label("Ask a partner to deliver", systemImage: "paperplane") }
+                        .accessibilityIdentifier("delivery.ask")
+                }
             }
         }
         .sheet(isPresented: $asking) {
@@ -601,7 +662,9 @@ struct DeliveryRequestDetailView: View {
     @State var request: Record
     let onChanged: () async -> Void
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @State private var reply = ""
+    @State private var confirmingWithdraw = false
     @State private var busy = false
     @State private var actionError: APIError?
     @State private var notice: String?
@@ -621,7 +684,8 @@ struct DeliveryRequestDetailView: View {
                 .padding(.vertical, 4)
             }
             if let actionError { Section { InlineErrorRow(error: actionError) } }
-            if status == "pending", request.string("request_type") == "partner_to_seller" {
+            if status == "pending", request.string("request_type") == "partner_to_seller",
+               DeliveryWords.can(.update, session.permissions) {
                 Section {
                     TextField("Reply to them (optional)", text: $reply, axis: .vertical)
                         .accessibilityIdentifier("delivery.reply")
@@ -638,8 +702,24 @@ struct DeliveryRequestDetailView: View {
                 } footer: {
                     Text("Accepting hands them the order and declines any other offers for it.")
                 }
+            } else if status == "pending", request.string("request_type") == "partner_to_seller" {
+                Section {
+                    Label("Your role can’t answer delivery offers. Someone who manages deliveries can accept or decline it.",
+                          systemImage: "lock").foregroundStyle(.secondaryText)
+                }
             } else if status == "pending" {
-                Section { Label("Waiting for \(partnerName) to answer.", systemImage: "clock").foregroundStyle(.secondaryText) }
+                Section {
+                    Label("Waiting for \(partnerName) to answer.", systemImage: "clock").foregroundStyle(.secondaryText)
+                    if DeliveryWords.can(.update, session.permissions) {
+                        Button(role: .destructive) { confirmingWithdraw = true } label: {
+                            Label("Withdraw the request", systemImage: "xmark.circle")
+                        }
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("delivery.withdraw")
+                    }
+                } footer: {
+                    Text("If they don't answer, the request runs out after a day and you can ask another partner.")
+                }
             }
             if status == "accepted", let orderUUID = request.string("order.uuid") {
                 Section {
@@ -679,9 +759,29 @@ struct DeliveryRequestDetailView: View {
         .disabled(busy)
         .navigationTitle(request.string("order.order_number") ?? "Delivery request")
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Withdraw the request to \(partnerName)?", isPresented: $confirmingWithdraw, titleVisibility: .visible) {
+            Button("Withdraw the request", role: .destructive) { Task { await withdraw() } }
+            Button("Not now", role: .cancel) {}
+        } message: {
+            Text("They won’t be able to accept it. You can then ask another partner.")
+        }
         .alert("Done", isPresented: .init(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
             Button("OK") {}
         } message: { Text(notice ?? "") }
+    }
+
+    private func withdraw() async {
+        busy = true
+        defer { busy = false }
+        do {
+            try await services.delivery.withdraw(request: request.string("uuid") ?? request.id)
+            request = request.setting("status", .string("cancelled"))
+            actionError = nil
+            notice = "Request withdrawn. You can ask another partner to deliver this order."
+            await onChanged()
+        } catch {
+            actionError = error.asAPIError
+        }
     }
 
     private func answer(_ accept: Bool) async {
@@ -704,6 +804,7 @@ struct DeliveryAskSheet: View {
     let store: Record
     let onSent: (String) async -> Void
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var orders: LoadState<[Record]> = .idle
     @State private var partners: [Record] = []
@@ -831,6 +932,7 @@ struct DeliveryOrderView: View {
     let orderUUID: String
     let currency: String?
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @State private var assignment: LoadState<Record?> = .idle
     @State private var notes = ""
     @State private var pending: (status: String, title: String, destructive: Bool)?
@@ -885,7 +987,7 @@ struct DeliveryOrderView: View {
             .padding(.vertical, 4)
         }
         if let actionError { Section { InlineErrorRow(error: actionError) } }
-        let moves = DeliveryWords.ownerMoves(from: status)
+        let moves = DeliveryWords.can(.update, session.permissions) ? DeliveryWords.ownerMoves(from: status) : []
         Section {
             ForEach(Array(moves.enumerated()), id: \.offset) { _, move in
                 Button {
@@ -932,7 +1034,11 @@ struct DeliveryOrderView: View {
         }
         Section("Proof and notes") {
             DetailRow(label: "Tracking number", value: a.string("tracking_number"))
-            DetailRow(label: "Proof of delivery", value: a.string("proof_of_delivery"))
+            if let pod = DeliveryProof(a.string("proof_of_delivery")) {
+                // The signature itself is shown above when it could be loaded.
+                if proof?.signature == nil { DetailRow(label: "Signed for", value: pod.signedLine) }
+                DetailRow(label: "Delivery note", value: pod.notes)
+            }
             DetailRow(label: "Notes", value: a.string("notes"))
         }
     }
@@ -978,6 +1084,7 @@ struct DeliveryOrderView: View {
 /// The platform's delivery prices and a fee estimate (read only: platform admins set the prices).
 struct DeliveryPricesList: View {
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @State private var config: LoadState<Record?> = .idle
     @State private var distance = ""
     @State private var orderValue = ""

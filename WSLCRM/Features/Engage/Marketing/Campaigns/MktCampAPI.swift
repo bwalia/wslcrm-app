@@ -70,7 +70,7 @@ struct MktCampAPI: Sendable {
 
     private func campaign(from answer: JSONValue) throws -> MktCampaign {
         guard let record = answer.engageRecord else {
-            throw ResourceService.problem(422, "The server didn’t send the campaign back. Pull to refresh.")
+            throw ResourceService.problem(422, "The campaign didn’t come back after saving. Pull down to refresh.")
         }
         return MktCampaign(record)
     }

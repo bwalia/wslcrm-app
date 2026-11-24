@@ -66,6 +66,9 @@ struct PagedList<Item: Identifiable & Sendable, Row: View>: View where Item.ID: 
     let emptyTitle: String
     let emptySystemImage: String
     var emptyDescription: String?
+    /// The way out of an empty list, e.g. "Add a customer". Shown only when nothing is searched.
+    var emptyActionTitle: String? = nil
+    var emptyAction: (() -> Void)? = nil
     @ViewBuilder let row: (Item) -> Row
 
     var body: some View {
@@ -115,6 +118,12 @@ struct PagedList<Item: Identifiable & Sendable, Row: View>: View where Item.ID: 
             } description: {
                 if model.search.isEmpty, let emptyDescription { Text(emptyDescription) }
                 else if !model.search.isEmpty { Text("Nothing matches “\(model.search)”.") }
+            } actions: {
+                if model.search.isEmpty, let emptyAction {
+                    Button(emptyActionTitle ?? "Add the first one", action: emptyAction)
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("list.emptyAction")
+                }
             }
         default:
             EmptyView()

@@ -32,7 +32,7 @@ struct CRMActivitiesSection: View {
                     NavigationLink(value: ResourceRoute(descriptorID: descriptor.id, recordID: record.id, seed: record)) {
                         RecordRow(record: record, list: descriptor.list)
                     }
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if canUpdate, ["pending", "planned"].contains(record.string("status") ?? "") {
                             Button("Done") { Task { await complete(record) } }.tint(.green)
                         }
@@ -250,7 +250,8 @@ struct ReferralRow: View {
             }
             .buttonStyle(.borderless)
             .frame(minHeight: 44)
-        case "won" where referral.invoiceUuid == nil:
+        // The invoice is crm_deals.update and invoices.create (crm-partners.lua).
+        case "won" where referral.invoiceUuid == nil && session.permissions.can(.create, .invoices):
             Button("Invoice the commission", systemImage: "doc.badge.plus") { askingTax = true }
                 .buttonStyle(.borderless)
                 .frame(minHeight: 44)

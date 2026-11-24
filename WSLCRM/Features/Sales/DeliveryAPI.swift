@@ -2,8 +2,8 @@ import Foundation
 
 /// Delivery partners for the workspace's stores (`load_if("delivery", …)`, menu module `delivery`).
 ///
-/// What the server checks: a signed-in person, and for a store's partners, requests and deliveries that
-/// they set the store up (`stores.user_id`) — not the workspace role. These routes read form fields
+/// What the server checks: for a store's partners, requests and deliveries, `delivery.<action>` in the store's
+/// workspace (helper/store-access.lua); the partner side, that it's their request. These routes read form fields
 /// (`self.params`), so writes go form-encoded. Lists come back under their own keys (`{partners}`,
 /// `{requests}`, `{delivery_partners}`), so rows are read as `Record`s.
 struct DeliveryAPI: Sendable {
@@ -63,6 +63,11 @@ struct DeliveryAPI: Sendable {
         var form: [(String, String)] = []
         if let message = message.trimmedOrNil { form.append(("response_message", message)) }
         _ = try await write(.put, "/api/v2/delivery-requests/\(Self.path(uuid))/\(accept ? "accept" : "reject")", form: form)
+    }
+
+    /// Withdraws the store's own pending request to a partner (`PUT …/:uuid/cancel`, delivery.update).
+    func withdraw(request uuid: String) async throws {
+        _ = try await write(.put, "/api/v2/delivery-requests/\(Self.path(uuid))/cancel")
     }
 
     /// Asks a partner to deliver an order (the order must be confirmed, processing or packing).

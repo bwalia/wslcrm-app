@@ -30,7 +30,7 @@ struct CMSPostsListView: View {
                         CMSPostRow(post: post)
                     }
                     .accessibilityIdentifier("cms.post.\(post.id)")
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         if session.permissions.can(.delete, moduleName: CMS.module) {
                             Button(role: .destructive) { deleting = post } label: { Label("Delete", systemImage: "trash") }
                         }
@@ -209,7 +209,7 @@ struct CMSPagesListView: View {
                     CMSPageRow(page: page)
                 }
                 .accessibilityIdentifier("cms.page.\(page.id)")
-                .swipeActions {
+                .swipeActions(allowsFullSwipe: false) {
                     if session.permissions.can(.delete, moduleName: CMS.module) {
                         Button(role: .destructive) { deleting = page } label: { Label("Delete", systemImage: "trash") }
                     }

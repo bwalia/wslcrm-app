@@ -599,7 +599,7 @@ private struct VaultHome: View {
                                 .foregroundStyle(.secondaryText)
                         }
                     }
-                    .swipeActions {
+                    .swipeActions(allowsFullSwipe: false) {
                         Button("Delete", role: .destructive) { deletingFolder = folder }
                     }
                     .accessibilityIdentifier("vault.folder.\(folder.id)")
@@ -997,7 +997,7 @@ private struct VaultSecretForm: View {
                 PeopleOptionalDateRow(label: "Expires", date: $draft.expiresAt)
                 PeopleOptionalDateRow(label: "Remind me to change it", date: $draft.rotationAt)
             } footer: {
-                Text("A date can be set or moved here; the server can’t clear one once saved.")
+                Text("A date can be set or moved here, but not cleared once saved.")
             }
         }
         .navigationTitle(existing == nil ? "New secret" : "Edit secret")
@@ -1216,7 +1216,7 @@ private struct VaultShareForm: View {
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
                     .accessibilityIdentifier("vault.share.theirKey")
             } footer: {
-                Text("Their copy is encrypted with their own vault key, so the server needs it once. Ask them to type it here themselves.")
+                Text("Their copy is encrypted with their own vault key, so it’s needed once. Ask them to type it here themselves.")
             }
             Section {
                 Picker("They can", selection: $permission) {
