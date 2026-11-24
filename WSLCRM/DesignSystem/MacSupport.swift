@@ -26,8 +26,40 @@ enum MacSupport {
     }
 }
 
+/// The screen in front's refresh, for the Mac menu's View › Refresh (⌘R). Each refreshable screen registers while it is
+/// on screen; the last one to appear is the one in front (a pushed screen, the selected tab).
+@MainActor
+final class MacRefreshCenter {
+    static let shared = MacRefreshCenter()
+    private var screens: [(id: UUID, action: @MainActor @Sendable () async -> Void)] = []
+
+    func appeared(_ id: UUID, action: @escaping @MainActor @Sendable () async -> Void) {
+        screens.removeAll { $0.id == id }
+        screens.append((id, action))
+    }
+
+    func disappeared(_ id: UUID) {
+        screens.removeAll { $0.id == id }
+    }
+
+    func refresh() {
+        guard let action = screens.last?.action else { return }
+        Task { await action() }
+    }
+}
+
+/// The Mac menu bar's commands.
+struct MacCommands: Commands {
+    var body: some Commands {
+        CommandGroup(after: .toolbar) {
+            Button("Refresh") { MacRefreshCenter.shared.refresh() }
+                .keyboardShortcut("r", modifiers: .command)
+        }
+    }
+}
+
 extension View {
-    /// Pull to refresh on iPhone and iPad. A Mac has no pull, so there it is also a Refresh button with ⌘R.
+    /// Pull to refresh on iPhone and iPad. A Mac has no pull, so there it is a Refresh button and View › Refresh (⌘R).
     func wsRefreshable(action: @escaping @MainActor @Sendable () async -> Void) -> some View {
         modifier(RefreshControl(action: action))
     }
@@ -35,6 +67,7 @@ extension View {
 
 private struct RefreshControl: ViewModifier {
     let action: @MainActor @Sendable () async -> Void
+    @State private var id = UUID()
 
     func body(content: Content) -> some View {
         #if targetEnvironment(macCatalyst)
@@ -43,6 +76,8 @@ private struct RefreshControl: ViewModifier {
             .toolbar {
                 ToolbarItem(placement: .automatic) { MacRefreshButton(action: action) }
             }
+            .onAppear { MacRefreshCenter.shared.appeared(id, action: action) }
+            .onDisappear { MacRefreshCenter.shared.disappeared(id) }
         #else
         content.refreshable(action: action)
         #endif
@@ -64,7 +99,6 @@ private struct MacRefreshButton: View {
         } label: {
             Label("Refresh", systemImage: "arrow.clockwise")
         }
-        .keyboardShortcut("r", modifiers: .command)
         .disabled(refreshing)
         .help("Refresh (⌘R)")
         .accessibilityIdentifier("mac.refresh")
