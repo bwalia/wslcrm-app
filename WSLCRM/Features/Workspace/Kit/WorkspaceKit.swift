@@ -397,10 +397,11 @@ struct MetricTile: View {
 
 /// Metric tiles two to a row.
 struct MetricGrid: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     let tiles: [MetricTile]
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+        LazyVGrid(columns: .tiles(sizeClass), spacing: 10) {
             ForEach(Array(tiles.enumerated()), id: \.offset) { _, tile in tile }
         }
     }

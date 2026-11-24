@@ -58,6 +58,16 @@ struct MacCommands: Commands {
     }
 }
 
+extension Array where Element == GridItem {
+    /// Stat tiles: two a row on a phone; on an iPad or a Mac as many as fit at 220 pt or wider, so a wide window
+    /// doesn't stretch two tiles across it.
+    static func tiles(_ sizeClass: UserInterfaceSizeClass?, spacing: CGFloat = 10) -> [GridItem] {
+        sizeClass == .regular
+            ? [GridItem(.adaptive(minimum: 220), spacing: spacing)]
+            : [GridItem(.flexible(), spacing: spacing), GridItem(.flexible(), spacing: spacing)]
+    }
+}
+
 extension View {
     /// Pull to refresh on iPhone and iPad. A Mac has no pull, so there it is a Refresh button and View › Refresh (⌘R).
     func wsRefreshable(action: @escaping @MainActor @Sendable () async -> Void) -> some View {

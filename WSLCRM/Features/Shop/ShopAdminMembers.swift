@@ -4,6 +4,7 @@ import SwiftUI
 /// status, a member's details and their CRM lead, and recording a fee paid by invoice (RBAC `shop`).
 /// Rows are the `shop.members` descriptor's records (GET /membership/members).
 struct ShopMembersView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var state: LoadState<[Record]> = .idle
@@ -21,7 +22,7 @@ struct ShopMembersView: View {
             if let rows = state.value {
                 let stats = ShopMemberStats(rows)
                 Section {
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                    LazyVGrid(columns: .tiles(sizeClass), spacing: 10) {
                         StatTile(title: "VIP members", value: "\(stats.live) · \(stats.founding) founding", systemImage: "crown")
                         StatTile(title: "New this week", value: "\(stats.newThisWeek)", systemImage: "sparkles")
                         StatTile(title: "Fees a month (ex VAT)", value: ShopMoney.format(stats.monthlyNetMinor) ?? "—",

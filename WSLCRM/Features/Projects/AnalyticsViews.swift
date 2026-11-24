@@ -5,6 +5,7 @@ import SwiftUI
 /// cards by status and priority, how long cards take by priority, the team's workload — and the
 /// latest activity across the project.
 struct ProjectAnalyticsView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     let projectUuid: String
     @Environment(\.services) private var services
     @State private var stats: ProjectAnalytics?
@@ -71,7 +72,7 @@ struct ProjectAnalyticsView: View {
     }
 
     private func kpis(_ s: ProjectAnalytics) -> some View {
-        let columns = [GridItem(.flexible()), GridItem(.flexible())]
+        let columns = [GridItem].tiles(sizeClass, spacing: 8)
         return LazyVGrid(columns: columns, spacing: 8) {
             KPI(title: "Cards", value: "\(s.totalTasks)", detail: "\(s.boardCount) boards · \(s.memberCount) people")
             KPI(title: "Done", value: "\(s.completedTasks)", detail: "\(s.progressPercentage)% of the work", tone: .success)

@@ -146,6 +146,7 @@ enum ShopProductStatusPresentation {
 
 /// The shop back office home: the KPIs, what needs doing, the newest VIP members and the way into each area.
 struct ShopHomeView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var state: LoadState<ShopKPIs> = .idle
@@ -221,7 +222,7 @@ struct ShopHomeView: View {
         }
 
         Section {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            LazyVGrid(columns: .tiles(sizeClass), spacing: 10) {
                 tile(StatTile(title: "Orders · 30 days", value: "\(kpis.orders30d)", systemImage: "cart"),
                      hint: "\(kpis.ordersToday) today, \(kpis.orders7d) in 7 days") { ShopOrdersListView(initialFilter: .placedDays(30)) }
                 if session.shopPolicy.canSeeAnalytics {

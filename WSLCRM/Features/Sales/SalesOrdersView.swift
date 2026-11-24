@@ -4,6 +4,7 @@ import SwiftUI
 /// shop's and the stores', whatever channel they came through — with the web's filters, totals and
 /// "Create order" (a shop order, a store order, or a sale at the counter).
 struct SalesOrdersView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var query = SalesOrderQuery()
@@ -131,7 +132,7 @@ struct SalesOrdersView: View {
 
     private func statsSection(_ stats: SalesOrderStats) -> some View {
         Section {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            LazyVGrid(columns: .tiles(sizeClass), spacing: 10) {
                 Button { query.stage = nil } label: {
                     StatTile(title: "Total orders", value: stats.total.formatted(), systemImage: "cart")
                 }
