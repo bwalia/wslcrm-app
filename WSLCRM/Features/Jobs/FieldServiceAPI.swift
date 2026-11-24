@@ -723,13 +723,23 @@ struct FieldServiceAPI: Sendable {
     func convertToJob(_ uuid: String, body: ConvertToJobBody, siteUuid: String? = nil) async throws -> ConvertToJobResult {
         let envelope: Envelope.Standard<ConvertToJobResult> =
             try await client.send(.post("\(Self.base)/service-requests/\(uuid)/convert-to-job", json: body))
+        var result = envelope.data
         // opsapi #610 gap: convert-to-job passes the request's site to createJob, which drops
-        // `site_id` on insert. Best effort: set it on the new job (needs fs_jobs.update).
+        // `site_id` on insert. Set it on the new job (needs fs_jobs.update); say when that fails.
         if let siteUuid, !siteUuid.isEmpty {
-            struct SiteLink: Encodable, Sendable { let siteUuid: String }
-            _ = try? await client.sendRaw(.put("\(Self.base)/jobs/\(envelope.data.jobUuid)", json: SiteLink(siteUuid: siteUuid)))
+            do {
+                try await setJobSite(result.jobUuid, siteUuid: siteUuid)
+            } catch {
+                result.siteLinkError = error.asAPIError
+            }
         }
-        return envelope.data
+        return result
+    }
+
+    /// Puts a job at a site (`PUT /jobs/:uuid { site_uuid }`).
+    func setJobSite(_ jobUuid: String, siteUuid: String) async throws {
+        struct SiteLink: Encodable, Sendable { let siteUuid: String }
+        _ = try await client.sendRaw(.put("\(Self.base)/jobs/\(jobUuid)", json: SiteLink(siteUuid: siteUuid)))
     }
 
     // MARK: Sites (#610) — `{ success, data, meta }`
@@ -814,7 +824,8 @@ struct FieldServiceAPI: Sendable {
     static let maxPhotoBytes = 10 * 1024 * 1024
 
     func uploadPhoto(jobUuid: String, jpeg: Data, visitUuid: String?, caption: String?,
-                     itemUuid: String? = nil) async throws -> FsJobPhoto {
+                     itemUuid: String? = nil, idempotencyKey: String? = nil,
+                     filename: String? = nil) async throws -> FsJobPhoto {
         guard jpeg.count <= Self.maxPhotoBytes else {
             throw APIError.validation(ServerError(status: 413,
                                                   message: "That photo is too large to upload (over 10 MB). Take it again at a smaller size.",
@@ -825,9 +836,10 @@ struct FieldServiceAPI: Sendable {
         if let caption, !caption.isEmpty { fields.append(("caption", caption)) }
         // Ties the photo to a proposed line (more evidence for a part proposal).
         if let itemUuid { fields.append(("item_uuid", itemUuid)) }
-        let file = Endpoint.FilePart(fieldName: "photo", filename: "photo-\(Int(Date().timeIntervalSince1970)).jpg",
+        let file = Endpoint.FilePart(fieldName: "photo", filename: filename ?? "photo-\(Int(Date().timeIntervalSince1970)).jpg",
                                      mimeType: "image/jpeg", data: jpeg)
         let endpoint = Endpoint(.post, "\(Self.base)/jobs/\(jobUuid)/photos").withMultipart(fields: fields, file: file)
+            .withIdempotencyKey(idempotencyKey)
         do {
             let envelope: Envelope.Standard<FsJobPhoto> = try await client.send(endpoint)
             return envelope.data
@@ -970,6 +982,29 @@ struct FieldServiceAPI: Sendable {
                             entityId: visit.uuid, jobId: visit.jobUuid,
                             summary: "Finish job · \(visit.jobNumber)",
                             hints: ["complete_phase": body.completePhase ? "true" : "false"])
+        }
+
+        /// A queued "Finish job" carrying the customer's signature that the server can't keep: the workspace has
+        /// no file storage (503 `STORAGE_UNAVAILABLE`, "File storage isn't set up here…"), so it would be retried
+        /// for ever. Only a storage failure counts; any other error leaves the signature alone.
+        static func isStuckOnSignatureStorage(_ mutation: PendingMutation) -> Bool {
+            guard mutation.kind == .visitCheckOut, let body = mutation.body,
+                  String(decoding: body, as: UTF8.self).contains("\"customer_signature\"") else { return false }
+            var said = mutation.lastError ?? ""
+            if case .failed(let message, _) = mutation.state { said += " " + message }
+            return said.localizedCaseInsensitiveContains("storage")
+        }
+
+        /// The same finish without the signature (and its signer's name), as the online path sends it.
+        static func withoutSignature(_ mutation: PendingMutation) -> PendingMutation? {
+            guard let body = mutation.body,
+                  var json = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else { return nil }
+            json.removeValue(forKey: "customer_signature")
+            guard let data = try? JSONSerialization.data(withJSONObject: json, options: [.sortedKeys]) else { return nil }
+            return PendingMutation(kind: mutation.kind, method: mutation.method, path: mutation.path, body: data,
+                                   namespaceId: mutation.namespaceId, userId: mutation.userId, entityId: mutation.entityId,
+                                   jobId: mutation.jobId, summary: mutation.summary, hints: mutation.hints,
+                                   createdAt: mutation.createdAt)
         }
 
         static func noAccess(_ visit: Visit, reason: String, context: MutationContext) -> PendingMutation {

@@ -22,7 +22,9 @@ struct ContractsListView: View {
                           emptySystemImage: descriptor.systemImage,
                           emptyDescription: filters.isEmpty
                             ? "Maintenance contracts set the service levels the desk works to."
-                            : "No contracts match these filters.") { record in
+                            : "No contracts match these filters.",
+                          emptyActionTitle: "New contract",
+                          emptyAction: canCreate && filters.isEmpty ? { creating = true } : nil) { record in
                     NavigationLink(value: ResourceRoute(descriptorID: descriptor.id, recordID: record.id, seed: record)) {
                         ContractRow(contract: record)
                     }

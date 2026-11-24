@@ -431,6 +431,7 @@ struct VisitFormSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var values: VisitFormValues
     @State private var engineers: [Engineer] = []
+    @State private var engineersError: APIError?
     @State private var saving = false
     @State private var error: APIError?
     @State private var notes: [String] = []
@@ -472,6 +473,9 @@ struct VisitFormSheet: View {
                         ForEach(engineers) { Text($0.pickerLabel).tag(Optional($0.uuid)) }
                     }
                     .accessibilityIdentifier("visitForm.engineer")
+                    if let engineersError {
+                        InlineErrorRow(error: engineersError) { Task { await loadEngineers() } }
+                    }
                 }
                 if !phases.isEmpty {
                     Section("Phase") {
@@ -508,8 +512,18 @@ struct VisitFormSheet: View {
                     }
                 }
             }
-            .task { engineers = (try? await services.fieldService.engineers()) ?? [] }
+            .task { await loadEngineers() }
             .interactiveDismissDisabled(saving)
+        }
+    }
+
+    /// The engineers to pick from; a failure is shown with Try again, not an empty list.
+    private func loadEngineers() async {
+        do {
+            engineers = try await services.fieldService.engineers()
+            engineersError = nil
+        } catch {
+            engineersError = error.asAPIError
         }
     }
 
