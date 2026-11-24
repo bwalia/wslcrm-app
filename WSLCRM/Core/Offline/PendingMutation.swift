@@ -101,7 +101,8 @@ struct PendingMutation: Codable, Identifiable, Sendable, Equatable {
     var nextAttemptAt: Date?
     var lastError: String?
     var state: State
-    /// Single writes: sent as `Idempotency-Key` (creates only).
+    /// Single writes: sent as `Idempotency-Key` on every attempt (made once, when the write is made), so a
+    /// lost reply can't make the server do it twice. Routes that don't use keys ignore the header.
     var idempotencyKey: String?
     /// Chained writes (`pdCapture`); nil for a single call.
     var steps: [Step]?
@@ -124,6 +125,7 @@ struct PendingMutation: Codable, Identifiable, Sendable, Equatable {
         self.createdAt = createdAt
         self.attempts = 0
         self.state = .pending
+        self.idempotencyKey = UUID().uuidString
     }
 
     var isFailed: Bool {
