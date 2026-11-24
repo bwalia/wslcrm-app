@@ -252,6 +252,7 @@
 		66F483A38A7A2E4BCF78C89E /* VATView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C61268D687B30AF708EAA68 /* VATView.swift */; };
 		6740627DCDAEB3A8634C3E3D /* JobManageViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AC083287EA3BD10787651D4 /* JobManageViews.swift */; };
 		6837586C4AF5D9685B9C0127 /* ATSHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98A6910E9602293EAA774F06 /* ATSHomeView.swift */; };
+		68F2C0592BE583A05EE73444 /* WorkspaceDeepAuditTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4609AEAE83A7C489BCBD999 /* WorkspaceDeepAuditTests.swift */; };
 		6919101EECDE30DC198F2CE4 /* MktGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1831BE91069B694A75027E36 /* MktGuideView.swift */; };
 		699C46BD76CA43F52AA368C6 /* WorkspacePart+Operations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62CFF5598490ED275B3BA81B /* WorkspacePart+Operations.swift */; };
 		69B426B702FAD15F22C334C2 /* WorkspacePeopleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52EC2CC479A652FF392C7D8A /* WorkspacePeopleTests.swift */; };
@@ -564,6 +565,7 @@
 		E5026329597900737E2CD6F9 /* TaxReportsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17E73BEBF699148F4822669A /* TaxReportsView.swift */; };
 		E52E9C35FE316B1A258536B5 /* WebFormEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71A9E847543444EB9C47184C /* WebFormEditorView.swift */; };
 		E67136EBBE8EB8E5BD4C8A19 /* ShopSupplierModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97F0C848246EA2F955B0B3AC /* ShopSupplierModels.swift */; };
+		E68B859C6E64E5935E75D0F0 /* RecordSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A55E3DE5701419010AD564F /* RecordSearch.swift */; };
 		E6B1919803018469694845B1 /* PDLeadsAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C596AB9509DFD3AA99DB5B7 /* PDLeadsAPI.swift */; };
 		E6DAF49E3615C7D08675E424 /* WorkspacePart+People.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5ACA2F8EA59B90FB0C31021 /* WorkspacePart+People.swift */; };
 		E796F14ED4100A212841CD00 /* HealthRecords.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D858002F1AD8FB921D193E8 /* HealthRecords.swift */; };
@@ -959,6 +961,7 @@
 		78B6F9224365763E446F27F4 /* PropertyPAAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropertyPAAPI.swift; sourceTree = "<group>"; };
 		796D060315EB4065FEC6E3ED /* MktListDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MktListDetailView.swift; sourceTree = "<group>"; };
 		79E8CCBFD3C16167C05552EC /* WorkManagementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkManagementTests.swift; sourceTree = "<group>"; };
+		7A55E3DE5701419010AD564F /* RecordSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordSearch.swift; sourceTree = "<group>"; };
 		7A60A2700AE067902B133C8D /* WebFormInsightsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebFormInsightsTab.swift; sourceTree = "<group>"; };
 		7AC16E6963B1204BF4E258A0 /* AIRunnerModuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIRunnerModuleTests.swift; sourceTree = "<group>"; };
 		7AE87075E5F4191FA32F1901 /* ShopQuoteLines.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopQuoteLines.swift; sourceTree = "<group>"; };
@@ -1231,6 +1234,7 @@
 		E37C50A6F5A8D849C577041B /* PDWorkViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDWorkViews.swift; sourceTree = "<group>"; };
 		E38E510DB6CE422C7FA59C63 /* AcademyCourseFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcademyCourseFormView.swift; sourceTree = "<group>"; };
 		E3BE7B5281A562460F21679A /* PDBuyersViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDBuyersViews.swift; sourceTree = "<group>"; };
+		E4609AEAE83A7C489BCBD999 /* WorkspaceDeepAuditTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceDeepAuditTests.swift; sourceTree = "<group>"; };
 		E4892F6AFDBC83E69093CCEB /* PropertyDealsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropertyDealsModels.swift; sourceTree = "<group>"; };
 		E4BBA6607AAE5202B7F87318 /* HMRCFraudSignals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HMRCFraudSignals.swift; sourceTree = "<group>"; };
 		E4DBFE9C7371B1FA02642DD9 /* PluginsModuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginsModuleTests.swift; sourceTree = "<group>"; };
@@ -1659,6 +1663,7 @@
 				0624645DD3040CE6A890805C /* WorkspaceAdminTests.swift */,
 				5B81519BBD05886F5C3EE765 /* WorkspaceBillingTests.swift */,
 				FF95B0FBF2F0929CDABFF356 /* WorkspaceBrandTests.swift */,
+				E4609AEAE83A7C489BCBD999 /* WorkspaceDeepAuditTests.swift */,
 				EAC51EAEE49083ECCC864363 /* WorkspaceFirstRunTests.swift */,
 				1D8D6B61E5CE89DAACB90C6E /* WorkspaceIntegrationsTests.swift */,
 				93C04B6F12635CB4D7D21D40 /* WorkspaceModuleTests.swift */,
@@ -1909,6 +1914,7 @@
 			children = (
 				3E588CCF13D92CA34E03CBD4 /* AppMenu.swift */,
 				041232C972DC2FCAB0DD361D /* MenuView.swift */,
+				7A55E3DE5701419010AD564F /* RecordSearch.swift */,
 			);
 			path = Menu;
 			sourceTree = "<group>";
@@ -3029,6 +3035,7 @@
 				F9DE0C31E9D9DAB0B67B7276 /* QuotePDF.swift in Sources */,
 				2A07CF9B6F78BDAF96BF4C10 /* QuoteSheetView.swift in Sources */,
 				289114D56F96C646F2722366 /* Record.swift in Sources */,
+				E68B859C6E64E5935E75D0F0 /* RecordSearch.swift in Sources */,
 				FFF77B561F9368165B8D3FFD /* ReportPDFRenderer.swift in Sources */,
 				BFB72D5431212A5442E6B90F /* ReportsViews.swift in Sources */,
 				5215D9093164BC0EC0529BCF /* ResourceDescriptor.swift in Sources */,
@@ -3248,6 +3255,7 @@
 				2A9A3635FAC9861A48D8C68F /* WorkspaceAdminTests.swift in Sources */,
 				BA73DD38F18E8BDFDE046935 /* WorkspaceBillingTests.swift in Sources */,
 				DC9E2D22B0301D95BD775790 /* WorkspaceBrandTests.swift in Sources */,
+				68F2C0592BE583A05EE73444 /* WorkspaceDeepAuditTests.swift in Sources */,
 				CA08C1504EF1B0CF3D4C1FE2 /* WorkspaceFirstRunTests.swift in Sources */,
 				5B257342045EE861F6CD19E8 /* WorkspaceIntegrationsTests.swift in Sources */,
 				ACAEDC8FAE98E82A895F3C43 /* WorkspaceModuleTests.swift in Sources */,

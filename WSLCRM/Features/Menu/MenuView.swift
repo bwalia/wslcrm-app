@@ -6,25 +6,33 @@ import UIKit
 /// native screen.
 struct AppsView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(\.services) private var services
     @State private var search = ""
+    @State private var records = RecordSearchModel()
 
     var body: some View {
         let catalog = AppCatalog(menu: session.menu)
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 22) {
                 if session.menu.isEmpty {
-                    // No menu yet (offline on first launch): the modules the app knows, by permission.
+                    if MenuLoadFailedCard.applies(hasWorkspace: session.workspace != nil, error: session.permissionsError,
+                                                  menuIsEmpty: true) {
+                        MenuLoadFailedCard()
+                    }
+                    // No menu yet (offline on first launch): the apps the app knows, by permission.
                     VStack(alignment: .leading, spacing: 10) {
-                        DashboardSectionHeader("Modules")
+                        DashboardSectionHeader("Apps")
                         VStack(spacing: 0) { LegacyModuleLinks() }
                             .buttonStyle(.pressableCard)
                             .brandCard(padding: 8)
                     }
                 } else {
                     let groups = catalog.filtered(search)
+                    let searchingRecords = search.trimmingCharacters(in: .whitespaces).count >= RecordSearchModel.minimumLength
                     if catalog.groups.isEmpty {
                         NoAccessCard()
-                    } else if groups.isEmpty {
+                    } else if groups.isEmpty, !searchingRecords || (records.groups.isEmpty && !records.isSearching
+                                                                     && records.error == nil) {
                         ContentUnavailableView.search(text: search)
                     }
                     ForEach(groups) { group in
@@ -42,6 +50,12 @@ struct AppsView: View {
                             .brandCard(padding: 6, radius: 18)
                         }
                     }
+                    // Customers, invoices, orders… matching the search (the web's ⌘K).
+                    if searchingRecords {
+                        RecordSearchResults(model: records, menu: session.menu) {
+                            Task { await records.search(search, api: services.workspace()) }
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -49,7 +63,10 @@ struct AppsView: View {
         }
         .brandCanvas()
         .navigationTitle("Apps")
-        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search apps")
+        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "Search apps, customers, invoices…")
+        .task(id: search) { await records.search(search, api: services.workspace()) }
+        .navigationDestination(for: RecordSearchTarget.self) { RecordSearchDestination(target: $0) }
         .refreshable { await session.reloadPermissions() }
         .accessibilityIdentifier("apps.list")
     }
@@ -179,7 +196,7 @@ struct ProfileSheet: View {
                 }
             } message: {
                 if hasUnsynced {
-                    Text("You have \(sync.mutations.count) change(s) that haven't reached the server. They stay on this device and sync the next time you sign in.")
+                    Text("You have \(sync.mutations.count) change(s) that haven't been saved online yet. They stay on this device and are saved the next time you sign in.")
                 }
             }
         }
