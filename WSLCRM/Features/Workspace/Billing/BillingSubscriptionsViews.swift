@@ -133,13 +133,15 @@ private struct BillingSubscriptionsContent: View {
             switch tab {
             case .subscriptions:
                 PagedList(model: model, emptyTitle: "No subscriptions", emptySystemImage: "arrow.triangle.2.circlepath",
-                          emptyDescription: "Customers who pay every month or year appear here.") { row in
+                          emptyDescription: "Customers who pay every month or year appear here.",
+                          emptyActionTitle: "Record a sale", emptyAction: canCreate && appFilter.isEmpty ? { sheet = .sale } : nil) { row in
                     NavigationLink { BillingSubscriptionDetail(subscription: row) } label: { BillingSubscriptionRow(row: row) }
                         .accessibilityIdentifier("billing.subscription.\(row.id)")
                 }
             case .purchases:
                 PagedList(model: model, emptyTitle: "No purchases", emptySystemImage: "bag",
-                          emptyDescription: "One-off and fixed-term sales appear here, paid online or recorded by hand.") { row in
+                          emptyDescription: "One-off and fixed-term sales appear here, paid online or recorded by hand.",
+                          emptyActionTitle: "Record a sale", emptyAction: canCreate && appFilter.isEmpty ? { sheet = .sale } : nil) { row in
                     NavigationLink {
                         BillingPurchaseDetail(purchase: row) { message in finished(message, key: nil, reload: [.purchases, .history]) }
                     } label: {
@@ -149,7 +151,8 @@ private struct BillingSubscriptionsContent: View {
                 }
             case .grants:
                 PagedList(model: model, emptyTitle: "No access granted", emptySystemImage: "gift",
-                          emptyDescription: "Access you give a customer without a sale (a partner, a trial, a refund) appears here.") { row in
+                          emptyDescription: "Access you give a customer without a sale (a partner, a trial, a refund) appears here.",
+                          emptyActionTitle: "Grant access", emptyAction: canCreate && appFilter.isEmpty ? { sheet = .grant } : nil) { row in
                     NavigationLink {
                         BillingGrantDetail(grant: row) { message in finished(message, key: nil, reload: [.grants]) }
                     } label: {
