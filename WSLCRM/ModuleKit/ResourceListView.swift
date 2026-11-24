@@ -77,7 +77,9 @@ private struct ResourceListContent: View {
                       : (descriptor.list.searchPrompt ?? "Search \(descriptor.title.lowercased())"),
                   emptyTitle: descriptor.list.emptyTitle ?? "No \(descriptor.title.lowercased()) yet",
                   emptySystemImage: descriptor.systemImage,
-                  emptyDescription: descriptor.list.emptyDescription ?? descriptor.summary) { record in
+                  emptyDescription: descriptor.list.emptyDescription ?? descriptor.summary,
+                  emptyActionTitle: "New \(descriptor.noun)",
+                  emptyAction: canCreate ? { creating = true } : nil) { record in
             NavigationLink(value: ResourceRoute(descriptorID: descriptor.id, recordID: record.id, seed: record)) {
                 RecordRow(record: record, list: descriptor.list)
             }
