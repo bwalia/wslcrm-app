@@ -20,6 +20,7 @@ struct HomeView: View {
     @State private var invitations = InvitationInbox()
     @State private var notifications = NotificationsModel()
     @State private var showingNotifications = false
+    @State private var isDeliveryPartner = false
 
     var body: some View {
         let catalog = AppCatalog(menu: session.menu)
@@ -37,6 +38,19 @@ struct HomeView: View {
                 }
 
                 if !invitations.items.isEmpty || !invitations.feedback.isNone { invitationsSection }
+                // Delivery partners (no workspace needed): their drops, signed for on delivery.
+                if isDeliveryPartner {
+                    NavigationLink(value: NativeScreenRoute(SalesScreen.myDeliveries)) {
+                        HStack {
+                            MyDeliveries.entryLabel.font(.brandHeadline)
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundStyle(.secondaryText)
+                        }
+                        .brandCard(padding: 16, radius: 16)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("home.myDeliveries")
+                }
                 if !HomeDigest.sources(session: session).isEmpty { todaySection }
                 if !hubs.isEmpty { workSection }
                 quickActions(catalog: catalog)
@@ -52,6 +66,8 @@ struct HomeView: View {
             .padding(.bottom, 32)
         }
         .brandCanvas()
+        // A running task timer, wherever it was started (hidden when none is running).
+        .workRunningTimer()
         .overlay(alignment: .top) { StatusBarBackdrop() }
         .toolbar(.hidden, for: .navigationBar)
         .navigationTitle("Home")
@@ -65,6 +81,7 @@ struct HomeView: View {
             await digest.load(session: session, services: services)
             await invitations.load(services.workspace())
             await notifications.load(services.workspace())
+            isDeliveryPartner = await MyDeliveries.isPartner(services)
         }
         .sheet(isPresented: $showingNotifications) { NotificationsView(model: notifications) }
         .onAppear {
