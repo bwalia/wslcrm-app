@@ -308,6 +308,9 @@ struct ShopHomeView: View {
                 .accessibilityIdentifier("shop.quotes")
             NavigationLink { ShopDealsListView() } label: { Label("Deals", systemImage: "lock.doc") }
                 .accessibilityIdentifier("shop.deals")
+            // "Chats" as on the dashboard's shop tabs: what customers asked the shop's AI assistant.
+            NavigationLink { ShopChatsListView() } label: { Label("Chats", systemImage: "bubble.left.and.bubble.right") }
+                .accessibilityIdentifier("shop.chats")
             if session.permissions.shows(.orders) || session.permissions.can(.read, .shop) {
                 NavigationLink(value: NativeScreen.orders) {
                     Label("Every order (online, phone and till)", systemImage: "list.bullet.rectangle")
@@ -368,8 +371,6 @@ struct ShopHomeView: View {
             .accessibilityIdentifier("shop.members")
             resourceLink(ModuleCatalog.shopWaitlist, id: "shop.waitlist")
             resourceLink(ModuleCatalog.shopCredits, id: "shop.credits")
-            NavigationLink { ShopChatsListView() } label: { Label("Assistant chats", systemImage: "bubble.left.and.bubble.right") }
-                .accessibilityIdentifier("shop.chats")
             NavigationLink { ShopKnowledgeView() } label: { Label("Assistant knowledge", systemImage: "books.vertical") }
                 .accessibilityIdentifier("shop.knowledge")
             resourceLink(ModuleCatalog.shopLegal, id: "shop.legal")

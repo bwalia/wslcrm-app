@@ -102,9 +102,9 @@ struct LeadShopSections: View {
                         }
                     }
                 }
-                if !sessions.isEmpty {
-                    NavigationLink { ShopChatsListView() } label: {
-                        Label(sessions.count == 1 ? "They chatted with the shop's AI" : "They chatted with the shop's AI \(sessions.count) times",
+                ForEach(Array(sessions.enumerated()), id: \.element) { index, chat in
+                    NavigationLink { ShopChatDetailView(uuid: chat) } label: {
+                        Label(sessions.count == 1 ? "Open their chat with the shop's AI" : "Chat \(index + 1) with the shop's AI",
                               systemImage: "bubble.left.and.bubble.right")
                     }
                 }

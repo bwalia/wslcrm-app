@@ -584,7 +584,12 @@ struct ShopQuoteDetailView: View {
                     }
                 }
                 DetailRow(label: "Source", value: current.source.map(Formatters.humanize))
-                DetailRow(label: "Assistant chat", value: current.chatSessionUuid == nil ? nil : "Started from a chat")
+                if let chat = current.chatSessionUuid {
+                    NavigationLink { ShopChatDetailView(uuid: chat) } label: {
+                        LabeledContent("Chat", value: "View transcript")
+                    }
+                    .accessibilityIdentifier("shopQuote.chat")
+                }
                 DetailRow(label: "CRM lead", value: current.crmLeadId.map { "#\($0)" })
                 DetailRow(label: "Created", value: Formatters.dateTime(current.createdAt))
                 DetailRow(label: "Updated", value: Formatters.dateTime(current.updatedAt))
