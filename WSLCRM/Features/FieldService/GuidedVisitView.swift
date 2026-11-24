@@ -52,13 +52,15 @@ private struct GuidedVisitContent: View {
         }
         .sheet(item: $proposingPart) { proposal in
             PartProposalSheet(model: proposal,
-                              currency: model.displayedVisit?.jobCurrency ?? Formatters.fallbackCurrency) {
+                              currency: model.displayedVisit?.jobCurrency ?? Formatters.fallbackCurrency) { message in
+                model.notice = message
                 Task { await model.load() }
             }
         }
         .sheet(isPresented: $showingFinish) {
             if let detail = model.detail {
-                CheckOutSheet(visit: detail.visit, phase: detail.phase) { form in
+                CheckOutSheet(visit: detail.visit, phase: detail.phase,
+                              signatureUnavailable: model.signatureUnavailable) { form in
                     await model.checkOut(form)
                 }
             }
@@ -90,7 +92,7 @@ private struct GuidedVisitContent: View {
     private func content(detail: VisitDetail, visit: Visit) -> some View {
         let onSite = visit.status == .onSite
         let done = visit.status == .completed
-        return ScrollView {
+        return ScrollViewReader { proxy in ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 // Header
                 VStack(alignment: .leading, spacing: 4) {
@@ -237,14 +239,22 @@ private struct GuidedVisitContent: View {
                         Text("Job complete").font(.wsTitle3.bold())
                         if let summary = visit.workSummary { Text(summary).multilineTextAlignment(.center) }
                         if let hours = visit.labourHours { Text("\(hours.formatted()) h on site").font(.wsFootnote).foregroundStyle(.secondaryText) }
+                        if visit.hasCustomerSignature { VisitSignatureCard(visitUuid: visit.uuid) }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(20)
                     .background(Tone.success.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 20))
                     .accessibilityIdentifier("guided.complete")
+                    .id("guided.complete")
                 }
             }
             .padding(16)
+        }
+        // After "Finish job" the sheet closes on a long page: bring "Job complete" into view.
+        .onChange(of: visit.status) { _, status in
+            guard status == .completed else { return }
+            withAnimation { proxy.scrollTo("guided.complete", anchor: .bottom) }
+        }
         }
         .background(Color(.systemGroupedBackground))
         .onAppear {
@@ -257,6 +267,21 @@ private struct GuidedVisitContent: View {
     @ViewBuilder
     private func primaryActionBar(_ visit: Visit) -> some View {
         VStack(spacing: 6) {
+            if let notice = model.notice {
+                // Says what the last tap did, next to the button that did it.
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill").accessibilityHidden(true)
+                    Text(notice).font(.wsSubheadline.weight(.semibold))
+                    Spacer(minLength: 0)
+                    Button { model.notice = nil } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Dismiss")
+                }
+                .foregroundStyle(Tone.success.textColor)
+                .padding(10)
+                .background(Tone.success.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("guided.notice")
+            }
             switch visit.status {
             case .scheduled:
                 actionButton("On my way", systemImage: "car.fill", tone: .info, id: "enRoute") {
@@ -296,7 +321,7 @@ private struct GuidedVisitContent: View {
         // Opaque, not `.bar`: work notes must never be read through the action bar.
         .background(Color(.systemGroupedBackground))
         .overlay(alignment: .top) { Divider() }
-        .opacity(visit.status.isOpen || visit.status == .noAccess ? 1 : 0)
+        .opacity(visit.status.isOpen || visit.status == .noAccess || model.notice != nil ? 1 : 0)
     }
 
     private func actionButton(_ title: String, systemImage: String, tone: Tone, id: String, action: @escaping () -> Void) -> some View {

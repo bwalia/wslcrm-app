@@ -29,6 +29,12 @@ struct PATodayView: View {
     /// The card whose Call button was tapped: back in the app, offer to capture how it went.
     @State private var calledCard: PACard?
     @State private var askAfterCall: PACard?
+    /// A manager answering a handoff straight from its card (Face ID first, as on the handoff screen).
+    @State private var replyingTo: PACard?
+    @State private var replyText = ""
+    @State private var answering: String?
+    @State private var answerNotice: String?
+    @State private var replyFailure: String?
 
     private static let pollInterval: Duration = .seconds(60)
 
@@ -73,6 +79,19 @@ struct PATodayView: View {
         .sheet(isPresented: $showingCapture) {
             PACaptureSheet(context: captureContext) { Task { await load(quietly: true) } }
         }
+        .alert("Reply to \(replyingTo?.person?.name ?? "the question")", isPresented: Binding(
+            get: { replyingTo != nil }, set: { if !$0 { replyingTo = nil } })) {
+            TextField("Your view", text: $replyText, axis: .vertical)
+            Button("Send") {
+                if let card = replyingTo { Task { await answer(card, agree: false) } }
+            }
+            Button("Cancel", role: .cancel) { replyText = "" }
+        } message: {
+            Text("You'll confirm with \(session.biometrics.displayName). It goes back onto the deal.")
+        }
+        .alert(replyFailure ?? "", isPresented: Binding(get: { replyFailure != nil }, set: { if !$0 { replyFailure = nil } })) {
+            Button("OK", role: .cancel) {}
+        }
     }
 
     // MARK: Content
@@ -97,6 +116,13 @@ struct PATodayView: View {
             }
             if !manager, today.mode != "briefing" { modePicker }
             if let cachedAt { CachedDataNotice(savedAt: cachedAt) }
+            if let answerNotice {
+                Section {
+                    Label(answerNotice, systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(Tone.success.textColor)
+                        .accessibilityIdentifier("pa.today.answerNotice")
+                }
+            }
             if !manager { capturesSection }
 
             let all = visibleCards(today.cards)
@@ -143,7 +169,45 @@ struct PATodayView: View {
                    onCall: { calledCard = card },
                    onAsk: { asking = AskSheet(context: context(for: card)) },
                    onDone: { queue(card, .done) },
-                   onLater: { laterCard = card })
+                   onLater: { laterCard = card },
+                   answer: manager && session.permissions.pa(.update, "handoffs") ? PACardView.Answer(
+                       sending: answering == card.handoffUuid,
+                       agree: { Task { await answer(card, agree: true) } },
+                       reply: { replyText = ""; replyingTo = card }) : nil)
+    }
+
+    /// `POST /handoffs/:id/reply` from the card, after Face ID — never queued. As on the handoff
+    /// screen (and the web), agreeing records the PA's recommendation as the decision.
+    private func answer(_ card: PACard, agree: Bool) async {
+        guard let uuid = card.handoffUuid else { return }
+        let text = replyText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard agree || !text.isEmpty else { return }
+        let who = card.person?.name ?? "the"
+        guard await session.biometrics.authenticate(reason: "Answer \(who)'s question") else {
+            answerNotice = nil
+            replyFailure = "Not sent: \(session.biometrics.displayName) didn't confirm it's you."
+            return
+        }
+        answering = uuid
+        defer { answering = nil }
+        do {
+            let detail = try await services.propertyPA.handoffDetail(uuid)
+            let body = PATodayView.replyBody(agree: agree, text: text, recommendation: detail.recommendation)
+            try await services.propertyPA.replyHandoff(uuid, reply: body.reply, decision: body.decision)
+            replyText = ""
+            replyFailure = nil
+            answerNotice = agree ? "Agreed. It goes back onto the deal." : "Reply sent. It goes back onto the deal."
+            await load(quietly: true)
+        } catch {
+            replyFailure = error.asAPIError.localizedDescription
+        }
+    }
+
+    /// What the reply route is sent: agreeing records the recommendation, a reply is the manager's words.
+    nonisolated static func replyBody(agree: Bool, text: String, recommendation: String?) -> (reply: String, decision: String?) {
+        guard agree else { return (text, nil) }
+        let reply = recommendation.map { "Agreed: \($0)" } ?? (text.isEmpty ? "Agreed." : text)
+        return (reply, recommendation ?? reply)
     }
 
     private var modePicker: some View {
@@ -225,7 +289,8 @@ struct PATodayView: View {
             Button { asking = AskSheet(context: nil) } label: { Label("Ask PA", systemImage: "bubble.left.and.text.bubble.right") }
                 .accessibilityIdentifier("pa.ask")
         }
-        if session.propertyPA?.can("create", "knowledge") ?? false {
+        // POST /knowledge/teach needs property_pa_knowledge.create.
+        if session.permissions.pa(.create, "knowledge") {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { showingTeach = true } label: { Label("Teach PA", systemImage: "graduationcap") }
                     .accessibilityIdentifier("pa.teach")
@@ -300,6 +365,14 @@ struct PACardView: View {
     let onAsk: () -> Void
     let onDone: () -> Void
     let onLater: () -> Void
+    /// Agree / Reply on a manager's handoff card (nil: the role can't answer, or not a manager card).
+    var answer: Answer?
+
+    struct Answer {
+        var sending: Bool
+        let agree: () -> Void
+        let reply: () -> Void
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -342,11 +415,30 @@ struct PACardView: View {
     @ViewBuilder
     private var buttons: some View {
         if manager, let handoff = card.handoffUuid {
+            if let answer {
+                HStack(spacing: 8) {
+                    Button(action: answer.agree) {
+                        if answer.sending {
+                            ProgressView()
+                        } else {
+                            Label("Agree", systemImage: "faceid")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Tone.success.solidColor)
+                    .accessibilityIdentifier("pa.card.agree")
+                    Button(action: answer.reply) { Label("Reply", systemImage: "arrowshape.turn.up.left") }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("pa.card.reply")
+                }
+                .disabled(answer.sending)
+                .font(.wsSubheadline.weight(.semibold))
+            }
             HStack(spacing: 8) {
                 NavigationLink(value: PAHandoffRoute(uuid: handoff)) {
-                    Label("Decide", systemImage: "checkmark.seal")
+                    Label(answer == nil ? "Decide" : "See the details", systemImage: "checkmark.seal")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .accessibilityIdentifier("pa.card.decide")
                 if let opportunity = card.opportunityUuid {
                     NavigationLink(value: NativeScreenRoute("pa.opportunity", opportunity)) {

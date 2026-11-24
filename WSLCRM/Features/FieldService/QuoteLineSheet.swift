@@ -57,11 +57,13 @@ struct QuoteLineSheet: View {
                     }
                     Section {
                         SheetSectionTitle("Time")
-                        Stepper(value: $hours, in: 0...24, step: 0.5) {
-                            LabeledContent("Hours", value: hours.formatted())
-                                .font(.wsTitle3.monospacedDigit())
+                        LabeledContent("Hours") {
+                            TextField("Hours", value: $hours, format: .number.precision(.fractionLength(0...2)))
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .accessibilityIdentifier("quote.hours")
                         }
-                        .accessibilityIdentifier("quote.hours")
+                        .font(.wsTitle3.monospacedDigit())
                         Stepper(value: $days, in: 0...60, step: 1) {
                             LabeledContent("Days", value: days.formatted())
                                 .font(.wsTitle3.monospacedDigit())
@@ -138,7 +140,7 @@ struct QuoteLineSheet: View {
 
     private var isValid: Bool {
         switch kind {
-        case .labour: hours > 0 || days > 0
+        case .labour: hours >= 0 && (hours > 0 || days > 0)
         case .material, .hire: !description.trimmingCharacters(in: .whitespaces).isEmpty
         }
     }

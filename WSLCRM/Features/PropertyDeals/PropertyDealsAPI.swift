@@ -48,37 +48,11 @@ struct PropertyDealsAPI: Sendable {
         return envelope.data
     }
 
-    /// "Let AI do it" — Phase 5 of the backend (API.md §4). Until it ships the server answers 404.
-    func startAgentRun(taskUuid: String) async throws {
-        try await client.sendDiscardingBody(.post("\(Self.base)/tasks/\(taskUuid)/agent-run", json: EmptyBody()))
-    }
-
     // MARK: Deals
 
     enum DealFilter: String, Sendable, CaseIterable, Identifiable {
         case red, amber, mine
         var id: String { rawValue }
-    }
-
-    func deals(_ filter: DealFilter, me userUuid: String, page: Int, perPage: Int = 25) async throws -> Fetched<Page<PDDeal>> {
-        var query = [URLQueryItem(name: "status", value: "active"),
-                     URLQueryItem(name: "page", value: String(page)),
-                     URLQueryItem(name: "per_page", value: String(perPage))]
-        switch filter {
-        case .red, .amber:
-            query += [URLQueryItem(name: "health", value: filter.rawValue),
-                      URLQueryItem(name: "sort", value: "money_at_risk")]
-        case .mine:
-            query += [URLQueryItem(name: "owner_user_uuid", value: userUuid),
-                      URLQueryItem(name: "sort", value: "health")]
-        }
-        let fetched: Fetched<Envelope.Standard<LossyArray<PDDeal>>> =
-            try await cachedEnvelope(.get("\(Self.base)/deals", query: query), cacheKey: "pd/deals/\(filter.rawValue)/\(page)")
-        let envelope = fetched.value
-        let items = envelope.data.elements
-        let result = Page(items: items, page: envelope.meta?.page ?? page, perPage: envelope.meta?.perPage ?? perPage,
-                          total: envelope.meta?.total ?? items.count)
-        return Fetched(value: result, cachedAt: fetched.cachedAt)
     }
 
     func overview(dealUuid: String) async throws -> Fetched<PDDealOverview> {

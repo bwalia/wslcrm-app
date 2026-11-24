@@ -390,9 +390,12 @@ private struct PDMapSelection: View {
         }
         if let status = feature.string("company_status") { DetailRow(label: "Status", value: Formatters.humanize(status)) }
         if let address = feature.string("address_snippet") { DetailRow(label: "Address", value: address) }
-        Button("Create a lead from this company", systemImage: "person.badge.plus") { Task { await createLead() } }
-            .disabled(working)
-            .accessibilityIdentifier("pd.map.createLead")
+        // POST /finder/companies/lead needs property_deals_leads.create.
+        if session.propertyDeals?.can(.create, .leads) ?? false {
+            Button("Create a lead from this company", systemImage: "person.badge.plus") { Task { await createLead() } }
+                .disabled(working)
+                .accessibilityIdentifier("pd.map.createLead")
+        }
     }
 
     private func createDeal() async {

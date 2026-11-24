@@ -143,11 +143,10 @@ final class EngineerFlowUITests: XCTestCase {
         XCTAssertTrue(element("guided.status").label.contains("On site"), "The stub visit is already checked in")
         audit("Guided visit")
 
-        // Labour: hours come from a stepper, so engineers never type on site.
+        // Labour: hours are typed as a number (1.5, 0.75), as on the web; it starts at 1.
         tap("guided.tile.labour")
-        let hours = app.steppers["quote.hours"]
+        let hours = app.textFields["quote.hours"]
         XCTAssertTrue(hours.waitForExistence(timeout: 10))
-        hours.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
         audit("Quote line — labour")
         element("quote.add").tap()
 

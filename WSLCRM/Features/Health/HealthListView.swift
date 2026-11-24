@@ -117,6 +117,12 @@ struct HealthListView<Row: View>: View {
             NavigationLink(value: destination(record)) { row(record) }
                 .accessibilityIdentifier("health.row.\(record.id)")
         }
+        .overlay {
+            // A refusal is about the person's role, not a fault: say who can fix it.
+            if HealthAccess.isRefused(model.state.error), model.items.isEmpty {
+                HealthNoAccessView().frame(maxWidth: .infinity, maxHeight: .infinity).background(Color(.systemBackground))
+            }
+        }
         .navigationTitle(title)
         .safeAreaInset(edge: .top, spacing: 0) { filterSummary }
         .onAppear {

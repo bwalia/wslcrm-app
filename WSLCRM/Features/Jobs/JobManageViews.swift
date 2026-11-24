@@ -4,7 +4,7 @@ import SwiftUI
 
 // MARK: - Edit the job
 
-/// The job's details in the module kit form (`ModuleCatalog.fsJobs`): loads the job as the server
+/// The job's details in the job form (`JobFormView`): loads the job as the server
 /// sends it, then saves only what changed.
 struct JobEditSheet: View {
     let jobUuid: String
@@ -17,7 +17,7 @@ struct JobEditSheet: View {
         NavigationStack {
             switch state {
             case .loaded(let record):
-                ResourceFormView(descriptor: ModuleCatalog.fsJobs, existing: record) { _ in onSaved() }
+                JobFormView(existing: record) { _ in onSaved() }
             case .failed(let error):
                 List { InlineErrorRow(error: error) { Task { await load() } } }
                     .navigationTitle("Edit job")

@@ -156,7 +156,7 @@ struct ServiceRequestsListView: View {
                         Text("Any priority").tag(String?.none)
                         ForEach(ModuleCatalog.jobPriorityChoices) { Text($0.label).tag(Optional($0.value)) }
                     }
-                    Toggle("Missed its target (SLA)", isOn: $model.slaBreached)
+                    Toggle("Missed a target", isOn: $model.slaBreached)
                 } label: {
                     Label("Filter", systemImage: model.filter == .open && model.priority == nil && !model.slaBreached
                           ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
@@ -212,7 +212,7 @@ struct ServiceRequestRow: View {
             HStack(spacing: 12) {
                 Label(Formatters.humanize(request.channel), systemImage: "phone.arrow.down.left")
                 if request.slaBreached {
-                    Label("SLA breached", systemImage: "exclamationmark.triangle.fill")
+                    Label("Missed its target", systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(Tone.danger.textColor)
                 }
                 if let created = request.createdAt {
@@ -404,7 +404,7 @@ private struct ServiceRequestDetailContent: View {
                         request.status.badge
                         if request.priority != .normal { request.priority.badge }
                         if request.slaBreached {
-                            StatusBadge(text: "SLA breached", systemImage: "exclamationmark.triangle.fill", tone: .danger)
+                            StatusBadge(text: "Missed its target", systemImage: "exclamationmark.triangle.fill", tone: .danger)
                         }
                     }
                     if let description = request.description {

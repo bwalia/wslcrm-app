@@ -19,7 +19,8 @@ final class PartProposalModel: Identifiable {
     var selected: FsPart?
     var quantity: Decimal = 1
     var reason = ""
-    var photo: UIImage?
+    /// The first photo goes up with the proposal; the rest are tied to the new line afterwards.
+    var photos: [UIImage] = []
     private(set) var submitting = false
     var error: APIError?
 
@@ -32,7 +33,7 @@ final class PartProposalModel: Identifiable {
     }
 
     var canSubmit: Bool {
-        selected != nil && photo != nil && !reason.trimmingCharacters(in: .whitespaces).isEmpty
+        selected != nil && !photos.isEmpty && !reason.trimmingCharacters(in: .whitespaces).isEmpty
             && quantity > 0 && !submitting
     }
 
@@ -42,18 +43,38 @@ final class PartProposalModel: Identifiable {
         return price * quantity
     }
 
-    func submit() async -> JobItem? {
-        guard let part = selected, let photo, let jpeg = JobPhotosModel.jpeg(from: photo) else { return nil }
+    /// Sends the proposal with its first photo (`POST /jobs/{uuid}/part-proposals`), then each other
+    /// photo to `POST /jobs/{uuid}/photos` with the new line's `item_uuid`. Returns what to tell the
+    /// engineer, or nil when the proposal itself failed (the error is shown on the sheet).
+    func submit() async -> String? {
+        guard let part = selected, let first = photos.first, let jpeg = JobPhotosModel.jpeg(from: first) else { return nil }
         submitting = true
         defer { submitting = false }
+        let item: JobItem
         do {
-            return try await api.proposePart(jobUuid: jobUuid, partUuid: part.uuid, quantity: quantity,
+            item = try await api.proposePart(jobUuid: jobUuid, partUuid: part.uuid, quantity: quantity,
                                              reason: reason, unitPrice: part.unitPrice, taxRate: part.taxRate,
                                              visitUuid: visitUuid, jpeg: jpeg)
         } catch {
             self.error = error.asAPIError
             return nil
         }
+        var failed = 0
+        for extra in photos.dropFirst() {
+            guard let data = JobPhotosModel.jpeg(from: extra),
+                  (try? await api.uploadPhoto(jobUuid: jobUuid, jpeg: data, visitUuid: visitUuid, caption: nil,
+                                              itemUuid: item.uuid)) != nil else {
+                failed += 1
+                continue
+            }
+        }
+        return Self.sentMessage(photos: photos.count, failed: failed)
+    }
+
+    nonisolated static func sentMessage(photos: Int, failed: Int) -> String {
+        guard failed > 0 else { return "Part sent to the office for approval." }
+        return "Part sent to the office for approval, but \(failed) of \(photos) photos didn't upload. "
+            + "Add them again from Photos."
     }
 }
 
@@ -62,7 +83,8 @@ struct PartProposalSheet: View {
     /// Prices are a manager concern on the quote sheet, but a part's own price is on the shelf
     /// label; showing it here is what stops an engineer proposing a £900 compressor by accident.
     let currency: String?
-    let onProposed: () -> Void
+    /// Called with what to tell the engineer once the proposal is in.
+    let onProposed: (String) -> Void
 
     @Environment(ConnectivityMonitor.self) private var connectivity
     @Environment(\.dismiss) private var dismiss
@@ -106,7 +128,7 @@ struct PartProposalSheet: View {
             .fullScreenCover(isPresented: $showingCamera) {
                 CameraCapture { image in
                     showingCamera = false
-                    if let image { model.photo = image }
+                    if let image { model.photos.append(image) }
                 }
                 .ignoresSafeArea()
             }
@@ -115,7 +137,7 @@ struct PartProposalSheet: View {
                 pickerItem = nil
                 Task {
                     if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
-                        model.photo = image
+                        model.photos.append(image)
                     }
                 }
             }
@@ -175,47 +197,65 @@ struct PartProposalSheet: View {
 
     private var photoSection: some View {
         Section {
-            if let photo = model.photo {
-                Image(uiImage: photo)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(height: 180)
-                    .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .accessibilityLabel("Fault photo")
-                    .accessibilityIdentifier("partProposal.photo")
-                Button("Retake", systemImage: "arrow.counterclockwise") { model.photo = nil }
-            } else {
-                if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                    Button("Take photo of the fault", systemImage: "camera.fill") { showingCamera = true }
-                        .accessibilityIdentifier("partProposal.takePhoto")
-                }
-                PhotosPicker(selection: $pickerItem, matching: .images) {
-                    Label("Choose from library", systemImage: "photo.on.rectangle")
-                }
-                .accessibilityIdentifier("partProposal.libraryPhoto")
-                #if DEBUG
-                // A simulator has no camera and a UI test has no library worth driving, so test
-                // runs get a generated photo. Debug-only: this is compiled out of Release.
-                if ProcessInfo.processInfo.arguments.contains(UITestSupport.samplePhotoArgument) {
-                    Button("Use sample photo", systemImage: "photo") {
-                        model.photo = UITestSupport.samplePhoto()
+            if !model.photos.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(Array(model.photos.enumerated()), id: \.offset) { index, photo in
+                            Image(uiImage: photo)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 140, height: 140)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(alignment: .topTrailing) {
+                                    Button {
+                                        model.photos.remove(at: index)
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.wsTitle3)
+                                            .symbolRenderingMode(.palette)
+                                            .foregroundStyle(.white, .black.opacity(0.6))
+                                            .frame(width: 44, height: 44)
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .accessibilityLabel("Remove photo \(index + 1)")
+                                }
+                                .accessibilityLabel("Fault photo \(index + 1)")
+                                .accessibilityIdentifier(index == 0 ? "partProposal.photo" : "partProposal.photo.\(index)")
+                        }
                     }
-                    .accessibilityIdentifier("partProposal.samplePhoto")
                 }
-                #endif
             }
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button(model.photos.isEmpty ? "Take photo of the fault" : "Take another photo", systemImage: "camera.fill") {
+                    showingCamera = true
+                }
+                .accessibilityIdentifier("partProposal.takePhoto")
+            }
+            PhotosPicker(selection: $pickerItem, matching: .images) {
+                Label(model.photos.isEmpty ? "Choose from library" : "Add from library", systemImage: "photo.on.rectangle")
+            }
+            .accessibilityIdentifier("partProposal.libraryPhoto")
+            #if DEBUG
+            // A simulator has no camera and a UI test has no library worth driving, so test
+            // runs get a generated photo. Debug-only: this is compiled out of Release.
+            if ProcessInfo.processInfo.arguments.contains(UITestSupport.samplePhotoArgument) {
+                Button("Use sample photo", systemImage: "photo") {
+                    model.photos.append(UITestSupport.samplePhoto())
+                }
+                .accessibilityIdentifier("partProposal.samplePhoto")
+            }
+            #endif
         } header: {
-            Text("Evidence")
+            Text(model.photos.count > 1 ? "Evidence (\(model.photos.count) photos)" : "Evidence")
         } footer: {
-            Text("A photo of the fault is required — it is what the manager approves the part on.")
+            Text("At least one photo of the fault is needed — it is what the manager approves the part on. Add more to show it from other sides.")
         }
     }
 
     private func submit() {
         Task {
-            if await model.submit() != nil {
-                onProposed()
+            if let message = await model.submit() {
+                onProposed(message)
                 dismiss()
             }
         }

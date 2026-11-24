@@ -166,10 +166,9 @@ struct PropertyPAAPI: Sendable {
 
     // MARK: Handoffs
 
-    /// People who can answer a handoff: `GET /managers` when the server has it, else workspace
-    /// members with a manager or owner role (needs `users.read`).
+    /// People who can answer a handoff: workspace members with a manager or owner role. The PA has
+    /// no `/managers` route, so this goes straight to the members list.
     func managers() async throws -> [PAManager] {
-        if let list: LossyArray<PAManager> = try? await data(.get("\(Self.base)/managers")) { return list.elements }
         let envelope: Envelope.Standard<LossyArray<JSONValue>> = try await client.send(
             .get("/api/v2/namespace/members", query: [URLQueryItem(name: "per_page", value: "200")]))
         return PAMapping.managers(fromMembers: envelope.data.elements)
