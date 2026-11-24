@@ -14,6 +14,10 @@ final class SessionStore {
         /// Signed in, but the user belongs to several workspaces and none is selected.
         case choosingWorkspace
         case signedIn
+        /// A stored session exists but the workspace couldn't be reached at launch (offline with
+        /// nothing saved, a server error, the rate limiter, a secure-connection problem). The
+        /// session is kept: the person can try again or sign out. Only a rejected sign-in signs out.
+        case unreachable
     }
 
     private(set) var phase: Phase = .restoring
@@ -35,6 +39,8 @@ final class SessionStore {
     private(set) var workspaceGeneration = 0
     /// Explains why the user was returned to the sign-in screen.
     var signedOutReason: String?
+    /// Why the workspace couldn't be reached (`phase == .unreachable`).
+    private(set) var unreachableError: APIError?
 
     /// Changes when the app is repointed at another environment from the sign-in screen.
     private(set) var environmentName: String
@@ -109,6 +115,13 @@ final class SessionStore {
         }
     }
 
+    /// "Try again" on the can't-reach-your-workspace screen.
+    func retryRestore() async {
+        guard phase == .unreachable else { return }
+        phase = .restoring
+        await loadSessionContext()
+    }
+
     /// Loads user + memberships (network, else last cached copy), then the workspace and permissions.
     private func loadSessionContext() async {
         do {
@@ -120,20 +133,25 @@ final class SessionStore {
                let me = try? JSONDecoder.opsAPI().decode(MeResponse.self, from: entry.data) {
                 apply(user: me.user, workspaces: me.namespaces, current: me.currentNamespace)
             } else {
-                // Tokens exist but nothing cached: we cannot show anything useful offline.
-                permissionsError = error
-                phase = .signedOut
-                signedOutReason = "You're offline. Connect to sign in."
+                // Tokens exist but nothing is saved to show offline: keep the session, offer Try again.
+                becomeUnreachable(error)
                 return
             }
         } catch {
-            // `unauthorized` has already cleared tokens via the session-expired event.
-            if case .unauthorized = error.asAPIError { return }
-            permissionsError = error.asAPIError
-            phase = .signedOut
+            let apiError = error.asAPIError
+            // A rejected sign-in has already cleared the tokens via the session-expired event.
+            if case .unauthorized = apiError, !(await client.hasTokens) { return }
+            becomeUnreachable(apiError)
             return
         }
+        unreachableError = nil
         await chooseInitialWorkspace()
+    }
+
+    private func becomeUnreachable(_ error: APIError) {
+        permissionsError = error
+        unreachableError = error
+        phase = .unreachable
     }
 
     // MARK: - Sign in
@@ -405,6 +423,7 @@ final class SessionStore {
         landingDue = false
         propertyDeals = nil
         propertyPA = nil
+        unreachableError = nil
         phase = .signedOut
     }
 }
