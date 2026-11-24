@@ -40,8 +40,9 @@ struct MenuConfigView: View {
         }
         .overlay {
             if !allowed {
-                ContentUnavailableView("Only the owner can change the menu", systemImage: "lock",
-                                       description: Text("Ask the workspace owner if a page should be shown or hidden."))
+                ContentUnavailableView("You can't change the menu", systemImage: "lock",
+                                       description: Text("The owner, or someone with full access to the workspace's "
+                                                         + "settings, can. Ask them if a page should be shown or hidden."))
             } else if !loaded, loadError == nil {
                 SkeletonList()
             } else if loaded, items.isEmpty, loadError == nil {

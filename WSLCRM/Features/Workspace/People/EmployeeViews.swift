@@ -204,10 +204,14 @@ private struct EmployeesList: View {
 
     var body: some View {
         let permissions = session.permissions
+        let canAddProfile = permissions.can(.create, moduleName: "employees")
+        let canAddLogin = permissions.can(.create, moduleName: "users")
         PagedList(model: model, searchPrompt: "Search name, email, job title, code…", emptyTitle: "No employees yet",
                   emptySystemImage: "person.text.rectangle",
                   emptyDescription: "An employee profile adds a job title, code, skills and hourly cost to someone "
-                      + "who signs in to this workspace.") { employee in
+                      + "who signs in to this workspace.",
+                  emptyActionTitle: canAddProfile ? "Add an employee profile" : "Add a team member",
+                  emptyAction: canAddProfile ? { adding = true } : canAddLogin ? { addingTeamMember = true } : nil) { employee in
             NavigationLink {
                 EmployeeDetail(api: api, employee: employee) { message in
                     feedback = .done(message)

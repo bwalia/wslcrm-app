@@ -62,16 +62,24 @@ struct RoleListView: View {
             } footer: {
                 if !roles.isEmpty {
                     Text("A person can have several roles; they can do everything any of their roles allows. "
-                         + "The owner can always do everything.")
+                         + "The Owner role can do everything.")
                 }
             }
         }
         .overlay {
             if !loaded, loadError == nil { SkeletonList() }
             else if loaded, filtered.isEmpty, loadError == nil {
-                ContentUnavailableView(search.isEmpty ? "No roles yet" : "No results", systemImage: "person.badge.key",
-                                       description: Text(search.isEmpty ? "Roles decide what people can see and do."
-                                                         : "Nothing matches “\(search)”."))
+                ContentUnavailableView {
+                    Label(search.isEmpty ? "No roles yet" : "No results", systemImage: "person.badge.key")
+                } description: {
+                    Text(search.isEmpty ? "Roles decide what people can see and do." : "Nothing matches “\(search)”.")
+                } actions: {
+                    if search.isEmpty, session.permissions.can(.create, moduleName: "roles") {
+                        Button("New role") { creating = true }
+                            .buttonStyle(.borderedProminent)
+                            .accessibilityIdentifier("roles.emptyNew")
+                    }
+                }
             }
         }
         .searchable(text: $search, prompt: "Search roles")

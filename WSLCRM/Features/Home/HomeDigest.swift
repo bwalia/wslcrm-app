@@ -40,10 +40,19 @@ final class HomeDigest {
         if session.propertyPA != nil { sources.insert(.pa) }
         if menu.contains("tax_file") { sources.insert(.taxReturn) }
         if menu.contains("tax_filing_requests") { sources.insert(.taxQueue) }
+        if menu.contains("timesheets"), canApproveTimesheets(session.permissions) { sources.insert(.timesheetApprovals) }
         return sources
     }
 
-    enum Source: Hashable, Sendable { case shop, leads, tasks, invoices, fieldService, deals, pa, taxReturn, taxQueue }
+    /// Deciding on other people's timesheets (`POST /api/v2/timesheets/:uuid/approve` needs
+    /// `timesheet_approvals.approve`; `manage` covers it).
+    nonisolated static func canApproveTimesheets(_ permissions: PermissionSet) -> Bool {
+        permissions.can(.approve, .timesheetApprovals)
+    }
+
+    enum Source: Hashable, Sendable {
+        case shop, leads, tasks, invoices, fieldService, deals, pa, taxReturn, taxQueue, timesheetApprovals
+    }
 
     func load(session: SessionStore, services: Services) async {
         let sources = Self.sources(session: session)
@@ -71,11 +80,15 @@ final class HomeDigest {
         async let taxQueue = sources.contains(.taxQueue)
             ? try? await services.workspace().get("/api/v2/tax/filing/queue", query: ["status": "open", "perPage": "1"])
             : nil
+        // Submitted timesheets waiting for a decision (the Timesheets screen's approvals list).
+        async let timesheetsWaiting = sources.contains(.timesheetApprovals)
+            ? try? await services.timesheets.approvalQueue(page: 1, perPage: 1).total : nil
 
         let digest = await Self.signals(shop: shop, steps: steps, tasks: tasks?.items, overdueInvoices: overdueInvoices?.total,
                                         fieldService: fieldService, deals: deals, pa: pa, isEngineer: isEngineer,
                                         taxReturn: (await taxReturn).map { WorkspaceAPI.object($0.payload) },
-                                        taxQueue: (await taxQueue).map(WorkspaceAPI.object))
+                                        taxQueue: (await taxQueue).map(WorkspaceAPI.object),
+                                        timesheetsToApprove: await timesheetsWaiting)
         signals = digest.signals
         activity = digest.activity
         hasLoaded = true
@@ -86,6 +99,7 @@ final class HomeDigest {
     nonisolated static func signals(shop: ShopKPIs?, steps: LeadMySteps?, tasks: [KanbanTask]?, overdueInvoices: Int?,
                                     fieldService: FieldServiceStats?, deals: PDToday?, pa: PAServerBriefing?,
                                     isEngineer: Bool, taxReturn: Record? = nil, taxQueue: Record? = nil,
+                                    timesheetsToApprove: Int? = nil,
                                     now: Date = Date(), calendar: Calendar = .current)
         -> (signals: [HomeSignal], activity: [NavigationPolicy.Home: Int]) {
         var signals: [HomeSignal] = []
@@ -175,6 +189,10 @@ final class HomeDigest {
                 "doc.text", .info, hub: nil, key: "tax_filing_requests")
             add("tax.queue.filing", "Tax returns to file with HMRC", taxQueue.int("meta.counts.filing") ?? 0,
                 "paperplane", .progress, hub: nil, key: "tax_filing_requests")
+        }
+        if let timesheetsToApprove {
+            add("timesheets.approve", "Timesheets to approve", timesheetsToApprove, "clock.badge.checkmark", .warning,
+                hub: nil, key: "timesheets")
         }
         return (signals, activity)
     }

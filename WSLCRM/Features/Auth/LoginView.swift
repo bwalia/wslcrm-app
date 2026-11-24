@@ -13,6 +13,10 @@ struct LoginView: View {
 
     private enum Field { case identifier, password }
 
+    /// Accounts are made by invitation (there's no sign-up in the app or on the dashboard): say how to get one.
+    static let newHereAdvice = "You need an invitation to sign in. Ask your employer, or whoever runs your company's "
+        + "workspace, to invite your email address. Their email has a link to set up your account; then sign in here."
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -66,6 +70,17 @@ struct LoginView: View {
                     Button("Forgot password?") { showingForgotPassword = true }
                         .font(.brandCallout)
                         .frame(maxWidth: .infinity, minHeight: 44)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("New here?").font(.brandHeadline)
+                        Text(LoginView.newHereAdvice)
+                            .font(.brandFootnote)
+                            .foregroundStyle(.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("login.newHere")
                 }
                 .brandCard(padding: 22, radius: 26)
                 .padding(.horizontal, 16)
@@ -274,6 +289,10 @@ struct TwoFactorView: View {
 }
 
 struct ForgotPasswordView: View {
+    /// The link opens the reset page in the phone's browser, not in the app: say so, and to come back.
+    static let afterSending = "Open the link from the email on this phone: it opens in your browser, where you "
+        + "choose a new password. Then come back here and sign in with it."
+
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State var prefill: String
@@ -288,6 +307,8 @@ struct ForgotPasswordView: View {
                     Section {
                         Label("If an account exists for \(prefill), you'll receive an email with a reset link.",
                               systemImage: "envelope.open.fill")
+                    } footer: {
+                        Text(ForgotPasswordView.afterSending)
                     }
                 } else {
                     Section {
@@ -297,7 +318,7 @@ struct ForgotPasswordView: View {
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                     } footer: {
-                        Text("We'll email you a link to reset your password.")
+                        Text("We'll email you a link to reset your password. " + ForgotPasswordView.afterSending)
                     }
                     if let error {
                         Section { InlineErrorRow(error: error) }

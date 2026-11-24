@@ -104,17 +104,34 @@ struct AccountProfileView: View {
     @State private var feedback: Feedback = .none
     @State private var saving = false
 
-    static func body(firstName: String, lastName: String, email: String, phone: String, address: String) -> JSONValue {
-        .object([
-            "first_name": .textOrEmpty(firstName), "last_name": .textOrEmpty(lastName),
-            "email": .textOrEmpty(email), "phone_no": .textOrEmpty(phone), "address": .textOrEmpty(address),
-        ])
+    /// The fields in `current`'s order.
+    static let fieldKeys = ["first_name", "last_name", "email", "phone_no", "address"]
+
+    /// `PUT /api/v2/users/:uuid`: only what changed ("" clears a field), so an unchanged email or name
+    /// isn't sent again.
+    static func body(_ values: [String], original: [String]) -> JSONValue {
+        var body: [String: JSONValue] = [:]
+        for (index, key) in fieldKeys.enumerated() where index < values.count {
+            let value = values[index].trimmingCharacters(in: .whitespacesAndNewlines)
+            let before = index < original.count ? original[index].trimmingCharacters(in: .whitespacesAndNewlines) : nil
+            if value != before { body[key] = .string(value) }
+        }
+        return .object(body)
     }
 
-    /// The server's 403 in words that say what to do.
+    /// Your own name, phone and address need no permission (`routes/users.lua` OWN_FIELDS); changing the email
+    /// you sign in with needs `users.update`.
+    static func canChangeEmail(_ permissions: PermissionSet) -> Bool {
+        permissions.can(.update, moduleName: "users")
+    }
+
+    /// The server's refusal in words that say what to do. Its own plain refusal ("To change your email…")
+    /// is kept; a bare permission error (an older server) is explained.
     static func explain(_ error: APIError) -> APIError {
-        if case .forbidden = error {
-            return ResourceService.problem(403, "Changing your details needs the Users update permission in this workspace. Ask the workspace owner to change them, or to give you that permission.")
+        if case .forbidden(let server) = error, server.requiredPermission != nil {
+            return ResourceService.problem(403, "Your details couldn't be changed: this workspace doesn't let you change "
+                                           + "them yourself yet. What you typed is still here. Ask the person who "
+                                           + "manages the workspace to change them for you.")
         }
         return error
     }
@@ -134,6 +151,8 @@ struct AccountProfileView: View {
                     .textContentType(.emailAddress)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    .disabled(!Self.canChangeEmail(session.permissions))
+                    .foregroundStyle(Self.canChangeEmail(session.permissions) ? Color.primary : .secondaryText)
                     .accessibilityIdentifier("account.email")
                 TextField("Phone", text: $phone)
                     .keyboardType(.phonePad)
@@ -144,7 +163,9 @@ struct AccountProfileView: View {
                     .textContentType(.fullStreetAddress)
                     .accessibilityIdentifier("account.address")
             } footer: {
-                Text("Your email is also what you sign in with.")
+                Text(Self.canChangeEmail(session.permissions)
+                     ? "Your email is also what you sign in with."
+                     : "Your email is also what you sign in with. To change it, ask the person who manages this workspace.")
             }
         }
         .navigationTitle("Your details")
@@ -188,10 +209,9 @@ struct AccountProfileView: View {
         defer { saving = false }
         do {
             try await services.workspace().send(.put, "/api/v2/users/\(user.uuid)",
-                                                body: Self.body(firstName: firstName, lastName: lastName, email: email,
-                                                                phone: phone, address: address))
+                                                body: Self.body(current, original: original))
             original = current
-            feedback = .done("Saved. Your new details show everywhere the next time you sign in.")
+            feedback = .done("Your details are saved. They show everywhere the next time you sign in.")
         } catch {
             feedback = .failed(Self.explain(error.asAPIError))
         }

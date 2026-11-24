@@ -111,7 +111,7 @@ struct PluginPageProblem: View {
             ContentUnavailableView {
                 Label("This page isn't available", systemImage: "puzzlepiece.extension")
             } description: {
-                Text("The plugin that provides it isn't installed on this server, or no longer offers this page.")
+                Text("The add-on that provides it isn't installed for this workspace, or no longer offers this page.")
             }
         case .other:
             ErrorStateView(error: error, retry: retry)
