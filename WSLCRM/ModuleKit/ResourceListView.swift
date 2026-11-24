@@ -118,7 +118,11 @@ private struct ResourceListContent: View {
         }
         .sheet(item: $running) { action in
             NavigationStack {
-                ActionInputForm(action: action) { inputs in await run(action, inputs: inputs) }
+                ActionInputForm(action: action) { inputs in
+                    // A failure is shown in the sheet itself, which stays open with what was typed.
+                    try await perform(action, inputs: inputs)
+                    return true
+                }
             }
         }
         .confirmationDialog(confirming?.title ?? "", isPresented: Binding(
@@ -129,7 +133,7 @@ private struct ResourceListContent: View {
                 }
             }
         } message: {
-            Text(confirming?.confirm ?? "")
+            if let confirm = confirming?.confirm { Text(confirm) }
         }
     }
 
@@ -144,7 +148,7 @@ private struct ResourceListContent: View {
             ForEach(allowedListActions) { action in
                 Button(role: action.destructive ? .destructive : nil) {
                     if !action.inputs.isEmpty { running = action }
-                    else if action.confirm != nil { confirming = action }
+                    else if action.confirm != nil || action.destructive { confirming = action }
                     else { Task { _ = await run(action, inputs: [:]) } }
                 } label: {
                     Label(action.title, systemImage: action.systemImage)
@@ -173,19 +177,24 @@ private struct ResourceListContent: View {
         }
     }
 
+    /// Runs an action from the menu or a confirmation: a failure shows on this screen.
     private func run(_ action: ActionSpec, inputs: [String: JSONValue]) async -> Bool {
         do {
-            _ = try await source.service.run(action, on: Record([:]), inputs: inputs,
-                                             requiresNamespace: descriptor.api.requiresNamespace)
-            actionError = nil
-            notice = action.done ?? "\(action.title): done."
-            await model.load()
+            try await perform(action, inputs: inputs)
             return true
         } catch {
             actionError = error.asAPIError
             notice = nil
             return false
         }
+    }
+
+    private func perform(_ action: ActionSpec, inputs: [String: JSONValue]) async throws {
+        _ = try await source.service.run(action, on: Record([:]), inputs: inputs,
+                                         requiresNamespace: descriptor.api.requiresNamespace)
+        actionError = nil
+        notice = action.done ?? "\(action.title): done."
+        await model.load()
     }
 
     private var canCreate: Bool {

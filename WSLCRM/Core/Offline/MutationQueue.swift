@@ -53,6 +53,9 @@ actor MutationQueue {
     private var isReplaying = false
     private var observer: (@Sendable ([PendingMutation]) -> Void)?
     private var onSynced: (@Sendable (PendingMutation) -> Void)?
+    private var onSaveProblem: (@Sendable (String?) -> Void)?
+    /// What went wrong the last time the queue couldn't be written to disk (nil once it can again).
+    private(set) var saveProblem: String?
     private let log = Logger(subsystem: "uk.co.workstation.wslcrm", category: "offline-queue")
 
     enum ReplayOutcome: Equatable, Sendable {
@@ -69,12 +72,39 @@ actor MutationQueue {
         self.sender = sender
         self.backoff = backoff
         self.now = now
-        if let data = try? Data(contentsOf: fileURL),
-           let stored = try? JSONDecoder().decode([PendingMutation].self, from: data) {
-            items = stored
-        } else {
-            items = []
+        items = Self.load(from: fileURL)
+    }
+
+    /// The saved queue, read one write at a time: a write this version can't read is left out, not the
+    /// whole queue. Whenever anything couldn't be read the file is moved aside first (kept, never
+    /// overwritten by the next save), so nothing the person did is destroyed.
+    /// ponytail: set-aside files are kept but not offered back in the app; add a restore if one is ever needed.
+    static func load(from fileURL: URL, now: Date = Date()) -> [PendingMutation] {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
+        let decoded = (try? Data(contentsOf: fileURL)).flatMap { try? JSONDecoder().decode([LossyMutation].self, from: $0) }
+        var items = decoded?.compactMap(\.mutation) ?? []
+        if decoded == nil || items.count != decoded?.count {
+            let aside = setAsideURL(for: fileURL, now: now)
+            try? FileManager.default.moveItem(at: fileURL, to: aside)
+            let kept = items.count, found = decoded?.count ?? -1, name = aside.lastPathComponent
+            Logger(subsystem: "uk.co.workstation.wslcrm", category: "offline-queue")
+                .error("Offline queue: kept \(kept) of \(found) writes; the file was moved to \(name, privacy: .public)")
         }
+        // Writes saved by an older version get their key now; it stays the same on every attempt.
+        for index in items.indices where items[index].idempotencyKey == nil {
+            items[index].idempotencyKey = UUID().uuidString
+        }
+        return items
+    }
+
+    /// `pending-mutations.unreadable-<time>.json`, next to the queue.
+    static func setAsideURL(for fileURL: URL, now: Date) -> URL {
+        fileURL.deletingPathExtension().appendingPathExtension("unreadable-\(Int(now.timeIntervalSince1970)).json")
+    }
+
+    private struct LossyMutation: Decodable {
+        let mutation: PendingMutation?
+        init(from decoder: Decoder) throws { mutation = try? PendingMutation(from: decoder) }
     }
 
     static func defaultFileURL() -> URL {
@@ -91,6 +121,12 @@ actor MutationQueue {
 
     func setOnSynced(_ handler: @escaping @Sendable (PendingMutation) -> Void) {
         onSynced = handler
+    }
+
+    /// Told when the queue can't be saved to disk (a message), and again when it can (nil).
+    func setOnSaveProblem(_ handler: @escaping @Sendable (String?) -> Void) {
+        onSaveProblem = handler
+        handler(saveProblem)
     }
 
     var all: [PendingMutation] { items }
@@ -227,13 +263,13 @@ actor MutationQueue {
             var captured: String?
             if step.captures != nil, let field = step.capturesField {
                 guard let value = Self.value(field, in: data) else {
-                    throw APIError.validation(ServerError(status: 0, message: "\(step.label): the server didn't return \(field)",
+                    throw APIError.validation(ServerError(status: 0, message: "\(step.label): this step's answer was missing something the next step needs. Try again.",
                                                           fieldErrors: [:], rawBody: String(decoding: data.prefix(300), as: UTF8.self)))
                 }
                 captured = value
             } else if step.captures != nil {
                 guard let uuid = Self.uuid(in: data) else {
-                    throw APIError.validation(ServerError(status: 0, message: "\(step.label): the server didn't return an id",
+                    throw APIError.validation(ServerError(status: 0, message: "\(step.label): this step's answer was missing something the next step needs. Try again.",
                                                           fieldErrors: [:], rawBody: String(decoding: data.prefix(300), as: UTF8.self)))
                 }
                 captured = uuid
@@ -272,8 +308,15 @@ actor MutationQueue {
             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(),
                                                     withIntermediateDirectories: true)
             try data.write(to: fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            if saveProblem != nil {
+                saveProblem = nil
+                onSaveProblem?(nil)
+            }
         } catch {
             log.error("Failed to persist offline queue: \(String(describing: error), privacy: .public)")
+            saveProblem = "Changes waiting to be sent couldn't be saved on this phone, so they'd be lost if the app "
+                + "closed. Keep the app open until they're sent, and check the phone has free space."
+            onSaveProblem?(saveProblem)
         }
         observer?(items)
     }

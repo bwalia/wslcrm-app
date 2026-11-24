@@ -95,7 +95,9 @@ private struct ResourceDetailContent: View {
             NavigationStack {
                 ActionInputForm(action: action) { inputs in
                     guard let record else { return false }
-                    return await run(action, on: record, inputs: inputs)
+                    // A failure is shown in the sheet itself, which stays open with what was typed.
+                    try await perform(action, on: record, inputs: inputs)
+                    return true
                 }
             }
         }
@@ -107,7 +109,7 @@ private struct ResourceDetailContent: View {
                 }
             }
         } message: {
-            Text(confirming?.confirm ?? "")
+            if let confirm = confirming?.confirm { Text(confirm) }
         }
     }
 
@@ -144,7 +146,7 @@ private struct ResourceDetailContent: View {
                 ForEach(actions) { action in
                     Button(role: action.destructive ? .destructive : nil) {
                         if !action.inputs.isEmpty { running = action }
-                        else if action.confirm != nil { confirming = action }
+                        else if action.confirm != nil || action.destructive { confirming = action }
                         else { Task { _ = await run(action, on: record, inputs: [:]) } }
                     } label: {
                         Label(action.title, systemImage: action.systemImage)
@@ -202,30 +204,35 @@ private struct ResourceDetailContent: View {
         }
     }
 
+    /// Runs an action from a button or a confirmation: a failure shows on this screen.
     private func run(_ action: ActionSpec, on record: Record, inputs: [String: JSONValue]) async -> Bool {
-        busy = true
-        defer { busy = false }
         do {
-            let response = try await service.run(action, on: record, inputs: inputs,
-                                                 requiresNamespace: descriptor.api.requiresNamespace)
-            actionError = nil
-            notice = action.done ?? "\(action.title): done."
-            if action.method == .delete { dismiss(); return true }
-            // The server usually answers with the changed record: show it straight away (the only
-            // way to refresh a resource that can't be fetched on its own).
-            if let response,
-               let updated = ResourceService.parseRecord(response, itemKey: descriptor.api.itemKey,
-                                                         idKeys: descriptor.api.idKeys),
-               updated.id == record.id {
-                self.record = updated
-            }
-            await load()
+            try await perform(action, on: record, inputs: inputs)
             return true
         } catch {
             actionError = error.asAPIError
             notice = nil
             return false
         }
+    }
+
+    private func perform(_ action: ActionSpec, on record: Record, inputs: [String: JSONValue]) async throws {
+        busy = true
+        defer { busy = false }
+        let response = try await service.run(action, on: record, inputs: inputs,
+                                             requiresNamespace: descriptor.api.requiresNamespace)
+        actionError = nil
+        notice = action.done ?? "\(action.title): done."
+        if action.method == .delete { dismiss(); return }
+        // The server usually answers with the changed record: show it straight away (the only
+        // way to refresh a resource that can't be fetched on its own).
+        if let response,
+           let updated = ResourceService.parseRecord(response, itemKey: descriptor.api.itemKey,
+                                                     idKeys: descriptor.api.idKeys),
+           updated.id == record.id {
+            self.record = updated
+        }
+        await load()
     }
 
     private func delete(_ record: Record) async -> Bool {

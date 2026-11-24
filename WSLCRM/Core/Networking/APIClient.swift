@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Events the client raises that the UI layer must react to.
 enum SessionEvent: Sendable, Equatable {
@@ -6,6 +7,8 @@ enum SessionEvent: Sendable, Equatable {
     case sessionExpired
     /// Tokens were rotated by a refresh.
     case tokensRefreshed
+    /// A signed-in request was refused (403): the person's role may have changed on the web.
+    case forbidden
 }
 
 /// The single entry point for every OpsAPI call.
@@ -28,6 +31,9 @@ actor APIClient {
     private var tokens: AuthTokens?
     private var namespaceId: String?
     private var refreshTask: Task<AuthTokens, Error>?
+    /// Changes whenever the session is replaced or ended. A refresh that started before can't write
+    /// its tokens back afterwards (signing out while a refresh is in flight), or end the new session.
+    private var sessionEpoch = 0
 
     nonisolated let events: AsyncStream<SessionEvent>
     private let eventContinuation: AsyncStream<SessionEvent>.Continuation
@@ -67,9 +73,12 @@ actor APIClient {
     }
 
     func setTokens(_ newTokens: AuthTokens?) {
+        sessionEpoch += 1
         tokens = newTokens
         tokenStore.save(newTokens)
-        if newTokens == nil { refreshTask?.cancel(); refreshTask = nil }
+        // Signed out or signed in afresh: a refresh for the old session is no use to anyone.
+        refreshTask?.cancel()
+        refreshTask = nil
     }
 
     func setNamespace(_ id: String?) {
@@ -138,6 +147,10 @@ actor APIClient {
         if endpoint.requiresNamespace && (endpoint.namespaceOverride ?? namespaceId) == nil {
             throw APIError.missingNamespace
         }
+        // A save the person started keeps going if they leave the app straight away.
+        var background: BackgroundWrite?
+        if endpoint.method != .get { background = await BackgroundWrite(endpoint.summary) }
+        defer { if let background { Task { @MainActor in background.end() } } }
         if endpoint.requiresAuth, let current = tokens, JWT.isExpiring(current.accessToken, within: 60, now: now()) {
             // Refresh proactively instead of spending a round trip on a guaranteed 401.
             // Connectivity failures fall through: the request itself will report them.
@@ -164,10 +177,11 @@ actor APIClient {
 
             if response.statusCode == 401, endpoint.requiresAuth, endpoint.unauthorizedEndsSession {
                 let refreshed = try await refreshedTokens(replacing: tokenUsed)
+                let epoch = sessionEpoch
                 (data, response) = try await perform(endpoint, accessToken: refreshed.accessToken)
                 if response.statusCode == 401 {
                     // A fresh token was still rejected — treat the session as over.
-                    endSession()
+                    endSession(ifStill: epoch)
                     throw APIError.from(status: 401, data: data, headers: response.allHeaderFields)
                 }
             }
@@ -184,6 +198,7 @@ actor APIClient {
         }
 
         guard (200..<300).contains(response.statusCode) else {
+            if response.statusCode == 403, endpoint.requiresAuth { eventContinuation.yield(.forbidden) }
             throw APIError.from(status: response.statusCode, data: data, headers: response.allHeaderFields)
         }
         return (data, response)
@@ -207,8 +222,11 @@ actor APIClient {
         if let current = tokens, current.accessToken != staleAccessToken {
             return current
         }
+        let epoch = sessionEpoch
         if let inFlight = refreshTask {
-            return try await inFlight.value
+            let refreshed = try await inFlight.value
+            guard epoch == sessionEpoch else { throw APIError.cancelled }
+            return refreshed
         }
         guard let refreshToken = tokens?.refreshToken else {
             endSession()
@@ -217,15 +235,19 @@ actor APIClient {
 
         let task = Task { try await self.performRefresh(refreshToken: refreshToken) }
         refreshTask = task
-        defer { refreshTask = nil }
+        // Signing out cleared it already, and a newer refresh may be running by now.
+        defer { if epoch == sessionEpoch { refreshTask = nil } }
 
         do {
             let newTokens = try await task.value
+            // Signed out (or signed in afresh) meanwhile: these tokens belong to a session that's over.
+            guard epoch == sessionEpoch else { throw APIError.cancelled }
             tokens = newTokens
             tokenStore.save(newTokens)
             eventContinuation.yield(.tokensRefreshed)
             return newTokens
         } catch let error as APIError {
+            guard epoch == sessionEpoch else { throw APIError.cancelled }
             switch error {
             case .offline, .transport, .cancelled, .server, .rateLimited:
                 // Can't reach the server or it is failing: keep the session, surface the error.
@@ -255,8 +277,11 @@ actor APIClient {
         return AuthTokens(accessToken: body.token, refreshToken: body.refreshToken ?? refreshToken)
     }
 
-    private func endSession() {
-        guard tokens != nil else { return }
+    /// Ends the session, unless it has already been replaced since `epoch` was read.
+    private func endSession(ifStill epoch: Int? = nil) {
+        guard tokens != nil, epoch == nil || epoch == sessionEpoch else { return }
+        sessionEpoch += 1
+        refreshTask = nil
         tokens = nil
         tokenStore.save(nil)
         eventContinuation.yield(.sessionExpired)
@@ -338,6 +363,23 @@ actor APIClient {
         @unknown default:
             return String(describing: decodingError)
         }
+    }
+}
+
+/// Asks iOS for a little more time when the person leaves the app while a save is on its way, so the
+/// write isn't cut off half-sent. Ended when the request finishes (or when iOS says time's up).
+@MainActor
+final class BackgroundWrite {
+    private var id: UIBackgroundTaskIdentifier = .invalid
+
+    init(_ name: String) {
+        id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in self?.end() }
+    }
+
+    func end() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
     }
 }
 

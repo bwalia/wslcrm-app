@@ -24,8 +24,10 @@ struct RetryPolicy: Sendable {
         switch error {
         case .offline(let urlError), .transport(let urlError):
             // A dropped or timed-out connection, not a flat "no network" — that falls through
-            // to the offline cache immediately.
-            return [URLError.Code.timedOut, .networkConnectionLost, .cannotConnectToHost,
+            // to the offline cache immediately. A timeout is tried once more only: each one is a
+            // full wait, and the person is looking at a loading screen.
+            if urlError.code == .timedOut { return attempt == 0 }
+            return [URLError.Code.networkConnectionLost, .cannotConnectToHost,
                     .dnsLookupFailed].contains(urlError.code)
         default:
             return false
