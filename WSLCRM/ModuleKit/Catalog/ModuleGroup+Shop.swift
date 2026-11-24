@@ -83,7 +83,8 @@ extension ModuleCatalog {
 
     static let shopCredits = ResourceDescriptor(
         id: "shop.credits", title: "Credits", noun: "credit", systemImage: "gift",
-        // Giving credit is `shop.update` on the server (POST /credits), so it is a list action, not a create form.
+        // Giving credit is `shop.manage` on the server (POST /credits: money off a future order), so it is a list
+        // action, not a create form. Cancelling one stays `shop.update`.
         api: ResourceAPISpec(list: "\(shopBase)/credits", paging: .limitOffset, searchParam: "q"),
         permissions: ResourcePermissions(module: "shop"),
         list: ListSpec(title: ["email"],
@@ -119,7 +120,7 @@ extension ModuleCatalog {
         ],
         summary: "Store credit customers can spend on their next order.",
         listActions: [
-            ActionSpec("grant", "Give credit", systemImage: "gift", path: "\(shopBase)/credits",
+            ActionSpec("grant", "Give credit", systemImage: "gift", path: "\(shopBase)/credits", action: .manage,
                        inputs: [
                            FieldSpec("email", "Customer email", .email, required: true),
                            FieldSpec("amount_minor", "Credit (before VAT)", gbp, required: true),
@@ -216,7 +217,7 @@ extension ModuleCatalog {
         summary: "Customers on the VIP membership.",
         listActions: [
             ActionSpec("invoiced", "Record a fee paid by invoice", systemImage: "doc.text",
-                       path: "\(shopBase)/membership/members/invoiced",
+                       path: "\(shopBase)/membership/members/invoiced", action: .manage,
                        inputs: [FieldSpec("email", "Customer email", .email, required: true),
                                 FieldSpec("invoice_ref", "Invoice number", required: true)],
                        done: "Membership fee recorded."),

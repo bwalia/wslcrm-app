@@ -13,6 +13,12 @@ struct ShopPolicy: Sendable {
     var canSeeAnalytics: Bool { permissions.can(.read, .shopAnalytics) }
     /// Saving a quote's customer to the CRM creates an account and a contact.
     var canSaveToCRM: Bool { permissions.can(.update, .shop) && permissions.can(.create, .crmAccounts) && permissions.can(.create, .crmContacts) }
+    /// Photos are kept in the media library (routes/cms-media.lua, loaded with the website content area or the
+    /// shop): `cms.update` or `shop.update` to upload, `cms.read` or `shop.read` to browse.
+    var canUploadPhotos: Bool { permissions.can(.update, moduleName: "cms") || permissions.can(.update, .shop) }
+    var canBrowseMedia: Bool { permissions.can(.read, moduleName: "cms") || permissions.can(.read, .shop) }
+    /// "Open their lead" (crm_leads.read).
+    var canOpenLeads: Bool { permissions.can(.read, .crmLeads) }
 }
 
 extension SessionStore {
@@ -217,7 +223,7 @@ struct ShopHomeView: View {
         Section {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                 tile(StatTile(title: "Orders · 30 days", value: "\(kpis.orders30d)", systemImage: "cart"),
-                     hint: "\(kpis.ordersToday) today, \(kpis.orders7d) in 7 days") { ShopOrdersListView() }
+                     hint: "\(kpis.ordersToday) today, \(kpis.orders7d) in 7 days") { ShopOrdersListView(initialFilter: .placedDays(30)) }
                 if session.shopPolicy.canSeeAnalytics {
                     NavigationLink(value: NativeScreenRoute(SalesScreen.shopAnalytics)) {
                         StatTile(title: "Revenue · 30 days (inc VAT)",
@@ -226,20 +232,21 @@ struct ShopHomeView: View {
                     }
                     .buttonStyle(.plain)
                 } else {
-                    StatTile(title: "Revenue · 30 days (inc VAT)",
-                             value: ShopMoney.format(kpis.revenuePaid30dMinor, currency: kpis.currency) ?? "—",
-                             systemImage: "sterlingsign.circle")
+                    tile(StatTile(title: "Revenue · 30 days (inc VAT)",
+                                  value: ShopMoney.format(kpis.revenuePaid30dMinor, currency: kpis.currency) ?? "—",
+                                  systemImage: "sterlingsign.circle"),
+                         hint: "Orders paid in the last 30 days") { ShopOrdersListView(initialFilter: .paidDays(30)) }
                 }
                 tile(StatTile(title: "Orders today", value: "\(kpis.ordersToday)", systemImage: "calendar"),
-                     hint: "\(kpis.orders7d) in the last 7 days") { ShopOrdersListView() }
+                     hint: "\(kpis.orders7d) in the last 7 days") { ShopOrdersListView(initialFilter: .placedDays(1)) }
                 tile(StatTile(title: "To fulfil", value: "\(kpis.awaitingFulfilment)", systemImage: "shippingbox"),
                      hint: "Paid orders waiting to be sent") { ShopOrdersListView(initialStatus: .paid) }
                 tile(StatTile(title: "Open quotes", value: "\(kpis.openQuotes) · \(ShopMoney.format(kpis.openQuotesValueMinor, currency: kpis.currency) ?? "")",
                               systemImage: "doc.text"),
-                     hint: "Pipeline value") { ShopQuotesListView() }
+                     hint: "Pipeline value") { ShopQuotesListView(initialFilter: .open) }
                 tile(StatTile(title: "Quote → order", value: kpis.quoteConversionRate.formatted(.percent.precision(.fractionLength(0...1))),
                               systemImage: "arrow.right.circle"),
-                     hint: "Conversion") { ShopQuotesListView() }
+                     hint: "Conversion") { ShopQuotesListView(initialStatus: .converted) }
                 tile(StatTile(title: "Low stock", value: "\(kpis.lowStockCount)", systemImage: "exclamationmark.triangle"),
                      hint: "Items at or below their threshold") { ShopStockView(lowOnly: true) }
                 tile(StatTile(title: "AI chats · 7 days", value: "\(kpis.chats7d)", systemImage: "bubble.left.and.bubble.right"),
@@ -295,14 +302,16 @@ struct ShopHomeView: View {
                 }
                 .accessibilityIdentifier("shop.newQuote")
             }
-            NavigationLink { ShopOrdersListView() } label: { Label("Orders", systemImage: "cart") }
+            NavigationLink { ShopOrdersListView() } label: { Label("Online shop orders", systemImage: "cart") }
                 .accessibilityIdentifier("shop.orders")
             NavigationLink { ShopQuotesListView() } label: { Label("Quotes", systemImage: "doc.text") }
                 .accessibilityIdentifier("shop.quotes")
             NavigationLink { ShopDealsListView() } label: { Label("Deals", systemImage: "lock.doc") }
                 .accessibilityIdentifier("shop.deals")
             if session.permissions.shows(.orders) || session.permissions.can(.read, .shop) {
-                NavigationLink(value: NativeScreen.orders) { Label("All sales orders", systemImage: "list.bullet.rectangle") }
+                NavigationLink(value: NativeScreen.orders) {
+                    Label("Every order (online, phone and till)", systemImage: "list.bullet.rectangle")
+                }
                     .accessibilityIdentifier("shop.salesOrders")
             }
             if session.permissions.can(.create, .orders) {
@@ -319,7 +328,7 @@ struct ShopHomeView: View {
             }
         }
         Section("Catalogue") {
-            NavigationLink { ShopProductsListView() } label: { Label("Products", systemImage: "shippingbox") }
+            NavigationLink { ShopProductsListView() } label: { Label("Online shop products", systemImage: "shippingbox") }
                 .accessibilityIdentifier("shop.products")
             NavigationLink { ShopCategoriesView() } label: { Label("Categories", systemImage: "folder") }
                 .accessibilityIdentifier("shop.categories")
@@ -396,7 +405,7 @@ struct ShopHomeView: View {
 
     private func alerts(for kpis: ShopKPIs) -> [String] {
         var out: [String] = []
-        if !kpis.paymentsEnabled { out.append("Card payments are off: the server has no Stripe key.") }
+        if !kpis.paymentsEnabled { out.append("Card payments are off: online card payments aren’t set up for this shop yet.") }
         else if !kpis.webhookConfigured { out.append("Stripe webhook secret is missing, so paid orders won't confirm on their own.") }
         if kpis.pendingPayment > 0 { out.append("\(kpis.pendingPayment) order\(kpis.pendingPayment == 1 ? " is" : "s are") waiting on payment.") }
         if kpis.unverifiedPrices > 0 {

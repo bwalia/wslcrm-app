@@ -73,7 +73,7 @@ struct ShopQuoteBuilderView: View {
             } header: {
                 Text("Terms")
             } footer: {
-                Text(setValidUntil ? "Prices are ex VAT; VAT is added by the server." : "Without a date it is valid for the shop’s usual number of days (Shop settings).")
+                Text(setValidUntil ? "Prices are ex VAT; VAT is added when you save." : "Without a date it is valid for the shop’s usual number of days (Shop settings).")
             }
             Section("Notes for the customer") {
                 TextField("Shown on the \(terms.kind == .order ? "order" : "quote")", text: $notes, axis: .vertical).lineLimit(2...6)

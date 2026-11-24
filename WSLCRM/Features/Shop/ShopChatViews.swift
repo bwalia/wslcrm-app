@@ -75,6 +75,7 @@ struct ShopChatDetailView: View {
     let uuid: String
     var seed: ShopChatRecord?
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @State private var state: LoadState<ShopChatRecord> = .idle
 
     var body: some View {
@@ -158,7 +159,7 @@ struct ShopChatDetailView: View {
             } else {
                 DetailRow(label: "Order", value: "—")
             }
-            if let lead = chat.crmLeadUuid {
+            if let lead = chat.crmLeadUuid, session.shopPolicy.canOpenLeads {
                 NavigationLink { LeadDetailView(leadUuid: lead) } label: {
                     Label("Open their lead", systemImage: "person.crop.circle.badge.plus")
                 }

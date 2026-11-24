@@ -72,7 +72,10 @@ struct ShopProductsListView: View {
             }
         }) { model in
             PagedList(model: model, searchPrompt: "Name, SKU or brand", emptyTitle: "No products", emptySystemImage: "shippingbox",
-                      emptyDescription: lowStockOnly ? "Nothing is running low." : "Add a product with +, or import a spreadsheet of products with Import.") { product in
+                      emptyDescription: lowStockOnly ? "Nothing is running low."
+                          : "The online shop’s catalogue. Add a product, or import a spreadsheet of products from Add.",
+                      emptyActionTitle: "New product",
+                      emptyAction: !lowStockOnly && session.shopPolicy.canCreate ? { creating = true } : nil) { product in
                 NavigationLink {
                     ShopProductDetailView(uuid: product.uuid, onChange: { model.replace($0.summary) },
                                           onDelete: { model.remove(id: product.id) })
@@ -82,7 +85,7 @@ struct ShopProductsListView: View {
             }
         }
         .id(Filter(status: status, type: type, lowStockOnly: lowStockOnly, reload: reloadToken))
-        .navigationTitle("Products")
+        .navigationTitle("Shop products")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
@@ -233,9 +236,10 @@ struct ShopProductDetailView: View {
                 Text("Stock")
             }
 
-            if policy.canCreate || !enquiries.isEmpty {
+            // The enquiry's draft is shop.update and sending it shop.create (routes/shop-admin.lua).
+            if (policy.canCreate && policy.canUpdate) || !enquiries.isEmpty {
                 Section {
-                    if policy.canCreate {
+                    if policy.canCreate && policy.canUpdate {
                         Button {
                             askingSupplier = true
                         } label: {
@@ -524,6 +528,7 @@ private struct ShopCategoryForm: View {
     let onSaved: () async -> Void
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
+    @Environment(SessionStore.self) private var session
     @State private var name: String
     @State private var slug: String
     @State private var description: String
@@ -564,14 +569,19 @@ private struct ShopCategoryForm: View {
                     ForEach(all.filter { $0.uuid != category?.uuid }) { Text($0.name).tag($0.uuid) }
                 }
                 TextField("Description", text: $description, axis: .vertical).lineLimit(2...5)
-                HStack {
-                    ShopThumbnail(url: URL(string: imageURL.shopTrimmed))
-                    PhotosPicker(selection: $photo, matching: .images) {
-                        Label(uploading ? "Uploading…" : (imageURL.shopTrimmed.isEmpty ? "Choose a picture" : "Change the picture"),
-                              systemImage: "photo")
+                // Uploads go to the media library (cms.update or shop.update).
+                if session.shopPolicy.canUploadPhotos {
+                    HStack {
+                        ShopThumbnail(url: URL(string: imageURL.shopTrimmed))
+                        PhotosPicker(selection: $photo, matching: .images) {
+                            Label(uploading ? "Uploading…" : (imageURL.shopTrimmed.isEmpty ? "Choose a picture" : "Change the picture"),
+                                  systemImage: "photo")
+                        }
+                        .disabled(uploading)
+                        .accessibilityIdentifier("shopCategory.photo")
                     }
-                    .disabled(uploading)
-                    .accessibilityIdentifier("shopCategory.photo")
+                } else if !imageURL.shopTrimmed.isEmpty {
+                    ShopThumbnail(url: URL(string: imageURL.shopTrimmed))
                 }
                 TextField("Or the picture's address (https://…)", text: $imageURL)
                     .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
