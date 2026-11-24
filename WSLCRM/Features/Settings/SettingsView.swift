@@ -79,9 +79,11 @@ struct SettingsView: View {
             }
 
             Section {
-                if session.permissions.isAdmin || session.permissions.isOwner {
-                    Label(session.permissions.isAdmin ? "Platform administrator: you can do everything"
-                          : "Workspace owner: you can do everything", systemImage: "checkmark.shield")
+                if session.permissions.isOwner, !session.permissions.isAdmin {
+                    Label("You own this workspace. Your roles decide what you can do here.", systemImage: "crown")
+                }
+                if session.permissions.isAdmin {
+                    Label("Platform administrator: you can do everything", systemImage: "checkmark.shield")
                 } else if grantedModules.isEmpty {
                     Text("Your role doesn't give you access to anything in this workspace yet. Ask the person who "
                          + "manages it to give you a role with access.")
@@ -144,7 +146,7 @@ struct PendingChangesView: View {
         List {
             if sync.mutations.isEmpty {
                 ContentUnavailableView("All changes synced", systemImage: "checkmark.icloud",
-                                       description: Text("Check-ins, check-outs and checklist ticks made offline appear here until they reach the server."))
+                                       description: Text("Check-ins, check-outs and checklist ticks made offline appear here until they're saved online."))
             } else {
                 Section {
                     ForEach(sync.mutations) { mutation in
@@ -194,7 +196,7 @@ struct PendingChangesView: View {
                             titleVisibility: .visible, presenting: confirmDiscard) { mutation in
             Button("Discard “\(mutation.summary)”", role: .destructive) { sync.discard(mutation) }
         } message: { _ in
-            Text("The server has not received it. This can't be undone.")
+            Text("It hasn't been saved online yet, so it will be lost. This can't be undone.")
         }
     }
 }

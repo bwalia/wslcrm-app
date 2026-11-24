@@ -86,10 +86,14 @@ private struct AdminUsersList: View {
         })
     }
 
+    private var canCreate: Bool { session.permissions.can(.create, moduleName: "users") }
+
     var body: some View {
         PagedList(model: model, searchPrompt: "Search by name or email", emptyTitle: "No users yet",
                   emptySystemImage: "person.2",
-                  emptyDescription: "People who can sign in to this workspace appear here.") { user in
+                  emptyDescription: "People who can sign in to this workspace appear here.",
+                  emptyActionTitle: "Create an account",
+                  emptyAction: canCreate ? { adding = true } : nil) { user in
             NavigationLink {
                 AdminUserDetail(api: api, uuid: user.string("uuid") ?? user.id, seed: user) { Task { await model.load() } }
             } label: {
@@ -97,12 +101,26 @@ private struct AdminUsersList: View {
             }
             .accessibilityIdentifier("users.row.\(user.id)")
         }
-        .safeAreaInset(edge: .top, spacing: 0) { FeedbackBar(feedback: feedback) }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                // Users and Members overlap: say which is which.
+                Text("The accounts people sign in with. Here you can make an account with a password for someone. "
+                     + "To invite someone by email so they set their own, use Members.")
+                    .font(.wsFootnote)
+                    .foregroundStyle(.secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .accessibilityIdentifier("users.about")
+                FeedbackBar(feedback: feedback)
+            }
+            .background(.bar)
+        }
         .navigationTitle("Users")
         .toolbar {
-            if session.permissions.can(.create, moduleName: "users") {
+            if canCreate {
                 ToolbarItem(placement: .primaryAction) {
-                    Button { adding = true } label: { Label("Add user", systemImage: "person.badge.plus") }
+                    Button { adding = true } label: { Label("Create an account", systemImage: "person.badge.plus") }
                         .accessibilityIdentifier("users.add")
                 }
             }
@@ -250,11 +268,13 @@ private struct AdminUserDetail: View {
                         .frame(minHeight: 44)
                         .accessibilityIdentifier("users.edit")
                     if membership != nil, !isOwnerHere {
-                        Button { changingRoles = true } label: { Label("Change workspace roles", systemImage: "person.badge.key") }
+                        Button { changingRoles = true } label: { Label("Change roles", systemImage: "person.badge.key") }
                             .frame(minHeight: 44)
                             .accessibilityIdentifier("users.roles")
                     } else if isOwnerHere {
-                        Label("Owner — full access", systemImage: "crown").foregroundStyle(.secondaryText)
+                        Label("Owns this workspace. Their roles decide what they can do; ownership changes only when "
+                              + "it's handed to someone else.", systemImage: "crown")
+                            .foregroundStyle(.secondaryText)
                     }
                 }
             }
@@ -402,7 +422,7 @@ private struct AdminUserCreateForm: View {
                 TextField("Address", text: $address, axis: .vertical)
             }
         }
-        .navigationTitle("Add user")
+        .navigationTitle("Create an account")
         .navigationBarTitleDisplayMode(.inline)
         .interactiveDismissDisabled(working)
         .task { roles = (try? await PeopleRoles.load(api)) ?? [] }

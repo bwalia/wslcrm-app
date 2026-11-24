@@ -172,7 +172,9 @@ private struct AdminWorkspacesList: View {
     var body: some View {
         PagedList(model: model, searchPrompt: "Search name, web address or description",
                   emptyTitle: filters.status.isEmpty ? "No workspaces" : "No \(filters.status) workspaces",
-                  emptySystemImage: "building.2") { workspace in
+                  emptySystemImage: "building.2",
+                  emptyActionTitle: "New workspace",
+                  emptyAction: filters.status.isEmpty ? { creating = true } : nil) { workspace in
             NavigationLink {
                 AdminWorkspaceDetail(api: api, workspace: workspace) { Task { await reload() } }
             } label: {
