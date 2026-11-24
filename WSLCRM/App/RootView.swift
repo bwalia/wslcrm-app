@@ -61,7 +61,10 @@ struct RootView: View {
                     session.lockIfEnabled()
                 }
                 backgroundedAt = nil
-                if session.phase == .signedIn { sync.replaySoon() }
+                if session.phase == .signedIn {
+                    sync.replaySoon()
+                    session.refreshPermissionsIfStale()
+                }
             default:
                 break
             }

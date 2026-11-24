@@ -72,7 +72,12 @@ final class SessionStore {
         eventsTask = Task { [weak self, client] in
             for await event in client.events {
                 guard let self else { return }
-                if event == .sessionExpired { self.handleSessionExpired() }
+                switch event {
+                case .sessionExpired: self.handleSessionExpired()
+                // Refused: the role may have changed on the web. Check again soon, at most every 15 s.
+                case .forbidden: self.refreshPermissionsIfStale(olderThan: 15)
+                case .tokensRefreshed: break
+                }
             }
         }
     }
@@ -341,15 +346,10 @@ final class SessionStore {
 
     func reloadPermissions() async {
         guard let workspace else { return }
+        permissionsCheckedAt = now()
         do {
             let (menu, data) = try await auth.menu()
-            await cache.store(data, key: "menu", namespaceId: workspace.uuid)
-            permissions = PermissionSet(menu: menu)
-            self.menu = AppMenu(menu)
-            if menu.namespace?.isOwner == true, let index = workspaces.firstIndex(where: { $0.uuid == workspace.uuid }) {
-                workspaces[index].isOwner = true
-            }
-            permissionsError = nil
+            await apply(menu: menu, data: data, for: workspace)
         } catch {
             let apiError = error.asAPIError
             if let entry = await cache.load(key: "menu", namespaceId: workspace.uuid),
@@ -365,6 +365,37 @@ final class SessionStore {
         await reloadPropertyDealsAccess()
         await reloadPropertyPAAccess()
     }
+
+    private func apply(menu: MenuResponse, data: Data, for workspace: Workspace) async {
+        await cache.store(data, key: "menu", namespaceId: workspace.uuid)
+        permissions = PermissionSet(menu: menu)
+        self.menu = AppMenu(menu)
+        if menu.namespace?.isOwner == true, let index = workspaces.firstIndex(where: { $0.uuid == workspace.uuid }) {
+            workspaces[index].isOwner = true
+        }
+        permissionsError = nil
+    }
+
+    /// When permissions were last asked for (loaded or tried), so quiet refreshes stay rare.
+    @ObservationIgnored private var permissionsCheckedAt: Date?
+    @ObservationIgnored private var quietPermissionsRefresh: Task<Void, Never>?
+    @ObservationIgnored var now: () -> Date = { Date() }
+
+    /// Back in the app, or a request was refused: a role changed on the web shows without pulling to
+    /// refresh. Quiet: at most once per `interval`, and a failure leaves what's on screen as it is.
+    func refreshPermissionsIfStale(olderThan interval: TimeInterval = 60) {
+        guard phase == .signedIn, let workspace, quietPermissionsRefresh == nil else { return }
+        if let checked = permissionsCheckedAt, now().timeIntervalSince(checked) < interval { return }
+        permissionsCheckedAt = now()
+        quietPermissionsRefresh = Task {
+            defer { quietPermissionsRefresh = nil }
+            guard let (menu, data) = try? await auth.menu(), self.workspace?.uuid == workspace.uuid else { return }
+            await apply(menu: menu, data: data, for: workspace)
+        }
+    }
+
+    /// The quiet refresh in flight, for tests.
+    var pendingPermissionsRefresh: Task<Void, Never>? { quietPermissionsRefresh }
 
     private func reloadPropertyPAAccess() async {
         propertyPA = try? await PropertyPAAPI(client: client, cache: cache).me()
