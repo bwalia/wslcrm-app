@@ -37,3 +37,11 @@ The prod URL is never committed. Pass `-Pwslcrm.prodApiBaseUrl=https://…`, set
 ```
 
 Unit tests run on the JVM. Captured API payloads are shared with iOS from `../WSLCRMTests/Fixtures`.
+
+## Desktop (Windows)
+
+`desktop/` is the Windows (and macOS/Linux) app: Compose Multiplatform on the JVM, compiled with the
+platform-free files from `app/` (listed in `desktop/build.gradle.kts`). Keep new networking, model
+and API code free of Android imports so the desktop app can share it; platform calls go through a
+seam such as `core/platform/PlatformLog.kt`. `./gradlew :desktop:test`, `:desktop:run`,
+`:desktop:packageDistributionForCurrentOS`. See [../docs/DESKTOP.md](../docs/DESKTOP.md).

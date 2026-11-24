@@ -239,7 +239,7 @@ final class ThemeStore {
     /// The home-screen icon. iOS shows its own short message when it changes.
     func setIcon(_ choice: AppIconChoice) async {
         guard UIApplication.shared.supportsAlternateIcons else {
-            problem = "This phone can't change the app's icon."
+            problem = "This device can't change the app's icon (a Mac keeps the standard one)."
             return
         }
         do {

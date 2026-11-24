@@ -64,5 +64,9 @@ xcodebuild test -project WSLCRM.xcodeproj -scheme WSLCRM-Int \
   -destination 'platform=iOS Simulator,name=iPhone 16 Pro' -only-testing:WSLCRMTests CODE_SIGNING_ALLOWED=NO
 ```
 
+The same app runs on the Mac through Mac Catalyst (docs/DESKTOP.md). A framework that isn't on the
+Mac (VisionKit's live scanner, for one) gets a `#if targetEnvironment(macCatalyst)` fallback, never
+a removed feature; `.github/workflows/desktop.yml` builds for Catalyst on every change.
+
 Local OpsAPI testing (scheme `WSLCRM-Local`, `Config/Local.xcconfig`) and test credentials are in the
 README. A merge to `main` uploads a TestFlight build (`.github/workflows/ios_release.yml`).

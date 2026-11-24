@@ -463,6 +463,13 @@ Every screen is SwiftUI: the app shows no web pages and has no web views. `scrip
 fails CI if one comes back. New modules are built with the module kit or as hand-built screens in a
 module group — see [docs/NATIVE_MODULES.md](docs/NATIVE_MODULES.md).
 
+## Desktop (macOS and Windows)
+
+The Mac app is this app built for Mac Catalyst (`-destination 'platform=macOS,variant=Mac Catalyst'`);
+the Windows app is a Compose Multiplatform desktop app in `android/desktop` that reuses the Android
+app's Kotlin. Both are native, never a web wrapper. Build, release and limitations:
+[docs/DESKTOP.md](docs/DESKTOP.md).
+
 ## Architecture
 
 ```

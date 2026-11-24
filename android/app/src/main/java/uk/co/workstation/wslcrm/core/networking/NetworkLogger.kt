@@ -1,6 +1,6 @@
 package uk.co.workstation.wslcrm.core.networking
 
-import android.util.Log
+import uk.co.workstation.wslcrm.core.platform.PlatformLog
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -15,22 +15,22 @@ class NetworkLogger(val isEnabled: Boolean) {
     fun request(method: String, url: String, namespace: String?, body: ByteArray?, id: String) {
         if (!isEnabled) return
         val redacted = body?.let(::redactedBody).orEmpty()
-        Log.d(TAG, "→ [$id] $method $url ns=${namespace ?: "-"} $redacted")
+        PlatformLog.d(TAG, "→ [$id] $method $url ns=${namespace ?: "-"} $redacted")
     }
 
     fun response(status: Int, data: ByteArray, id: String, durationMs: Long) {
         if (!isEnabled) return
-        Log.d(TAG, "← [$id] $status ${durationMs}ms ${redactedBody(data)}")
+        PlatformLog.d(TAG, "← [$id] $status ${durationMs}ms ${redactedBody(data)}")
     }
 
     fun retry(endpoint: String, attempt: Int, delaySeconds: Double) {
         if (!isEnabled) return
-        Log.d(TAG, "↻ $endpoint retry $attempt in ${"%.1f".format(java.util.Locale.ROOT, delaySeconds)}s")
+        PlatformLog.d(TAG, "↻ $endpoint retry $attempt in ${"%.1f".format(java.util.Locale.ROOT, delaySeconds)}s")
     }
 
     fun failure(error: Throwable, id: String) {
         if (!isEnabled) return
-        Log.e(TAG, "✕ [$id] $error")
+        PlatformLog.e(TAG, "✕ [$id] $error")
     }
 
     companion object {

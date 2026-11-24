@@ -1270,6 +1270,7 @@
 		F0A7439BFB444ADC7AA2A5DD /* TimesheetsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimesheetsAPI.swift; sourceTree = "<group>"; };
 		F14E252DC867CA93491BF471 /* EnvelopeDecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvelopeDecodingTests.swift; sourceTree = "<group>"; };
 		F23EE396CB4072055B7E09C9 /* CustomersViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomersViews.swift; sourceTree = "<group>"; };
+		F3397239225821D19C5FF9B1 /* WSLCRM-macOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "WSLCRM-macOS.entitlements"; sourceTree = "<group>"; };
 		F36A089EB14B12E0BD0178DA /* AccountSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSettingsView.swift; sourceTree = "<group>"; };
 		F3928761F68F7BDA89ABCAAD /* AIRunDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIRunDetailView.swift; sourceTree = "<group>"; };
 		F3B598DCCC331660B7988255 /* ShopDealRequestViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopDealRequestViews.swift; sourceTree = "<group>"; };
@@ -1443,6 +1444,7 @@
 				592AF8CD0F41FEFEDFD251C2 /* Fonts */,
 				89777838133A13A27F85285A /* Assets.xcassets */,
 				C99DF96FE6AE2F8982ED771E /* PrivacyInfo.xcprivacy */,
+				F3397239225821D19C5FF9B1 /* WSLCRM-macOS.entitlements */,
 				9B5BBB6A423BB8ED3C88C70A /* WSLCRM.entitlements */,
 			);
 			path = Resources;
@@ -3345,13 +3347,16 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(BRAND_APP_ICON)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "$(BRAND_ACCENT_COLOR)";
 				CODE_SIGN_ENTITLEMENTS = WSLCRM/Resources/WSLCRM.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "WSLCRM/Resources/WSLCRM-macOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, photos of a property you're capturing, scan a bank statement for your tax, or scan product barcodes at the till.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
@@ -3366,9 +3371,12 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm;
 				PRODUCT_NAME = WSLCRM;
 				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = "Debug-Int";
@@ -3470,13 +3478,16 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(BRAND_APP_ICON)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "$(BRAND_ACCENT_COLOR)";
 				CODE_SIGN_ENTITLEMENTS = WSLCRM/Resources/WSLCRM.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "WSLCRM/Resources/WSLCRM-macOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, photos of a property you're capturing, scan a bank statement for your tax, or scan product barcodes at the till.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
@@ -3491,9 +3502,12 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm;
 				PRODUCT_NAME = WSLCRM;
 				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = "Release-Int";
@@ -3721,13 +3735,16 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(BRAND_APP_ICON)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "$(BRAND_ACCENT_COLOR)";
 				CODE_SIGN_ENTITLEMENTS = WSLCRM/Resources/WSLCRM.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "WSLCRM/Resources/WSLCRM-macOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, photos of a property you're capturing, scan a bank statement for your tax, or scan product barcodes at the till.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
@@ -3742,9 +3759,12 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm;
 				PRODUCT_NAME = WSLCRM;
 				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = "Debug-Local";
@@ -3935,13 +3955,16 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(BRAND_APP_ICON)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "$(BRAND_ACCENT_COLOR)";
 				CODE_SIGN_ENTITLEMENTS = WSLCRM/Resources/WSLCRM.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "WSLCRM/Resources/WSLCRM-macOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, photos of a property you're capturing, scan a bank statement for your tax, or scan product barcodes at the till.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
@@ -3956,9 +3979,12 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm;
 				PRODUCT_NAME = WSLCRM;
 				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = "Release-Prod";
@@ -3971,13 +3997,16 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = "$(BRAND_APP_ICON)";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "$(BRAND_ACCENT_COLOR)";
 				CODE_SIGN_ENTITLEMENTS = WSLCRM/Resources/WSLCRM.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "WSLCRM/Resources/WSLCRM-macOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(WSLCRM_INFOPLIST_FILE)";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(BRAND_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take fault and site photos for a job, photos of a property you're capturing, scan a bank statement for your tax, or scan product barcodes at the till.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to unlock your saved $(BRAND_NAME) session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is used only when you check in to or out of a site visit, as proof of attendance, or when you capture a property's address.";
@@ -3992,9 +4021,12 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.workstation.wslcrm;
 				PRODUCT_NAME = WSLCRM;
 				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = "Debug-Prod";

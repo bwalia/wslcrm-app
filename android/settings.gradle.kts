@@ -22,3 +22,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "WSLCRM"
 include(":app")
+// The Windows/macOS/Linux desktop app (Compose Multiplatform, JVM). Shares app/'s platform-free code.
+include(":desktop")
