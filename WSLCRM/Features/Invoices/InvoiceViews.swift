@@ -142,8 +142,10 @@ private struct InvoicesListBody: View {
         PagedList(model: holder.list, searchPrompt: "Number, customer or email", emptyTitle: "No invoices",
                   emptySystemImage: "doc.text",
                   emptyDescription: isFiltered ? "No invoices match these filters."
-                      : session.permissions.can(.create, .invoices) ? "Tap + to make your first invoice."
-                      : "Invoices your team makes show here. Ask an admin if you need to make them too.") { invoice in
+                      : session.permissions.can(.create, .invoices) ? "Make your first invoice: who it's for, what for and how much."
+                      : "Invoices your team makes show here. Ask the workspace owner if you need to make them too.",
+                  emptyActionTitle: isFiltered ? nil : "New invoice",
+                  emptyAction: !isFiltered && session.permissions.can(.create, .invoices) ? { creating = true } : nil) { invoice in
             NavigationLink {
                 InvoiceDetailView(invoiceUuid: invoice.id) { updated in
                     if let updated { holder.list.replace(updated) } else { holder.list.remove(id: invoice.id) }
@@ -161,8 +163,16 @@ private struct InvoicesListBody: View {
                 HStack(spacing: 10) {
                     StatTile(title: "Invoiced", value: money(stats.totalInvoiced), systemImage: "doc.text")
                     StatTile(title: "Outstanding", value: money(stats.totalOutstanding), systemImage: "hourglass")
-                    StatTile(title: "Overdue (\(stats.overdueCount))", value: money(stats.totalOverdue),
-                             systemImage: "exclamationmark.triangle")
+                    // Tapping it shows just the overdue invoices (tap again for all of them).
+                    Button { filter = filter == .overdue ? nil : .overdue } label: {
+                        StatTile(title: "Overdue (\(stats.overdueCount))", value: money(stats.totalOverdue),
+                                 systemImage: "exclamationmark.triangle")
+                            .overlay(RoundedRectangle(cornerRadius: 12)
+                                .strokeBorder(Tone.danger.color, lineWidth: filter == .overdue ? 2 : 0))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint(filter == .overdue ? "Shows every invoice again" : "Shows only overdue invoices")
+                    .accessibilityIdentifier("invoices.overdueTile")
                     StatTile(title: "Paid", value: money(stats.totalPaid), systemImage: "checkmark.seal")
                 }
                 .frame(height: 76)
@@ -196,8 +206,8 @@ private struct InvoicesListSheets: ViewModifier {
                     .presentationDetents([.medium, .large])
             }
             .sheet(isPresented: $creating) {
-                InvoiceCreateSheet { body in
-                    let created = try await services.invoices.create(body)
+                InvoiceCreateSheet { body, key in
+                    let created = try await services.invoices.create(body, idempotencyKey: key)
                     await holder.list.load()
                     stats = try? await services.invoices.stats()
                     openedNotice = "Invoice \(created.displayNumber) created as a draft. Check it, then email it to the customer."
@@ -273,6 +283,7 @@ struct InvoiceDetailView: View {
     @State private var recordingPayment = false
     @State private var confirmVoid = false
     @State private var confirmDelete = false
+    @State private var deletingPayment: InvoicePayment?
     @State private var pdfURL: URL?
     @State private var previewURL: URL?
     @State private var emailing = false
@@ -325,11 +336,13 @@ struct InvoiceDetailView: View {
             } onDelete: {
                 await mutate("Line removed.") { try await services.invoices.deleteItem(invoiceUuid, itemId: item.id) }
             }
+            .moneySheetError(actionError)
         }
         .sheet(isPresented: $addingItem) {
             LineItemSheet(item: nil) { body in
                 await mutate("Line added.") { try await services.invoices.addItem(invoiceUuid, body) }
             } onDelete: { false }
+            .moneySheetError(actionError)
         }
         .sheet(isPresented: $emailing) {
             if let invoice = state.value {
@@ -346,6 +359,7 @@ struct InvoiceDetailView: View {
                 InvoiceEditSheet(invoice: invoice) { body in
                     await mutate("Invoice saved.") { try await services.invoices.updateHeader(invoiceUuid, body) }
                 }
+                .moneySheetError(actionError)
             }
         }
         .sheet(isPresented: $recordingPayment) {
@@ -355,7 +369,12 @@ struct InvoiceDetailView: View {
                         try await services.invoices.recordPayment(invoiceUuid, body)
                     }
                 }
+                .moneySheetError(actionError)
             }
+        }
+        // A sheet shows only its own failure, not one from before it opened.
+        .onChange(of: addingItem || editingItem != nil || editingHeader || recordingPayment) { _, open in
+            if open { actionError = nil }
         }
         .confirmationDialog("Void this invoice?", isPresented: $confirmVoid, titleVisibility: .visible) {
             Button("Void invoice", role: .destructive) {
@@ -363,6 +382,19 @@ struct InvoiceDetailView: View {
             }
         } message: {
             Text("A voided invoice can't be reopened. Recorded payments are kept.")
+        }
+        .confirmationDialog(Self.deletePaymentTitle(deletingPayment, currency: state.value?.currency ?? ""),
+                            isPresented: Binding(get: { deletingPayment != nil }, set: { if !$0 { deletingPayment = nil } }),
+                            titleVisibility: .visible, presenting: deletingPayment) { payment in
+            Button("Delete payment", role: .destructive) {
+                Task {
+                    _ = await mutate("Payment deleted. The invoice shows what's still owed.") {
+                        try await services.invoices.deletePayment(invoiceUuid, paymentId: payment.id)
+                    }
+                }
+            }
+        } message: { _ in
+            Text("The invoice will show this amount as owing again.")
         }
         .confirmationDialog("Delete this draft?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete draft", role: .destructive) {
@@ -504,13 +536,7 @@ struct InvoiceDetailView: View {
                         }
                         .swipeActions(allowsFullSwipe: false) {
                             if permissions.can(.delete, .payments) {
-                                Button("Delete", role: .destructive) {
-                                    Task {
-                                        _ = await mutate("Payment deleted.") {
-                                            try await services.invoices.deletePayment(invoiceUuid, paymentId: payment.id)
-                                        }
-                                    }
-                                }
+                                Button("Delete", role: .destructive) { deletingPayment = payment }
                             }
                         }
                     }
@@ -560,8 +586,15 @@ struct InvoiceDetailView: View {
                 }
             }
             if vat.supplierVrn == nil {
-                Text("Add the workspace's VAT registration under Tax › VAT so it prints on invoices.")
-                    .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                if VATContext.workspace.allows(.update, session.permissions) {
+                    NavigationLink(value: NativeScreenRoute("tax.vat:namespace")) {
+                        Label("Add your business’s VAT number so it prints on invoices", systemImage: "building.2")
+                    }
+                    .accessibilityIdentifier("invoice.addBusinessVAT")
+                } else {
+                    Text("Your business’s VAT number isn’t set up, so it can’t print on invoices. Ask the workspace owner to add it.")
+                        .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                }
             }
             HStack {
                 Button("Check e-invoice") { Task { await checkEinvoice() } }
@@ -626,6 +659,11 @@ struct InvoiceDetailView: View {
         }
     }
 
+    static func deletePaymentTitle(_ payment: InvoicePayment?, currency: String) -> String {
+        guard let payment else { return "Delete this payment?" }
+        return "Delete this \(Formatters.money(payment.amount, currency: currency) ?? payment.amount.formatted()) payment?"
+    }
+
     static func paymentNotice(_ amount: Decimal, currency: String) -> String {
         "Payment of \(Formatters.money(amount, currency: currency) ?? amount.formatted()) recorded."
     }
@@ -662,6 +700,7 @@ struct LineItemSheet: View {
     @State private var body_: LineItemBody
     @State private var taxRates: [TaxRate] = []
     @State private var saving = false
+    @State private var confirmDelete = false
 
     init(item: InvoiceLineItem?, save: @escaping (LineItemBody) async -> Bool, onDelete: @escaping () async -> Bool) {
         self.item = item
@@ -696,11 +735,14 @@ struct LineItemSheet: View {
                 }
                 if item != nil {
                     Section {
-                        Button("Delete line item", role: .destructive) {
-                            Task { if await onDelete() { dismiss() } }
-                        }
+                        Button("Delete line item", role: .destructive) { confirmDelete = true }
                     }
                 }
+            }
+            .confirmationDialog("Delete this line?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button("Delete line", role: .destructive) { Task { if await onDelete() { dismiss() } } }
+            } message: {
+                Text("It comes off the invoice and the totals are worked out again.")
             }
             .navigationTitle(item == nil ? "Add line item" : "Edit line item")
             .navigationBarTitleDisplayMode(.inline)
@@ -799,7 +841,8 @@ struct PaymentSheet: View {
 /// A new invoice: the customer (picked or typed), dates and terms, how to pay, the customer's PO number and
 /// lines with a tax rate from the workspace's list (`GET /api/v2/invoices/tax-rates`, else typed).
 struct InvoiceCreateSheet: View {
-    let create: (InvoiceHeaderBody) async throws -> Invoice
+    /// The body and this form's Idempotency-Key.
+    let create: (InvoiceHeaderBody, String) async throws -> Invoice
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
     @State private var customerName: String
@@ -813,18 +856,24 @@ struct InvoiceCreateSheet: View {
     @State private var methods: [PaymentMethodInfo] = []
     @State private var taxRates: [TaxRate] = []
     @State private var notes = ""
-    @State private var items: [LineItemBody] = [LineItemBody(description: "", quantity: 1, unitPrice: 0, taxRate: 20)]
+    @State private var items = [MoneyDraftLine(LineItemBody(description: "", quantity: 1, unitPrice: 0, taxRate: 20))]
     @State private var saving = false
     @State private var error: APIError?
+    @State private var retryKey = MoneyRetryKey()
 
     /// Payment terms offered (days after the issue date).
     static let termChoices = [0, 7, 14, 30, 60]
 
-    init(prefill: PickedCustomer? = nil, create: @escaping (InvoiceHeaderBody) async throws -> Invoice) {
+    init(prefill: PickedCustomer? = nil, create: @escaping (InvoiceHeaderBody, String) async throws -> Invoice) {
         self.create = create
         _customerName = State(initialValue: prefill?.name ?? "")
         _customerEmail = State(initialValue: prefill?.email ?? "")
         _customerAddress = State(initialValue: prefill?.addressText ?? "")
+    }
+
+    /// For callers that don't pass the key on (it's still one per form, but the server never sees it).
+    init(prefill: PickedCustomer? = nil, create: @escaping (InvoiceHeaderBody) async throws -> Invoice) {
+        self.init(prefill: prefill) { body, _ in try await create(body) }
     }
 
     static func dueDate(issued: Date, terms: Int, calendar: Calendar = .current) -> Date {
@@ -847,7 +896,9 @@ struct InvoiceCreateSheet: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             Form {
+                if let error { Section { InlineErrorRow(error: error) }.id("form.error") }
                 Section("Customer") {
                     ChooseCustomerButton { picked in
                         customerName = picked.name
@@ -880,41 +931,48 @@ struct InvoiceCreateSheet: View {
                 } footer: {
                     Text("The due date follows the payment terms. \"How to pay\" is printed on the invoice.")
                 }
-                ForEach($items.indices, id: \.self) { index in
+                // Rows are bound by a stable id: removing a line while another is being typed in can't point at
+                // a row that has gone.
+                ForEach($items) { $item in
+                    let index = items.firstIndex { $0.id == item.id } ?? 0
                     Section("Line \(index + 1)") {
-                        TextField("Description", text: $items[index].description)
-                        TextField("Quantity", value: $items[index].quantity, format: .number).keyboardType(.decimalPad)
-                        TextField("Unit price", value: $items[index].unitPrice, format: .number).keyboardType(.decimalPad)
+                        TextField("Description", text: $item.body.description)
+                        TextField("Quantity", value: $item.body.quantity, format: .number).keyboardType(.decimalPad)
+                        TextField("Unit price", value: $item.body.unitPrice, format: .number).keyboardType(.decimalPad)
                         if taxRates.isEmpty {
-                            TextField("VAT %", value: $items[index].taxRate, format: .number).keyboardType(.decimalPad)
+                            TextField("VAT %", value: $item.body.taxRate, format: .number).keyboardType(.decimalPad)
                         } else {
-                            Picker("Tax rate", selection: $items[index].taxRate) {
+                            Picker("Tax rate", selection: $item.body.taxRate) {
                                 ForEach(taxRates) { Text("\($0.name) (\($0.rate.formatted())%)").tag($0.rate) }
-                                if !taxRates.contains(where: { $0.rate == items[index].taxRate }) {
-                                    Text("\(items[index].taxRate.formatted())%").tag(items[index].taxRate)
+                                if !taxRates.contains(where: { $0.rate == item.body.taxRate }) {
+                                    Text("\(item.body.taxRate.formatted())%").tag(item.body.taxRate)
                                 }
                             }
                         }
                         if items.count > 1 {
-                            Button("Remove line", role: .destructive) { items.remove(at: index) }
+                            Button("Remove line", role: .destructive) { items.removeAll { $0.id == item.id } }
                         }
                     }
                 }
                 Section {
                     Button("Add another line", systemImage: "plus") {
-                        items.append(LineItemBody(description: "", quantity: 1, unitPrice: 0, taxRate: items.last?.taxRate ?? 0))
+                        items.append(MoneyDraftLine(LineItemBody(description: "", quantity: 1, unitPrice: 0,
+                                                                 taxRate: items.last?.body.taxRate ?? 0)))
                     }
                     TextField("Notes shown on the invoice", text: $notes, axis: .vertical)
                 }
-                if let error { Section { InlineErrorRow(error: error) } }
+            }
+            .onChange(of: error?.plainMessage) { _, message in
+                if message != nil { withAnimation { proxy.scrollTo("form.error", anchor: .top) } }
+            }
             }
             .navigationTitle("New invoice")
             .navigationBarTitleDisplayMode(.inline)
             .task {
                 methods = (try? await services.invoices.paymentMethods()) ?? []
                 taxRates = (try? await services.invoices.taxRates()) ?? []
-                if let preferred = taxRates.first(where: \.isDefault), items.count == 1, items[0].description.isEmpty {
-                    items[0].taxRate = preferred.rate
+                if let preferred = taxRates.first(where: \.isDefault), items.count == 1, items[0].body.description.isEmpty {
+                    items[0].body.taxRate = preferred.rate
                 }
             }
             .toolbar {
@@ -934,14 +992,15 @@ struct InvoiceCreateSheet: View {
         error = nil
         let body = Self.body(name: customerName, email: customerEmail, address: customerAddress, issued: issueDate,
                              terms: terms, currency: currency, notes: notes, poNumber: poNumber, methodUuid: methodUuid,
-                             items: items)
+                             items: items.map(\.body))
         Task {
             defer { saving = false }
             do {
-                _ = try await create(body)
+                _ = try await create(body, retryKey.value)
                 dismiss()
             } catch {
                 self.error = error.asAPIError
+                retryKey.settle(error.asAPIError)
             }
         }
     }

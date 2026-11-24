@@ -12,7 +12,8 @@ struct InvoicesAPI: Sendable {
         q.add("page", page)
         q.add("perPage", perPage)
         q.add("search", search.trimmingCharacters(in: .whitespaces))
-        if let status, [.draft, .sent, .paid, .void].contains(status) { q.add("status", status.rawValue) }
+        // "overdue" isn't stored: the server works it out (sent, past due, still owing).
+        if let status, status != .unknown { q.add("status", status.rawValue) }
         q.add("from_date", issuedFrom?.isoString)
         q.add("to_date", issuedTo?.isoString)
         let envelope: Envelope.Invoices<LossyArray<Invoice>> = try await client.send(.get(Self.base, query: q.items))
@@ -33,9 +34,10 @@ struct InvoicesAPI: Sendable {
         return rates.elements
     }
 
-    /// Create returns the header only; the full invoice is fetched afterwards.
-    func create(_ body: InvoiceHeaderBody) async throws -> Invoice {
-        let created: Invoice = try await data(.post(Self.base, json: body))
+    /// Create returns the header only; the full invoice is fetched afterwards. `idempotencyKey`: one per form
+    /// (`MoneyRetryKey`), so a retry after a lost reply can be answered with the first invoice.
+    func create(_ body: InvoiceHeaderBody, idempotencyKey: String = UUID().uuidString) async throws -> Invoice {
+        let created: Invoice = try await data(Endpoint.post(Self.base, json: body).withIdempotencyKey(idempotencyKey))
         return try await invoice(created.id)
     }
 
