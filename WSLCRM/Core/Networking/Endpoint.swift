@@ -18,6 +18,7 @@ struct Endpoint: Sendable {
     /// write recorded before the user switched workspace).
     var namespaceOverride: String?
     var contentType = "application/json"
+    /// Reads give up after 20 s (one retry: about 40 s on a loading screen at worst); writes wait 30 s.
     var timeout: TimeInterval = 30
     /// Extra request headers, e.g. `Idempotency-Key`.
     var headers: [String: String] = [:]
@@ -32,6 +33,7 @@ struct Endpoint: Sendable {
         self.query = query
         self.requiresAuth = requiresAuth
         self.requiresNamespace = requiresNamespace
+        self.timeout = method == .get ? 20 : 30
     }
 
     static func get(_ path: String, query: [URLQueryItem] = []) -> Endpoint {

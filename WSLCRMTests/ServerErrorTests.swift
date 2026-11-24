@@ -39,7 +39,7 @@ final class ServerErrorTests: XCTestCase {
         let apiError = APIError.from(status: 403, data: Data(body.utf8), headers: [:])
         guard case .forbidden(let server) = apiError else { return XCTFail("Expected forbidden, got \(apiError)") }
         XCTAssertEqual(server.requiredPermission, .init(module: "fs_jobs", action: "update"))
-        XCTAssertEqual(apiError.localizedDescription, "You don't have permission to update service jobs.")
+        XCTAssertEqual(apiError.localizedDescription, "Your role doesn't allow this. Ask the workspace owner if you need it.")
     }
 
     func testCorrelationIdHeaderIsUsedWhenBodyHasNone() {
