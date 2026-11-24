@@ -82,6 +82,9 @@ enum Action: String, Sendable {
 /// The server remains the authority; this only decides what the UI offers.
 struct PermissionSet: Sendable, Equatable {
     var isAdmin: Bool
+    /// Owns the workspace. NOT an access bypass: the server is role-driven, so an owner gets what their
+    /// role grants (only an owner with no permissions at all gets everything, which `can` already
+    /// does). Never gate a button on this; use `can(action, module)`.
     var isOwner: Bool
     var grants: [String: Set<String>]
     /// Menu keys visible to the caller (`field_service_jobs`, `crm`, `invoices`, …), which also
@@ -394,9 +397,11 @@ struct FieldServicePolicy: Sendable {
     /// Anyone signed in may log and read their own time: those routes are namespace-gated only.
     var canLogOwnTime: Bool { true }
 
-    /// Seeing other people's time is an approver's right, not an ordinary one.
+    /// Seeing other people's time is an approver's right, not an ordinary one. As the server's
+    /// `can_view_others` (routes/timesheets.lua): read, approve or reject on approvals, or timesheets.manage.
     var canSeeOthersTimesheets: Bool {
-        permissions.can(.read, .timesheetApprovals) || permissions.can(.manage, .timesheets)
+        permissions.can(.read, .timesheetApprovals) || permissions.can(.approve, .timesheetApprovals)
+            || permissions.can(.reject, .timesheetApprovals) || permissions.can(.manage, .timesheets)
     }
 
     var canApproveTimesheets: Bool { permissions.can(.approve, .timesheetApprovals) }
