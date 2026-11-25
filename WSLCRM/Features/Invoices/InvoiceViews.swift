@@ -320,8 +320,13 @@ struct InvoiceDetailView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     // One tap shows the PDF; Quick Look has its own share button.
                     Button("Preview PDF", systemImage: "doc.richtext") {
-                        pdfURL = pdfURL ?? InvoicePDFRenderer.render(invoice, company: session.workspace?.name)
-                        previewURL = pdfURL
+                        Task {
+                            if pdfURL == nil {
+                                let design = await DocumentDesigns.get(.invoice, services: services, workspace: session.workspace?.uuid)
+                                pdfURL = InvoicePDFRenderer.render(invoice, company: session.workspace?.name, design: design)
+                            }
+                            previewURL = pdfURL
+                        }
                     }
                     .accessibilityIdentifier("invoice.pdf")
                 }
@@ -1058,89 +1063,72 @@ enum InvoicePDFRenderer {
         return rows
     }
 
+    /// The status pill's colour (the web dashboard's palette).
     @MainActor
-    static func render(_ invoice: Invoice, company: String? = nil) -> URL? {
-        let page = CGRect(x: 0, y: 0, width: 595, height: 842) // A4 at 72 dpi
-        let renderer = UIGraphicsPDFRenderer(bounds: page)
+    static func statusColor(_ status: InvoiceStatus) -> UIColor {
+        switch status {
+        case .sent: UIColor(red: 37 / 255, green: 99 / 255, blue: 235 / 255, alpha: 1)
+        case .paid: UIColor(red: 22 / 255, green: 163 / 255, blue: 74 / 255, alpha: 1)
+        case .partiallyPaid: UIColor(red: 202 / 255, green: 138 / 255, blue: 4 / 255, alpha: 1)
+        case .overdue: UIColor(red: 220 / 255, green: 38 / 255, blue: 38 / 255, alpha: 1)
+        default: DesignedPage.muted
+        }
+    }
+
+    /// The invoice as A4, drawn to the workspace's design (`DocumentDesigns.get(.invoice, …)`).
+    @MainActor
+    static func render(_ invoice: Invoice, company: String? = nil, design: DocumentDesign = .standard(.invoice)) -> URL? {
         let number = invoice.displayNumber
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(number.isEmpty ? "invoice" : number).pdf")
         let money = { (value: Decimal) in Formatters.money(value, currency: invoice.currency) ?? "" }
+        let head = DocumentLetterhead.current(name: company)
+        return DesignedPDF.file(named: "\(number.isEmpty ? "invoice" : number).pdf", design: design) { page in
+            let d = page.design
+            let status = invoice.displayStatus
+            page.header(head, number: "# \(number)",
+                        status: d.shows("status") ? (status.badge.text.uppercased(), statusColor(status)) : nil)
+            page.rich(d.intro)
 
-        do {
-            try renderer.writePDF(to: url) { context in
-                context.beginPage()
-                var y: CGFloat = 48
-                func draw(_ text: String, x: CGFloat, font: UIFont, color: UIColor = .black, width: CGFloat = 260, alignment: NSTextAlignment = .left) -> CGFloat {
-                    let style = NSMutableParagraphStyle()
-                    style.alignment = alignment
-                    let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color, .paragraphStyle: style]
-                    let rect = (text as NSString).boundingRect(with: CGSize(width: width, height: .greatestFiniteMagnitude),
-                                                               options: .usesLineFragmentOrigin, attributes: attributes, context: nil)
-                    (text as NSString).draw(in: CGRect(x: x, y: y, width: width, height: rect.height), withAttributes: attributes)
-                    return rect.height
-                }
+            var meta = [("Issue date", invoice.issueDate.flatMap { Formatters.day($0.date()) } ?? "—"),
+                        ("Due date", invoice.dueDate.flatMap { Formatters.day($0.date()) } ?? "—")]
+            if let po = invoice.poNumber?.trimmedOrNil { meta.append(("Your PO number", po)) }
+            page.parties(label: d.billToLabel, name: invoice.customerName?.trimmedOrNil ?? "Customer",
+                         lines: [invoice.customerEmail, invoice.customerAddress].compactMap { $0?.trimmedOrNil },
+                         meta: meta, callout: ("Amount due", money(invoice.balanceDue)))
 
-                _ = draw("INVOICE", x: 48, font: .boldSystemFont(ofSize: 28))
-                _ = draw(number, x: 287, font: .monospacedSystemFont(ofSize: 14, weight: .semibold), width: 260, alignment: .right)
-                if let company = company?.trimmedOrNil {
-                    y += 34
-                    _ = draw(company, x: 48, font: .systemFont(ofSize: 12), color: .darkGray)
-                    y += 10
-                }
-                y += 44
-                _ = draw("Bill to", x: 48, font: .systemFont(ofSize: 10), color: .darkGray)
-                let issued = invoice.issueDate.flatMap { Formatters.day($0.date()) } ?? ""
-                let due = invoice.dueDate.flatMap { Formatters.day($0.date()) } ?? ""
-                _ = draw((["Issued \(issued)", "Due \(due)"] + (invoice.poNumber.map { ["Your PO \($0)"] } ?? [])).joined(separator: "\n"),
-                         x: 287, font: .systemFont(ofSize: 11), width: 260, alignment: .right)
-                y += 14
-                y += draw([invoice.customerName, invoice.customerAddress, invoice.customerEmail].compactMap { $0 }.joined(separator: "\n"),
-                          x: 48, font: .systemFont(ofSize: 12))
-                y += 30
-
-                _ = draw("Description", x: 48, font: .boldSystemFont(ofSize: 11))
-                _ = draw("Qty", x: 300, font: .boldSystemFont(ofSize: 11), width: 50, alignment: .right)
-                _ = draw("Price", x: 360, font: .boldSystemFont(ofSize: 11), width: 80, alignment: .right)
-                _ = draw("Total", x: 447, font: .boldSystemFont(ofSize: 11), width: 100, alignment: .right)
-                y += 20
-                for item in invoice.lineItems {
-                    let height = draw(item.description, x: 48, font: .systemFont(ofSize: 11), width: 240)
-                    _ = draw(item.quantity.formatted(), x: 300, font: .systemFont(ofSize: 11), width: 50, alignment: .right)
-                    _ = draw(money(item.unitPrice), x: 360, font: .systemFont(ofSize: 11), width: 80, alignment: .right)
-                    _ = draw(money(item.lineTotal), x: 447, font: .systemFont(ofSize: 11), width: 100, alignment: .right)
-                    y += max(height, 14) + 6
-                    if y > 720 {
-                        context.beginPage()
-                        y = 48
-                    }
-                }
-                y += 16
-                for (label, value) in InvoicePDFRenderer.totals(invoice, money: money) {
-                    _ = draw(label, x: 300, font: .systemFont(ofSize: 12), width: 140, alignment: .right)
-                    _ = draw(value, x: 447, font: label == "Balance due" ? .boldSystemFont(ofSize: 12) : .systemFont(ofSize: 12),
-                             width: 100, alignment: .right)
-                    y += 18
-                }
-                if let notes = invoice.notes, !notes.isEmpty {
-                    y += 20
-                    y += draw(notes, x: 48, font: .systemFont(ofSize: 10), color: .darkGray, width: 499)
-                }
-                if let method = invoice.paymentMethod, invoice.status != .paid, invoice.status != .void {
-                    if y > 700 {
-                        context.beginPage()
-                        y = 48
-                    }
-                    y += 24
-                    _ = draw("How to pay", x: 48, font: .boldSystemFont(ofSize: 11))
-                    y += 16
-                    let lines = [method.heading] + method.rows.map { "\($0.0): \($0.1)" } + (method.instructions.map { [$0] } ?? [])
-                        + ["Reference: \(number)"]
-                    _ = draw(lines.joined(separator: "\n"), x: 48, font: .systemFont(ofSize: 10), width: 499)
-                }
+            let numW: CGFloat = d.shows("item_numbers") ? 26 : 0
+            let taxW: CGFloat = d.shows("tax_column") ? 64 : 0
+            let descW = page.width - numW - 46 - 78 - taxW - 82
+            var cols: [(String, CGFloat, NSTextAlignment)] = []
+            if numW > 0 { cols.append(("#", numW, .center)) }
+            cols += [("Description", descW, .left), ("Qty", 46, .right), ("Unit price", 78, .right)]
+            if taxW > 0 { cols.append(("Tax", taxW, .right)) }
+            cols.append(("Amount", 82, .right))
+            page.tableHead(cols)
+            for (i, item) in invoice.lineItems.enumerated() {
+                var cells: [(String, CGFloat, NSTextAlignment, Bool)] = []
+                if numW > 0 { cells.append(("\(i + 1)", numW, .center, false)) }
+                cells += [(item.description.trimmedOrNil ?? "—", descW, .left, false), (item.quantity.formatted(), 46, .right, false),
+                          (money(item.unitPrice), 78, .right, false)]
+                if taxW > 0 { cells.append((money(item.taxAmount), taxW, .right, false)) }
+                cells.append((money(item.lineTotal), 82, .right, true))
+                page.tableRow(cells, index: i, head: cols)
             }
-            return url
-        } catch {
-            return nil
+            page.y += 18
+
+            let rows = totals(invoice, money: money).filter { $0.0 != "Balance due" }
+            page.ensure(CGFloat(rows.count) * 20 + 60)
+            let top = page.y
+            page.totals(rows.map { ($0.0, $0.1, $0.0 == "Total") }, callout: ("Balance due", money(invoice.balanceDue)))
+            if d.shows("notes"), let notes = invoice.notes?.trimmedOrNil {
+                page.y = max(page.y, page.sideNote("NOTES", notes, top: top) + 18)
+            }
+            if d.shows("payment_details"), let method = invoice.paymentMethod, invoice.status != .paid, invoice.status != .void {
+                page.howToPay([method], reference: number)
+            }
+            page.rich(d.terms)
+            page.footer(fallback: "Thank you for your business.",
+                        note: invoice.paymentTermsDays.map { "Payment terms: net \($0) days" },
+                        rightLines: [head.name, "Invoice \(number)"].filter { !$0.isEmpty })
         }
     }
 }
@@ -1155,6 +1143,7 @@ struct EmailInvoiceSheet: View {
     var onSent: (String) -> Void = { _ in }
 
     @Environment(\.services) private var services
+    @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var recipient: String
     @State private var message = ""
@@ -1228,7 +1217,9 @@ struct EmailInvoiceSheet: View {
         error = nil
         Task {
             defer { sending = false }
-            guard let url = InvoicePDFRenderer.render(invoice, company: company), let pdf = try? Data(contentsOf: url) else {
+            let design = await DocumentDesigns.get(.invoice, services: services, workspace: session.workspace?.uuid)
+            guard let url = InvoicePDFRenderer.render(invoice, company: company, design: design),
+                  let pdf = try? Data(contentsOf: url) else {
                 error = .validation(ServerError(status: 0, message: "The invoice PDF could not be built.",
                                                 fieldErrors: [:], rawBody: ""))
                 return
