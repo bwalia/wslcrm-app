@@ -24,6 +24,13 @@ extension ShopAPI {
         try await client.send(.get(Self.adminBase + "/chats/\(uuid)"), as: Envelope.Standard<ShopChatRecord>.self).data
     }
 
+    /// Makes the chat a CRM lead with an email or a phone number the team has. Returns the lead's uuid.
+    func makeChatLead(_ uuid: String, _ body: ShopChatLeadBody) async throws -> String {
+        struct Made: Decodable, Sendable { let leadUuid: String }
+        return try await client.send(.post(Self.adminBase + "/chats/\(uuid)/lead", json: body),
+                                     as: Envelope.Standard<Made>.self).data.leadUuid
+    }
+
     // MARK: Knowledge
 
     func knowledgeEntries(search: String, source: ShopKnowledgeSource?, page: Int, limit: Int = 30) async throws -> Page<ShopKnowledgeEntry> {
@@ -83,4 +90,12 @@ extension ShopAPI {
     func deleteMessageTemplate(_ uuid: String) async throws {
         try await client.sendDiscardingBody(.delete(Self.adminBase + "/message-templates/\(uuid)"))
     }
+}
+
+/// `POST /api/v2/shop/admin/chats/:uuid/lead`: one of email or phone is enough.
+struct ShopChatLeadBody: Encodable, Sendable {
+    var email: String?
+    var phone: String?
+    var name: String?
+    var note: String?
 }

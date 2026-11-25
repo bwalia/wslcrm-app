@@ -219,7 +219,8 @@ final class PropertyDealsApprovalsTests: XCTestCase {
         XCTAssertEqual(link(["route": "digest"])?.target, .today)
         XCTAssertEqual(link(["route": "task", "uuid": "t1"])?.namespaceId, "ns-2")
         XCTAssertNil(link(["route": "task"]), "a task push without a uuid isn't routable")
-        XCTAssertNil(link(["route": "invoice", "uuid": "i1"]))
+        XCTAssertNil(link(["route": "spaceship", "uuid": "s1"]), "a route the app doesn't know isn't routable")
+        XCTAssertEqual(link(["route": "invoice", "uuid": "i1"])?.target, .invoice("i1"), "payment alerts open the invoice")
     }
 
     func testCustomSchemeLinks() throws {

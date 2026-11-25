@@ -153,6 +153,14 @@ struct LeadsAPI: Sendable {
         return result.message
     }
 
+    /// Asks the AI for a (new) draft answer to their latest email; answers in words. Nothing is sent.
+    @discardableResult
+    func replyDraft(_ uuid: String) async throws -> String? {
+        struct Result: Decodable, Sendable { let message: String? }
+        let result: Result = try await data(.post("\(Self.base)/\(uuid)/reply-draft", json: EmptyBody()))
+        return result.message
+    }
+
     /// Emails the lead from the workspace's "Questions and follow-up" account; saved on the timeline.
     func email(_ uuid: String, _ body: LeadEmailBody) async throws -> String? {
         struct Result: Decodable, Sendable { let to: String? }

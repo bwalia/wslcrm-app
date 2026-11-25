@@ -16,9 +16,9 @@ import UIKit
 /// `wslcrm://hmrc/<settings|file|vat>?hmrc_connected=true` (or `?hmrc_error=<code>`), which this
 /// sheet catches. The server needed no change for this.
 @MainActor
-final class HMRCSignIn: NSObject, ASWebAuthenticationPresentationContextProviding {
+final class HMRCSignIn {
     /// The app's URL scheme (Info.plist `CFBundleURLSchemes`).
-    nonisolated static let callbackScheme = "wslcrm"
+    nonisolated static let callbackScheme = SystemSignInSheet.callbackScheme
     /// Sent as `redirect_url`; the callback appends `/settings`, `/file` or `/vat`.
     nonisolated static let returnAddress = "wslcrm://hmrc"
 
@@ -30,25 +30,14 @@ final class HMRCSignIn: NSObject, ASWebAuthenticationPresentationContextProvidin
         case cancelled
     }
 
-    private var session: ASWebAuthenticationSession?
+    private let sheet = SystemSignInSheet()
 
     /// Opens HMRC's sign-in page and waits for the person to finish or close it.
     func start(_ authURL: URL) async -> Outcome {
-        await withCheckedContinuation { continuation in
-            let session = ASWebAuthenticationSession(url: authURL, callbackURLScheme: Self.callbackScheme) { url, error in
-                if let url {
-                    continuation.resume(returning: Self.outcome(of: url))
-                } else if let error = error as? ASWebAuthenticationSessionError, error.code == .canceledLogin {
-                    continuation.resume(returning: .cancelled)
-                } else {
-                    continuation.resume(returning: .failed("unknown"))
-                }
-            }
-            session.presentationContextProvider = self
-            // No cookies shared with Safari: the Government Gateway sign-in doesn't linger on the phone.
-            session.prefersEphemeralWebBrowserSession = true
-            self.session = session
-            if !session.start() { continuation.resume(returning: .failed("unknown")) }
+        switch await sheet.run(authURL) {
+        case .returned(let url): Self.outcome(of: url)
+        case .cancelled: .cancelled
+        case .failed: .failed("unknown")
         }
     }
 
@@ -58,6 +47,42 @@ final class HMRCSignIn: NSObject, ASWebAuthenticationPresentationContextProvidin
         if items.contains(where: { $0.name == "hmrc_connected" && $0.value == "true" }) { return .connected }
         if let code = items.first(where: { $0.name == "hmrc_error" })?.value, !code.isEmpty { return .failed(code) }
         return .failed("missing_params")
+    }
+}
+
+/// Apple's system sign-in sheet (`ASWebAuthenticationSession`) for the one step a provider requires on its
+/// own page: HMRC's Government Gateway, Microsoft's sign-in. It is not a web view inside the app (no embedded
+/// browser view, no in-app Safari sheet, nothing of the web dashboard); it closes itself when the provider
+/// sends the person back to `wslcrm://…`, and shares no cookies with Safari.
+@MainActor
+final class SystemSignInSheet: NSObject, ASWebAuthenticationPresentationContextProviding {
+    nonisolated static let callbackScheme = "wslcrm"
+
+    enum Result: Equatable, Sendable {
+        /// Sent back to the app: the address carries how it went.
+        case returned(URL)
+        case cancelled
+        case failed
+    }
+
+    private var session: ASWebAuthenticationSession?
+
+    func run(_ url: URL) async -> Result {
+        await withCheckedContinuation { continuation in
+            let session = ASWebAuthenticationSession(url: url, callbackURLScheme: Self.callbackScheme) { url, error in
+                if let url {
+                    continuation.resume(returning: .returned(url))
+                } else if let error = error as? ASWebAuthenticationSessionError, error.code == .canceledLogin {
+                    continuation.resume(returning: .cancelled)
+                } else {
+                    continuation.resume(returning: .failed)
+                }
+            }
+            session.presentationContextProvider = self
+            session.prefersEphemeralWebBrowserSession = true
+            self.session = session
+            if !session.start() { continuation.resume(returning: .failed) }
+        }
     }
 
     nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {

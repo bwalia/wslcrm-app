@@ -93,6 +93,36 @@ final class WorkspaceAdminTests: XCTestCase {
         XCTAssertEqual(MailRouting.status(try record(#"{"enabled":true}"#)).0, "Not tested")
     }
 
+    /// Microsoft 365 accounts (opsapi lib/mail-microsoft.lua): no server to edit, the sign-in sheet's result, the
+    /// Office 365 password accounts Microsoft is switching off, and "Sign in again".
+    func testMicrosoftAccountsShowTheirOwnSections() throws {
+        let descriptor = WorkspaceAdminCatalog.mailAccounts
+        let microsoft = try record(#"{"uuid":"m1","provider":"microsoft","host":"graph.microsoft.com","enabled":true,"#
+                                   + #""oauth_email":"sales@contoso.co.uk","needs_reconnect":false}"#)
+        let smtp = try record(#"{"uuid":"s1","provider":"smtp","host":"smtp.office365.com","enabled":true}"#)
+        let visible = { (r: Record?) in descriptor.form!.sections.filter { $0.isVisible(for: r) }.flatMap(\.fields).map(\.key) }
+        XCTAssertFalse(visible(microsoft).contains("host"), "a Microsoft account has no server or password to edit")
+        XCTAssertFalse(visible(microsoft).contains("password"))
+        XCTAssertTrue(visible(microsoft).contains("watch_replies"))
+        XCTAssertTrue(visible(smtp).contains("host"))
+        XCTAssertTrue(visible(nil).contains("host"), "a new account is a password account")
+        XCTAssertTrue(descriptor.detail.filter { $0.isVisible(for: microsoft) }.contains { $0.title == "Microsoft 365" })
+        XCTAssertFalse(descriptor.detail.filter { $0.isVisible(for: smtp) }.contains { $0.title == "Microsoft 365" })
+
+        XCTAssertEqual(MailRouting.microsoftAction(smtp), "Switch to the Microsoft sign-in")
+        XCTAssertNil(MailRouting.microsoftAction(microsoft))
+        let expired = try record(#"{"provider":"microsoft","enabled":true,"needs_reconnect":true}"#)
+        XCTAssertEqual(MailRouting.microsoftAction(expired), "Sign in again with Microsoft")
+        XCTAssertEqual(MailRouting.status(expired).0, "Sign in again")
+        XCTAssertNil(MailRouting.microsoftAction(try record(#"{"provider":"smtp","host":"smtp.gmail.com"}"#)))
+
+        XCTAssertEqual(MailRouting.microsoftOutcome(URL(string: "wslcrm://mail-connected?microsoft=connected&account=m1")!),
+                       .connected)
+        XCTAssertEqual(MailRouting.microsoftOutcome(URL(string: "wslcrm://mail-connected?microsoft=error&reason=Access%20wasn%27t%20allowed")!),
+                       .failed("Access wasn't allowed"))
+        XCTAssertEqual(MailRouting.microsoftReturn, "wslcrm://mail-connected", "must match the server's MS.APP_RETURN")
+    }
+
     func testRoutingSendsNullForTheDefault() {
         XCTAssertEqual(MailRouting.body(key: "invoice_sent", account: nil),
                        .object(["routes": .object(["invoice_sent": .null])]))

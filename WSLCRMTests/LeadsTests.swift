@@ -90,6 +90,32 @@ final class LeadsTests: XCTestCase {
         XCTAssertEqual(AppDeepLink(url: URL(string: "wslcrm://pd/deal/d-1")!)?.target, .deal("d-1"), "Property Deals links unchanged")
     }
 
+    /// GET lead → `reply_draft` (opsapi lib/crm/lead-reply-ai.lua `latest`).
+    func testTheAIsDraftAnswerDecodes() throws {
+        let json = """
+        {"uuid":"l-1","first_name":"Priya","status":"contacting","last_reply_at":"2026-11-25T10:00:00+00:00",
+         "reply_draft":{"uuid":"d-1","status":"done","subject":"Re: Your quote","body":"Hi Priya, Friday is fine.",
+                        "error":null,"is_current":true,"created_at":"2026-11-25T10:01:00+00:00"}}
+        """
+        let lead = try JSONDecoder.opsAPI().decode(Lead.self, from: Data(json.utf8))
+        XCTAssertEqual(lead.replyDraft?.isReady, true)
+        XCTAssertEqual(lead.replyDraft?.isCurrent, true)
+        XCTAssertEqual(lead.replyDraft?.subject, "Re: Your quote")
+        let running = try JSONDecoder.opsAPI().decode(LeadReplyDraft.self,
+                                                       from: Data(#"{"status":"running","is_current":true}"#.utf8))
+        XCTAssertTrue(running.isRunning)
+        XCTAssertFalse(running.isReady)
+        let none = try JSONDecoder.opsAPI().decode(Lead.self, from: Data(#"{"uuid":"l-2","status":"new","reply_draft":null}"#.utf8))
+        XCTAssertNil(none.replyDraft)
+    }
+
+    func testMakingAChatALeadSendsOnlyWhatWasGiven() throws {
+        let body = try JSONEncoder.opsAPI().encode(ShopChatLeadBody(email: nil, phone: "07700 900456", name: "Omar", note: nil))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(object["phone"] as? String, "07700 900456")
+        XCTAssertNil(object["email"], "one of email or phone is enough; an empty one isn't sent")
+    }
+
     func testReplySubject() {
         XCTAssertEqual(LeadDetailView.replySubject("Your quote"), "Re: Your quote")
         XCTAssertEqual(LeadDetailView.replySubject("Re: Your quote"), "Re: Your quote")

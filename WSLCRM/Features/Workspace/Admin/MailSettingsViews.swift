@@ -13,6 +13,8 @@ struct MailSettingsView: View {
     @State private var feedback: Feedback = .none
     @State private var adding = false
     @State private var hasAppeared = false
+    @State private var signIn = SystemSignInSheet()
+    @State private var connecting: String?
 
     private var canEdit: Bool { session.permissions.can(.update, moduleName: "namespace") }
 
@@ -44,8 +46,22 @@ struct MailSettingsView: View {
         .toolbar {
             if canEdit, tab == .accounts {
                 ToolbarItem(placement: .primaryAction) {
-                    Button { adding = true } label: { Label("Add an email account", systemImage: "plus") }
-                        .accessibilityIdentifier("mail.addAccount")
+                    if microsoftAvailable {
+                        Menu {
+                            Button { Task { await connectMicrosoft(nil) } } label: {
+                                Label("Connect Microsoft 365", systemImage: "envelope.badge.shield.half.filled")
+                            }
+                            .accessibilityIdentifier("mail.connectMicrosoft")
+                            Button { adding = true } label: { Label("Add an email account (SMTP)", systemImage: "server.rack") }
+                                .accessibilityIdentifier("mail.addAccount")
+                        } label: {
+                            if connecting != nil { ProgressView() } else { Label("Add", systemImage: "plus") }
+                        }
+                        .disabled(connecting != nil)
+                    } else {
+                        Button { adding = true } label: { Label("Add an email account", systemImage: "plus") }
+                            .accessibilityIdentifier("mail.addAccount")
+                    }
                 }
             }
         }
@@ -76,6 +92,13 @@ struct MailSettingsView: View {
                     MailAccountRow(account: account)
                 }
                 .accessibilityIdentifier("mail.account.\(account.id)")
+                if canEdit, microsoftAvailable, let action = MailRouting.microsoftAction(account) {
+                    Button { Task { await connectMicrosoft(account) } } label: {
+                        Label(action, systemImage: "envelope.badge.shield.half.filled").frame(minHeight: 44)
+                    }
+                    .disabled(connecting != nil)
+                    .accessibilityIdentifier("mail.account.\(account.id).microsoft")
+                }
             }
         } header: {
             Text("Your email accounts")
@@ -96,6 +119,40 @@ struct MailSettingsView: View {
             } footer: {
                 Text("These emails always come from the platform’s server, whatever you choose here.")
             }
+        }
+    }
+
+    // MARK: Microsoft 365
+
+    /// "Connect Microsoft 365" is offered when the server's Microsoft app is set up.
+    private var microsoftAvailable: Bool { overview?.bool("microsoft.available") == true }
+
+    /// Microsoft's own sign-in in Apple's sign-in sheet; Microsoft sends the person back to the app.
+    /// `account`: switch that password account to the Microsoft sign-in, or sign it in again.
+    private func connectMicrosoft(_ account: Record?) async {
+        connecting = account?.id ?? "new"
+        defer { connecting = nil }
+        do {
+            let response = try await services.workspace().get("\(WorkspaceAdminCatalog.mailBase)/microsoft/connect", query: [
+                "return_url": MailRouting.microsoftReturn, "account": account?.id,
+                "name": account == nil ? "Microsoft 365" : nil,
+            ])
+            guard let raw = WorkspaceAPI.object(response).string("data.auth_url"), let url = URL(string: raw) else {
+                feedback = .failed(ResourceService.problem(422, "Microsoft’s sign-in page couldn’t be opened. Try again."))
+                return
+            }
+            switch await signIn.run(url) {
+            case .returned(let back):
+                switch MailRouting.microsoftOutcome(back) {
+                case .connected: feedback = .done("Microsoft 365 is connected. Send a test email to check it.")
+                case .failed(let reason): feedback = .failed(ResourceService.problem(422, reason))
+                }
+                await load()
+            case .cancelled: break
+            case .failed: feedback = .failed(ResourceService.problem(422, "Microsoft’s sign-in didn’t open. Try again."))
+            }
+        } catch {
+            feedback = .failed(error.asAPIError)
         }
     }
 
@@ -225,11 +282,39 @@ enum MailRouting {
     /// How an account's health reads: off, its last test failed, tested when, or never tested.
     static func status(_ account: Record) -> (String, Tone, String) {
         if account.bool("enabled") == false { return ("Off", .neutral, "pause.circle") }
+        if account.bool("needs_reconnect") == true { return ("Sign in again", .danger, "person.crop.circle.badge.exclamationmark") }
         if account.string("last_error") != nil { return ("Last test failed", .danger, "xmark.octagon") }
         if let tested = account.date("last_tested_at") {
             return ("Tested \(Formatters.relative(tested) ?? "")", .success, "checkmark.circle")
         }
         return ("Not tested", .warning, "questionmark.circle")
+    }
+}
+
+extension MailRouting {
+    /// Where Microsoft's sign-in sends the person back (opsapi lib/mail-microsoft.lua `MS.APP_RETURN`).
+    static let microsoftReturn = "wslcrm://mail-connected"
+
+    enum MicrosoftOutcome: Equatable { case connected, failed(String) }
+
+    /// `wslcrm://mail-connected?microsoft=connected&account=…` / `?microsoft=error&reason=…`.
+    static func microsoftOutcome(_ url: URL) -> MicrosoftOutcome {
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        if items.contains(where: { $0.name == "microsoft" && $0.value == "connected" }) { return .connected }
+        return .failed(items.first { $0.name == "reason" }?.value?.trimmedOrNil ?? "Microsoft 365 wasn’t connected. Try again.")
+    }
+
+    /// An account Microsoft is switching off password sign-in for (Office 365 / Outlook servers).
+    static func isMicrosoftPasswordAccount(_ account: Record) -> Bool {
+        guard account.string("provider") != "microsoft", let host = account.string("host")?.lowercased() else { return false }
+        return host.hasSuffix("office365.com") || host.hasSuffix("outlook.com")
+    }
+
+    /// The Microsoft button under an account, if it needs one.
+    static func microsoftAction(_ account: Record) -> String? {
+        if account.bool("needs_reconnect") == true { return "Sign in again with Microsoft" }
+        if isMicrosoftPasswordAccount(account) { return "Switch to the Microsoft sign-in" }
+        return nil
     }
 }
 
@@ -248,8 +333,15 @@ private struct MailAccountRow: View {
             if let from = account.string("from_email") {
                 Text(from).font(.wsSubheadline).foregroundStyle(.secondaryText)
             }
-            if let host = account.string("host") {
+            if account.string("provider") == "microsoft" {
+                Label("Microsoft 365 · signed in with Microsoft", systemImage: "checkmark.shield")
+                    .font(.wsFootnote).foregroundStyle(.secondaryText)
+            } else if let host = account.string("host") {
                 Text("\(host):\(account.int("port") ?? 587)").font(.wsFootnote.monospaced()).foregroundStyle(.secondaryText)
+            }
+            if MailRouting.isMicrosoftPasswordAccount(account) {
+                Text("Microsoft switches off password sign-in for sending at the end of December 2026.")
+                    .font(.wsFootnote).foregroundStyle(Tone.warning.textColor)
             }
             StatusBadge(text: text, systemImage: symbol, tone: tone)
         }

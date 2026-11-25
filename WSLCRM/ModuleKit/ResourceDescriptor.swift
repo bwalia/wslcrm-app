@@ -241,13 +241,19 @@ struct SectionSpec: Hashable, Sendable, Identifiable {
     var title: String?
     var fields: [FieldSpec]
     var footer: String?
+    /// Shown only for records that match (a Microsoft 365 email account has no server to edit). A new
+    /// record is checked as an empty one.
+    var visibleWhen: Condition?
     var id: String { title ?? fields.map(\.key).joined(separator: ",") }
 
-    init(_ title: String? = nil, _ fields: [FieldSpec], footer: String? = nil) {
+    init(_ title: String? = nil, _ fields: [FieldSpec], footer: String? = nil, visibleWhen: Condition? = nil) {
         self.title = title
         self.fields = fields
         self.footer = footer
+        self.visibleWhen = visibleWhen
     }
+
+    func isVisible(for record: Record?) -> Bool { visibleWhen?.matches(record ?? Record([:])) ?? true }
 }
 
 /// What can be filled in when creating or editing.

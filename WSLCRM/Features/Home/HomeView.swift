@@ -66,13 +66,13 @@ struct HomeView: View {
             await session.reloadPermissions()
             await digest.load(session: session, services: services)
             await invitations.load(services.workspace())
-            await notifications.load(services.workspace())
+            await notifications.load(services.workspace(), workspace: session.workspace?.uuid)
             await loadLastRequest()
         }
         .task(id: session.workspace?.uuid) {
             await digest.load(session: session, services: services)
             await invitations.load(services.workspace())
-            await notifications.load(services.workspace())
+            await notifications.load(services.workspace(), workspace: session.workspace?.uuid)
             isDeliveryPartner = await MyDeliveries.isPartner(services)
         }
         // Each time Home comes back into view: the agent may have finished while the person was elsewhere.

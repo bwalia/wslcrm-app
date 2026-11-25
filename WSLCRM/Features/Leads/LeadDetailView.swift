@@ -105,12 +105,14 @@ struct LeadDetailView: View {
         } message: {
             Text("The reason is included in the cancellation everyone receives.")
         }
-        // While the AI works, check back every few seconds.
-        .task(id: state.value?.analysis?.isRunning == true) {
-            guard state.value?.analysis?.isRunning == true else { return }
-            try? await Task.sleep(for: .seconds(5))
-            guard !Task.isCancelled else { return }
-            await load()
+        // While the AI works (an analysis, or a drafted answer), check back every few seconds.
+        // (A loop: after a check that finds it still working, `aiWorking` hasn't changed, so the task wouldn't run again.)
+        .task(id: aiWorking) {
+            while aiWorking, !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { return }
+                await load()
+            }
         }
     }
 
@@ -168,6 +170,10 @@ struct LeadDetailView: View {
         .disabled(busy)
     }
 
+    private var aiWorking: Bool {
+        state.value?.analysis?.isRunning == true || state.value?.replyDraft?.isRunning == true
+    }
+
     private func stageLabel(_ stage: LeadStage) -> String { bundle?.stageLabels[stage.rawValue] ?? stage.label }
 
     private func header(_ lead: Lead) -> some View {
@@ -220,7 +226,38 @@ struct LeadDetailView: View {
                     if let text = reply?.detail?.trimmedOrNil {
                         Text(text).font(.wsSubheadline).lineLimit(8).textSelection(.enabled)
                     }
-                    contactButtons(lead, emailTitle: "Reply by email", subject: subject.map(Self.replySubject), body: nil)
+                    let draft = lead.replyDraft.flatMap { $0.isCurrent ? $0 : nil }
+                    if let draft, draft.isReady, let body = draft.body {
+                        Divider()
+                        Label("The AI wrote an answer. Check it, change anything you like, then send it.", systemImage: "sparkles")
+                            .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                        Text(body).font(.wsSubheadline).lineLimit(5)
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        contactButtons(lead, emailTitle: "Review and send",
+                                       subject: draft.subject ?? subject.map(Self.replySubject), body: body)
+                        Button { Task { await redraft(lead) } } label: {
+                            Label("Write it again", systemImage: "arrow.clockwise").frame(minHeight: 44)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityIdentifier("lead.guide.redraft")
+                    } else {
+                        if draft?.isRunning == true {
+                            Label("The AI is writing an answer…", systemImage: "sparkles")
+                                .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                        } else if let error = draft?.error?.trimmedOrNil {
+                            Label(error, systemImage: "exclamationmark.triangle").font(.wsFootnote).foregroundStyle(.secondaryText)
+                        }
+                        contactButtons(lead, emailTitle: "Reply by email", subject: subject.map(Self.replySubject), body: nil)
+                        if let draft, !draft.isRunning {
+                            Button { Task { await redraft(lead) } } label: {
+                                Label("Ask the AI to write an answer", systemImage: "sparkles").frame(minHeight: 44)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityIdentifier("lead.guide.redraft")
+                        }
+                    }
                 }
                 .padding(.vertical, 4)
             }
@@ -286,6 +323,17 @@ struct LeadDetailView: View {
             }
             .buttonStyle(.bordered)
             .accessibilityIdentifier("lead.guide.call")
+        }
+    }
+
+    /// A fresh draft from the AI (the card says it's writing, and the page checks back until it's done).
+    private func redraft(_ lead: Lead) async {
+        do {
+            notice = try await services.leads.replyDraft(lead.uuid) ?? "The AI is writing an answer."
+            actionError = nil
+            await load()
+        } catch {
+            actionError = error.asAPIError
         }
     }
 

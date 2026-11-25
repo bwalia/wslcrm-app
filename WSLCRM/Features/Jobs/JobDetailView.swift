@@ -854,6 +854,7 @@ enum AppDestinations {
         case let r as LeadRoute: AnyView(LeadDetailView(leadUuid: r.uuid))
         case let r as PurchaseOrderRoute: AnyView(PurchaseOrderDetailView(uuid: r.uuid))
         case let r as ShopOrderRoute: AnyView(ShopOrderDetailView(uuid: r.uuid))
+        case let r as ShopQuoteRoute: AnyView(ShopQuoteDetailView(uuid: r.uuid))
         case let r as ResourceRoute: AnyView(ResourceDetailView(route: r))
         case let r as NativeScreenRoute: AnyView(NativeScreenView(route: r))
         default: nil
@@ -901,6 +902,7 @@ extension View {
             .navigationDestination(for: PurchaseOrderRoute.self) { PurchaseOrderDetailView(uuid: $0.uuid) }
             .navigationDestination(for: LeadRoute.self) { LeadDetailView(leadUuid: $0.uuid) }
             .navigationDestination(for: ShopOrderRoute.self) { ShopOrderDetailView(uuid: $0.uuid) }
+            .navigationDestination(for: ShopQuoteRoute.self) { ShopQuoteDetailView(uuid: $0.uuid) }
             .navigationDestination(for: FieldServiceArea.self) { area in
                 switch area {
                 case .requests: ServiceRequestsListView()

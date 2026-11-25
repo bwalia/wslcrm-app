@@ -204,7 +204,7 @@ struct ResourceFormView: View {
                     Section { InlineErrorRow(error: error) }
                         .id(Self.errorAnchor)
                 }
-                ForEach(descriptor.form?.sections ?? []) { section in
+                ForEach(visibleSections) { section in
                     let editable = section.fields.filter { !$0.readOnly && $0.kind.isEditable }
                     if !editable.isEmpty {
                         Section {
@@ -255,8 +255,11 @@ struct ResourceFormView: View {
                 set: { values[field.key] = $0; problems[field.key] = nil })
     }
 
+    /// The form's sections for this record (`SectionSpec.visibleWhen`); hidden ones are neither checked nor sent.
+    private var visibleSections: [SectionSpec] { (descriptor.form?.sections ?? []).filter { $0.isVisible(for: existing) } }
+
     private func save() async {
-        let fields = (descriptor.form?.fields ?? []).filter(\.kind.isEditable)
+        let fields = visibleSections.flatMap(\.fields).filter(\.kind.isEditable)
         var found: [String: String] = [:]
         for field in fields {
             if let problem = FormCoding.problem(field, values[field.key] ?? .text("")) { found[field.key] = problem }

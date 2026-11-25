@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Shared shell for the lead sheets: Cancel / a primary button, an inline error, no dismiss while saving.
-private struct LeadSheet<Content: View>: View {
+/// Shared shell for the lead sheets (and the shop's "Make this a lead"): Cancel / a primary button, an inline
+/// error, no dismiss while saving.
+struct LeadSheet<Content: View>: View {
     let title: String
     let action: String
     var canSave = true

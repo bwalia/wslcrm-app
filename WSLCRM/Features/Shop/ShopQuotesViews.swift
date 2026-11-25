@@ -121,6 +121,9 @@ struct ShopQuotesListView: View {
     }
 }
 
+/// One shop quote by uuid (a push about an accepted quote opens it: `AppDeepLink.Target.quote`).
+struct ShopQuoteRoute: Hashable { let uuid: String }
+
 struct ShopQuoteDetailView: View {
     let summary: ShopQuote
     var onChange: ((ShopQuote) -> Void)?
