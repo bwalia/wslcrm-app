@@ -48,9 +48,50 @@ final class MacRefreshCenter {
     }
 }
 
+/// One of the sidebar's areas, for the Go menu (⌘1–⌘9).
+struct MacArea {
+    let title: String
+    let open: () -> Void
+}
+
+/// The list in front's "make a new one", for File › New (⌘N).
+struct MacNewItem {
+    let title: String
+    let action: () -> Void
+}
+
+extension FocusedValues {
+    /// The sidebar's areas in order (published by the window in front).
+    @Entry var macAreas: [MacArea]?
+    /// The list in front's New action, when the person may make one.
+    @Entry var macNewItem: MacNewItem?
+    /// The list in front's search field (Edit › Search This List, ⌘F).
+    @Entry var macFind: MacNewItem?
+}
+
 /// The Mac menu bar's commands.
 struct MacCommands: Commands {
+    @FocusedValue(\.macAreas) private var areas
+    @FocusedValue(\.macNewItem) private var newItem
+    @FocusedValue(\.macFind) private var find
+
     var body: some Commands {
+        // As in Mail: ⌘N makes a new one of whatever the list in front holds; a new window is ⌥⌘N.
+        CommandGroup(replacing: .newItem) {
+            Button(newItem.map { "\($0.title)…" } ?? "New…") { newItem?.action() }
+                .keyboardShortcut("n", modifiers: .command)
+                .disabled(newItem == nil)
+            Button("New Window") {
+                UIApplication.shared.requestSceneSessionActivation(nil, userActivity: nil, options: nil)
+            }
+            .keyboardShortcut("n", modifiers: [.command, .option])
+        }
+        CommandMenu("Go") {
+            ForEach(Array((areas ?? []).prefix(9).enumerated()), id: \.offset) { index, area in
+                Button(area.title) { area.open() }
+                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+            }
+        }
         CommandGroup(after: .toolbar) {
             Button("Refresh") { MacRefreshCenter.shared.refresh() }
                 .keyboardShortcut("r", modifiers: .command)
@@ -58,6 +99,9 @@ struct MacCommands: Commands {
         CommandGroup(after: .textEditing) {
             Button("Ask AI…") { NotificationCenter.default.post(name: .wsAskAI, object: nil) }
                 .keyboardShortcut("k", modifiers: .command)
+            Button("Search This List") { find?.action() }
+                .keyboardShortcut("f", modifiers: .command)
+                .disabled(find == nil)
         }
     }
 }

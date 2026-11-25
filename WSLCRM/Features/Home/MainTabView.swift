@@ -93,6 +93,10 @@ struct MainTabView: View {
             let entries = group.entries.filter { !hubKeys.contains($0.key) && NativeModules.destination(forKey: $0.key) != nil }
             return entries.isEmpty ? nil : AppCatalog.Group(key: group.key, title: group.title, entries: entries)
         }
+        // The Go menu (⌘1–⌘9) walks the sidebar in its order.
+        let tabs: [(String, AppTab)] = [("Home", .home)] + policy.ordered.map { ($0.title, .hub($0)) }
+            + groups.flatMap(\.entries).map { ($0.name, .app($0.key)) }
+        let areas = tabs.map { title, tab in MacArea(title: title) { selection = tab } }
         return NavigationSplitView {
             MacSidebar(selection: $selection, hubs: policy.ordered, groups: groups, failedCount: sync.failedCount)
         } detail: {
@@ -106,6 +110,7 @@ struct MainTabView: View {
             }
             .id(selection)
         }
+        .focusedSceneValue(\.macAreas, areas)
     }
 
     private func homeStack(policy: NavigationPolicy, slots: [TabSlot]) -> some View {

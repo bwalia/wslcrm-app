@@ -133,6 +133,13 @@ struct PagedList<Item: Identifiable & Sendable, Row: View>: View where Item.ID: 
     }
 
     var body: some View {
+        content
+            // File › New (⌘N) on the Mac makes one of what this list holds, when the person may.
+            .focusedSceneValue(\.macNewItem, emptyAction.map { MacNewItem(title: emptyActionTitle ?? "New", action: $0) })
+    }
+
+    @ViewBuilder
+    private var content: some View {
         if MacSupport.isMac, destination != nil || route != nil {
             MacListDetail(selection: $selection, ids: model.items.map(\.id)) {
                 list(selecting: true)
@@ -250,10 +257,18 @@ struct PagedList<Item: Identifiable & Sendable, Row: View>: View where Item.ID: 
 private struct OptionalSearchable: ViewModifier {
     @Binding var text: String
     let prompt: String?
+    @FocusState private var searching: Bool
 
     func body(content: Content) -> some View {
         if let prompt {
-            content.searchable(text: $text, prompt: prompt)
+            if #available(iOS 18.0, *) {
+                // Edit › Search This List (⌘F) on the Mac puts the cursor in the search field.
+                content.searchable(text: $text, prompt: prompt)
+                    .searchFocused($searching)
+                    .focusedSceneValue(\.macFind, MacNewItem(title: "Search This List") { searching = true })
+            } else {
+                content.searchable(text: $text, prompt: prompt)
+            }
         } else {
             content
         }
