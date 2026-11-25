@@ -148,32 +148,65 @@ struct Pill: View {
     }
 }
 
-/// A number on a dashboard: big Unbounded figure, small caption, tinted icon.
+/// A number on a dashboard: big Unbounded figure, small caption, tinted icon. A number that needs someone (a danger
+/// or warning tone: overdue, unassigned, waiting) carries its colour: a soft wash, a coloured edge and figure, so the
+/// eye finds it first.
 struct MetricCard: View {
     let title: String
     let value: String
     let systemImage: String
     var tone: Tone = .brand
+    /// A phone's dashboard of many numbers: the icon beside the figure, so the cards are a third shorter.
+    var compact = false
+
+    private var needsAttention: Bool { tone == .danger || tone == .warning }
+    private var radius: CGFloat { MacSupport.isMac ? 12 : 18 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: systemImage)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(tone.textColor)
-                .frame(width: 30, height: 30)
-                .background(tone.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            Text(value)
-                .font(.brandMetric)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        VStack(alignment: .leading, spacing: compact ? 6 : 10) {
+            if compact {
+                HStack(spacing: 10) { icon; figure }
+            } else {
+                icon
+                figure
+            }
             Text(title)
                 .font(.brandCaption)
                 .foregroundStyle(.secondaryText)
                 .lineLimit(2)
         }
-        .brandCard(padding: 14, radius: 18)
+        .padding(compact ? 12 : 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            shape.fill(Palette.card)
+            if needsAttention {
+                shape.fill(LinearGradient(colors: [tone.color.opacity(0.13), tone.color.opacity(0.03)],
+                                          startPoint: .topLeading, endPoint: .bottomTrailing))
+            }
+        }
+        .overlay(shape.stroke(needsAttention ? tone.color.opacity(0.40) : Palette.hairline))
+        .shadow(color: .black.opacity(MacSupport.isMac ? 0.06 : 0.05), radius: MacSupport.isMac ? 3 : 12,
+                y: MacSupport.isMac ? 1 : 4)
         .accessibilityElement(children: .combine)
+    }
+
+    private var icon: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(tone.textColor)
+            .frame(width: 30, height: 30)
+            .background(tone.color.opacity(needsAttention ? 0.20 : 0.14),
+                        in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+    }
+
+    private var figure: some View {
+        Text(value)
+            .font(.brandMetric)
+            .monospacedDigit()
+            .foregroundStyle(needsAttention ? tone.textColor : Color(.label))
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
     }
 }
 

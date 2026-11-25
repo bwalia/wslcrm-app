@@ -864,6 +864,8 @@ extension View {
             .navigationDestination(for: ResourceRoute.self) { ResourceDetailView(route: $0) }
             .navigationDestination(for: ResourceReportRoute.self) { ResourceReportView(route: $0) }
             .navigationDestination(for: NativeScreenRoute.self) { NativeScreenView(route: $0) }
+            .navigationDestination(for: JobsPresetRoute.self) { JobsListView(preset: $0.preset) }
+            .navigationDestination(for: VisitsPresetRoute.self) { VisitsScheduleView(preset: $0.preset) }
             .navigationDestination(for: PurchaseOrderRoute.self) { PurchaseOrderDetailView(uuid: $0.uuid) }
             .navigationDestination(for: FieldServiceArea.self) { area in
                 switch area {

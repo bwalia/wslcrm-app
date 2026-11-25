@@ -6,7 +6,14 @@ enum TabPin: Hashable, Sendable {
     case hub(NavigationPolicy.Home)
     case app(String)
 
-    static let limit = 3
+    /// Three between Home and Apps on a phone's tab bar; the Mac's sidebar has room for more.
+    static var limit: Int {
+        #if targetEnvironment(macCatalyst)
+        8
+        #else
+        3
+        #endif
+    }
 
     var storageKey: String {
         switch self {
@@ -96,8 +103,12 @@ struct TabBarSettingsView: View {
         let candidates = Self.candidates(policy: policy, catalog: catalog)
         List {
             Section {
-                Label("Home", systemImage: "house").foregroundStyle(.secondaryText)
-                if pins.isEmpty {
+                // The Mac pins to the top of its sidebar: no Home/Apps around them, and nothing until something is pinned.
+                if !MacSupport.isMac { Label("Home", systemImage: "house").foregroundStyle(.secondaryText) }
+                if pins.isEmpty, MacSupport.isMac {
+                    Text("Nothing pinned yet. Pin areas and apps below, or right-click one in the sidebar.")
+                        .font(.wsFootnote).foregroundStyle(.secondaryText)
+                } else if pins.isEmpty {
                     ForEach(TabBarLayout.slots(policy: policy, catalog: catalog, pins: nil)) { slot in
                         Label(slot.title, systemImage: slot.systemImage)
                     }
@@ -113,11 +124,13 @@ struct TabBarSettingsView: View {
                     .onMove { pins.move(fromOffsets: $0, toOffset: $1); save() }
                     .onDelete { pins.remove(atOffsets: $0); save() }
                 }
-                Label("Apps", systemImage: "square.grid.2x2").foregroundStyle(.secondaryText)
+                if !MacSupport.isMac { Label("Apps", systemImage: "square.grid.2x2").foregroundStyle(.secondaryText) }
             } header: {
-                Text("Your tab bar")
+                Text(MacSupport.isMac ? "Pinned in the sidebar" : "Your tab bar")
             } footer: {
-                Text("Home and Apps are always there. Pin up to \(TabPin.limit) shortcuts in between; drag to reorder, swipe to remove.")
+                Text(MacSupport.isMac
+                     ? "Up to \(TabPin.limit), at the top of the sidebar. Drag to reorder, swipe to remove."
+                     : "Home and Apps are always there. Pin up to \(TabPin.limit) shortcuts in between; drag to reorder, swipe to remove.")
             }
 
             ForEach(Self.sections(candidates), id: \.title) { section in
@@ -153,7 +166,7 @@ struct TabBarSettingsView: View {
             }
         }
         .environment(\.editMode, .constant(pins.isEmpty ? .inactive : .active))
-        .navigationTitle("Tab bar")
+        .navigationTitle(MacSupport.isMac ? "Pinned" : "Tab bar")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             guard !prepared else { return }
@@ -215,17 +228,20 @@ struct PinToTabBarButton: View {
 
     var body: some View {
         let preferences = HomePreferences.shared
-        let current = TabBarLayout.slots(policy: NavigationPolicy(session: session), catalog: AppCatalog(menu: session.menu),
-                                         pins: preferences.pins).map(\.pin)
+        // The Mac's sidebar shows only what was pinned; a phone's tab bar is automatic until something is.
+        let current = MacSupport.isMac ? (preferences.pins ?? [])
+            : TabBarLayout.slots(policy: NavigationPolicy(session: session), catalog: AppCatalog(menu: session.menu),
+                                 pins: preferences.pins).map(\.pin)
         let pinned = current.contains(pin)
+        let place = MacSupport.isMac ? "sidebar" : "tab bar"
         Button {
             // From automatic, the bar keeps what it shows now and this replaces the last place.
             preferences.togglePin(pin, current: current)
         } label: {
             if pinned {
-                Label("Remove from tab bar", systemImage: "pin.slash")
+                Label(MacSupport.isMac ? "Unpin" : "Remove from tab bar", systemImage: "pin.slash")
             } else {
-                Label(current.count >= TabPin.limit ? "Pin to tab bar (replaces \(lastTitle(current)))" : "Pin to tab bar",
+                Label(current.count >= TabPin.limit ? "Pin to \(place) (replaces \(lastTitle(current)))" : "Pin to \(place)",
                       systemImage: "pin")
             }
         }

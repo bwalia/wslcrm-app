@@ -57,10 +57,22 @@ final class JobsListViewModel {
     }
 }
 
+/// The jobs one of Field Service's numbers counts: the Jobs list with that filter on.
+struct JobsPresetRoute: Hashable {
+    enum Preset: Hashable { case open, inProgress, overdue, uninvoiced }
+    let preset: Preset
+}
+
 struct JobsListView: View {
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var model: JobsListViewModel?
+    /// Opened from a number on Field Service: the jobs it counts.
+    private let preset: JobsPresetRoute.Preset?
+
+    init(preset: JobsPresetRoute.Preset? = nil) {
+        self.preset = preset
+    }
 
     var body: some View {
         Group {
@@ -73,7 +85,17 @@ struct JobsListView: View {
         }
         .navigationTitle("Jobs")
         .onAppear {
-            if model == nil { model = JobsListViewModel(api: services.fieldService) }
+            if model == nil {
+                let model = JobsListViewModel(api: services.fieldService)
+                switch preset {
+                case .open: model.query.status = .open
+                case .inProgress: model.query.status = .inProgress
+                case .overdue: model.query.overdue = true
+                case .uninvoiced: model.query.status = .all; model.query.uninvoiced = true
+                case nil: break
+                }
+                self.model = model
+            }
         }
     }
 }

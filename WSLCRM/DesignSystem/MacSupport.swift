@@ -86,6 +86,11 @@ struct MacCommands: Commands {
             }
             .keyboardShortcut("n", modifiers: [.command, .option])
         }
+        // Settings… (⌘,), as in every Mac app: profile, appearance and theme, pinned areas.
+        CommandGroup(replacing: .appSettings) {
+            Button("Settings…") { NotificationCenter.default.post(name: .wsOpenSettings, object: nil) }
+                .keyboardShortcut(",", modifiers: .command)
+        }
         CommandMenu("Go") {
             ForEach(Array((areas ?? []).prefix(9).enumerated()), id: \.offset) { index, area in
                 Button(area.title) { area.open() }
@@ -185,6 +190,7 @@ private struct MacRefreshButton: View {
 extension Notification.Name {
     /// "Ask AI" from anywhere (⌘K): Home's command box takes the focus.
     static let wsAskAI = Notification.Name("ws.askAI")
+    static let wsOpenSettings = Notification.Name("ws.openSettings")
 }
 
 extension View {

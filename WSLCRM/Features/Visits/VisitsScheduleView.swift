@@ -1,5 +1,11 @@
 import SwiftUI
 
+/// The visits one of Field Service's numbers counts: the schedule with that filter on.
+struct VisitsPresetRoute: Hashable {
+    enum Preset: Hashable { case today, onSiteNow, unassigned }
+    let preset: Preset
+}
+
 /// The site-visit schedule (`GET /api/v2/field-service/visits`), a day or a week at a time.
 /// Engineers see their own visits; people who dispatch (`fs_visits.update`) can switch to everyone's,
 /// filter by engineer (or unassigned) and status, and move through days or weeks or jump to a date.
@@ -11,6 +17,18 @@ struct VisitsScheduleView: View {
     @State private var anchor = VisitSchedule.calendar.startOfDay(for: Date())
     @State private var engineer = ""
     @State private var status = ""
+
+    init() {}
+
+    /// Opened from a number on Field Service: everyone's visits that number counts.
+    init(preset: VisitsPresetRoute.Preset) {
+        _mine = State(initialValue: false)
+        switch preset {
+        case .today: _span = State(initialValue: .day)
+        case .onSiteNow: _span = State(initialValue: .day); _status = State(initialValue: "on_site")
+        case .unassigned: _engineer = State(initialValue: "unassigned")
+        }
+    }
     @State private var engineers: [Engineer] = []
     @State private var state: LoadState<[Visit]> = .idle
     @State private var cachedAt: Date?

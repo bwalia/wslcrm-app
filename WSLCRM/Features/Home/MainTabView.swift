@@ -87,18 +87,35 @@ struct MainTabView: View {
     /// The Mac: a sidebar with every work area and app (see `MacSidebar`), the chosen one beside it. Each keeps
     /// its own navigation, as a tab does.
     private func macWindow(policy: NavigationPolicy, slots: [TabSlot]) -> some View {
+        let catalog = AppCatalog(menu: session.menu)
+        // What the person pinned, still theirs in this workspace; shown once, at the top.
+        let pinned: [MacSidebar.Pinned] = (HomePreferences.shared.pins ?? []).compactMap { pin in
+            switch pin {
+            case .hub(let hub) where policy.available.contains(hub):
+                return .init(pin: pin, title: hub.title, systemImage: hub.systemImage, color: hub.color)
+            case .app(let key):
+                guard let entry = catalog.entry(forKey: key), NativeModules.destination(forKey: key) != nil else { return nil }
+                return .init(pin: pin, title: entry.name, systemImage: entry.systemImage, color: entry.color)
+            default:
+                return nil
+            }
+        }
+        let pinnedTabs = Set(pinned.map(\.tab))
+        let hubs = policy.ordered.filter { !pinnedTabs.contains(.hub($0)) }
         let hubKeys = Set(policy.ordered.compactMap(\.menuKey))
-        let groups = AppCatalog(menu: session.menu).groups.compactMap { group -> AppCatalog.Group? in
-            // A work area already in "Your work" isn't listed twice.
-            let entries = group.entries.filter { !hubKeys.contains($0.key) && NativeModules.destination(forKey: $0.key) != nil }
+        let groups = catalog.groups.compactMap { group -> AppCatalog.Group? in
+            // A work area already in "Your work", or pinned, isn't listed twice.
+            let entries = group.entries.filter {
+                !hubKeys.contains($0.key) && !pinnedTabs.contains(.app($0.key)) && NativeModules.destination(forKey: $0.key) != nil
+            }
             return entries.isEmpty ? nil : AppCatalog.Group(key: group.key, title: group.title, entries: entries)
         }
         // The Go menu (⌘1–⌘9) walks the sidebar in its order.
-        let tabs: [(String, AppTab)] = [("Home", .home)] + policy.ordered.map { ($0.title, .hub($0)) }
-            + groups.flatMap(\.entries).map { ($0.name, .app($0.key)) }
+        let tabs: [(String, AppTab)] = [("Home", .home)] + pinned.map { ($0.title, $0.tab) }
+            + hubs.map { ($0.title, .hub($0)) } + groups.flatMap(\.entries).map { ($0.name, .app($0.key)) }
         let areas = tabs.map { title, tab in MacArea(title: title) { selection = tab } }
         return NavigationSplitView {
-            MacSidebar(selection: $selection, hubs: policy.ordered, groups: groups, failedCount: sync.failedCount)
+            MacSidebar(selection: $selection, pinned: pinned, hubs: hubs, groups: groups, failedCount: sync.failedCount)
         } detail: {
             Group {
                 switch selection {

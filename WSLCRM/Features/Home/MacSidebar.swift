@@ -3,7 +3,23 @@ import SwiftUI
 /// The Mac's sidebar, in place of the phone's tab bar: the workspace at the top, Home, every work area, then every
 /// app grouped as the web dashboard's sidebar groups them, and the person at the bottom. One click to anything.
 struct MacSidebar: View {
+    /// Something the person pinned to the top of the sidebar (right-click › Pin to sidebar), as on a phone's tab bar.
+    struct Pinned: Identifiable {
+        let pin: TabPin
+        let title: String
+        let systemImage: String
+        let color: Color
+        var id: String { pin.storageKey }
+        var tab: AppTab {
+            switch pin {
+            case .hub(let hub): .hub(hub)
+            case .app(let key): .app(key)
+            }
+        }
+    }
+
     @Binding var selection: AppTab
+    let pinned: [Pinned]
     let hubs: [NavigationPolicy.Home]
     let groups: [AppCatalog.Group]
     let failedCount: Int
@@ -19,10 +35,19 @@ struct MacSidebar: View {
                     .badge(failedCount)
                 row("All apps", systemImage: "square.grid.2x2", tab: .apps, tint: .secondary)
             }
+            if !pinned.isEmpty {
+                Section {
+                    ForEach(pinned) { item in
+                        row(item.title, systemImage: item.systemImage, tab: item.tab, tint: item.color)
+                            .contextMenu { PinToTabBarButton(pin: item.pin) }
+                    }
+                } header: { header("Pinned") }
+            }
             if !hubs.isEmpty {
                 Section {
                     ForEach(hubs, id: \.self) { hub in
                         row(hub.title, systemImage: hub.systemImage, tab: .hub(hub), tint: hub.color)
+                            .contextMenu { PinToTabBarButton(pin: .hub(hub)) }
                     }
                 } header: { header("Your work") }
             }
@@ -30,6 +55,7 @@ struct MacSidebar: View {
                 Section {
                     ForEach(group.entries) { entry in
                         row(entry.name, systemImage: entry.systemImage, tab: .app(entry.key), tint: entry.color)
+                            .contextMenu { PinToTabBarButton(pin: .app(entry.key)) }
                     }
                 } header: { header(group.title) }
             }
@@ -44,6 +70,7 @@ struct MacSidebar: View {
             NavigationStack { WorkspacePickerView(isInitialChoice: false) }
         }
         .sheet(isPresented: $showingProfile) { ProfileSheet() }
+        .onReceive(NotificationCenter.default.publisher(for: .wsOpenSettings)) { _ in showingProfile = true }
         .accessibilityIdentifier("mac.sidebar")
     }
 
