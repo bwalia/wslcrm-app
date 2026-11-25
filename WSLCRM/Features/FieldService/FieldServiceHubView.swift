@@ -38,7 +38,8 @@ struct FieldServiceHubView: View {
                 }
             }
 
-            if permissions.can(.create, .fsServiceRequests) {
+            // The Mac has this in the window's toolbar instead.
+            if permissions.can(.create, .fsServiceRequests), !MacSupport.isMac {
                 Section {
                     Button {
                         creatingRequest = true
@@ -129,6 +130,16 @@ struct FieldServiceHubView: View {
             }
         }
         .navigationTitle("Field Service")
+        .toolbar {
+            if MacSupport.isMac, permissions.can(.create, .fsServiceRequests) {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Log a service request", systemImage: "plus.bubble") { creatingRequest = true }
+                        .labelStyle(.titleAndIcon)
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("hub.newRequest")
+                }
+            }
+        }
         .brandedNavigationBar()
         .task { await loadStats() }
         .wsRefreshable { await loadStats() }

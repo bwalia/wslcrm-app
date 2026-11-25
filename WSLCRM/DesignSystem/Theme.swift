@@ -61,12 +61,15 @@ enum Palette {
 extension View {
     /// The app's card: rounded, on the canvas, with a hairline and soft shadow.
     func brandCard(padding: CGFloat = 16, radius: CGFloat = 20) -> some View {
-        self
+        // The Mac: tighter corners and a crisper shadow, as desktop panels have.
+        let radius = MacSupport.isMac ? min(radius, 12) : radius
+        return self
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Palette.card, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(Palette.hairline))
-            .shadow(color: .black.opacity(0.05), radius: 12, y: 4)
+            .shadow(color: .black.opacity(MacSupport.isMac ? 0.06 : 0.05), radius: MacSupport.isMac ? 3 : 12,
+                    y: MacSupport.isMac ? 1 : 4)
     }
 
     /// The canvas behind a scrolling dashboard of cards.
@@ -174,13 +177,27 @@ struct MetricCard: View {
     }
 }
 
-/// Press feedback for cards and tiles: a slight shrink, no colour flash.
+/// Press feedback for cards and tiles: a slight shrink, no colour flash. With a pointer (Mac, iPad trackpad) the
+/// card lifts a little under it, so it reads as clickable.
 struct PressableCardStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .opacity(configuration.isPressed ? 0.9 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.8), value: configuration.isPressed)
+        PressableCardBody(configuration: configuration)
+    }
+
+    private struct PressableCardBody: View {
+        let configuration: Configuration
+        @State private var hovering = false
+
+        var body: some View {
+            configuration.label
+                .scaleEffect(configuration.isPressed ? 0.97 : 1)
+                .opacity(configuration.isPressed ? 0.9 : 1)
+                .shadow(color: .black.opacity(hovering ? 0.10 : 0), radius: 10, y: 4)
+                .offset(y: hovering && !configuration.isPressed ? -1 : 0)
+                .animation(.spring(response: 0.25, dampingFraction: 0.8), value: configuration.isPressed)
+                .animation(.easeOut(duration: 0.15), value: hovering)
+                .onHover { hovering = $0 }
+        }
     }
 }
 

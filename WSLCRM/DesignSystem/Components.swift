@@ -133,7 +133,8 @@ struct StatusBadge: View {
 
 // MARK: - Buttons
 
-/// Large, high-contrast button for one-handed/gloved use. Minimum 56pt tall.
+/// Large, high-contrast button for one-handed/gloved use. Minimum 56pt tall. On the Mac it is a desktop button:
+/// 40pt tall, as wide as its words (up to 360pt) rather than the whole window, and it brightens under the pointer.
 struct LargeButtonStyle: ButtonStyle {
     var tone: Tone = .brand
     var prominent = true
@@ -147,25 +148,32 @@ struct LargeButtonStyle: ButtonStyle {
         let tone: Tone
         let prominent: Bool
         @Environment(\.isEnabled) private var isEnabled
+        @State private var hovering = false
+
+        private var radius: CGFloat { MacSupport.isMac ? 10 : 14 }
 
         var body: some View {
             configuration.label
                 .font(.wsHeadline)
-                .frame(maxWidth: .infinity, minHeight: 56)
-                .padding(.horizontal, 16)
+                .frame(minWidth: MacSupport.isMac ? 200 : nil, maxWidth: MacSupport.isMac ? 360 : .infinity,
+                       minHeight: MacSupport.isMac ? 40 : 56)
+                .padding(.horizontal, MacSupport.isMac ? 20 : 16)
                 .foregroundStyle(prominent ? Color.white : tone.textColor)
                 .background {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(prominent ? tone.solidColor : tone.color.opacity(0.12))
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(prominent ? tone.solidColor : tone.color.opacity(hovering ? 0.18 : 0.12))
                 }
                 .overlay {
                     if !prominent {
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(tone.textColor, lineWidth: 2)
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .strokeBorder(tone.textColor, lineWidth: MacSupport.isMac ? 1.5 : 2)
                     }
                 }
+                .brightness(prominent && hovering && isEnabled ? 0.06 : 0)
                 .opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.45)
                 .contentShape(Rectangle())
+                .onHover { hovering = $0 }
+                .animation(.easeOut(duration: 0.12), value: hovering)
         }
     }
 }

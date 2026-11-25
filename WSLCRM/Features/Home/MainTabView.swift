@@ -25,35 +25,12 @@ struct MainTabView: View {
         let policy = NavigationPolicy(session: session)
         let slots = TabBarLayout.slots(policy: policy, catalog: AppCatalog(menu: session.menu),
                                        pins: HomePreferences.shared.pins)
-        TabView(selection: $selection) {
-            NavigationStack(path: $homePath) {
-                HomeView(hubs: policy.ordered, open: { open($0, slots: slots) }, path: $homePath,
-                         focusRequest: $commandFocus)
-                    .withAppDestinations()
-                    .navigationDestination(for: HubScreenRoute.self) { $0.hub.rootView }
-                    .navigationDestination(for: ChatLinkTarget.self) { ChatLinkDestinationView(target: $0) }
-                    .safeAreaInset(edge: .top, spacing: 0) { syncBanner }
+        Group {
+            if MacSupport.isMac {
+                macWindow(policy: policy, slots: slots)
+            } else {
+                tabBar(policy: policy, slots: slots)
             }
-            .tabItem { Label("Home", systemImage: "house") }
-            .tag(AppTab.home)
-            // Only for what needs the person: changes the server refused.
-            .badge(sync.failedCount)
-
-            // Up to three in between: the person's pins, or their busiest work areas.
-            ForEach(slots) { slot in
-                tabContent(slot)
-                    .tabItem { Label(slot.title, systemImage: slot.systemImage) }
-                    .tag(slot.tab)
-            }
-
-            NavigationStack {
-                AppsView()
-                    .askAIButton(path: nil)
-                    .withAppDestinations()
-                    .safeAreaInset(edge: .top, spacing: 0) { syncBanner }
-            }
-            .tabItem { Label("Apps", systemImage: "square.grid.2x2") }
-            .tag(AppTab.apps)
         }
         .sheet(isPresented: $showingPendingChanges) {
             NavigationStack { PendingChangesView() }
@@ -78,9 +55,76 @@ struct MainTabView: View {
         }
         // A shortcut that was unpinned while open: back to Home rather than an empty selection.
         .onChange(of: slots.map(\.tab)) { _, tabs in
+            if MacSupport.isMac { return } // the sidebar lists every area, pinned or not
             if case .home = selection { return }
             if case .apps = selection { return }
             if !tabs.contains(selection) { selection = .home }
+        }
+    }
+
+    /// iPhone and iPad: Home, up to three shortcuts, Apps.
+    private func tabBar(policy: NavigationPolicy, slots: [TabSlot]) -> some View {
+        TabView(selection: $selection) {
+            homeStack(policy: policy, slots: slots)
+                .tabItem { Label("Home", systemImage: "house") }
+                .tag(AppTab.home)
+                // Only for what needs the person: changes the server refused.
+                .badge(sync.failedCount)
+
+            // Up to three in between: the person's pins, or their busiest work areas.
+            ForEach(slots) { slot in
+                tabContent(slot)
+                    .tabItem { Label(slot.title, systemImage: slot.systemImage) }
+                    .tag(slot.tab)
+            }
+
+            appsStack
+                .tabItem { Label("Apps", systemImage: "square.grid.2x2") }
+                .tag(AppTab.apps)
+        }
+    }
+
+    /// The Mac: a sidebar with every work area and app (see `MacSidebar`), the chosen one beside it. Each keeps
+    /// its own navigation, as a tab does.
+    private func macWindow(policy: NavigationPolicy, slots: [TabSlot]) -> some View {
+        let hubKeys = Set(policy.ordered.compactMap(\.menuKey))
+        let groups = AppCatalog(menu: session.menu).groups.compactMap { group -> AppCatalog.Group? in
+            // A work area already in "Your work" isn't listed twice.
+            let entries = group.entries.filter { !hubKeys.contains($0.key) && NativeModules.destination(forKey: $0.key) != nil }
+            return entries.isEmpty ? nil : AppCatalog.Group(key: group.key, title: group.title, entries: entries)
+        }
+        return NavigationSplitView {
+            MacSidebar(selection: $selection, hubs: policy.ordered, groups: groups, failedCount: sync.failedCount)
+        } detail: {
+            Group {
+                switch selection {
+                case .home: homeStack(policy: policy, slots: slots)
+                case .apps: appsStack
+                case .hub(let hub): tabContent(TabSlot(pin: .hub(hub), title: hub.title, systemImage: hub.systemImage))
+                case .app(let key): tabContent(TabSlot(pin: .app(key), title: key, systemImage: "square"))
+                }
+            }
+            .id(selection)
+        }
+    }
+
+    private func homeStack(policy: NavigationPolicy, slots: [TabSlot]) -> some View {
+        NavigationStack(path: $homePath) {
+            HomeView(hubs: policy.ordered, open: { open($0, slots: slots) }, path: $homePath,
+                     focusRequest: $commandFocus)
+                .withAppDestinations()
+                .navigationDestination(for: HubScreenRoute.self) { $0.hub.rootView }
+                .navigationDestination(for: ChatLinkTarget.self) { ChatLinkDestinationView(target: $0) }
+                .safeAreaInset(edge: .top, spacing: 0) { syncBanner }
+        }
+    }
+
+    private var appsStack: some View {
+        NavigationStack {
+            AppsView()
+                .askAIButton(path: nil)
+                .withAppDestinations()
+                .safeAreaInset(edge: .top, spacing: 0) { syncBanner }
         }
     }
 
@@ -108,7 +152,7 @@ struct MainTabView: View {
 
     /// Opens a work area from Home: its tab when it has one, else on Home's own stack.
     private func open(_ tab: AppTab, slots: [TabSlot]) {
-        if slots.contains(where: { $0.tab == tab }) || tab == .apps || tab == .home {
+        if MacSupport.isMac || slots.contains(where: { $0.tab == tab }) || tab == .apps || tab == .home {
             selection = tab
         } else if case .hub(let hub) = tab {
             homePath.append(HubScreenRoute(hub: hub))
@@ -168,7 +212,7 @@ struct MainTabView: View {
             guard hub == .propertyPA ? policy.showsPropertyPA : policy.showsPropertyDeals else { return }
             let slots = TabBarLayout.slots(policy: policy, catalog: AppCatalog(menu: session.menu),
                                            pins: HomePreferences.shared.pins)
-            if slots.contains(where: { $0.pin == .hub(hub) }) {
+            if MacSupport.isMac || slots.contains(where: { $0.pin == .hub(hub) }) {
                 selection = .hub(hub)
                 hubPaths[hub] = Self.path(for: link.target, startingAtHub: nil)
             } else {

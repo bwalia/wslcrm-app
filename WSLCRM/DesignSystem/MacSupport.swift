@@ -73,6 +73,16 @@ extension Array where Element == GridItem {
 }
 
 extension View {
+    /// A big action: full width and `phoneHeight` tall on a phone (thumbs, gloves); on the Mac a desktop button,
+    /// as wide as its words and 40pt tall.
+    func actionButtonFrame(phoneHeight: CGFloat = 56) -> some View {
+        #if targetEnvironment(macCatalyst)
+        padding(.horizontal, 20).frame(minWidth: 200, minHeight: 40)
+        #else
+        frame(maxWidth: .infinity, minHeight: phoneHeight)
+        #endif
+    }
+
     /// Pull to refresh on iPhone and iPad. A Mac has no pull, so there it is a Refresh button and View › Refresh (⌘R).
     func wsRefreshable(action: @escaping @MainActor @Sendable () async -> Void) -> some View {
         modifier(RefreshControl(action: action))
