@@ -80,7 +80,13 @@ import uk.co.workstation.wslcrm.features.menu.MenuScreen
 import uk.co.workstation.wslcrm.features.menu.AppMenu
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.ViewKanban
-import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Home
+import androidx.activity.compose.BackHandler
+import uk.co.workstation.wslcrm.features.assistant.AssistantScreen
+import uk.co.workstation.wslcrm.features.home.HomeScreen
+import uk.co.workstation.wslcrm.features.menu.MenuDestination
+import uk.co.workstation.wslcrm.features.menu.WebPageRoute
 
 /**
  * The app's root: one screen per [SessionStore.Phase] (mirrors `RootView`). Signed in, it shows
@@ -272,24 +278,45 @@ private fun WorkspaceRow(workspace: Workspace, selected: Boolean, showDivider: B
 
 // MARK: - Signed in
 
-private enum class Tab(val label: String) { AI("AI"), PROJECTS("Projects"), SHOP("Shop"), MENU("Menu") }
+private enum class Tab(val label: String) { HOME("Home"), AI("AI"), PROJECTS("Projects"), SHOP("Shop"), MENU("Menu") }
+
+/** What Home shows over itself: the agent (optionally with a request to send) or a page from the menu. */
+private sealed interface HomeLayer {
+    data class Assistant(val ask: String?) : HomeLayer
+    data class Page(val route: WebPageRoute) : HomeLayer
+}
 
 @Composable
 private fun MainScreen(session: SessionStore) {
     val navigation = NavigationPolicy(session.permissions)
     val menu = session.menu
-    // The AI chat and project management are the web's own pages, so they work exactly as there.
+    // Home (the AI agent first) is always there; Projects is the web's own page, so it works exactly as there.
     val tabs = buildList {
+        add(Tab.HOME)
         if (menu.has(AppMenu.AI_CHAT_KEY)) add(Tab.AI)
         if (menu.has(AppMenu.PROJECTS_KEY)) add(Tab.PROJECTS)
         if (navigation.showsShop) add(Tab.SHOP)
         add(Tab.MENU)
     }
-    // Platform admins land on the Menu (the web's full menu); shop staff on the shop.
-    var selected by rememberSaveable {
-        mutableStateOf(if (!session.permissions.isAdmin && navigation.home == NavigationPolicy.Home.SHOP) Tab.SHOP else Tab.MENU)
+    var selected by rememberSaveable { mutableStateOf(Tab.HOME) }
+    if (selected !in tabs) selected = Tab.HOME
+    var homeLayer by remember { mutableStateOf<HomeLayer?>(null) }
+    var aiPage by remember { mutableStateOf<WebPageRoute?>(null) }
+
+    /** Opens a menu page from Home or the agent: the shop's own screens, the agent, or the page in the app. */
+    fun open(item: AppMenu.Item) {
+        when {
+            item.key == AppMenu.AI_CHAT_KEY -> homeLayer = HomeLayer.Assistant(null)
+            else -> when (val destination = MenuDestination.of(item)) {
+                MenuDestination.Shop -> if (Tab.SHOP in tabs) selected = Tab.SHOP
+                is MenuDestination.Web -> {
+                    homeLayer = HomeLayer.Page(destination.route)
+                    selected = Tab.HOME
+                }
+                null -> Unit
+            }
+        }
     }
-    if (selected !in tabs) selected = Tab.MENU
 
     Scaffold(
         bottomBar = {
@@ -297,11 +324,16 @@ private fun MainScreen(session: SessionStore) {
                 tabs.forEach { tab ->
                     NavigationBarItem(
                         selected = tab == selected,
-                        onClick = { selected = tab },
+                        onClick = {
+                            // Home again from Home: back to the top (the command box).
+                            if (tab == Tab.HOME && selected == Tab.HOME) homeLayer = null
+                            selected = tab
+                        },
                         icon = {
                             Icon(
                                 when (tab) {
-                                    Tab.AI -> Icons.Default.Forum
+                                    Tab.HOME -> Icons.Default.Home
+                                    Tab.AI -> Icons.Default.AutoAwesome
                                     Tab.PROJECTS -> Icons.Default.ViewKanban
                                     Tab.SHOP -> Icons.Default.Storefront
                                     Tab.MENU -> Icons.Default.Menu
@@ -318,7 +350,35 @@ private fun MainScreen(session: SessionStore) {
     ) { padding ->
         Column(Modifier.padding(bottom = padding.calculateBottomPadding())) {
             when (selected) {
-                Tab.AI -> menu.route(AppMenu.AI_CHAT_KEY)?.let { WebPageScreen(session, it) } ?: NotInMenu("AI chat")
+                Tab.HOME -> when (val layer = homeLayer) {
+                    null -> HomeScreen(
+                        session = session,
+                        showsShop = Tab.SHOP in tabs,
+                        onOpen = ::open,
+                        onOpenShop = { if (Tab.SHOP in tabs) selected = Tab.SHOP },
+                        onAsk = { homeLayer = HomeLayer.Assistant(it) },
+                        onContinue = { homeLayer = HomeLayer.Assistant(null) },
+                    )
+                    is HomeLayer.Assistant -> {
+                        BackHandler { homeLayer = null }
+                        AssistantScreen(session, ask = layer.ask, onOpen = ::open, onBack = { homeLayer = null })
+                    }
+                    is HomeLayer.Page -> {
+                        BackHandler { homeLayer = null }
+                        WebPageScreen(session, layer.route, onBack = { homeLayer = null })
+                    }
+                }
+                // The agent, native; the web's team chat (channels, direct messages) is a tap away in Menu.
+                Tab.AI -> aiPage?.let { route ->
+                    BackHandler { aiPage = null }
+                    WebPageScreen(session, route, onBack = { aiPage = null })
+                } ?: AssistantScreen(session, onOpen = { item ->
+                    when (val destination = MenuDestination.of(item)) {
+                        MenuDestination.Shop -> if (Tab.SHOP in tabs) selected = Tab.SHOP
+                        is MenuDestination.Web -> aiPage = destination.route
+                        null -> Unit
+                    }
+                })
                 Tab.PROJECTS -> menu.route(AppMenu.PROJECTS_KEY)?.let { WebPageScreen(session, it) } ?: NotInMenu("Projects")
                 Tab.SHOP -> ShopNavHost()
                 Tab.MENU -> MenuScreen(session, onOpenShop = { if (Tab.SHOP in tabs) selected = Tab.SHOP })
@@ -326,4 +386,3 @@ private fun MainScreen(session: SessionStore) {
         }
     }
 }
-

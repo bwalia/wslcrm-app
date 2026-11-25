@@ -2,6 +2,9 @@ package uk.co.workstation.wslcrm.designsystem
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -48,7 +51,7 @@ fun WSLCRMTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable
             outlineVariant = Color(0xFFD1D1D6),
         )
     }
-    MaterialTheme(colorScheme = scheme, content = content)
+    MaterialTheme(colorScheme = scheme, typography = AppTypography, content = content)
 }
 
 /** Colours the Material scheme has no slot for. */
@@ -70,4 +73,26 @@ object AppColors {
     val card: Color
         @Composable @ReadOnlyComposable
         get() = MaterialTheme.colorScheme.surface
+}
+
+/**
+ * Material's type scale, a step larger where it was hard to read: body and label text are a point up (supporting
+ * text was 12 sp, labels 11), and titles carry more weight, as on iOS.
+ */
+private fun TextStyle.sized(size: Int, line: Int) = copy(fontSize = size.sp, lineHeight = line.sp)
+
+private val AppTypography: Typography = Typography().run {
+    copy(
+        headlineMedium = headlineMedium.sized(28, 36),
+        headlineSmall = headlineSmall.sized(24, 32),
+        titleLarge = titleLarge.sized(22, 28),
+        titleMedium = titleMedium.sized(17, 24),
+        titleSmall = titleSmall.sized(15, 21),
+        bodyLarge = bodyLarge.sized(17, 25),
+        bodyMedium = bodyMedium.sized(15, 22),
+        bodySmall = bodySmall.sized(14, 20),
+        labelLarge = labelLarge.sized(15, 21),
+        labelMedium = labelMedium.sized(13, 18),
+        labelSmall = labelSmall.sized(12, 16),
+    )
 }
