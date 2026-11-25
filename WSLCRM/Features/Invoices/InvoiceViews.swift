@@ -303,7 +303,7 @@ struct InvoiceDetailView: View {
             case .idle, .loading:
                 SkeletonList(rows: 4)
             case .failed(let error):
-                ErrorStateView(error: error) { Task { await load() } }
+                RecordUnavailableView(noun: "invoice", systemImage: "doc.text", error: error) { Task { await load() } }
             case .loaded(let invoice):
                 content(invoice)
             }

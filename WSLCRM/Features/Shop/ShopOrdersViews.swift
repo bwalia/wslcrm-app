@@ -149,6 +149,16 @@ struct ShopOrderDetailView: View {
     private var current: ShopOrder { order ?? summary }
 
     var body: some View {
+        // Opened by uuid alone (a push, an alert) and it couldn't be loaded: say so, not an empty order.
+        if order == nil, summary.orderNumber == "…", let loadError {
+            RecordUnavailableView(noun: "order", systemImage: "shippingbox", error: loadError) { Task { await load() } }
+                .navigationTitle("Order")
+        } else {
+            details
+        }
+    }
+
+    private var details: some View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
