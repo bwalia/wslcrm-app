@@ -77,7 +77,12 @@ struct HomeView: View {
         }
         // Each time Home comes back into view: the agent may have finished while the person was elsewhere.
         .onAppear { Task { await loadLastRequest() } }
-        .sheet(isPresented: $showingNotifications) { NotificationsView(model: notifications) }
+        .sheet(isPresented: $showingNotifications) {
+            NotificationsView(model: notifications)
+                // A Mac sheet is small by default, which cramped the list.
+                .frame(minWidth: MacSupport.isMac ? 560 : nil, idealWidth: MacSupport.isMac ? 620 : nil,
+                       minHeight: MacSupport.isMac ? 620 : nil, idealHeight: MacSupport.isMac ? 760 : nil)
+        }
         .onAppear {
             // Said once after joining or making a workspace (the switch rebuilt Home).
             if let notice = session.notice {

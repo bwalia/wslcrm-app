@@ -13,6 +13,9 @@ struct LoginView: View {
 
     private enum Field { case identifier, password }
 
+    static let staysSignedIn = MacSupport.isMac ? "You stay signed in on this Mac until you sign out."
+        : "You stay signed in on this phone until you sign out."
+
     /// Accounts are made by invitation (there's no sign-up in the app or on the dashboard): say how to get one.
     static let newHereAdvice = "You need an invitation to sign in. Ask your employer, or whoever runs your company's "
         + "workspace, to invite your email address. Their email has a link to set up your account; then sign in here."
@@ -20,7 +23,10 @@ struct LoginView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                header
+                AuthHero(subtitle: MacSupport.isMac ? "Your whole business, in one place." : "Your whole business, in your pocket.",
+                         showsEnvironment: endpoint.buildName != "Production" || endpoint.isOverridden) {
+                    showingEndpoint = true
+                }
 
                 VStack(alignment: .leading, spacing: 20) {
                     Text("Sign in")
@@ -63,9 +69,17 @@ struct LoginView: View {
                             Text("Sign in")
                         }
                     }
-                    .buttonStyle(.large())
+                    .buttonStyle(.large(fill: true))
                     .disabled(!canSubmit)
                     .accessibilityIdentifier("login.submit")
+
+                    // The session is kept in the Keychain and renewed each time the app is used (the server's
+                    // refresh token lasts 30 days from the last use), so there is no "remember me" to tick.
+                    Label(LoginView.staysSignedIn, systemImage: "lock.shield")
+                        .font(.brandFootnote)
+                        .foregroundStyle(.secondaryText)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityIdentifier("login.staysSignedIn")
 
                     Button("Forgot password?") { showingForgotPassword = true }
                         .font(.brandCallout)
@@ -101,63 +115,6 @@ struct LoginView: View {
         .onAppear { focused = identifier.isEmpty ? .identifier : .password }
     }
 
-    /// The brand moment: the website's dark navy with an accent glow, the mark and the name in
-    /// the display face. The form sits on a card that overlaps its foot.
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
-                BrandMark(size: 48)
-                    .padding(8)
-                    .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                Spacer(minLength: 12)
-                // Pointing the app at another server is for testers: the App Store build hides it
-                // (unless it was already repointed, so there's a way back).
-                if endpoint.buildName != "Production" || endpoint.isOverridden {
-                    Button {
-                        showingEndpoint = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                            .font(.wsTitle3)
-                            .foregroundStyle(Palette.onDarkInk)
-                            .frame(width: 44, height: 44)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Environment settings")
-                    .accessibilityIdentifier("login.environmentSettings")
-                }
-            }
-            Text(BrandStore.shared.brand.name)
-                .font(.brandDisplay)
-                .foregroundStyle(.white)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("login.brandName")
-            Text(MacSupport.isMac ? "Your whole business, in one place." : "Your whole business, in your pocket.")
-                .font(.brandCallout)
-                .foregroundStyle(Palette.onDarkMuted)
-            if session.environmentName != "Production" {
-                Pill(text: "\(session.environmentName) environment", systemImage: "hammer",
-                     foreground: Palette.onDarkInk, background: .white.opacity(0.14))
-            }
-        }
-        .padding(.horizontal, 22)
-        .padding(.top, 20)
-        .padding(.bottom, 52)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            ZStack {
-                Palette.heroGradient
-                RadialGradient(colors: [Color.accentColor.opacity(0.6), .clear], center: .topTrailing,
-                               startRadius: 10, endRadius: 320)
-                RadialGradient(colors: [Palette.tileColors[1].opacity(0.35), .clear], center: .bottomLeading,
-                               startRadius: 10, endRadius: 260)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
-        .environment(\.colorScheme, .dark)
-    }
-
     private var canSubmit: Bool {
         !isSubmitting && !identifier.trimmingCharacters(in: .whitespaces).isEmpty && !password.isEmpty
     }
@@ -190,72 +147,103 @@ struct TwoFactorView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Image(systemName: "envelope.badge.shield.half.filled")
-                        .font(.system(size: 40))
-                        .foregroundStyle(.tint)
-                        .accessibilityHidden(true)
-                    Text("Check your email")
-                        .font(.brandDisplay)
-                    Text("Enter the 6-digit code we sent to \(challenge.email ?? "your email address").")
-                        .font(.brandBody)
-                        .foregroundStyle(.secondaryText)
-                }
-                .padding(.top, 32)
+            VStack(alignment: .leading, spacing: 0) {
+                AuthHero(subtitle: "One more step, so it’s really you.", showsEnvironment: false) {}
 
-                TextField("123456", text: $code)
-                    .textContentType(.oneTimeCode)
-                    .keyboardType(.numberPad)
-                    .font(BrandFont.font(.monoMedium, size: 34, relativeTo: .largeTitle))
-                    .tracking(8)
-                    .multilineTextAlignment(.center)
-                    .focused($codeFocused)
-                    .fieldStyle()
-                    .accessibilityLabel("Verification code")
-                    .accessibilityIdentifier("twofactor.code")
-                    .onChange(of: code) { _, newValue in
-                        let digits = String(newValue.filter(\.isNumber).prefix(6))
-                        if digits != newValue { code = digits }
-                        if digits.count == 6 { submit() }
+                VStack(alignment: .leading, spacing: 22) {
+                    HStack(alignment: .top, spacing: 14) {
+                        Image(systemName: "envelope.badge.shield.half.filled")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(Color.accentColor)
+                            .frame(width: 48, height: 48)
+                            .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Check your email")
+                                .font(.brandTitle)
+                                .accessibilityAddTraits(.isHeader)
+                            Text(sentTo)
+                                .font(.brandCallout)
+                                .foregroundStyle(.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
 
-                if let error {
-                    InlineErrorRow(error: error)
-                }
-                if let resendMessage {
-                    Label(resendMessage, systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(Tone.success.textColor)
-                }
+                    OneTimeCodeField(code: $code, focused: $codeFocused, hasError: error != nil)
+                        .onChange(of: code) { _, newValue in
+                            let digits = String(newValue.filter(\.isNumber).prefix(6))
+                            if digits != newValue { code = digits }
+                            if !digits.isEmpty { error = nil }
+                            if digits.count == 6 { submit() }
+                        }
 
-                Button(action: submit) {
-                    if isSubmitting { ProgressView().tint(.white) } else { Text("Verify") }
-                }
-                .buttonStyle(.large())
-                .disabled(code.count != 6 || isSubmitting)
-                .accessibilityIdentifier("twofactor.submit")
-
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    let remaining = Int(resendAvailableAt.timeIntervalSince(context.date).rounded(.up))
-                    Button(remaining > 0 ? "Resend code in \(remaining)s" : "Resend code") {
-                        resend()
+                    if let error {
+                        InlineErrorRow(error: error)
                     }
-                    .font(.wsBody.weight(.semibold))
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .disabled(remaining > 0)
-                }
+                    if let resendMessage {
+                        Label(resendMessage, systemImage: "checkmark.circle.fill")
+                            .font(.brandCallout)
+                            .foregroundStyle(Tone.success.textColor)
+                    }
 
-                Button("Use a different account", role: .cancel) {
-                    session.cancelTwoFactor()
+                    Button(action: submit) {
+                        if isSubmitting { ProgressView().tint(.white) } else { Text("Verify and sign in") }
+                    }
+                    .buttonStyle(.large(fill: true))
+                    .disabled(code.count != 6 || isSubmitting)
+                    .accessibilityIdentifier("twofactor.submit")
+
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        let remaining = Int(resendAvailableAt.timeIntervalSince(context.date).rounded(.up))
+                        HStack(spacing: 6) {
+                            Text("Didn’t get it?").foregroundStyle(.secondaryText)
+                            if remaining > 0 {
+                                Text("You can send another in \(remaining)s")
+                                    .foregroundStyle(.secondaryText)
+                                    .monospacedDigit()
+                            } else {
+                                Button("Send a new code") { resend() }
+                                    .fontWeight(.semibold)
+                                    .buttonStyle(.borderless)
+                                    .accessibilityIdentifier("twofactor.resend")
+                            }
+                        }
+                        .font(.brandCallout)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+
+                    Divider()
+
+                    Button(role: .cancel) {
+                        session.cancelTwoFactor()
+                    } label: {
+                        Label("Use a different account", systemImage: "arrow.uturn.backward")
+                            .font(.brandCallout.weight(.semibold))
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityIdentifier("twofactor.differentAccount")
                 }
-                .frame(maxWidth: .infinity, minHeight: 44)
+                .brandCard(padding: 22, radius: 26)
+                .padding(.horizontal, 16)
+                .padding(.top, -28)
             }
-            .padding(24)
             .frame(maxWidth: 520)
             .frame(maxWidth: .infinity)
         }
+        .scrollDismissesKeyboard(.interactively)
         .brandCanvas()
         .onAppear { codeFocused = true }
+    }
+
+    private var sentTo: AttributedString {
+        var text = AttributedString("Enter the 6-digit code we sent to ")
+        var email = AttributedString(challenge.email ?? "your email address")
+        email.font = .brandCallout.weight(.semibold)
+        email.foregroundColor = Color(.label)
+        text.append(email)
+        text.append(AttributedString(". It only works once."))
+        return text
     }
 
     private func submit() {
@@ -355,6 +343,138 @@ struct ForgotPasswordView: View {
                 self.error = error.asAPIError
             }
         }
+    }
+}
+
+/// The brand moment at the top of the sign-in screens: the website's dark navy with an accent glow, the mark
+/// and the name in the display face. The form sits on a card that overlaps its foot.
+struct AuthHero: View {
+    let subtitle: String
+    /// The gear for pointing the app at another server (testers; the App Store build hides it).
+    var showsEnvironment: Bool
+    var onEnvironment: () -> Void
+    @Environment(SessionStore.self) private var session
+
+    init(subtitle: String, showsEnvironment: Bool, onEnvironment: @escaping () -> Void) {
+        self.subtitle = subtitle
+        self.showsEnvironment = showsEnvironment
+        self.onEnvironment = onEnvironment
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                BrandMark(size: 48)
+                    .padding(8)
+                    .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                Spacer(minLength: 12)
+                if showsEnvironment {
+                    Button(action: onEnvironment) {
+                        Image(systemName: "gearshape")
+                            .font(.wsTitle3)
+                            .foregroundStyle(Palette.onDarkInk)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Environment settings")
+                    .accessibilityIdentifier("login.environmentSettings")
+                }
+            }
+            Text(BrandStore.shared.brand.name)
+                .font(.brandDisplay)
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("login.brandName")
+            Text(subtitle)
+                .font(.brandCallout)
+                .foregroundStyle(Palette.onDarkMuted)
+            if session.environmentName != "Production" {
+                Pill(text: "\(session.environmentName) environment", systemImage: "hammer",
+                     foreground: Palette.onDarkInk, background: .white.opacity(0.14))
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 20)
+        .padding(.bottom, 52)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            ZStack {
+                Palette.heroGradient
+                RadialGradient(colors: [Color.accentColor.opacity(0.6), .clear], center: .topTrailing,
+                               startRadius: 10, endRadius: 320)
+                RadialGradient(colors: [Palette.tileColors[1].opacity(0.35), .clear], center: .bottomLeading,
+                               startRadius: 10, endRadius: 260)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .environment(\.colorScheme, .dark)
+    }
+}
+
+/// A one-time code as six boxes. Underneath is ONE real text field (invisible text), so the code can be
+/// typed, pasted or filled in from Mail/Messages (`.oneTimeCode`), and the UI tests type into
+/// `twofactor.code` as before. The box for the next digit is highlighted; after a wrong code the boxes
+/// turn red until the person types again.
+struct OneTimeCodeField: View {
+    @Binding var code: String
+    var focused: FocusState<Bool>.Binding
+    var hasError = false
+    var length = 6
+
+    private var boxHeight: CGFloat { MacSupport.isMac ? 58 : 64 }
+
+    var body: some View {
+        ZStack {
+            HStack(spacing: MacSupport.isMac ? 10 : 8) {
+                ForEach(0..<length, id: \.self) { index in box(index) }
+            }
+            .accessibilityHidden(true)
+            TextField("", text: $code)
+                .textContentType(.oneTimeCode)
+                .keyboardType(.numberPad)
+                .focused(focused)
+                .foregroundStyle(.clear)
+                .tint(.clear)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityLabel("Verification code")
+                .accessibilityValue(code.isEmpty ? "Empty" : code.map(String.init).joined(separator: " "))
+                .accessibilityIdentifier("twofactor.code")
+        }
+        .frame(height: boxHeight)
+        .contentShape(Rectangle())
+        .onTapGesture { focused.wrappedValue = true }
+    }
+
+    private func box(_ index: Int) -> some View {
+        let digits = Array(code)
+        let digit = index < digits.count ? String(digits[index]) : nil
+        let isNext = focused.wrappedValue && index == min(digits.count, length - 1) && !(digits.count == length && index < length - 1)
+        let stroke: Color = hasError ? Tone.danger.solidColor : (isNext ? .accentColor : Palette.hairline)
+        return ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Palette.canvas)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(stroke, lineWidth: isNext || hasError ? 2 : 1)
+            if let digit {
+                Text(digit)
+                    .font(BrandFont.font(.monoMedium, size: MacSupport.isMac ? 26 : 30, relativeTo: .title))
+                    .foregroundStyle(Color(.label))
+                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+            } else if isNext {
+                // A caret where the next digit goes.
+                TimelineView(.periodic(from: .now, by: 0.55)) { context in
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(Color.accentColor)
+                        .frame(width: 2, height: boxHeight * 0.42)
+                        .opacity(Int(context.date.timeIntervalSinceReferenceDate / 0.55) % 2 == 0 ? 1 : 0)
+                }
+            }
+        }
+        .frame(maxWidth: 64)
+        .frame(maxWidth: .infinity)
+        .animation(.snappy(duration: 0.18), value: digit)
     }
 }
 
