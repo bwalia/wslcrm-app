@@ -229,6 +229,15 @@ struct MainTabView: View {
                 homePath = path
                 return
             }
+            // A lead, order, quote or invoice: the record itself, on Home, when the person may see it.
+            if RecordLinks.handles(link.target) {
+                var path = NavigationPath()
+                if RecordLinks.append(link.target, to: &path, permissions: session.permissions) {
+                    selection = .home
+                    homePath = path
+                }
+                return
+            }
             let policy = NavigationPolicy(session: session)
             let hub: NavigationPolicy.Home = link.target.isPA ? .propertyPA : .propertyDeals
             guard hub == .propertyPA ? policy.showsPropertyPA : policy.showsPropertyDeals else { return }
@@ -282,7 +291,7 @@ struct MainTabView: View {
         case .task(let uuid): path.append(PDTaskRoute(uuid: uuid))
         case .approval(let uuid): path.append(PDApprovalRoute(uuid: uuid))
         case .deal(let uuid): path.append(PDDealRoute(uuid: uuid))
-        case .today, .paCard, .paBrief, .chat: break
+        case .today, .paCard, .paBrief, .chat, .lead, .order, .quote, .invoice: break
         }
         return path
     }
@@ -298,5 +307,28 @@ struct MainTabView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("sync.banner")
+    }
+}
+
+/// The records a push or an in-app alert opens: a lead, a shop order, a shop quote, an invoice.
+@MainActor
+enum RecordLinks {
+    static func handles(_ target: AppDeepLink.Target) -> Bool {
+        switch target {
+        case .lead, .order, .quote, .invoice: true
+        default: false
+        }
+    }
+
+    /// Adds the record's screen to `path`. False when it isn't a record, or the person may not see it.
+    static func append(_ target: AppDeepLink.Target, to path: inout NavigationPath, permissions: PermissionSet) -> Bool {
+        switch target {
+        case .lead(let uuid) where permissions.can(.read, .crmLeads): path.append(LeadRoute(uuid: uuid))
+        case .order(let uuid) where permissions.can(.read, .shop): path.append(ShopOrderRoute(uuid: uuid))
+        case .quote(let uuid) where permissions.can(.read, .shop): path.append(ShopQuoteRoute(uuid: uuid))
+        case .invoice(let uuid) where permissions.can(.read, .invoices): path.append(InvoiceRoute(uuid: uuid))
+        default: return false
+        }
+        return true
     }
 }

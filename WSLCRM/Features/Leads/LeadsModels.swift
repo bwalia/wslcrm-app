@@ -179,6 +179,10 @@ struct Lead: Identifiable, Hashable, Sendable {
     var campaign: String?
     var ownerEmail: String?
     var lastContactedAt: Date?
+    /// When the customer last answered by email (read from a watched inbox).
+    var lastReplyAt: Date?
+    /// The AI's draft answer to their latest email (`isCurrent` until someone emails them). Nothing is sent.
+    var replyDraft: LeadReplyDraft?
     var convertedDealValue: Decimal?
     var referrals: [Referral]
     /// The server's words for each call outcome (`call_outcomes`).
@@ -207,7 +211,7 @@ extension Lead: Decodable {
         case firstContactedAt, contactAttempts, estimatedValue, currency, expectedCloseDate, nurtureUntil, lostReason
         case qualification, aiStatus, aiScore, aiSummary, createdAt, convertedDealUuid, convertedDealName
         case analysis, meetings, permissions, channel, campaign, ownerEmail, lastContactedAt, convertedDealValue
-        case referrals, callOutcomes
+        case referrals, callOutcomes, lastReplyAt, replyDraft
     }
 
     init(from decoder: Decoder) throws {
@@ -252,6 +256,8 @@ extension Lead: Decodable {
         campaign = c.string(.campaign)
         ownerEmail = c.string(.ownerEmail)
         lastContactedAt = c.decodeDate(forKey: .lastContactedAt)
+        lastReplyAt = c.decodeDate(forKey: .lastReplyAt)
+        replyDraft = try? c.decodeIfPresent(LeadReplyDraft.self, forKey: .replyDraft)
         convertedDealValue = c.decodeFlexibleDecimal(forKey: .convertedDealValue)
         referrals = (try? c.decodeIfPresent(LossyArray<Referral>.self, forKey: .referrals))?.elements ?? []
         callOutcomes = c.lenientStringMap(forKey: .callOutcomes)
@@ -277,6 +283,37 @@ extension Lead {
 }
 
 // MARK: - AI analysis
+
+/// The AI's draft answer to the customer's latest email (opsapi lib/crm/lead-reply-ai.lua).
+struct LeadReplyDraft: Decodable, Sendable, Hashable {
+    var status: String
+    var subject: String?
+    var body: String?
+    var error: String?
+    var isCurrent: Bool
+
+    var isRunning: Bool { status == "pending" || status == "running" }
+    var isReady: Bool { status == "done" && (body?.isEmpty == false) }
+
+    enum CodingKeys: String, CodingKey { case status, subject, body, error, isCurrent }
+
+    init(status: String, subject: String? = nil, body: String? = nil, error: String? = nil, isCurrent: Bool = true) {
+        self.status = status
+        self.subject = subject
+        self.body = body
+        self.error = error
+        self.isCurrent = isCurrent
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        status = c.string(.status) ?? "pending"
+        subject = c.string(.subject)
+        body = c.string(.body)
+        error = c.string(.error)
+        isCurrent = c.decodeFlexibleBool(forKey: .isCurrent) ?? false
+    }
+}
 
 struct LeadAnalysis: Decodable, Sendable, Hashable {
     var status: String
@@ -471,6 +508,9 @@ struct LeadCard: Identifiable, Hashable, Sendable {
     var email: String?
     var phone: String?
     var source: String?
+    var createdAt: Date?
+    /// When they last answered by email (`my-steps` → `replied`).
+    var lastReplyAt: Date?
 
     var isOverdue: Bool { (nextActionAt.map { $0 < Date() }) ?? false }
 }
@@ -478,7 +518,7 @@ struct LeadCard: Identifiable, Hashable, Sendable {
 extension LeadCard: Decodable {
     enum CodingKeys: String, CodingKey {
         case uuid, firstName, lastName, companyName, status, stage, ownerName, estimatedValue, currency, aiScore, aiSummary
-        case nextActionType, nextActionAt, email, phone, source
+        case nextActionType, nextActionAt, email, phone, source, createdAt, lastReplyAt
     }
 
     init(from decoder: Decoder) throws {
@@ -499,6 +539,8 @@ extension LeadCard: Decodable {
         email = c.string(.email)
         phone = c.string(.phone)
         source = c.string(.source)
+        createdAt = c.decodeDate(forKey: .createdAt)
+        lastReplyAt = c.decodeDate(forKey: .lastReplyAt)
     }
 }
 
@@ -545,6 +587,10 @@ struct LeadMySteps: Decodable, Sendable {
     var meetings: [Meeting]
     var unassigned: Int
     var isManager: Bool
+    /// Leads that answered and wait for a reply, newest first.
+    var replied: [LeadCard] = []
+    /// New leads nobody has contacted yet (theirs, and unassigned ones for a manager), newest first.
+    var fresh: [LeadCard] = []
 
     struct Meeting: Decodable, Sendable, Identifiable {
         var id: String { uuid }
@@ -568,7 +614,7 @@ struct LeadMySteps: Decodable, Sendable {
         }
     }
 
-    enum CodingKeys: String, CodingKey { case overdue, today, meetings, unassigned, isManager }
+    enum CodingKeys: String, CodingKey { case overdue, today, meetings, unassigned, isManager, replied, fresh }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -577,6 +623,8 @@ struct LeadMySteps: Decodable, Sendable {
         meetings = (try? c.decodeIfPresent(LossyArray<Meeting>.self, forKey: .meetings))?.elements ?? []
         unassigned = c.decodeFlexibleInt(forKey: .unassigned) ?? 0
         isManager = c.decodeFlexibleBool(forKey: .isManager) ?? false
+        replied = (try? c.decodeIfPresent(LossyArray<LeadCard>.self, forKey: .replied))?.elements ?? []
+        fresh = (try? c.decodeIfPresent(LossyArray<LeadCard>.self, forKey: .fresh))?.elements ?? []
     }
 }
 
@@ -589,8 +637,12 @@ struct LeadTimelineItem: Decodable, Sendable, Identifiable {
     var by: String?
     var status: String?
     var outcomeLabel: String?
+    /// "inbound" for the customer's own email (a reply read from the workspace's inbox).
+    var direction: String?
 
-    enum CodingKeys: String, CodingKey { case kind, at, title, detail, by, status, outcomeLabel }
+    var isCustomerReply: Bool { direction == "inbound" }
+
+    enum CodingKeys: String, CodingKey { case kind, at, title, detail, by, status, outcomeLabel, direction }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -601,6 +653,7 @@ struct LeadTimelineItem: Decodable, Sendable, Identifiable {
         by = c.string(.by)
         status = c.string(.status)
         outcomeLabel = c.string(.outcomeLabel)
+        direction = c.string(.direction)
     }
 }
 

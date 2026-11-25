@@ -6,6 +6,9 @@ import Observation
 /// Property Deals pushes carry `{ namespace_id, route: task|approval|deal|digest, uuid, plugin }`
 /// (opsapi `docs/property-deals/API.md` §3). The same targets open from
 /// `wslcrm://pd/<route>/<uuid>?namespace_id=<uuid>`, which is also how UI tests drive it.
+/// Lead alerts (new lead, a reply, back again: opsapi lib/crm/lead-notify.lua) carry `route: lead`, new
+/// shop orders `route: order`, accepted quotes `route: quote` and recorded payments `route: invoice`;
+/// they also open from `wslcrm://lead/<uuid>`, `wslcrm://order/<uuid>` (and quote, invoice).
 struct AppDeepLink: Equatable, Sendable, Identifiable {
     enum Target: Equatable, Sendable {
         case task(String)
@@ -24,6 +27,14 @@ struct AppDeepLink: Equatable, Sendable, Identifiable {
         case paCapture(String)
         /// A new chat message (`type: chat_message`, `channel_uuid`): open that conversation.
         case chat(String)
+        /// A lead: new, replied, back again, a step due.
+        case lead(String)
+        /// A shop order that just came in.
+        case order(String)
+        /// A shop quote the customer accepted.
+        case quote(String)
+        /// An invoice someone recorded a payment on.
+        case invoice(String)
 
         var isPA: Bool {
             switch self {
@@ -68,15 +79,19 @@ struct AppDeepLink: Equatable, Sendable, Identifiable {
             self.init(namespaceId: namespace, target: .chat(channel))
             return
         }
-        guard url.scheme == "wslcrm", url.host == "pd" || url.host == "pa" else { return nil }
+        let records = ["lead", "order", "quote", "invoice"]
+        guard url.scheme == "wslcrm", let host = url.host, (["pd", "pa"] + records).contains(host) else { return nil }
         let parts = url.pathComponents.filter { $0 != "/" }
-        guard let target = Self.target(route: parts.first, uuid: parts.dropFirst().first) else { return nil }
+        let route = records.contains(host) ? host : parts.first
+        let uuid = records.contains(host) ? parts.first : parts.dropFirst().first
+        guard let target = Self.target(route: route, uuid: uuid) else { return nil }
         let namespace = URLComponents(url: url, resolvingAgainstBaseURL: false)?
             .queryItems?.first { $0.name == "namespace_id" }?.value
         self.init(namespaceId: namespace, target: target)
     }
 
-    private static func target(route: String?, uuid: String?) -> Target? {
+    /// A route and uuid (a push's `userInfo`, an in-app alert's `data`) → what to open.
+    static func target(route: String?, uuid: String?) -> Target? {
         let uuid = uuid.flatMap { $0.isEmpty ? nil : $0 }
         switch (route, uuid) {
         case ("task", let id?): return .task(id)
@@ -87,6 +102,10 @@ struct AppDeepLink: Equatable, Sendable, Identifiable {
         case ("pa_brief", _): return .paBrief
         case ("handoff", let id?): return .handoff(id)
         case ("pa_capture_ready", let id?): return .paCapture(id)
+        case ("lead", let id?): return .lead(id)
+        case ("order", let id?): return .order(id)
+        case ("quote", let id?): return .quote(id)
+        case ("invoice", let id?): return .invoice(id)
         default: return nil
         }
     }

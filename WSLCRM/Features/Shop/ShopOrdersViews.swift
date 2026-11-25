@@ -126,6 +126,9 @@ struct ShopStatusFilterMenu<Status: Hashable>: View {
     }
 }
 
+/// One shop order by uuid (a push about a new order opens it: `AppDeepLink.Target.order`).
+struct ShopOrderRoute: Hashable { let uuid: String }
+
 struct ShopOrderDetailView: View {
     let summary: ShopOrder
     var onChange: ((ShopOrder) -> Void)?

@@ -2,10 +2,16 @@ import SwiftUI
 
 // MARK: - What arrived
 
-/// One notification, from `GET /api/v2/kanban/notifications` (opsapi `routes/kanban-notifications.lua`,
-/// `KanbanNotificationQueries.getByUser`): a row of `kanban_notifications` plus `project_name`,
-/// `task_title`, `task_uuid` and the actor's name. It lists every workspace's, newest first.
+/// One notification, from either of two lists:
+/// - tasks: `GET /api/v2/kanban/notifications` (opsapi `routes/kanban-notifications.lua`): a row of
+///   `kanban_notifications` plus `project_name`, `task_title`, `task_uuid` and the actor's name, for every
+///   workspace, newest first;
+/// - alerts: `GET /api/v2/notifications?namespace_id=` (opsapi `routes/notifications.lua`): leads (new, a
+///   reply, back again, steps due), shop orders and accepted quotes, payments recorded — this workspace's,
+///   with `data` naming the record (`route`, `uuid`).
 struct InboxNotification: Identifiable, Equatable, Sendable {
+    enum Source: Equatable, Sendable { case tasks, alerts }
+    let source: Source
     let uuid: String
     /// The numeric workspace id (`namespace_id`), to switch workspace before opening it.
     let workspaceId: Int?
@@ -18,10 +24,14 @@ struct InboxNotification: Identifiable, Equatable, Sendable {
     let createdAt: Date?
     let projectName: String?
     let actorName: String?
-    var id: String { uuid }
+    /// An alert's record (lead, order, quote, invoice), opened natively.
+    let record: AppDeepLink.Target?
+    var id: String { "\(source)-\(uuid)" }
 
     init?(_ record: Record) {
         guard let uuid = record.string("uuid") else { return nil }
+        source = .tasks
+        self.record = nil
         self.uuid = uuid
         workspaceId = record.int("namespace_id")
         type = record.string("type") ?? ""
@@ -34,8 +44,39 @@ struct InboxNotification: Identifiable, Equatable, Sendable {
         actorName = record.personName("actor_")
     }
 
+    /// An alert (`notifications` row): `data` is the JSON text the server stored.
+    init?(alert row: Record) {
+        guard let uuid = row.string("uuid") else { return nil }
+        source = .alerts
+        self.uuid = uuid
+        workspaceId = nil // the list is this workspace's
+        type = row.string("type") ?? ""
+        title = row.string("title")?.trimmedOrNil ?? "Notification"
+        message = row.string("message")?.trimmedOrNil
+        isRead = row.bool("is_read") ?? false
+        createdAt = row.date("created_at")
+        projectName = nil
+        actorName = nil
+        let data = row.string("data").flatMap { try? JSONDecoder().decode(JSONValue.self, from: Data($0.utf8)) }
+            .map(WorkspaceAPI.object)
+        record = AppDeepLink.target(route: data?.string("route"), uuid: data?.string("uuid"))
+        actionPath = nil
+    }
+
     var systemImage: String {
-        switch type {
+        if source == .alerts {
+            switch type {
+            case "crm_leads.lead_replied": return "arrowshape.turn.up.left.fill"
+            case "crm_leads.hot_lead": return "flame"
+            case let t where t.hasPrefix("crm_leads.step"): return "clock"
+            case let t where t.hasPrefix("crm_leads."): return "person.crop.circle.badge.plus"
+            case let t where t.hasPrefix("shop_orders."): return "cart"
+            case let t where t.hasPrefix("shop_quotes."): return "doc.text"
+            case let t where t.hasPrefix("invoices."): return "sterlingsign.circle"
+            default: return "bell"
+            }
+        }
+        return switch type {
         case "task_assigned", "task_unassigned": "person.badge.plus"
         case "task_commented", "comment_reply": "text.bubble"
         case "task_mentioned", "mentioned": "at"
@@ -49,13 +90,32 @@ struct InboxNotification: Identifiable, Equatable, Sendable {
     /// One page of the list, and the counts in `meta` (`total` counts every notification, read or not).
     static func page(_ json: JSONValue) -> (items: [InboxNotification], total: Int, unread: Int) {
         let root = WorkspaceAPI.object(json)
-        let items = WorkspaceAPI.records(json, idKeys: ["uuid"]).compactMap(InboxNotification.init)
+        let items = WorkspaceAPI.records(json, idKeys: ["uuid"]).compactMap { InboxNotification($0) }
         return (items, root.int("meta.total") ?? items.count, root.int("meta.unread_count") ?? 0)
     }
 }
 
 extension WorkspaceAPI {
     static let notificationsPath = "/api/v2/kanban/notifications"
+    static let alertsPath = "/api/v2/notifications"
+
+    /// The workspace's alerts (`{ notifications, unread_count }`, no envelope): `limit`/`offset` paging.
+    func alerts(workspace: String, limit: Int, offset: Int, unreadOnly: Bool) async throws -> JSONValue {
+        try await get(Self.alertsPath, query: ["namespace_id": workspace, "limit": String(limit), "offset": String(offset),
+                                               "unread_only": unreadOnly ? "true" : nil], namespace: false)
+    }
+
+    func markAlertRead(_ uuid: String) async throws {
+        try await send(.put, "\(Self.alertsPath)/\(uuid)/read", namespace: false)
+    }
+
+    func markAllAlertsRead(workspace: String) async throws {
+        try await send(.put, "\(Self.alertsPath)/mark-all-read", query: ["namespace_id": workspace], namespace: false)
+    }
+
+    func deleteAlert(_ uuid: String) async throws {
+        try await send(.delete, "\(Self.alertsPath)/\(uuid)", namespace: false)
+    }
 
     /// The route reads `page`, `perPage` (camel case) and `unread_only=true`.
     func notifications(page: Int, perPage: Int, unreadOnly: Bool) async throws -> JSONValue {
@@ -77,69 +137,131 @@ extension WorkspaceAPI {
     }
 }
 
-/// The person's notifications and unread count (the bell on Home).
+/// The person's notifications and unread count (the bell on Home): tasks from every workspace and this
+/// workspace's alerts, merged newest first. Each list pages on its own; a server without the alerts list
+/// (notifications not deployed) just shows tasks.
 @MainActor
 @Observable
 final class NotificationsModel {
     static let perPage = 20
     private(set) var items: [InboxNotification] = []
     private(set) var unread = 0
-    private(set) var total = 0
     private(set) var hasLoaded = false
     private(set) var loadError: APIError?
-    private(set) var page = 1
     private(set) var unreadOnly = false
     var feedback: Feedback = .none
 
-    var canLoadMore: Bool { items.count < (unreadOnly ? unread : total) }
+    private var tasks: [InboxNotification] = []
+    private var alerts: [InboxNotification] = []
+    private var taskPage = 1
+    private var taskTotal = 0
+    private var taskUnread = 0
+    private var alertUnread = 0
+    private var alertsMore = false
+    private var workspace: String?
 
-    func load(_ api: WorkspaceAPI, unreadOnly: Bool? = nil) async {
+    var canLoadMore: Bool { tasks.count < (unreadOnly ? taskUnread : taskTotal) || alertsMore }
+
+    func load(_ api: WorkspaceAPI, workspace: String?, unreadOnly: Bool? = nil) async {
         if let unreadOnly { self.unreadOnly = unreadOnly }
+        self.workspace = workspace
+        let only = self.unreadOnly
+        async let taskJSON = api.notifications(page: 1, perPage: Self.perPage, unreadOnly: only)
+        async let alertJSON: JSONValue? = workspace == nil ? nil
+            : try? await api.alerts(workspace: workspace ?? "", limit: Self.perPage, offset: 0, unreadOnly: only)
         do {
-            let result = InboxNotification.page(try await api.notifications(page: 1, perPage: Self.perPage,
-                                                                          unreadOnly: self.unreadOnly))
-            items = result.items
-            total = result.total
-            unread = result.unread
-            page = 1
+            let t = InboxNotification.page(try await taskJSON)
+            tasks = t.items
+            taskTotal = t.total
+            taskUnread = t.unread
+            taskPage = 1
             loadError = nil
         } catch {
             let apiError = error.asAPIError
             if case .cancelled = apiError { return }
             loadError = apiError
         }
+        let a = Self.alertPage(await alertJSON)
+        alerts = a.items
+        alertUnread = a.unread
+        alertsMore = a.items.count == Self.perPage
+        merge()
         hasLoaded = true
     }
 
     func loadMore(_ api: WorkspaceAPI) async {
-        guard canLoadMore,
-              let json = try? await api.notifications(page: page + 1, perPage: Self.perPage, unreadOnly: unreadOnly)
-        else { return }
-        let result = InboxNotification.page(json)
-        let known = Set(items.map(\.uuid))
-        items += result.items.filter { !known.contains($0.uuid) }
-        page += 1
-        if result.items.isEmpty { total = items.count }
+        guard canLoadMore else { return }
+        let only = unreadOnly
+        if tasks.count < (only ? taskUnread : taskTotal),
+           let json = try? await api.notifications(page: taskPage + 1, perPage: Self.perPage, unreadOnly: only) {
+            let result = InboxNotification.page(json)
+            let known = Set(tasks.map(\.uuid))
+            tasks += result.items.filter { !known.contains($0.uuid) }
+            taskPage += 1
+            if result.items.isEmpty { taskTotal = tasks.count }
+        }
+        if alertsMore, let workspace {
+            let json = try? await api.alerts(workspace: workspace, limit: Self.perPage, offset: alerts.count, unreadOnly: only)
+            let result = Self.alertPage(json)
+            let known = Set(alerts.map(\.uuid))
+            alerts += result.items.filter { !known.contains($0.uuid) }
+            alertsMore = result.items.count == Self.perPage
+        }
+        merge()
     }
 
     /// Best effort: opening a notification shouldn't fail because it couldn't be marked read.
     func markRead(_ notification: InboxNotification, api: WorkspaceAPI) async {
-        guard !notification.isRead, (try? await api.markNotificationRead(notification.uuid)) != nil else { return }
-        setRead(notification.uuid)
+        guard !notification.isRead else { return }
+        let ok: Bool
+        switch notification.source {
+        case .tasks: ok = (try? await api.markNotificationRead(notification.uuid)) != nil
+        case .alerts: ok = (try? await api.markAlertRead(notification.uuid)) != nil
+        }
+        guard ok else { return }
+        setRead(notification)
     }
 
     func markAllRead(_ api: WorkspaceAPI) async {
-        if await run(done: "All marked as read.", { try await api.markAllNotificationsRead() }) {
-            await load(api)
+        let workspace = workspace
+        if await run(done: "All marked as read.", {
+            try await api.markAllNotificationsRead()
+            if let workspace, alertUnread > 0 { try await api.markAllAlertsRead(workspace: workspace) }
+        }) {
+            await load(api, workspace: workspace)
         }
     }
 
     func delete(_ notification: InboxNotification, api: WorkspaceAPI) async {
-        if await run(done: "Notification removed.", { try await api.deleteNotification(notification.uuid) }) {
-            items.removeAll { $0.uuid == notification.uuid }
-            total = max(0, total - 1)
-            if !notification.isRead { unread = max(0, unread - 1) }
+        let source = notification.source
+        if await run(done: "Notification removed.", {
+            switch source {
+            case .tasks: try await api.deleteNotification(notification.uuid)
+            case .alerts: try await api.deleteAlert(notification.uuid)
+            }
+        }) {
+            switch source {
+            case .tasks:
+                tasks.removeAll { $0.uuid == notification.uuid }
+                taskTotal = max(0, taskTotal - 1)
+                if !notification.isRead { taskUnread = max(0, taskUnread - 1) }
+            case .alerts:
+                alerts.removeAll { $0.uuid == notification.uuid }
+                if !notification.isRead { alertUnread = max(0, alertUnread - 1) }
+            }
+            merge()
         }
+    }
+
+    nonisolated static func alertPage(_ json: JSONValue?) -> (items: [InboxNotification], unread: Int) {
+        guard let json else { return ([], 0) }
+        let items = WorkspaceAPI.records(json, key: "notifications", idKeys: ["uuid"]).compactMap { InboxNotification(alert: $0) }
+        return (items, WorkspaceAPI.object(json).int("unread_count") ?? 0)
+    }
+
+    private func merge() {
+        items = (tasks + alerts).sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
+        unread = taskUnread + alertUnread
     }
 
     private func run(done message: String, _ work: () async throws -> Void) async -> Bool {
@@ -155,11 +277,18 @@ final class NotificationsModel {
         }
     }
 
-    private func setRead(_ uuid: String) {
-        guard let index = items.firstIndex(where: { $0.uuid == uuid }), !items[index].isRead else { return }
-        items[index].isRead = true
-        unread = max(0, unread - 1)
-        if unreadOnly { items.remove(at: index) }
+    private func setRead(_ notification: InboxNotification) {
+        func mark(_ list: inout [InboxNotification]) -> Bool {
+            guard let index = list.firstIndex(where: { $0.uuid == notification.uuid }), !list[index].isRead else { return false }
+            list[index].isRead = true
+            if unreadOnly { list.remove(at: index) }
+            return true
+        }
+        switch notification.source {
+        case .tasks: if mark(&tasks) { taskUnread = max(0, taskUnread - 1) }
+        case .alerts: if mark(&alerts) { alertUnread = max(0, alertUnread - 1) }
+        }
+        merge()
     }
 }
 
@@ -185,16 +314,18 @@ struct NotificationsView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var target: ChatLinkTarget?
+    @State private var path = NavigationPath()
     @State private var notInApp = false
     @State private var dashboardHost: String?
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             List {
                 FeedbackSection(feedback: model.feedback)
                 Section {
                     Picker("Show", selection: Binding(get: { model.unreadOnly },
-                                                      set: { only in Task { await model.load(api, unreadOnly: only) } })) {
+                                                      set: { only in Task { await model.load(api, workspace: workspaceUuid,
+                                                                                             unreadOnly: only) } })) {
                         Text("All").tag(false)
                         Text(model.unread > 0 ? "Unread (\(model.unread))" : "Unread").tag(true)
                     }
@@ -203,13 +334,14 @@ struct NotificationsView: View {
                     .accessibilityIdentifier("notifications.filter")
                 }
                 if let error = model.loadError, model.items.isEmpty {
-                    Section { InlineErrorRow(error: error) { Task { await model.load(api) } } }
+                    Section { InlineErrorRow(error: error) { Task { await model.load(api, workspace: workspaceUuid) } } }
                 } else if !model.hasLoaded {
                     Section { ProgressView("Loading…") }
                 } else if model.items.isEmpty {
                     Section {
                         Label(model.unreadOnly ? "Nothing unread. You're up to date." : "No notifications yet. "
-                              + "When someone assigns you a task, mentions you or comments, it shows here.",
+                              + "New leads, customers' replies, orders, accepted quotes and payments show here, and so "
+                              + "does anyone assigning you a task, mentioning you or commenting.",
                               systemImage: "bell.slash")
                             .font(.wsSubheadline)
                             .foregroundStyle(.secondaryText)
@@ -238,10 +370,10 @@ struct NotificationsView: View {
                     }
                 }
             }
-            .wsRefreshable { await model.load(api) }
+            .wsRefreshable { await model.load(api, workspace: workspaceUuid) }
             .task {
                 dashboardHost = DashboardURL.forAPI(await services.client.currentBaseURL)?.host
-                await model.load(api)
+                await model.load(api, workspace: workspaceUuid)
             }
             .navigationDestination(item: $target) { ChatLinkDestinationView(target: $0) }
             .withAppDestinations()
@@ -254,6 +386,7 @@ struct NotificationsView: View {
     }
 
     private var api: WorkspaceAPI { services.workspace() }
+    private var workspaceUuid: String? { session.workspace?.uuid }
 
     private func row(_ notification: InboxNotification) -> some View {
         Button { Task { await open(notification) } } label: {
@@ -307,6 +440,16 @@ struct NotificationsView: View {
 
     private func open(_ notification: InboxNotification) async {
         await model.markRead(notification, api: api)
+        // An alert: its lead, order, quote or invoice.
+        if notification.source == .alerts {
+            var next = path
+            if let record = notification.record, RecordLinks.append(record, to: &next, permissions: session.permissions) {
+                path = next
+            } else {
+                notInApp = true
+            }
+            return
+        }
         guard let path = notification.actionPath else { return }
         if let workspace = otherWorkspace(for: notification) {
             // Its record lives in another workspace: switch, and the new Home opens it.

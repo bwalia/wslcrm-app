@@ -66,13 +66,13 @@ struct HomeView: View {
             await session.reloadPermissions()
             await digest.load(session: session, services: services)
             await invitations.load(services.workspace())
-            await notifications.load(services.workspace())
+            await notifications.load(services.workspace(), workspace: session.workspace?.uuid)
             await loadLastRequest()
         }
         .task(id: session.workspace?.uuid) {
             await digest.load(session: session, services: services)
             await invitations.load(services.workspace())
-            await notifications.load(services.workspace())
+            await notifications.load(services.workspace(), workspace: session.workspace?.uuid)
             isDeliveryPartner = await MyDeliveries.isPartner(services)
         }
         // Each time Home comes back into view: the agent may have finished while the person was elsewhere.
@@ -138,6 +138,10 @@ struct HomeView: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("home.myDeliveries")
+        }
+        // New leads and customers who replied, first: the work that brings money in.
+        if !digest.leadsReplied.isEmpty || !digest.leadsFresh.isEmpty {
+            HomeLeadsPanel(replied: digest.leadsReplied, fresh: digest.leadsFresh)
         }
         if !HomeDigest.sources(session: session).isEmpty { todaySection }
         if !hubs.isEmpty { workSection }
@@ -652,5 +656,123 @@ private struct StatusBarBackdrop: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+// MARK: - Leads waiting
+
+/// Home's "Leads waiting for you": customers who replied (answer them) and new leads nobody has contacted, each
+/// with what the AI made of them. A tap opens the lead, which leads with the next step: the email the AI wrote,
+/// ready to check and send, or a call. Asks once for alerts, so the next lead rings the phone.
+struct HomeLeadsPanel: View {
+    let replied: [LeadCard]
+    let fresh: [LeadCard]
+    @Environment(PushCenter.self) private var push
+    @AppStorage("home.leads.pushPromptDismissed") private var promptDismissed = false
+
+    private static let limit = 5
+
+    var body: some View {
+        let rows = Array((replied.map { ($0, true) } + fresh.map { ($0, false) }).prefix(Self.limit))
+        DashboardPanel(title: "Leads waiting for you") {
+            Text(guide)
+                .font(.wsFootnote)
+                .foregroundStyle(.secondaryText)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 4)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(rows, id: \.0.uuid) { lead, didReply in
+                NavigationLink(value: LeadRoute(uuid: lead.uuid)) { row(lead, replied: didReply) }
+                    .buttonStyle(.panelRow)
+                    .accessibilityIdentifier("home.lead.\(lead.uuid)")
+            }
+            if replied.count + fresh.count > Self.limit {
+                NavigationLink { LeadsHomeView() } label: {
+                    PanelRow(title: "All \(replied.count + fresh.count) waiting", systemImage: "person.2")
+                }
+                .buttonStyle(.panelRow)
+            }
+            if push.authorization == .notDetermined, !promptDismissed { pushPrompt }
+        }
+        .task { await push.refreshAuthorization() }
+        .accessibilityIdentifier("home.leads")
+    }
+
+    private var guide: String {
+        if !replied.isEmpty {
+            return replied.count == 1 ? "\(replied[0].name) replied. Open it to answer." : "\(replied.count) customers replied. Open one to answer."
+        }
+        return fresh.count == 1 ? "A new lead. Open it to send the email the AI wrote, or call them."
+            : "\(fresh.count) new leads. Open one to send the email the AI wrote, or call them."
+    }
+
+    private func row(_ lead: LeadCard, replied: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(initials(lead.name))
+                .font(.wsFootnote.weight(.bold))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(replied ? Tone.success.solidColor : Tone.brand.solidColor, in: Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text(lead.name).font(.wsSubheadline.weight(.semibold)).foregroundStyle(Color(.label)).lineLimit(1)
+                status(lead, replied: replied)
+                Text(summary(lead))
+                    .font(.wsFootnote)
+                    .foregroundStyle(.secondaryText)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .padding(.top, 1)
+            }
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .padding(.top, 10)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(replied ? "Opens the lead to answer them" : "Opens the lead to get in touch")
+    }
+
+    /// "Replied 12 min ago" / "New · 40 min ago", in the row's colour.
+    private func status(_ lead: LeadCard, replied: Bool) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: replied ? "arrowshape.turn.up.left.fill" : "sparkle").imageScale(.small)
+            Text(replied ? "Replied" : "New")
+            if let when = replied ? lead.lastReplyAt : lead.createdAt {
+                Text(when, format: .relative(presentation: .numeric, unitsStyle: .abbreviated))
+            }
+        }
+        .font(.wsCaption.weight(.semibold))
+        .foregroundStyle(replied ? Tone.success.textColor : Tone.brand.textColor)
+        .lineLimit(1)
+    }
+
+    private func summary(_ lead: LeadCard) -> String {
+        if let summary = lead.aiSummary?.trimmedOrNil { return summary }
+        let from = lead.source.map { "From \(Formatters.humanize($0).lowercased())" }
+        return [lead.companyName, from].compactMap { $0 }.joined(separator: " · ").trimmedOrNil ?? "The AI is reading it now"
+    }
+
+    private func initials(_ name: String) -> String {
+        let letters = name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined()
+        return letters.isEmpty ? "?" : letters.uppercased()
+    }
+
+    private var pushPrompt: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Get an alert the moment a lead comes in or replies.", systemImage: "bell.badge")
+                .font(.wsSubheadline)
+            HStack {
+                Button("Turn on alerts") { Task { await push.requestPermission() } }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("home.leads.push.enable")
+                Button("Not now") { promptDismissed = true }
+                    .buttonStyle(.bordered)
+            }
+        }
+        .padding(10)
     }
 }

@@ -173,7 +173,7 @@ private struct ResourceDetailContent: View {
 
     /// The descriptor's sections, or every field the server sent when it describes none.
     private func sections(for record: Record) -> [SectionSpec] {
-        descriptor.detail.isEmpty ? [AutoFields.section(for: record)] : descriptor.detail
+        descriptor.detail.isEmpty ? [AutoFields.section(for: record)] : descriptor.detail.filter { $0.isVisible(for: record) }
     }
 
     private var isWritable: Bool {

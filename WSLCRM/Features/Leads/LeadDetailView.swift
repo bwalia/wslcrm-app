@@ -11,6 +11,7 @@ struct LeadDetailView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var state: LoadState<Lead> = .idle
     @State private var callFollowUp = LeadCallFollowUp()
     @State private var timeline: [LeadTimelineItem] = []
@@ -104,12 +105,14 @@ struct LeadDetailView: View {
         } message: {
             Text("The reason is included in the cancellation everyone receives.")
         }
-        // While the AI works, check back every few seconds.
-        .task(id: state.value?.analysis?.isRunning == true) {
-            guard state.value?.analysis?.isRunning == true else { return }
-            try? await Task.sleep(for: .seconds(5))
-            guard !Task.isCancelled else { return }
-            await load()
+        // While the AI works (an analysis, or a drafted answer), check back every few seconds.
+        // (A loop: after a check that finds it still working, `aiWorking` hasn't changed, so the task wouldn't run again.)
+        .task(id: aiWorking) {
+            while aiWorking, !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { return }
+                await load()
+            }
         }
     }
 
@@ -118,6 +121,7 @@ struct LeadDetailView: View {
     private func content(_ lead: Lead) -> some View {
         List {
             header(lead)
+            if canWork(lead) { contactGuide(lead) }
             if let notice {
                 Section { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
             }
@@ -166,6 +170,10 @@ struct LeadDetailView: View {
         .disabled(busy)
     }
 
+    private var aiWorking: Bool {
+        state.value?.analysis?.isRunning == true || state.value?.replyDraft?.isRunning == true
+    }
+
     private func stageLabel(_ stage: LeadStage) -> String { bundle?.stageLabels[stage.rawValue] ?? stage.label }
 
     private func header(_ lead: Lead) -> some View {
@@ -196,6 +204,141 @@ struct LeadDetailView: View {
             }
             if let email = lead.email { EmailLinkRow(email: email) }
         }
+    }
+
+    /// What to do now, before anything else: answer a customer who replied, or get in touch with a new lead —
+    /// the email the AI wrote (checked and changed before it goes, sent from the workspace's email account), or a call.
+    @ViewBuilder
+    private func contactGuide(_ lead: Lead) -> some View {
+        let first = lead.firstName.nonEmpty ?? lead.displayName
+        if let repliedAt = lead.lastReplyAt, repliedAt > (lead.lastContactedAt ?? .distantPast) {
+            let reply = timeline.filter(\.isCustomerReply).max { ($0.at ?? .distantPast) < ($1.at ?? .distantPast) }
+            let subject = reply.map { $0.title.hasPrefix("Replied: ") ? String($0.title.dropFirst(9)) : $0.title }
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 6) {
+                        Label("\(first) replied", systemImage: "arrowshape.turn.up.left.fill")
+                            .font(.wsHeadline).foregroundStyle(Tone.success.textColor)
+                        Text(repliedAt, format: .relative(presentation: .named))
+                            .font(.wsFootnote).foregroundStyle(.secondaryText)
+                    }
+                    if let subject { Text(subject).font(.wsSubheadline.weight(.semibold)) }
+                    if let text = reply?.detail?.trimmedOrNil {
+                        Text(text).font(.wsSubheadline).lineLimit(8).textSelection(.enabled)
+                    }
+                    let draft = lead.replyDraft.flatMap { $0.isCurrent ? $0 : nil }
+                    if let draft, draft.isReady, let body = draft.body {
+                        Divider()
+                        Label("The AI wrote an answer. Check it, change anything you like, then send it.", systemImage: "sparkles")
+                            .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                        Text(body).font(.wsSubheadline).lineLimit(5)
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        contactButtons(lead, emailTitle: "Review and send",
+                                       subject: draft.subject ?? subject.map(Self.replySubject), body: body)
+                        Button { Task { await redraft(lead) } } label: {
+                            Label("Write it again", systemImage: "arrow.clockwise").frame(minHeight: 44)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityIdentifier("lead.guide.redraft")
+                    } else {
+                        if draft?.isRunning == true {
+                            Label("The AI is writing an answer…", systemImage: "sparkles")
+                                .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                        } else if let error = draft?.error?.trimmedOrNil {
+                            Label(error, systemImage: "exclamationmark.triangle").font(.wsFootnote).foregroundStyle(.secondaryText)
+                        }
+                        contactButtons(lead, emailTitle: "Reply by email", subject: subject.map(Self.replySubject), body: nil)
+                        if let draft, !draft.isRunning {
+                            Button { Task { await redraft(lead) } } label: {
+                                Label("Ask the AI to write an answer", systemImage: "sparkles").frame(minHeight: 44)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityIdentifier("lead.guide.redraft")
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .accessibilityIdentifier("lead.guide.replied")
+        } else if lead.isOpen, lead.firstContactedAt == nil, lead.email != nil || lead.phone != nil {
+            let analysis = lead.analysis
+            let draft = analysis?.result?.firstReply
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Get in touch with \(first)", systemImage: "hand.wave.fill")
+                        .font(.wsHeadline).foregroundStyle(Color.accentColor)
+                    if let body = draft?.body, lead.email != nil {
+                        Text("The AI wrote a first email for you. Check it, change anything you like, then send it.")
+                            .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                        Text(body).font(.wsSubheadline).lineLimit(4)
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    } else if analysis?.isRunning == true || lead.aiStatus == "pending" || lead.aiStatus == "running" {
+                        Label("The AI is writing a first email for you…", systemImage: "sparkles")
+                            .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                    } else {
+                        Text(lead.email != nil ? "Send them an email, or give them a call." : "Give them a call.")
+                            .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                    }
+                    contactButtons(lead, emailTitle: draft?.body != nil ? "Review and send" : "Write an email",
+                                   subject: draft?.subject, body: draft?.body)
+                }
+                .padding(.vertical, 4)
+            }
+            .accessibilityIdentifier("lead.guide.new")
+        }
+    }
+
+    /// Full-width, one above the other on a phone (big to tap); side by side on an iPad or a Mac.
+    @ViewBuilder
+    private func contactButtons(_ lead: Lead, emailTitle: String, subject: String?, body: String?) -> some View {
+        if sizeClass == .regular {
+            HStack(spacing: 10) { emailButton(lead, emailTitle, subject, body); callButton(lead) }
+        } else {
+            VStack(spacing: 8) { emailButton(lead, emailTitle, subject, body); callButton(lead) }
+        }
+    }
+
+    @ViewBuilder
+    private func emailButton(_ lead: Lead, _ title: String, _ subject: String?, _ body: String?) -> some View {
+        if lead.email != nil {
+            Button { sheet = .email(subject: subject, body: body) } label: {
+                Label(title, systemImage: "envelope.fill")
+                    .frame(maxWidth: sizeClass == .regular ? nil : .infinity, minHeight: 44).padding(.horizontal, 6)
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("lead.guide.email")
+        }
+    }
+
+    @ViewBuilder
+    private func callButton(_ lead: Lead) -> some View {
+        if lead.phone != nil {
+            Button { dial(lead) } label: {
+                Label("Call \(lead.firstName.nonEmpty ?? "them")", systemImage: "phone.fill")
+                    .frame(maxWidth: sizeClass == .regular ? nil : .infinity, minHeight: 44).padding(.horizontal, 6)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("lead.guide.call")
+        }
+    }
+
+    /// A fresh draft from the AI (the card says it's writing, and the page checks back until it's done).
+    private func redraft(_ lead: Lead) async {
+        do {
+            notice = try await services.leads.replyDraft(lead.uuid) ?? "The AI is writing an answer."
+            actionError = nil
+            await load()
+        } catch {
+            actionError = error.asAPIError
+        }
+    }
+
+    nonisolated static func replySubject(_ subject: String) -> String {
+        subject.lowercased().hasPrefix("re:") ? subject : "Re: " + subject
     }
 
     /// The common actions, one tap each, as on the web's action bar.

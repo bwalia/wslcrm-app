@@ -19,6 +19,8 @@ struct ShopPolicy: Sendable {
     var canBrowseMedia: Bool { permissions.can(.read, moduleName: "cms") || permissions.can(.read, .shop) }
     /// "Open their lead" (crm_leads.read).
     var canOpenLeads: Bool { permissions.can(.read, .crmLeads) }
+    /// Making a chat a CRM lead (POST /shop/admin/chats/:uuid/lead): shop.update and crm_leads.create, as on the server.
+    var canMakeLeads: Bool { permissions.can(.update, .shop) && permissions.can(.create, .crmLeads) }
 }
 
 extension SessionStore {

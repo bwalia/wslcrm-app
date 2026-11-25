@@ -59,6 +59,69 @@ final class LeadsTests: XCTestCase {
         XCTAssertTrue(team.contains { $0.name == "Olivia Owner" })
     }
 
+    /// `my-steps` → `replied` and `fresh` (opsapi lib/crm/lead-pipeline.lua), for Home's "Leads waiting for you".
+    func testMyStepsListsRepliedAndFreshLeads() throws {
+        let json = """
+        {"overdue":[],"today":[],"meetings":[],"unassigned":1,"is_manager":true,
+         "replied":[{"uuid":"l-1","first_name":"Priya","last_name":"Shah","status":"contacting","ai_summary":"Wants two GPUs",
+                     "email":"p@x.test","created_at":"2026-11-24T10:00:00+00:00","last_reply_at":"2026-11-25T09:58:00+00:00"}],
+         "fresh":[{"uuid":"l-2","first_name":"Omar","status":"new","source":"shop_chat","created_at":"2026-11-25T09:20:00+00:00"}]}
+        """
+        let steps = try JSONDecoder.opsAPI().decode(LeadMySteps.self, from: Data(json.utf8))
+        XCTAssertEqual(steps.replied.map(\.name), ["Priya Shah"])
+        XCTAssertNotNil(steps.replied.first?.lastReplyAt)
+        XCTAssertEqual(steps.replied.first?.aiSummary, "Wants two GPUs")
+        XCTAssertEqual(steps.fresh.map(\.uuid), ["l-2"])
+        XCTAssertNotNil(steps.fresh.first?.createdAt)
+        // An older server sends neither list.
+        let old = try JSONDecoder.opsAPI().decode(LeadMySteps.self, from: Data(#"{"overdue":[],"today":[],"meetings":[],"unassigned":0}"#.utf8))
+        XCTAssertTrue(old.replied.isEmpty && old.fresh.isEmpty)
+    }
+
+    /// Lead alerts carry `route: lead`, new shop orders `route: order` (opsapi lib/crm/lead-notify.lua): a tap opens it.
+    func testLeadAndOrderPushesOpenTheRecord() {
+        let lead: [AnyHashable: Any] = ["route": "lead", "uuid": "l-1", "namespace_id": "ns-1", "event": "lead_replied"]
+        XCTAssertEqual(AppDeepLink(userInfo: lead)?.target, .lead("l-1"))
+        XCTAssertEqual(AppDeepLink(userInfo: lead)?.namespaceId, "ns-1")
+        XCTAssertEqual(AppDeepLink(userInfo: ["route": "order", "uuid": "o-1"])?.target, .order("o-1"))
+        XCTAssertNil(AppDeepLink(userInfo: ["route": "lead"]), "no uuid: nothing to open")
+        XCTAssertEqual(AppDeepLink(url: URL(string: "wslcrm://lead/l-2?namespace_id=ns")!)?.target, .lead("l-2"))
+        XCTAssertEqual(AppDeepLink(url: URL(string: "wslcrm://order/o-2")!)?.target, .order("o-2"))
+        XCTAssertEqual(AppDeepLink(url: URL(string: "wslcrm://pd/deal/d-1")!)?.target, .deal("d-1"), "Property Deals links unchanged")
+    }
+
+    /// GET lead → `reply_draft` (opsapi lib/crm/lead-reply-ai.lua `latest`).
+    func testTheAIsDraftAnswerDecodes() throws {
+        let json = """
+        {"uuid":"l-1","first_name":"Priya","status":"contacting","last_reply_at":"2026-11-25T10:00:00+00:00",
+         "reply_draft":{"uuid":"d-1","status":"done","subject":"Re: Your quote","body":"Hi Priya, Friday is fine.",
+                        "error":null,"is_current":true,"created_at":"2026-11-25T10:01:00+00:00"}}
+        """
+        let lead = try JSONDecoder.opsAPI().decode(Lead.self, from: Data(json.utf8))
+        XCTAssertEqual(lead.replyDraft?.isReady, true)
+        XCTAssertEqual(lead.replyDraft?.isCurrent, true)
+        XCTAssertEqual(lead.replyDraft?.subject, "Re: Your quote")
+        let running = try JSONDecoder.opsAPI().decode(LeadReplyDraft.self,
+                                                       from: Data(#"{"status":"running","is_current":true}"#.utf8))
+        XCTAssertTrue(running.isRunning)
+        XCTAssertFalse(running.isReady)
+        let none = try JSONDecoder.opsAPI().decode(Lead.self, from: Data(#"{"uuid":"l-2","status":"new","reply_draft":null}"#.utf8))
+        XCTAssertNil(none.replyDraft)
+    }
+
+    func testMakingAChatALeadSendsOnlyWhatWasGiven() throws {
+        let body = try JSONEncoder.opsAPI().encode(ShopChatLeadBody(email: nil, phone: "07700 900456", name: "Omar", note: nil))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(object["phone"] as? String, "07700 900456")
+        XCTAssertNil(object["email"], "one of email or phone is enough; an empty one isn't sent")
+    }
+
+    func testReplySubject() {
+        XCTAssertEqual(LeadDetailView.replySubject("Your quote"), "Re: Your quote")
+        XCTAssertEqual(LeadDetailView.replySubject("Re: Your quote"), "Re: Your quote")
+        XCTAssertEqual(LeadDetailView.replySubject("RE: Your quote"), "RE: Your quote")
+    }
+
     func testRequestBodiesUseTheServersNames() throws {
         let encoder = JSONEncoder.opsAPI()
         // `null` unassigns, so it has to be on the wire.

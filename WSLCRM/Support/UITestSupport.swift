@@ -176,7 +176,7 @@ final class UITestStubServer: @unchecked Sendable {
             case .paAgent: ["projects": ["read", "update"], "crm_accounts": ["read"]]
             case .paManager: ["projects": ["manage"], "crm_accounts": ["manage"]]
             case .shopkeeper: ["shop": ["manage"], "products": ["manage"], "customers": ["manage"],
-                               "orders": ["manage"], "invoices": ["manage"]]
+                               "orders": ["manage"], "invoices": ["manage"], "crm_leads": ["manage"]]
             }
         }
 
@@ -205,9 +205,57 @@ final class UITestStubServer: @unchecked Sendable {
             case .propertyOperator: ["crm_leads", "projects", "timesheets"]
             case .propertyManager: ["crm_leads", "projects", "timesheets", "invoices", "purchase_orders"]
             case .paAgent, .paManager: ["crm_leads", "projects", "timesheets"]
-            case .shopkeeper: ["shop", "products", "customers", "invoices"]
+            case .shopkeeper: ["shop", "crm_leads", "products", "customers", "invoices"]
             }
         }
+    }
+
+    /// A lead for the shopkeeper's Home and lead screen: Priya replied; Omar and Lena are new, from the shop.
+    static func stubLead(_ key: String, detail: Bool = false) -> [String: Any] {
+        let now = Date()
+        func ago(_ minutes: Double) -> String { ISO8601DateFormatter().string(from: now.addingTimeInterval(-minutes * 60)) }
+        var lead: [String: Any]
+        switch key {
+        case "priya":
+            lead = ["uuid": "lead-priya", "first_name": "Priya", "last_name": "Shah", "email": "priya@harbourvfx.example",
+                    "phone": "07700 900123", "company_name": "Harbour VFX", "source": "shop_quote", "status": "contacting",
+                    "ai_score": 86, "ai_summary": "Wants two RTX 6000 Ada workstations for a VFX studio, delivered this month.",
+                    "first_contacted_at": ago(26 * 60), "last_contacted_at": ago(26 * 60), "last_reply_at": ago(12),
+                    "created_at": ago(28 * 60),
+                    "reply_draft": ["uuid": "d-priya", "status": "done", "is_current": true, "subject": "Re: Your GPU workstation quote",
+                                    "body": "Hi Priya,\n\nGreat news — we'll go ahead with the 2× RTX 6000 option. We'll confirm "
+                                        + "Friday delivery today once the courier slot is booked.\n\nMaya"]]
+        case "omar":
+            lead = ["uuid": "lead-omar", "first_name": "Omar", "last_name": "Haddad", "email": "omar@quantlab.example",
+                    "phone": "07700 900456", "company_name": "QuantLab", "source": "shop_chat", "status": "new", "ai_score": 74,
+                    "ai_summary": "Asked the shop assistant about an 8-GPU server for model training; budget around £60k.",
+                    "created_at": ago(40)]
+        default:
+            lead = ["uuid": "lead-lena", "first_name": "Lena", "last_name": "Fischer", "email": "lena@studiofischer.example",
+                    "source": "shop_chat", "status": "new", "ai_status": "running", "created_at": ago(5)]
+        }
+        guard detail else { return lead }
+        lead["is_open"] = true
+        lead["owner_name"] = "Maya Collins"
+        lead["permissions"] = ["can_work": true, "is_manager": true, "can_assign_any": true, "can_convert": true]
+        if key == "omar" {
+            lead["analysis"] = ["uuid": "an-omar", "status": "done", "result": [
+                "summary": lead["ai_summary"] ?? "", "wants": "An 8-GPU training server",
+                "first_reply": ["channel": "email", "subject": "Your 8-GPU training server",
+                                "body": "Hi Omar,\n\nThanks for asking about an 8-GPU server for model training. We can build one around "
+                                    + "8× RTX 6000 Ada with 1 TB of memory, inside your £60k budget, and deliver it in two weeks.\n\n"
+                                    + "Could we have a quick call tomorrow to confirm the spec?\n\nMaya"]]]
+        } else if key == "lena" {
+            lead["analysis"] = ["uuid": "an-lena", "status": "running"]
+        }
+        return lead
+    }
+
+    static var priyaTimeline: [[String: Any]] {
+        [["kind": "activity", "type": "email", "status": "completed", "direction": "inbound",
+          "at": ISO8601DateFormatter().string(from: Date().addingTimeInterval(-12 * 60)),
+          "title": "Replied: Re: Your GPU workstation quote",
+          "detail": "Yes please, go ahead with the 2× RTX 6000 option. Can you deliver by Friday? Our new artists start Monday."]]
     }
 
     /// The shop's dashboard (`GET /api/v2/shop/admin/dashboard`), for the shopkeeper.
@@ -470,6 +518,30 @@ final class UITestStubServer: @unchecked Sendable {
 
         case ("GET", "/api/v2/shop/admin/dashboard"):
             return (200, ["success": true, "data": Self.shopDashboard])
+        // The bell's alerts for this workspace (opsapi routes/notifications.lua, no envelope).
+        case ("GET", "/api/v2/notifications") where role == .shopkeeper:
+            func ago(_ minutes: Double) -> String { ISO8601DateFormatter().string(from: Date().addingTimeInterval(-minutes * 60)) }
+            return (200, ["unread_count": 2, "notifications": [
+                ["uuid": "al-1", "type": "crm_leads.lead_replied", "title": "Priya Shah replied", "is_read": false,
+                 "message": "Re: Your GPU workstation quote: Yes please, go ahead with the 2× RTX 6000 option.",
+                 "created_at": ago(12), "data": #"{"route":"lead","uuid":"lead-priya"}"#],
+                ["uuid": "al-2", "type": "shop_quotes.accepted", "title": "Quote accepted: WSQ-0042 £12,840.00", "is_read": false,
+                 "message": "Harbour VFX confirmed it online. Turn it into an order.", "created_at": ago(35),
+                 "data": #"{"route":"quote","uuid":"q-42"}"#],
+                ["uuid": "al-3", "type": "shop_orders.paid", "title": "New order paid online: WSO-1042 £14,899.00", "is_read": true,
+                 "message": "QuantLab · 2 × RTX 6000 Ada 48GB +1 more", "created_at": ago(180),
+                 "data": #"{"route":"order","uuid":"o-1042"}"#],
+            ]])
+        // Leads waiting (the shopkeeper): one who replied, two new ones from the shop.
+        case ("GET", "/api/v2/crm/leads/my-steps") where role == .shopkeeper:
+            return (200, ["success": true, "data": ["overdue": [], "today": [], "meetings": [], "unassigned": 2, "is_manager": true,
+                                                    "replied": [Self.stubLead("priya")], "fresh": [Self.stubLead("omar"), Self.stubLead("lena")]]])
+        case ("GET", let p) where role == .shopkeeper && p.hasPrefix("/api/v2/crm/leads/") && p.hasSuffix("/timeline"):
+            let uuid = p.dropFirst("/api/v2/crm/leads/".count).dropLast("/timeline".count)
+            return (200, ["success": true, "data": uuid == "lead-priya" ? Self.priyaTimeline : []])
+        case ("GET", let p) where role == .shopkeeper && p.hasPrefix("/api/v2/crm/leads/lead-"):
+            let key = String(p.dropFirst("/api/v2/crm/leads/lead-".count))
+            return (200, ["success": true, "data": Self.stubLead(key, detail: true)])
         case ("GET", "/api/v2/invoices"):
             return (200, ["success": true, "data": [invoice], "meta": ["total": 1, "page": 1, "perPage": 25, "totalPages": 1]])
 

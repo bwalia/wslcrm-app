@@ -67,9 +67,7 @@ struct SettingsView: View {
                 Text("On after you sign in. \(BrandStore.shared.brand.name) then asks for \(session.biometrics.displayName) when you open it or return after five minutes, instead of the password.")
             }
 
-            if session.propertyDeals != nil {
-                PushSettingsSection()
-            }
+            PushSettingsSection()
 
             Section("About") {
                 LabeledContent("Environment", value: session.environmentName)
@@ -202,11 +200,12 @@ struct PendingChangesView: View {
     }
 }
 
-/// Alerts for Property Deals: overdue and due-soon tasks, escalations, the morning digest,
-/// compliance expiring, approvals needed and "AI couldn't finish" — each can be switched off
-/// (`/notification-preferences`), with optional quiet hours.
+/// Phone alerts: a new lead, a customer's reply, a lead back again, a new shop order, chat messages —
+/// and, with Property Deals, its tasks, escalations, digest, compliance, approvals and "AI couldn't
+/// finish", each of which can be switched off (`/notification-preferences`), with optional quiet hours.
 struct PushSettingsSection: View {
     @Environment(PushCenter.self) private var push
+    @Environment(SessionStore.self) private var session
     @Environment(\.services) private var services
     @Environment(\.openURL) private var openURL
     @State private var preferences: PDNotificationPreferences?
@@ -231,7 +230,7 @@ struct PushSettingsSection: View {
         } header: {
             Text("Notifications")
         } footer: {
-            Text("Tapping an alert opens the task, approval or deal, switching workspace if it's in another one.")
+            Text("Get an alert when a lead comes in or replies, and when a shop order arrives. Tapping it opens the lead or order, switching workspace if it's in another one.")
         }
         .task { await push.refreshAuthorization() }
         .task { await load() }
@@ -268,7 +267,8 @@ struct PushSettingsSection: View {
     }
 
     private func load() async {
-        // An older server has no preferences endpoint: the switches simply don't appear.
+        // Property Deals' own alert switches; an older server has no preferences endpoint: they simply don't appear.
+        guard session.propertyDeals != nil else { return }
         preferences = try? await services.propertyDeals.notificationPreferences()
     }
 

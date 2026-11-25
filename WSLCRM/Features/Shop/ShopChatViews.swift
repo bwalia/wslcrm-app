@@ -76,9 +76,14 @@ struct ShopChatDetailView: View {
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var state: LoadState<ShopChatRecord> = .idle
+    @State private var makingLead = false
+    @State private var notice: String?
 
     var body: some View {
         List {
+            if let notice {
+                Section { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
+            }
             if let chat = state.value ?? seed {
                 content(chat)
             }
@@ -93,6 +98,14 @@ struct ShopChatDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .wsRefreshable { await load() }
+        .sheet(isPresented: $makingLead) {
+            if let chat = state.value { MakeChatLeadSheet(chat: chat) { await made() } }
+        }
+    }
+
+    private func made() async {
+        notice = "Lead made. The AI is reading it now."
+        await load()
     }
 
     @ViewBuilder
@@ -158,10 +171,17 @@ struct ShopChatDetailView: View {
             } else {
                 DetailRow(label: "Order", value: "—")
             }
-            if let lead = chat.crmLeadUuid, session.shopPolicy.canOpenLeads {
-                NavigationLink { LeadDetailView(leadUuid: lead) } label: {
-                    Label("Open their lead", systemImage: "person.crop.circle.badge.plus")
+            if let lead = chat.crmLeadUuid {
+                if session.shopPolicy.canOpenLeads {
+                    NavigationLink { LeadDetailView(leadUuid: lead) } label: {
+                        Label("Open their lead", systemImage: "person.crop.circle.badge.plus")
+                    }
                 }
+            } else if session.shopPolicy.canMakeLeads, state.value != nil {
+                Button { makingLead = true } label: {
+                    Label("Make this a lead", systemImage: "person.crop.circle.badge.plus").frame(minHeight: 44)
+                }
+                .accessibilityIdentifier("shop.chat.makeLead")
             }
             DetailRow(label: "Messages", value: "\(chat.messageCount)")
             if let last = Formatters.dateTime(chat.updatedAt) { DetailRow(label: "Last activity", value: last) }
@@ -176,6 +196,53 @@ struct ShopChatDetailView: View {
             if case .cancelled = apiError { return }
             state = .failed(apiError)
         }
+    }
+}
+
+/// The team has the visitor's email or number (they rang, or wrote in): make the chat a CRM lead.
+private struct MakeChatLeadSheet: View {
+    let chat: ShopChatRecord
+    let onMade: () async -> Void
+    @Environment(\.services) private var services
+    @State private var email: String
+    @State private var phone: String
+    @State private var name: String
+    @State private var note = ""
+
+    init(chat: ShopChatRecord, onMade: @escaping () async -> Void) {
+        self.chat = chat
+        self.onMade = onMade
+        _email = State(initialValue: chat.email ?? "")
+        _phone = State(initialValue: chat.contactPhone ?? "")
+        _name = State(initialValue: chat.contactName ?? "")
+    }
+
+    var body: some View {
+        LeadSheet(title: "Make this a lead", action: "Make the lead", canSave: email.trimmedOrNil != nil || phone.trimmedOrNil != nil,
+                  save: save) {
+            Section {
+                TextField("Email", text: $email)
+                    .keyboardType(.emailAddress).textContentType(.emailAddress)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .accessibilityIdentifier("shop.chat.lead.email")
+                TextField("Phone", text: $phone)
+                    .keyboardType(.phonePad).textContentType(.telephoneNumber)
+                    .accessibilityIdentifier("shop.chat.lead.phone")
+                TextField("Name", text: $name).textContentType(.name)
+            } footer: {
+                Text("One of email or phone is enough. What they asked the assistant goes on the lead.")
+            }
+            Section("Note (optional)") {
+                TextField("e.g. Rang the shop; wants a call back on Monday", text: $note, axis: .vertical)
+                    .lineLimit(2...5)
+            }
+        }
+    }
+
+    private func save() async throws {
+        _ = try await services.shop.makeChatLead(chat.uuid, ShopChatLeadBody(
+            email: email.trimmedOrNil, phone: phone.trimmedOrNil, name: name.trimmedOrNil, note: note.trimmedOrNil))
+        await onMade()
     }
 }
 

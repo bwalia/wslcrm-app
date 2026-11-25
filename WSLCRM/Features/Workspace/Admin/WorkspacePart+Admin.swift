@@ -200,6 +200,9 @@ enum WorkspaceAdminCatalog {
 
     static let mailSecurity = [Choice("starttls", "STARTTLS"), Choice("ssl", "SSL/TLS"), Choice("none", "None")]
 
+    /// An email account signed in with a password (not Microsoft 365, which has no server to edit).
+    private static let notMicrosoft = Condition.field("provider", notIn: ["microsoft"])
+
     static let mailAccounts = ResourceDescriptor(
         id: "workspace.mail_accounts", title: "Email accounts", noun: "email account", systemImage: "envelope",
         api: ResourceAPISpec(list: mailBase, item: "\(mailBase)/{uuid}", create: mailBase, update: "\(mailBase)/{uuid}",
@@ -222,6 +225,15 @@ enum WorkspaceAdminCatalog {
                 FieldSpec("host", "Server"), FieldSpec("port", "Port", .integer),
                 FieldSpec("security", "Security", .choice(mailSecurity)), FieldSpec("username", "Username"),
                 FieldSpec("has_password", "Password saved", .bool),
+            ], visibleWhen: notMicrosoft),
+            SectionSpec("Microsoft 365", [
+                FieldSpec("oauth_email", "Signed in as", .email), FieldSpec("oauth_connected_at", "Connected", .dateTime),
+                FieldSpec("oauth_error", "Problem", .multiline),
+            ], footer: "Sends and reads with a Microsoft sign-in, not a password. To use another mailbox, connect it again.",
+               visibleWhen: .field("provider", in: ["microsoft"])),
+            SectionSpec("Customers' replies", [
+                FieldSpec("watch_replies", "Watching for replies", .bool), FieldSpec("replies_checked_at", "Last checked", .dateTime),
+                FieldSpec("replies_error", "Problem", .multiline),
             ]),
             SectionSpec("Last test", [
                 FieldSpec("last_tested_at", "Tested", .dateTime), FieldSpec("last_error", "Problem", .multiline),
@@ -241,7 +253,17 @@ enum WorkspaceAdminCatalog {
                           defaultValue: .string("starttls")),
                 FieldSpec("username", "Username"),
                 FieldSpec("password", "Password", .secret, help: "Leave blank to keep the saved password."),
-            ], footer: "Your email provider lists these. Port 587 with STARTTLS is the most common."),
+            ], footer: "Your email provider lists these. Port 587 with STARTTLS is the most common.", visibleWhen: notMicrosoft),
+            SectionSpec("Customers' replies", [
+                FieldSpec("watch_replies", "Watch this inbox for customers' replies", .bool,
+                          help: "When a lead answers an email you sent from this account, the reply goes on their lead "
+                              + "and whoever works it gets an alert. Only your leads' emails are read; nothing is marked "
+                              + "read or moved."),
+            ]),
+            SectionSpec(nil, [
+                FieldSpec("imap_host", "Inbox server (IMAP)", placeholder: "Leave blank to use the usual one",
+                          help: "It signs in with the username and password above (for Gmail, an app password)."),
+            ], visibleWhen: notMicrosoft),
             SectionSpec(nil, [
                 FieldSpec("enabled", "On", .bool, defaultValue: .bool(true)),
                 FieldSpec("is_default", "Default account", .bool,
