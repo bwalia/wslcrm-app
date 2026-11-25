@@ -138,15 +138,18 @@ struct StatusBadge: View {
 struct LargeButtonStyle: ButtonStyle {
     var tone: Tone = .brand
     var prominent = true
+    /// As wide as the fields above it (a form's main button), on a Mac too.
+    var fill = false
 
     func makeBody(configuration: Configuration) -> some View {
-        LargeButtonBody(configuration: configuration, tone: tone, prominent: prominent)
+        LargeButtonBody(configuration: configuration, tone: tone, prominent: prominent, fill: fill)
     }
 
     private struct LargeButtonBody: View {
         let configuration: Configuration
         let tone: Tone
         let prominent: Bool
+        let fill: Bool
         @Environment(\.isEnabled) private var isEnabled
         @State private var hovering = false
 
@@ -155,8 +158,8 @@ struct LargeButtonStyle: ButtonStyle {
         var body: some View {
             configuration.label
                 .font(.wsHeadline)
-                .frame(minWidth: MacSupport.isMac ? 200 : nil, maxWidth: MacSupport.isMac ? 360 : .infinity,
-                       minHeight: MacSupport.isMac ? 40 : 56)
+                .frame(minWidth: MacSupport.isMac ? 200 : nil, maxWidth: MacSupport.isMac && !fill ? 360 : .infinity,
+                       minHeight: MacSupport.isMac ? (fill ? 46 : 40) : 56)
                 .padding(.horizontal, MacSupport.isMac ? 20 : 16)
                 .foregroundStyle(prominent ? Color.white : tone.textColor)
                 .background {
@@ -179,8 +182,8 @@ struct LargeButtonStyle: ButtonStyle {
 }
 
 extension ButtonStyle where Self == LargeButtonStyle {
-    static func large(_ tone: Tone = .brand, prominent: Bool = true) -> LargeButtonStyle {
-        LargeButtonStyle(tone: tone, prominent: prominent)
+    static func large(_ tone: Tone = .brand, prominent: Bool = true, fill: Bool = false) -> LargeButtonStyle {
+        LargeButtonStyle(tone: tone, prominent: prominent, fill: fill)
     }
 }
 
