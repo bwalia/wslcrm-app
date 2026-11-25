@@ -444,8 +444,9 @@ struct LeadsBrowseView: View {
         }) { model in
             PagedList(model: model, searchPrompt: "Name, email, company or phone", emptyTitle: "No leads match",
                       emptySystemImage: "person.crop.circle.badge.questionmark",
-                      emptyDescription: "Try another filter, or add a lead with New lead.") { card in
-                NavigationLink(value: LeadRoute(uuid: card.uuid)) { LeadRow(card: card, showsOwner: true) }
+                      emptyDescription: "Try another filter, or add a lead with New lead.",
+                      route: { card in LeadRoute(uuid: card.uuid) }) { card in
+                LeadRow(card: card, showsOwner: true)
             }
             .onChange(of: query) { _, value in
                 box.query = value

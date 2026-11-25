@@ -110,20 +110,19 @@ struct StatTile: View {
     let title: String
     let value: String
     let systemImage: String
+    /// A strip of numbers: the icon beside the figure, so the strip stays low.
+    var compact = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Icon above the words: side by side, a narrow tile broke words mid-way ("Ope / n").
-            Image(systemName: systemImage)
-                .font(.wsFootnote.weight(.semibold))
-                .foregroundStyle(Tone.brand.textColor)
-                .frame(width: 28, height: 28)
-                .background(Tone.brand.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .accessibilityHidden(true)
-            Text(value)
-                .font(.wsTitle.monospacedDigit())
-                .minimumScaleFactor(0.6)
-                .lineLimit(1)
+        VStack(alignment: .leading, spacing: compact ? 6 : 8) {
+            // Icon above the words: side by side, a narrow tile broke words mid-way ("Ope / n"). The compact form puts
+            // the icon beside the figure, not the words.
+            if compact {
+                HStack(spacing: 8) { icon; figure }
+            } else {
+                icon
+                figure
+            }
             Text(title)
                 .font(.wsFootnote)
                 // `.secondary` is 60% of label colour: it fails the contrast audit on this card.
@@ -132,10 +131,25 @@ struct StatTile: View {
                 .minimumScaleFactor(0.8)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        // The same card as every other number in the app.
+        .numberCard(padding: compact ? 12 : 14)
         .accessibilityElement(children: .combine)
+    }
+
+    private var icon: some View {
+        Image(systemName: systemImage)
+            .font(.wsFootnote.weight(.semibold))
+            .foregroundStyle(Tone.brand.textColor)
+            .frame(width: 28, height: 28)
+            .background(Tone.brand.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .accessibilityHidden(true)
+    }
+
+    private var figure: some View {
+        Text(value)
+            .font(.wsTitle.monospacedDigit())
+            .minimumScaleFactor(0.6)
+            .lineLimit(1)
     }
 }
 
@@ -177,14 +191,13 @@ struct CRMAccountsListView: View {
             PagedList(model: model, searchPrompt: "Name or email", emptyTitle: "No accounts", emptySystemImage: "building.2",
                       emptyDescription: "Companies you work with.",
                       emptyActionTitle: "New account",
-                      emptyAction: session.canCreate(.crmAccounts) ? { creating = true } : nil) { account in
-                NavigationLink {
+                      emptyAction: session.canCreate(.crmAccounts) ? { creating = true } : nil,
+                      destination: { account in
                     CRMAccountDetailView(accountUuid: account.uuid) { updated in
                         if let updated { model.replace(updated) } else { model.remove(id: account.id) }
                     }
-                } label: {
-                    CRMAccountRow(account: account)
-                }
+                }) { account in
+                CRMAccountRow(account: account)
                 .accessibilityIdentifier("crm.account.\(account.uuid)")
             }
             .onChange(of: filter) { _, value in
@@ -530,19 +543,18 @@ struct CRMContactsListView: View {
             PagedList(model: model, searchPrompt: "Name or email", emptyTitle: "No contacts", emptySystemImage: "person.crop.circle",
                       emptyDescription: "The people at your accounts.",
                       emptyActionTitle: "New contact",
-                      emptyAction: session.canCreate(.crmContacts) ? { creating = true } : nil) { contact in
-                NavigationLink {
+                      emptyAction: session.canCreate(.crmContacts) ? { creating = true } : nil,
+                      destination: { contact in
                     CRMContactDetailView(contactUuid: contact.uuid)
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(contact.fullName).font(.wsHeadline)
-                        if let line = [contact.jobTitle, contact.accountName, contact.email].compactMap({ $0 })
-                            .joined(separator: " · ").nonEmpty {
-                            Text(line).font(.wsSubheadline).foregroundStyle(.secondaryText)
-                        }
+                }) { contact in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(contact.fullName).font(.wsHeadline)
+                    if let line = [contact.jobTitle, contact.accountName, contact.email].compactMap({ $0 })
+                        .joined(separator: " · ").nonEmpty {
+                        Text(line).font(.wsSubheadline).foregroundStyle(.secondaryText)
                     }
-                    .padding(.vertical, 4)
                 }
+                .padding(.vertical, 4)
                 .accessibilityIdentifier("crm.contact.\(contact.uuid)")
             }
             .onChange(of: filter) { _, value in

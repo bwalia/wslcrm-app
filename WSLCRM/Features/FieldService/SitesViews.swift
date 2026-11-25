@@ -224,10 +224,9 @@ struct SitesListView: View {
             PagedListModel<FsSite> { search, page in try await api.sites(search: search, page: page, perPage: 50) }
         }) { model in
             PagedList(model: model, searchPrompt: "Name, street, town or postcode", emptyTitle: "No sites",
-                      emptySystemImage: "building.2", emptyDescription: "Sites are added from a service request's customer.") { site in
-                NavigationLink(value: SiteRoute(site: site)) {
-                    SiteRow(site: site)
-                }
+                      emptySystemImage: "building.2", emptyDescription: "Sites are added from a service request's customer.",
+                      route: { site in SiteRoute(site: site) }) { site in
+                SiteRow(site: site)
             }
         }
         .navigationTitle("Sites")

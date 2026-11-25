@@ -27,8 +27,9 @@ struct ATSCandidatesView: View {
                   emptySystemImage: "person.2",
                   emptyDescription: "Add candidates here or from a job’s pipeline, then invite them to an AI interview.",
                   emptyActionTitle: "Add a candidate",
-                  emptyAction: session.permissions.can(.create, moduleName: ATSModule.candidates) ? { adding = true } : nil) { candidate in
-            NavigationLink(value: ATSScreen.candidate(candidate.uuid)) { ATSCandidateRow(candidate: candidate) }
+                  emptyAction: session.permissions.can(.create, moduleName: ATSModule.candidates) ? { adding = true } : nil,
+                  route: { candidate in ATSScreen.candidate(candidate.uuid) }) { candidate in
+            ATSCandidateRow(candidate: candidate)
                 .accessibilityIdentifier("ats.candidate.\(candidate.uuid)")
         }
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: notice) }

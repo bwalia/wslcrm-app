@@ -272,11 +272,41 @@ private struct JobDetailContent: View {
         }
     }
 
+    /// The Mac's status changes in the job's header: starting and completing prominent, the others beside them, cancel
+    /// behind More. The same transitions and rules as the phone's Actions section.
+    private func macActions(_ detail: JobDetail) -> some View {
+        let transitions = orderedTransitions(detail.allowedTransitions)
+        return RecordActionBar(showsMore: transitions.contains(.cancelled)) {
+            ForEach(transitions.filter { $0 != .cancelled }, id: \.self) { status in
+                if status == .completed || status == .inProgress {
+                    statusButton(status).buttonStyle(.borderedProminent).tint(status.tone.solidColor)
+                } else {
+                    statusButton(status)
+                }
+            }
+        } more: {
+            Button("Cancel job", systemImage: JobStatus.cancelled.systemImage, role: .destructive) {
+                cancelReason = ""
+                cancellingJob = true
+            }
+            .accessibilityIdentifier("job.action.cancelled")
+        }
+        .disabled(model.busyKey != nil)
+    }
+
+    private func statusButton(_ status: JobStatus) -> some View {
+        Button { Task { await model.changeJobStatus(to: status) } } label: {
+            Label(status.actionTitle, systemImage: status.systemImage)
+        }
+        .accessibilityIdentifier("job.action.\(status.rawValue)")
+    }
+
     private func loaded(_ detail: JobDetail) -> some View {
         let policy = model.policy
         return List {
             Section {
                 header(detail)
+                if MacSupport.isMac, policy.canChangeJobStatus(detail) { macActions(detail) }
                 if let cachedAt = model.cachedAt {
                     CachedDataNotice(savedAt: cachedAt)
                 }
@@ -293,7 +323,8 @@ private struct JobDetailContent: View {
                 Section { InlineErrorRow(error: manageError) }
             }
 
-            if policy.canChangeJobStatus(detail) {
+            // The Mac has these in the header (macActions).
+            if policy.canChangeJobStatus(detail), !MacSupport.isMac {
                 Section("Actions") {
                     ForEach(orderedTransitions(detail.allowedTransitions), id: \.self) { status in
                         Button {
@@ -804,6 +835,31 @@ struct VisitRoute: Hashable { let uuid: String }
 struct InvoiceRoute: Hashable { let uuid: String }
 struct ServiceRequestRoute: Hashable { let uuid: String }
 
+/// The screen a list row's route opens, for the Mac's list-beside-record (`PagedList(route:)`). The same screens
+/// `withAppDestinations` registers below: add a route here when a list of it should open beside itself on the Mac.
+@MainActor
+enum AppDestinations {
+    static func view(for route: AnyHashable) -> AnyView? {
+        switch route.base {
+        case let r as JobRoute: AnyView(JobDetailView(jobUuid: r.uuid))
+        case let r as VisitRoute: AnyView(VisitDetailView(visitUuid: r.uuid))
+        case let r as ServiceRequestRoute: AnyView(ServiceRequestDetailView(requestUuid: r.uuid))
+        case let r as InvoiceRoute: AnyView(InvoiceDetailView(invoiceUuid: r.uuid))
+        case let r as AssetRoute: AnyView(AssetDetailView(product: r.product))
+        case let r as SiteRoute: AnyView(SiteDetailView(site: r.site))
+        case let r as CustomerAssetRoute: AnyView(CustomerAssetDetailView(assetUuid: r.uuid))
+        case let r as TimesheetRoute: AnyView(TimesheetDetailView(uuid: r.uuid))
+        case let r as TaskRoute: AnyView(TaskDetailView(uuid: r.uuid))
+        case let r as PDDealRoute: AnyView(PDDealView(dealUuid: r.uuid))
+        case let r as LeadRoute: AnyView(LeadDetailView(leadUuid: r.uuid))
+        case let r as PurchaseOrderRoute: AnyView(PurchaseOrderDetailView(uuid: r.uuid))
+        case let r as ResourceRoute: AnyView(ResourceDetailView(route: r))
+        case let r as NativeScreenRoute: AnyView(NativeScreenView(route: r))
+        default: nil
+        }
+    }
+}
+
 extension View {
     /// Registers value-based destinations once, at the root of a navigation stack.
     func withAppDestinations() -> some View {
@@ -839,6 +895,8 @@ extension View {
             .navigationDestination(for: ResourceRoute.self) { ResourceDetailView(route: $0) }
             .navigationDestination(for: ResourceReportRoute.self) { ResourceReportView(route: $0) }
             .navigationDestination(for: NativeScreenRoute.self) { NativeScreenView(route: $0) }
+            .navigationDestination(for: JobsPresetRoute.self) { JobsListView(preset: $0.preset) }
+            .navigationDestination(for: VisitsPresetRoute.self) { VisitsScheduleView(preset: $0.preset) }
             .navigationDestination(for: PurchaseOrderRoute.self) { PurchaseOrderDetailView(uuid: $0.uuid) }
             .navigationDestination(for: FieldServiceArea.self) { area in
                 switch area {

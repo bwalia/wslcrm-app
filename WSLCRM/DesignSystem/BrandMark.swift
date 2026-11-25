@@ -61,8 +61,11 @@ extension View {
     /// the moment it is used.
     func brandedNavigationBar() -> some View {
         toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                BrandMark(size: 36, isDecorative: false)
+            // The Mac's sidebar carries the brand at the top of the window.
+            if !MacSupport.isMac {
+                ToolbarItem(placement: .topBarLeading) {
+                    BrandMark(size: 36, isDecorative: false)
+                }
             }
         }
     }

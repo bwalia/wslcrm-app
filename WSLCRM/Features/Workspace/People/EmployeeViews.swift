@@ -211,15 +211,14 @@ private struct EmployeesList: View {
                   emptyDescription: "An employee profile adds a job title, code, skills and hourly cost to someone "
                       + "who signs in to this workspace.",
                   emptyActionTitle: canAddProfile ? "Add an employee profile" : "Add a team member",
-                  emptyAction: canAddProfile ? { adding = true } : canAddLogin ? { addingTeamMember = true } : nil) { employee in
-            NavigationLink {
+                  emptyAction: canAddProfile ? { adding = true } : canAddLogin ? { addingTeamMember = true } : nil,
+                  destination: { employee in
                 EmployeeDetail(api: api, employee: employee) { message in
                     feedback = .done(message)
                     Task { await model.load() }
                 }
-            } label: {
-                EmployeeRow(employee: employee)
-            }
+            }) { employee in
+            EmployeeRow(employee: employee)
             .accessibilityIdentifier("employees.row.\(employee.id)")
         }
         .safeAreaInset(edge: .top, spacing: 0) { FeedbackBar(feedback: feedback) }

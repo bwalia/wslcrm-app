@@ -61,12 +61,15 @@ enum Palette {
 extension View {
     /// The app's card: rounded, on the canvas, with a hairline and soft shadow.
     func brandCard(padding: CGFloat = 16, radius: CGFloat = 20) -> some View {
-        self
+        // The Mac: tighter corners and a crisper shadow, as desktop panels have.
+        let radius = MacSupport.isMac ? min(radius, 12) : radius
+        return self
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Palette.card, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(Palette.hairline))
-            .shadow(color: .black.opacity(0.05), radius: 12, y: 4)
+            .shadow(color: .black.opacity(MacSupport.isMac ? 0.06 : 0.05), radius: MacSupport.isMac ? 3 : 12,
+                    y: MacSupport.isMac ? 1 : 4)
     }
 
     /// The canvas behind a scrolling dashboard of cards.
@@ -145,42 +148,192 @@ struct Pill: View {
     }
 }
 
-/// A number on a dashboard: big Unbounded figure, small caption, tinted icon.
+extension Tone {
+    /// Overdue, unassigned, waiting: a number in this tone needs someone.
+    var needsAttention: Bool { self == .danger || self == .warning }
+}
+
+extension View {
+    /// The card every number in the app sits on (MetricCard, StatTile, MetricTile): the card surface, a hairline edge
+    /// and a soft shadow. A number that needs someone carries its tone's colour: a soft wash and a coloured edge.
+    func numberCard(tone: Tone = .brand, padding: CGFloat = 14) -> some View {
+        modifier(NumberCardChrome(tone: tone, padding: padding))
+    }
+}
+
+private struct NumberCardChrome: ViewModifier {
+    let tone: Tone
+    let padding: CGFloat
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: MacSupport.isMac ? 12 : 18, style: .continuous)
+        content
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                shape.fill(Palette.card)
+                if tone.needsAttention {
+                    shape.fill(LinearGradient(colors: [tone.color.opacity(0.13), tone.color.opacity(0.03)],
+                                              startPoint: .topLeading, endPoint: .bottomTrailing))
+                }
+            }
+            .overlay(shape.stroke(tone.needsAttention ? tone.color.opacity(0.40) : Palette.hairline))
+            .shadow(color: .black.opacity(MacSupport.isMac ? 0.06 : 0.05), radius: MacSupport.isMac ? 3 : 10,
+                    y: MacSupport.isMac ? 1 : 3)
+    }
+}
+
+/// A titled card of rows on a dashboard: what a list's section was, drawn as a panel so several sit side by side on a
+/// wide window. Rows are `PanelRow` links (or any view); the title is the dashboard's eyebrow style.
+struct DashboardPanel<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title.uppercased())
+                .font(.brandEyebrow)
+                .tracking(1.1)
+                .foregroundStyle(.secondaryText)
+                .padding(.horizontal, 14)
+                .padding(.top, 12)
+                .padding(.bottom, 2)
+                .accessibilityAddTraits(.isHeader)
+            VStack(alignment: .leading, spacing: 0) { content }
+                .padding(.horizontal, 4)
+                .padding(.bottom, 6)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: MacSupport.isMac ? 12 : 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: MacSupport.isMac ? 12 : 18, style: .continuous).stroke(Palette.hairline))
+        .shadow(color: .black.opacity(MacSupport.isMac ? 0.06 : 0.05), radius: MacSupport.isMac ? 3 : 10,
+                y: MacSupport.isMac ? 1 : 3)
+    }
+}
+
+/// A row in a panel: icon, words, and a chevron; it highlights under the pointer and when pressed.
+struct PanelRow: View {
+    let title: String
+    let systemImage: String
+    var detail: String?
+    var tint: Color?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(tint ?? Color.accentColor)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.wsBody).foregroundStyle(Color(.label))
+                if let detail { Text(detail).font(.wsCaption).foregroundStyle(.secondaryText) }
+            }
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondaryText)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .contentShape(Rectangle())
+    }
+}
+
+/// The press and pointer highlight for panel rows (`.buttonStyle(.panelRow)` on their links).
+struct PanelRowStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        PanelRowBody(configuration: configuration)
+    }
+
+    private struct PanelRowBody: View {
+        let configuration: Configuration
+        @State private var hovering = false
+
+        var body: some View {
+            configuration.label
+                .background(Color(.label).opacity(configuration.isPressed ? 0.10 : hovering ? 0.05 : 0),
+                            in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .onHover { hovering = $0 }
+                .animation(.easeOut(duration: 0.12), value: hovering)
+        }
+    }
+}
+
+extension ButtonStyle where Self == PanelRowStyle {
+    static var panelRow: PanelRowStyle { PanelRowStyle() }
+}
+
+/// A number on a dashboard: big Unbounded figure, small caption, tinted icon. A number that needs someone (a danger
+/// or warning tone: overdue, unassigned, waiting) carries its colour: a soft wash, a coloured edge and figure, so the
+/// eye finds it first.
 struct MetricCard: View {
     let title: String
     let value: String
     let systemImage: String
     var tone: Tone = .brand
+    /// A phone's dashboard of many numbers: the icon beside the figure, so the cards are a third shorter.
+    var compact = false
+
+    private var needsAttention: Bool { tone.needsAttention }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: systemImage)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(tone.textColor)
-                .frame(width: 30, height: 30)
-                .background(tone.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            Text(value)
-                .font(.brandMetric)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
+        VStack(alignment: .leading, spacing: compact ? 6 : 10) {
+            if compact {
+                HStack(spacing: 10) { icon; figure }
+            } else {
+                icon
+                figure
+            }
             Text(title)
                 .font(.brandCaption)
                 .foregroundStyle(.secondaryText)
-                .lineLimit(2)
+                // Two lines kept on a phone, so cards side by side are the same height.
+                .lineLimit(2, reservesSpace: compact)
         }
-        .brandCard(padding: 14, radius: 18)
+        .numberCard(tone: tone, padding: compact ? 12 : 14)
         .accessibilityElement(children: .combine)
+    }
+
+    private var icon: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(tone.textColor)
+            .frame(width: 30, height: 30)
+            .background(tone.color.opacity(needsAttention ? 0.20 : 0.14),
+                        in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+    }
+
+    private var figure: some View {
+        Text(value)
+            .font(.brandMetric)
+            .monospacedDigit()
+            .foregroundStyle(needsAttention ? tone.textColor : Color(.label))
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
     }
 }
 
-/// Press feedback for cards and tiles: a slight shrink, no colour flash.
+/// Press feedback for cards and tiles: a slight shrink, no colour flash. With a pointer (Mac, iPad trackpad) the
+/// card lifts a little under it, so it reads as clickable.
 struct PressableCardStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .opacity(configuration.isPressed ? 0.9 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.8), value: configuration.isPressed)
+        PressableCardBody(configuration: configuration)
+    }
+
+    private struct PressableCardBody: View {
+        let configuration: Configuration
+        @State private var hovering = false
+
+        var body: some View {
+            configuration.label
+                .scaleEffect(configuration.isPressed ? 0.97 : 1)
+                .opacity(configuration.isPressed ? 0.9 : 1)
+                .shadow(color: .black.opacity(hovering ? 0.10 : 0), radius: 10, y: 4)
+                .offset(y: hovering && !configuration.isPressed ? -1 : 0)
+                .animation(.spring(response: 0.25, dampingFraction: 0.8), value: configuration.isPressed)
+                .animation(.easeOut(duration: 0.15), value: hovering)
+                .onHover { hovering = $0 }
+        }
     }
 }
 

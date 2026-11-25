@@ -41,10 +41,9 @@ private struct CustomerAssetsContent: View {
     var body: some View {
         PagedList(model: model.list, searchPrompt: "Tag, description, serial or model",
                   emptyTitle: "No assets", emptySystemImage: "air.conditioner.horizontal",
-                  emptyDescription: "Customer plant under maintenance appears here once it is in the register.") { asset in
-            NavigationLink(value: CustomerAssetRoute(uuid: asset.uuid)) {
-                CustomerAssetRow(asset: asset)
-            }
+                  emptyDescription: "Customer plant under maintenance appears here once it is in the register.",
+                  route: { asset in CustomerAssetRoute(uuid: asset.uuid) }) { asset in
+            CustomerAssetRow(asset: asset)
             .accessibilityIdentifier("customerAsset.row.\(asset.assetTag ?? asset.name)")
         }
         .safeAreaInset(edge: .top) {

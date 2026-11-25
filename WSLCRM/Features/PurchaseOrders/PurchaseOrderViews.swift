@@ -65,28 +65,28 @@ struct PurchaseOrdersListView: View {
                           : "A purchase order is what you ask a supplier for: what, how many and the price.",
                       emptyActionTitle: "New purchase order",
                       emptyAction: session.permissions.can(.create, .purchaseOrders)
-                          && filter == nil && supplier.isEmpty && raisedFrom == nil && raisedTo == nil ? { creating = true } : nil) { po in
-                NavigationLink {
+                          && filter == nil && supplier.isEmpty && raisedFrom == nil && raisedTo == nil ? { creating = true } : nil,
+                      destination: { po in
                     PurchaseOrderDetailView(uuid: po.id) { updated in
                         if let updated { holder.list.replace(updated) } else { holder.list.remove(id: po.id) }
                         Task { stats = try? await services.purchaseOrders.stats() }
                     }
-                } label: {
-                    PurchaseOrderRow(po: po)
-                }
+                }) { po in
+                PurchaseOrderRow(po: po)
                 .accessibilityIdentifier("po.row.\(po.poNumber)")
             }
             .safeAreaInset(edge: .top) {
                 if let stats, route.projectUuid == nil {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 10) {
-                            StatTile(title: "Open (\(stats.openCount))", value: stats.amounts(\.openValue), systemImage: "shippingbox")
-                            StatTile(title: "Overdue", value: "\(stats.overdueCount)", systemImage: "exclamationmark.triangle")
+                            StatTile(title: "Open (\(stats.openCount))", value: stats.amounts(\.openValue), systemImage: "shippingbox", compact: true)
+                            StatTile(title: "Overdue", value: "\(stats.overdueCount)", systemImage: "exclamationmark.triangle", compact: true)
                             StatTile(title: "To bill (\(stats.toBillCount))", value: stats.amounts(\.toBillValue),
                                      systemImage: "sterlingsign.circle")
-                            StatTile(title: "Billed", value: stats.amounts(\.billedValue), systemImage: "checkmark.seal")
+                            StatTile(title: "Billed", value: stats.amounts(\.billedValue), systemImage: "checkmark.seal", compact: true)
                         }
-                        .frame(height: 76)
+                        // The tiles set the strip's height (a fixed one clipped them).
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal)
                     }
                     .padding(.vertical, 6)

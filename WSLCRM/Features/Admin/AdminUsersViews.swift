@@ -93,12 +93,11 @@ private struct AdminUsersList: View {
                   emptySystemImage: "person.2",
                   emptyDescription: "People who can sign in to this workspace appear here.",
                   emptyActionTitle: "Create an account",
-                  emptyAction: canCreate ? { adding = true } : nil) { user in
-            NavigationLink {
+                  emptyAction: canCreate ? { adding = true } : nil,
+                  destination: { user in
                 AdminUserDetail(api: api, uuid: user.string("uuid") ?? user.id, seed: user) { Task { await model.load() } }
-            } label: {
-                AdminUserRow(user: user)
-            }
+            }) { user in
+            AdminUserRow(user: user)
             .accessibilityIdentifier("users.row.\(user.id)")
         }
         .safeAreaInset(edge: .top, spacing: 0) {

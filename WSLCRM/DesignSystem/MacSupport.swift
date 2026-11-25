@@ -48,9 +48,55 @@ final class MacRefreshCenter {
     }
 }
 
+/// One of the sidebar's areas, for the Go menu (⌘1–⌘9).
+struct MacArea {
+    let title: String
+    let open: () -> Void
+}
+
+/// The list in front's "make a new one", for File › New (⌘N).
+struct MacNewItem {
+    let title: String
+    let action: () -> Void
+}
+
+extension FocusedValues {
+    /// The sidebar's areas in order (published by the window in front).
+    @Entry var macAreas: [MacArea]?
+    /// The list in front's New action, when the person may make one.
+    @Entry var macNewItem: MacNewItem?
+    /// The list in front's search field (Edit › Search This List, ⌘F).
+    @Entry var macFind: MacNewItem?
+}
+
 /// The Mac menu bar's commands.
 struct MacCommands: Commands {
+    @FocusedValue(\.macAreas) private var areas
+    @FocusedValue(\.macNewItem) private var newItem
+    @FocusedValue(\.macFind) private var find
+
     var body: some Commands {
+        // As in Mail: ⌘N makes a new one of whatever the list in front holds; a new window is ⌥⌘N.
+        CommandGroup(replacing: .newItem) {
+            Button(newItem.map { "\($0.title)…" } ?? "New…") { newItem?.action() }
+                .keyboardShortcut("n", modifiers: .command)
+                .disabled(newItem == nil)
+            Button("New Window") {
+                UIApplication.shared.requestSceneSessionActivation(nil, userActivity: nil, options: nil)
+            }
+            .keyboardShortcut("n", modifiers: [.command, .option])
+        }
+        // Settings… (⌘,), as in every Mac app: profile, appearance and theme, pinned areas.
+        CommandGroup(replacing: .appSettings) {
+            Button("Settings…") { NotificationCenter.default.post(name: .wsOpenSettings, object: nil) }
+                .keyboardShortcut(",", modifiers: .command)
+        }
+        CommandMenu("Go") {
+            ForEach(Array((areas ?? []).prefix(9).enumerated()), id: \.offset) { index, area in
+                Button(area.title) { area.open() }
+                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+            }
+        }
         CommandGroup(after: .toolbar) {
             Button("Refresh") { MacRefreshCenter.shared.refresh() }
                 .keyboardShortcut("r", modifiers: .command)
@@ -58,6 +104,9 @@ struct MacCommands: Commands {
         CommandGroup(after: .textEditing) {
             Button("Ask AI…") { NotificationCenter.default.post(name: .wsAskAI, object: nil) }
                 .keyboardShortcut("k", modifiers: .command)
+            Button("Search This List") { find?.action() }
+                .keyboardShortcut("f", modifiers: .command)
+                .disabled(find == nil)
         }
     }
 }
@@ -73,22 +122,40 @@ extension Array where Element == GridItem {
 }
 
 extension View {
+    /// A big action: full width and `phoneHeight` tall on a phone (thumbs, gloves); on the Mac a desktop button,
+    /// as wide as its words and 40pt tall.
+    func actionButtonFrame(phoneHeight: CGFloat = 56) -> some View {
+        #if targetEnvironment(macCatalyst)
+        padding(.horizontal, 20).frame(minWidth: 200, minHeight: 40)
+        #else
+        frame(maxWidth: .infinity, minHeight: phoneHeight)
+        #endif
+    }
+
     /// Pull to refresh on iPhone and iPad. A Mac has no pull, so there it is a Refresh button and View › Refresh (⌘R).
     func wsRefreshable(action: @escaping @MainActor @Sendable () async -> Void) -> some View {
         modifier(RefreshControl(action: action))
     }
 }
 
+extension EnvironmentValues {
+    /// A screen shown beside a list on the Mac leaves the toolbar's Refresh button to the list (one, not two).
+    @Entry var macRefreshButtonHidden = false
+}
+
 private struct RefreshControl: ViewModifier {
     let action: @MainActor @Sendable () async -> Void
     @State private var id = UUID()
+    @Environment(\.macRefreshButtonHidden) private var buttonHidden
 
     func body(content: Content) -> some View {
         #if targetEnvironment(macCatalyst)
         content
             .refreshable(action: action)
             .toolbar {
-                ToolbarItem(placement: .automatic) { MacRefreshButton(action: action) }
+                if !buttonHidden {
+                    ToolbarItem(placement: .automatic) { MacRefreshButton(action: action) }
+                }
             }
             .onAppear { MacRefreshCenter.shared.appeared(id, action: action) }
             .onDisappear { MacRefreshCenter.shared.disappeared(id) }
@@ -123,6 +190,7 @@ private struct MacRefreshButton: View {
 extension Notification.Name {
     /// "Ask AI" from anywhere (⌘K): Home's command box takes the focus.
     static let wsAskAI = Notification.Name("ws.askAI")
+    static let wsOpenSettings = Notification.Name("ws.openSettings")
 }
 
 extension View {
@@ -141,5 +209,61 @@ private struct ReadableWidth: ViewModifier {
         content
             .contentMargins(.horizontal, max(0, (width - maxWidth) / 2), for: .scrollContent)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+    }
+}
+
+
+/// The Mac's list-beside-record, as in Mail: `list` (which selects into `selection`) on the left, the chosen record's
+/// screen on the right. The first record opens with the list; one that leaves it (deleted, filtered out) hands over to
+/// the first. The record's screen leaves the toolbar's Refresh button to the list.
+struct MacListDetail<ID: Hashable, ListContent: View, Pane: View>: View {
+    @Binding var selection: ID?
+    let ids: [ID]
+    @ViewBuilder let list: ListContent
+    @ViewBuilder let pane: (ID) -> Pane
+
+    var body: some View {
+        HStack(spacing: 0) {
+            // An empty list (loading, nothing yet, an error) has the whole width for its message.
+            list.frame(minWidth: 320, idealWidth: 380, maxWidth: ids.isEmpty ? .infinity : 440)
+            if !ids.isEmpty {
+                Divider()
+                Group {
+                    if let selection, ids.contains(selection) {
+                        pane(selection).id(selection).environment(\.macRefreshButtonHidden, true)
+                    } else {
+                        ContentUnavailableView("Choose one from the list", systemImage: "sidebar.left",
+                                               description: Text("It opens here, next to the list."))
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .onChange(of: ids, initial: true) { _, ids in
+            if selection == nil || !ids.contains(where: { $0 == selection }) { selection = ids.first }
+        }
+    }
+}
+
+/// A record's actions on the Mac, in its header: the main ones as desktop buttons (the first prominent), the rest —
+/// destructive ones — behind More, instead of the phone's full-width rows down the page.
+struct RecordActionBar<Actions: View, More: View>: View {
+    var showsMore = true
+    @ViewBuilder let actions: Actions
+    @ViewBuilder let more: More
+
+    var body: some View {
+        HStack(spacing: 8) {
+            actions
+            if showsMore {
+                Menu { more } label: { Label("More", systemImage: "ellipsis.circle") }
+                    .fixedSize()
+                    .accessibilityIdentifier("record.more")
+            }
+            Spacer(minLength: 0)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+        .padding(.top, 6)
     }
 }

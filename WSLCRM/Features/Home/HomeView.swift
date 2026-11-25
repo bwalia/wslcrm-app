@@ -412,7 +412,7 @@ private struct HomeHeader: View {
 
     private var identity: some View {
         HStack(alignment: .center, spacing: 12) {
-            BrandMark(size: 34)
+            if !MacSupport.isMac { BrandMark(size: 34) }
             VStack(alignment: .leading, spacing: 2) {
                 Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)).uppercased())
                     .font(.brandEyebrow)
@@ -430,7 +430,7 @@ private struct HomeHeader: View {
     @ViewBuilder
     private var workspaceButton: some View {
         HStack(spacing: 8) {
-            if let workspace = session.workspace {
+            if let workspace = session.workspace, !MacSupport.isMac {
                 Button {
                     choosingWorkspace = true
                 } label: {
@@ -479,6 +479,7 @@ private struct HomeHeader: View {
             .buttonStyle(.plain)
             .accessibilityLabel(unread > 0 ? "Notifications, \(unread) unread" : "Notifications")
             .accessibilityIdentifier("home.notifications")
+            if !MacSupport.isMac {
             Button { showingProfile = true } label: {
                 Text(session.user?.initials ?? "?")
                     .font(.brandCallout.weight(.semibold))
@@ -489,6 +490,7 @@ private struct HomeHeader: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Profile and settings")
             .accessibilityIdentifier("home.profile")
+            }
         }
     }
 

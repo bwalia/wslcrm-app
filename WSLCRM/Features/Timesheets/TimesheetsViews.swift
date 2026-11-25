@@ -102,10 +102,9 @@ private struct MyTimesheetsList: View {
                           emptyDescription: statusFilter.map { "None of your timesheets are “\($0.label)”. Pick “All” to see every one." }
                             ?? "Log the hours you have worked and submit them for approval.",
                           emptyActionTitle: "Log time",
-                          emptyAction: statusFilter == nil ? onLogTime : nil) { sheet in
-                    NavigationLink(value: TimesheetRoute(uuid: sheet.uuid)) {
-                        TimesheetRow(timesheet: sheet, showsActor: false)
-                    }
+                          emptyAction: statusFilter == nil ? onLogTime : nil,
+                          route: { sheet in TimesheetRoute(uuid: sheet.uuid) }) { sheet in
+                    TimesheetRow(timesheet: sheet, showsActor: false)
                     .accessibilityIdentifier("timesheet.row.\(sheet.uuid)")
                 }
             }

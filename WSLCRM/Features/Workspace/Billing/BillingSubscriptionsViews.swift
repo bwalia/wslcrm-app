@@ -134,30 +134,31 @@ private struct BillingSubscriptionsContent: View {
             case .subscriptions:
                 PagedList(model: model, emptyTitle: "No subscriptions", emptySystemImage: "arrow.triangle.2.circlepath",
                           emptyDescription: "Customers who pay every month or year appear here.",
-                          emptyActionTitle: "Record a sale", emptyAction: canCreate && appFilter.isEmpty ? { sheet = .sale } : nil) { row in
-                    NavigationLink { BillingSubscriptionDetail(subscription: row) } label: { BillingSubscriptionRow(row: row) }
+                          emptyActionTitle: "Record a sale", emptyAction: canCreate && appFilter.isEmpty ? { sheet = .sale } : nil,
+                          destination: { row in
+ BillingSubscriptionDetail(subscription: row)
+                    }) { row in
+ BillingSubscriptionRow(row: row)
                         .accessibilityIdentifier("billing.subscription.\(row.id)")
                 }
             case .purchases:
                 PagedList(model: model, emptyTitle: "No purchases", emptySystemImage: "bag",
                           emptyDescription: "One-off and fixed-term sales appear here, paid online or recorded by hand.",
-                          emptyActionTitle: "Record a sale", emptyAction: canCreate && appFilter.isEmpty ? { sheet = .sale } : nil) { row in
-                    NavigationLink {
+                          emptyActionTitle: "Record a sale", emptyAction: canCreate && appFilter.isEmpty ? { sheet = .sale } : nil,
+                          destination: { row in
                         BillingPurchaseDetail(purchase: row) { message in finished(message, key: nil, reload: [.purchases, .history]) }
-                    } label: {
-                        BillingPurchaseRow(row: row)
-                    }
+                    }) { row in
+                    BillingPurchaseRow(row: row)
                     .accessibilityIdentifier("billing.purchase.\(row.id)")
                 }
             case .grants:
                 PagedList(model: model, emptyTitle: "No access granted", emptySystemImage: "gift",
                           emptyDescription: "Access you give a customer without a sale (a partner, a trial, a refund) appears here.",
-                          emptyActionTitle: "Grant access", emptyAction: canCreate && appFilter.isEmpty ? { sheet = .grant } : nil) { row in
-                    NavigationLink {
+                          emptyActionTitle: "Grant access", emptyAction: canCreate && appFilter.isEmpty ? { sheet = .grant } : nil,
+                          destination: { row in
                         BillingGrantDetail(grant: row) { message in finished(message, key: nil, reload: [.grants]) }
-                    } label: {
-                        BillingGrantRow(row: row)
-                    }
+                    }) { row in
+                    BillingGrantRow(row: row)
                     .accessibilityIdentifier("billing.grant.\(row.id)")
                 }
             case .history:

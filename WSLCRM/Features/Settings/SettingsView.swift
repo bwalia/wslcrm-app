@@ -19,7 +19,8 @@ struct SettingsView: View {
                 NavigationLink {
                     TabBarSettingsView()
                 } label: {
-                    Label("Tab bar", systemImage: "dock.rectangle")
+                    Label(MacSupport.isMac ? "Pinned in the sidebar" : "Tab bar",
+                          systemImage: MacSupport.isMac ? "pin" : "dock.rectangle")
                 }
                 .accessibilityIdentifier("settings.tabBar")
             } header: {

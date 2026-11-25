@@ -153,6 +153,8 @@ final class UITestStubServer: @unchecked Sendable {
         /// Property PA (mock): Sophie, a seller agent, and Ashley, her manager, in "Demo Buyers Ltd".
         case paAgent = "paagent"
         case paManager = "pamanager"
+        /// The shop's back office (`-UITestRole shop`): Maya runs the shop, its products, customers and invoices.
+        case shopkeeper = "shop"
 
         var hasPropertyDeals: Bool { [.propertyOperator, .propertyManager, .paAgent, .paManager].contains(self) }
         var hasPropertyPA: Bool { self == .paAgent || self == .paManager }
@@ -173,6 +175,8 @@ final class UITestStubServer: @unchecked Sendable {
                                     "purchase_orders": ["manage"]]
             case .paAgent: ["projects": ["read", "update"], "crm_accounts": ["read"]]
             case .paManager: ["projects": ["manage"], "crm_accounts": ["manage"]]
+            case .shopkeeper: ["shop": ["manage"], "products": ["manage"], "customers": ["manage"],
+                               "orders": ["manage"], "invoices": ["manage"]]
             }
         }
 
@@ -186,6 +190,7 @@ final class UITestStubServer: @unchecked Sendable {
             case .propertyManager: ("Priya", "Shah", "priya.shah@demo-buyers.example")
             case .paAgent: ("Sophie", "Turner", "sophie@demo-buyers.example")
             case .paManager: ("Ashley", "Brooks", "ashley@demo-buyers.example")
+            case .shopkeeper: ("Maya", "Collins", "maya.collins@dbs-limited.example")
             }
         }
 
@@ -200,8 +205,43 @@ final class UITestStubServer: @unchecked Sendable {
             case .propertyOperator: ["crm_leads", "projects", "timesheets"]
             case .propertyManager: ["crm_leads", "projects", "timesheets", "invoices", "purchase_orders"]
             case .paAgent, .paManager: ["crm_leads", "projects", "timesheets"]
+            case .shopkeeper: ["shop", "products", "customers", "invoices"]
             }
         }
+    }
+
+    /// The shop's dashboard (`GET /api/v2/shop/admin/dashboard`), for the shopkeeper.
+    static var shopDashboard: [String: Any] {
+        let now = ISO8601DateFormatter().string(from: Date())
+        func order(_ n: String, _ status: String, _ name: String, _ total: Int) -> [String: Any] {
+            ["uuid": "ord-\(n)", "order_number": n, "status": status, "email": "\(name.lowercased().replacingOccurrences(of: " ", with: "."))@example.com",
+             "customer": ["name": name], "lines": [], "subtotal_minor": total * 5 / 6, "vat_minor": total / 6,
+             "shipping_minor": 0, "total_minor": total, "currency": "GBP", "created_at": now, "paid_at": now]
+        }
+        func quote(_ n: String, _ status: String, _ name: String, _ total: Int) -> [String: Any] {
+            ["uuid": "quo-\(n)", "quote_number": n, "status": status, "customer": ["name": name, "company": name],
+             "lines": [], "subtotal_minor": total * 5 / 6, "vat_minor": total / 6, "shipping_minor": 0, "total_minor": total,
+             "currency": "GBP", "created_at": now]
+        }
+        return [
+            "orders_today": 6, "orders_7d": 41, "orders_30d": 168, "paid_orders_30d": 159,
+            "revenue_paid_30d_minor": 2_486_350, "pending_payment": 2, "awaiting_fulfilment": 5,
+            "open_quotes": 7, "open_quotes_value_minor": 1_284_000, "quotes_30d": 23, "quote_conversion_rate": 0.42,
+            "low_stock_count": 3,
+            "low_stock": [
+                ["kind": "product", "uuid": "p-1", "sku": "CND-25A", "name": "Contactor 25A, 230V coil", "stock_qty": 2,
+                 "held": 0, "available": 2, "low_stock_threshold": 5, "is_low": true],
+                ["kind": "product", "uuid": "p-2", "sku": "FAN-EV120", "name": "Evaporator fan motor 120W", "stock_qty": 1,
+                 "held": 1, "available": 0, "low_stock_threshold": 4, "is_low": true],
+            ],
+            "chats_7d": 58, "active_products": 412, "unverified_prices": 0, "currency": "GBP",
+            "payments_enabled": true, "webhook_configured": true,
+            "latest_orders": [order("ORD-10482", "paid", "Harbour Fish Bar", 48_960),
+                              order("ORD-10481", "processing", "Greenway Pharmacy", 125_400),
+                              order("ORD-10480", "shipped", "The Copper Kettle", 32_750)],
+            "latest_quotes": [quote("Q-2291", "sent", "Northgate Property Management", 642_000),
+                              quote("Q-2290", "accepted", "The Olive Tree Restaurants", 389_500)],
+        ]
     }
 
     var role: Role = .engineer
@@ -428,6 +468,8 @@ final class UITestStubServer: @unchecked Sendable {
                                                      "job_count": 3, "created_at": "2024-09-01 08:00:00+00"]],
                           "meta": meta(1)])
 
+        case ("GET", "/api/v2/shop/admin/dashboard"):
+            return (200, ["success": true, "data": Self.shopDashboard])
         case ("GET", "/api/v2/invoices"):
             return (200, ["success": true, "data": [invoice], "meta": ["total": 1, "page": 1, "perPage": 25, "totalPages": 1]])
 

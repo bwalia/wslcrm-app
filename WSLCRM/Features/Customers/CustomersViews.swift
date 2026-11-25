@@ -43,14 +43,13 @@ struct CustomersListView: View {
                       emptySystemImage: "person.crop.rectangle.stack",
                       emptyDescription: "People who buy from you.",
                       emptyActionTitle: "Add a customer",
-                      emptyAction: session.permissions.can(.create, .customers) ? { creating = true } : nil) { customer in
-                NavigationLink {
+                      emptyAction: session.permissions.can(.create, .customers) ? { creating = true } : nil,
+                      destination: { customer in
                     CustomerDetailView(customerUuid: customer.uuid) { updated in
                         if let updated { model.replace(updated) } else { model.remove(id: customer.id) }
                     }
-                } label: {
-                    CustomerRow(customer: customer)
-                }
+                }) { customer in
+                CustomerRow(customer: customer)
                 .accessibilityIdentifier("customers.row.\(customer.displayName)")
             }
             .onChange(of: sort) { _, value in
@@ -187,6 +186,30 @@ struct CustomerDetailView: View {
         }
     }
 
+    /// The Mac's "sell to them" in the customer's header: their details are filled in for each.
+    private func macActions(_ customer: Customer) -> some View {
+        RecordActionBar(showsMore: false) {
+            if session.permissions.can(.create, .invoices) {
+                Button { newInvoice = true } label: { Label("New invoice", systemImage: "doc.badge.plus") }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("customer.newInvoice")
+            }
+            if session.permissions.can(.create, .orders) {
+                Button { newOrder = true } label: { Label("New order", systemImage: "cart.badge.plus") }
+                    .accessibilityIdentifier("customer.newOrder")
+            }
+            if canQuote {
+                NavigationLink {
+                    ShopQuoteBuilderView(kind: .quote, customer: PickedCustomer(customer).shopDraft)
+                } label: {
+                    Label("New quote", systemImage: "doc.text")
+                }
+                .accessibilityIdentifier("customer.newQuote")
+            }
+        } more: { EmptyView() }
+        .help("Their name, email and address are filled in for you.")
+    }
+
     private func content(_ customer: Customer) -> some View {
         List {
             Section {
@@ -198,6 +221,7 @@ struct CustomerDetailView: View {
                                     tone: state == "enabled" ? .success : .neutral)
                         if customer.taxExempt { StatusBadge(text: "Tax exempt", systemImage: "percent", tone: .info) }
                     }
+                    if MacSupport.isMac, canStartSale { macActions(customer) }
                 }
                 .padding(.vertical, 4)
                 if let phone = customer.phone { PhoneLinkRow(name: customer.displayName, phone: phone) }
@@ -206,7 +230,8 @@ struct CustomerDetailView: View {
             if let notice {
                 Section { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
             }
-            if canStartSale {
+            // The Mac has these in the header (macActions).
+            if canStartSale, !MacSupport.isMac {
                 Section {
                     if session.permissions.can(.create, .invoices) {
                         Button { newInvoice = true } label: { Label("New invoice", systemImage: "doc.badge.plus") }

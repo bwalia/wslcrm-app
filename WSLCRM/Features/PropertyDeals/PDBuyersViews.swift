@@ -93,8 +93,9 @@ private struct PDBuyersList: View {
     var body: some View {
         PagedList(model: model, searchPrompt: "Search buyers by name or email", emptyTitle: "No buyers yet",
                   emptySystemImage: "person.2", emptyDescription: "Add a buyer profile to start matching homes.",
-                  emptyActionTitle: "New buyer", emptyAction: canCreate ? { adding = true } : nil) { buyer in
-            NavigationLink(value: NativeScreenRoute("pd.buyer", buyer.id)) { PDBuyerRow(buyer: buyer) }
+                  emptyActionTitle: "New buyer", emptyAction: canCreate ? { adding = true } : nil,
+                  route: { buyer in NativeScreenRoute("pd.buyer", buyer.id) }) { buyer in
+            PDBuyerRow(buyer: buyer)
                 .accessibilityIdentifier("pd.buyers.row.\(buyer.id)")
         }
         .safeAreaInset(edge: .top, spacing: 0) { PDNoticeBar(notice: notice, error: nil) }

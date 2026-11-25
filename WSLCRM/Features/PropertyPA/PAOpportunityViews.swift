@@ -46,10 +46,9 @@ private struct PAOpportunitiesContent: View {
         PagedList(model: model, searchPrompt: nil,
                   emptyTitle: mine ? "No \(statusWord) opportunities of yours" : "No \(statusWord) opportunities",
                   emptySystemImage: "person.2",
-                  emptyDescription: "Opportunities show here once they're added from a capture or loaded by a manager.") { row in
-            NavigationLink(value: NativeScreenRoute("pa.opportunity", row.uuid)) {
-                PAOpportunityRowView(row: row)
-            }
+                  emptyDescription: "Opportunities show here once they're added from a capture or loaded by a manager.",
+                  route: { row in NativeScreenRoute("pa.opportunity", row.uuid) }) { row in
+            PAOpportunityRowView(row: row)
             .accessibilityIdentifier("pa.opportunities.row.\(row.uuid)")
         }
         .navigationTitle(mine ? "My opportunities" : "Opportunities")

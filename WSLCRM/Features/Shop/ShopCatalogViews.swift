@@ -75,13 +75,12 @@ struct ShopProductsListView: View {
                       emptyDescription: lowStockOnly ? "Nothing is running low."
                           : "The online shop’s catalogue. Add a product, or import a spreadsheet of products from Add.",
                       emptyActionTitle: "New product",
-                      emptyAction: !lowStockOnly && session.shopPolicy.canCreate ? { creating = true } : nil) { product in
-                NavigationLink {
+                      emptyAction: !lowStockOnly && session.shopPolicy.canCreate ? { creating = true } : nil,
+                      destination: { product in
                     ShopProductDetailView(uuid: product.uuid, onChange: { model.replace($0.summary) },
                                           onDelete: { model.remove(id: product.id) })
-                } label: {
-                    ShopProductRow(product: product)
-                }
+                }) { product in
+                ShopProductRow(product: product)
             }
         }
         .id(Filter(status: status, type: type, lowStockOnly: lowStockOnly, reload: reloadToken))

@@ -339,12 +339,11 @@ private struct BillingCouponsList: View {
                   emptyDescription: "A coupon takes a percentage or an amount off. Customers type its code when they buy.",
                   emptyActionTitle: "New coupon",
                   emptyAction: session.permissions.can(.create, moduleName: BillingModule.billing) && appFilter.isEmpty
-                      ? { creating = true } : nil) { coupon in
-            NavigationLink {
+                      ? { creating = true } : nil,
+                  destination: { coupon in
                 BillingCouponDetailView(coupon: coupon, apps: apps) { Task { await model.load() } }
-            } label: {
-                BillingCouponRow(coupon: coupon)
-            }
+            }) { coupon in
+            BillingCouponRow(coupon: coupon)
             .accessibilityIdentifier("billing.coupon.\(coupon.id)")
         }
         .navigationTitle("Coupons")

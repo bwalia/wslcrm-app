@@ -174,12 +174,11 @@ private struct AdminWorkspacesList: View {
                   emptyTitle: filters.status.isEmpty ? "No workspaces" : "No \(filters.status) workspaces",
                   emptySystemImage: "building.2",
                   emptyActionTitle: "New workspace",
-                  emptyAction: filters.status.isEmpty ? { creating = true } : nil) { workspace in
-            NavigationLink {
+                  emptyAction: filters.status.isEmpty ? { creating = true } : nil,
+                  destination: { workspace in
                 AdminWorkspaceDetail(api: api, workspace: workspace) { Task { await reload() } }
-            } label: {
-                AdminWorkspaceRow(workspace: workspace)
-            }
+            }) { workspace in
+            AdminWorkspaceRow(workspace: workspace)
             .accessibilityIdentifier("namespaces.row.\(workspace.id)")
         }
         .safeAreaInset(edge: .top, spacing: 0) {

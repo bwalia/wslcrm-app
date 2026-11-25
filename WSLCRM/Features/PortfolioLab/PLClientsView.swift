@@ -42,8 +42,9 @@ private struct PLClientsContent: View {
     var body: some View {
         PagedList(model: model, searchPrompt: "Name, email or phone", emptyTitle: "No clients match",
                   emptySystemImage: "person.2",
-                  emptyDescription: "New enquiries from the website, referrals and messages appear here.") { client in
-            NavigationLink(value: NativeScreenRoute(PLScreens.client, client.id)) { PLClientRow(client: client) }
+                  emptyDescription: "New enquiries from the website, referrals and messages appear here.",
+                  route: { client in NativeScreenRoute(PLScreens.client, client.id) }) { client in
+            PLClientRow(client: client)
                 .accessibilityIdentifier("pl.clients.row.\(client.id)")
         }
         .navigationTitle("Joy clients")

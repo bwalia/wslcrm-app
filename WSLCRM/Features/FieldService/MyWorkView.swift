@@ -283,7 +283,7 @@ private struct MyWorkContent: View {
                             Link(destination: url) {
                                 Label("Directions", systemImage: "location.fill")
                                     .font(.wsHeadline)
-                                    .frame(maxWidth: .infinity, minHeight: 50)
+                                    .actionButtonFrame(phoneHeight: 50)
                             }
                             .buttonStyle(.bordered)
                             .accessibilityLabel("Directions to \(hero.siteName ?? place)")
@@ -384,12 +384,14 @@ private struct HeroCard: View {
             if pending { PendingSyncBadge() }
             Label(active ? "Continue job" : visit.status == .noAccess ? "Revisit" : "Start job", systemImage: "arrow.right.circle.fill")
                 .font(.wsHeadline)
-                .frame(maxWidth: .infinity, minHeight: 56)
-                .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 14))
+                .actionButtonFrame()
+                .background(Color.accentColor, in: RoundedRectangle(cornerRadius: MacSupport.isMac ? 10 : 14))
                 .foregroundStyle(.white)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(Color(.secondarySystemGroupedBackground),
+                    in: RoundedRectangle(cornerRadius: MacSupport.isMac ? 12 : 24, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 }

@@ -56,8 +56,9 @@ private struct PDSuppliersList: View {
         PagedList(model: model, searchPrompt: "Search by name or town", emptyTitle: "No suppliers yet",
                   emptySystemImage: "wrench.and.screwdriver",
                   emptyDescription: "EPC assessors, surveyors, solicitors and more, with how fast they really are.",
-                  emptyActionTitle: "Add supplier", emptyAction: canCreate ? { adding = true } : nil) { supplier in
-            NavigationLink(value: NativeScreenRoute("pd.supplier", supplier.id)) { PDSupplierRow(supplier: supplier) }
+                  emptyActionTitle: "Add supplier", emptyAction: canCreate ? { adding = true } : nil,
+                  route: { supplier in NativeScreenRoute("pd.supplier", supplier.id) }) { supplier in
+            PDSupplierRow(supplier: supplier)
                 .accessibilityIdentifier("pd.suppliers.row.\(supplier.id)")
         }
         .safeAreaInset(edge: .top, spacing: 0) {

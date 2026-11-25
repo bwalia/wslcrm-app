@@ -35,6 +35,9 @@ struct MyTasksView: View {
         .sorted { $0.name < $1.name }
     }
 
+    /// The Mac's open task, beside the list.
+    @State private var macSelection: String?
+
     private var filtered: [KanbanTask] {
         let text = search.trimmingCharacters(in: .whitespaces).lowercased()
         return (state.value ?? []).filter { task in
@@ -53,26 +56,15 @@ struct MyTasksView: View {
                 ContentUnavailableView("No tasks assigned to you", systemImage: "checklist",
                                        description: Text("Open cards assigned to you across every project show up here."))
             case .loaded:
-                List {
-                    Section {
-                        Picker("Show", selection: $scope) {
-                            ForEach(Scope.allCases) { Text($0.title).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .accessibilityIdentifier("mytasks.scope")
-                        filters
-                    }
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                    switch scope {
-                    case .today: todaySections(filtered)
-                    case .week: weekSections(filtered)
-                    case .dueDate: prioritySections(filtered)
-                    case .sprint: sprintSections(filtered)
-                    }
-                    if !terminals.isEmpty { terminalSection }
+                if MacSupport.isMac {
+                    MacListDetail(selection: $macSelection, ids: filtered.map(\.uuid)) {
+                        List(selection: $macSelection) { listContent }
+                            .wsRefreshable { await load() }
+                    } pane: { TaskDetailView(uuid: $0) }
+                } else {
+                    List { listContent }
+                        .wsRefreshable { await load() }
                 }
-                .wsRefreshable { await load() }
             }
         }
         .navigationTitle("My tasks")
@@ -89,6 +81,28 @@ struct MyTasksView: View {
         .workRunningTimer()
         .task { await load() }
         .workReloadOnReturn { await load() }
+    }
+
+    /// The scope picker, filters and the tasks, for either list (the Mac's selects; a phone's links).
+    @ViewBuilder
+    private var listContent: some View {
+        Section {
+            Picker("Show", selection: $scope) {
+                ForEach(Scope.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("mytasks.scope")
+            filters
+        }
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+        switch scope {
+        case .today: todaySections(filtered)
+        case .week: weekSections(filtered)
+        case .dueDate: prioritySections(filtered)
+        case .sprint: sprintSections(filtered)
+        }
+        if !terminals.isEmpty { terminalSection }
     }
 
     private var filters: some View {
@@ -133,7 +147,7 @@ struct MyTasksView: View {
             }
             .listRowBackground(Color.clear)
         } else {
-            Section {
+        Section {
                 ForEach(today) { row($0) }
             } footer: {
                 Text("Overdue first, then due today, then work you've already started.")
@@ -183,7 +197,7 @@ struct MyTasksView: View {
                 .listRowBackground(Color.clear)
         }
         ForEach(sprints) { bucket in
-            Section {
+        Section {
                 ForEach(bucket.tasks) { row($0) }
             } header: {
                 SprintHeader(sprint: bucket.sprint)
@@ -191,7 +205,7 @@ struct MyTasksView: View {
         }
         let outside = TaskAgenda.open(tasks).count - inSprint
         if !sprints.isEmpty, outside > 0 {
-            Section {
+        Section {
             } footer: {
                 Text(outside == 1 ? "1 more of your cards isn't in a running sprint. It's under All."
                                   : "\(outside) more of your cards aren't in a running sprint. They're under All.")
@@ -222,18 +236,26 @@ struct MyTasksView: View {
         }
     }
 
+    @ViewBuilder
     private func row(_ task: KanbanTask) -> some View {
-        NavigationLink(value: TaskRoute(uuid: task.uuid)) {
-            VStack(alignment: .leading, spacing: 2) {
-                TaskCard(task: task)
-                if let place = task.projectName {
-                    Text([place, task.columnName].compactMap { $0 }.joined(separator: " · "))
-                        .font(.wsCaption)
-                        .foregroundStyle(.secondaryText)
-                }
+        // The Mac selects (the task opens beside the list); a phone opens it.
+        if MacSupport.isMac {
+            rowLabel(task).tag(task.uuid).accessibilityIdentifier("mytask.row.\(task.reference)")
+        } else {
+            NavigationLink(value: TaskRoute(uuid: task.uuid)) { rowLabel(task) }
+                .accessibilityIdentifier("mytask.row.\(task.reference)")
+        }
+    }
+
+    private func rowLabel(_ task: KanbanTask) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            TaskCard(task: task)
+            if let place = task.projectName {
+                Text([place, task.columnName].compactMap { $0 }.joined(separator: " · "))
+                    .font(.wsCaption)
+                    .foregroundStyle(.secondaryText)
             }
         }
-        .accessibilityIdentifier("mytask.row.\(task.reference)")
     }
 
     private func load() async {

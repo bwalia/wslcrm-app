@@ -60,6 +60,10 @@ final class PagedListModel<Item: Identifiable & Sendable> where Item.ID: Sendabl
 }
 
 /// Standard list screen: skeleton → rows / empty / error, search, pull to refresh, infinite scroll.
+///
+/// Give it `destination` (the screen a row opens) and it makes the row a link on iPhone and iPad; on the Mac the
+/// list sits on the left with the chosen record beside it, as in Mail, so someone can go down a list without losing
+/// their place. Lists that build their own links in `row` stay as they are everywhere.
 struct PagedList<Item: Identifiable & Sendable, Row: View>: View where Item.ID: Sendable {
     @Bindable var model: PagedListModel<Item>
     var searchPrompt: String?
@@ -67,44 +71,163 @@ struct PagedList<Item: Identifiable & Sendable, Row: View>: View where Item.ID: 
     let emptySystemImage: String
     var emptyDescription: String?
     /// The way out of an empty list, e.g. "Add a customer". Shown only when nothing is searched.
-    var emptyActionTitle: String? = nil
-    var emptyAction: (() -> Void)? = nil
+    var emptyActionTitle: String?
+    var emptyAction: (() -> Void)?
+    private let destination: ((Item) -> AnyView)?
+    /// A row that opens a route (`NavigationLink(value:)`): the link on iPhone and iPad, its screen beside the list on
+    /// the Mac (`AppDestinations`).
+    private let routeLink: ((Item) -> AnyView)?
+    private let route: ((Item) -> AnyHashable)?
     @ViewBuilder let row: (Item) -> Row
+    @State private var selection: Item.ID?
+
+    init(model: PagedListModel<Item>, searchPrompt: String? = nil, emptyTitle: String, emptySystemImage: String,
+         emptyDescription: String? = nil, emptyActionTitle: String? = nil, emptyAction: (() -> Void)? = nil,
+         @ViewBuilder row: @escaping (Item) -> Row) {
+        self.model = model
+        self.searchPrompt = searchPrompt
+        self.emptyTitle = emptyTitle
+        self.emptySystemImage = emptySystemImage
+        self.emptyDescription = emptyDescription
+        self.emptyActionTitle = emptyActionTitle
+        self.emptyAction = emptyAction
+        self.destination = nil
+        self.routeLink = nil
+        self.route = nil
+        self.row = row
+    }
+
+    init<Route: Hashable>(model: PagedListModel<Item>, searchPrompt: String? = nil, emptyTitle: String,
+                          emptySystemImage: String, emptyDescription: String? = nil, emptyActionTitle: String? = nil,
+                          emptyAction: (() -> Void)? = nil, route: @escaping (Item) -> Route,
+                          @ViewBuilder row: @escaping (Item) -> Row) {
+        self.model = model
+        self.searchPrompt = searchPrompt
+        self.emptyTitle = emptyTitle
+        self.emptySystemImage = emptySystemImage
+        self.emptyDescription = emptyDescription
+        self.emptyActionTitle = emptyActionTitle
+        self.emptyAction = emptyAction
+        self.destination = nil
+        // The concrete route type, so the stack's navigationDestination(for:) still matches it.
+        self.routeLink = { item in AnyView(NavigationLink(value: route(item)) { row(item) }) }
+        self.route = { AnyHashable(route($0)) }
+        self.row = row
+    }
+
+    init<Detail: View>(model: PagedListModel<Item>, searchPrompt: String? = nil, emptyTitle: String,
+                       emptySystemImage: String, emptyDescription: String? = nil, emptyActionTitle: String? = nil,
+                       emptyAction: (() -> Void)? = nil, @ViewBuilder destination: @escaping (Item) -> Detail,
+                       @ViewBuilder row: @escaping (Item) -> Row) {
+        self.model = model
+        self.searchPrompt = searchPrompt
+        self.emptyTitle = emptyTitle
+        self.emptySystemImage = emptySystemImage
+        self.emptyDescription = emptyDescription
+        self.emptyActionTitle = emptyActionTitle
+        self.emptyAction = emptyAction
+        self.destination = { AnyView(destination($0)) }
+        self.routeLink = nil
+        self.route = nil
+        self.row = row
+    }
 
     var body: some View {
-        List {
-            ForEach(model.items) { item in
-                row(item)
-                    .task { await model.loadMoreIfNeeded(item) }
+        content
+            // File › New (⌘N) on the Mac makes one of what this list holds, when the person may.
+            .focusedSceneValue(\.macNewItem, emptyAction.map { MacNewItem(title: emptyActionTitle ?? "New", action: $0) })
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if MacSupport.isMac, destination != nil || route != nil {
+            MacListDetail(selection: $selection, ids: model.items.map(\.id)) {
+                list(selecting: true)
+            } pane: { id in
+                if let item = model.items.first(where: { $0.id == id }) { pane(for: item) }
             }
-            if model.isLoadingMore {
-                HStack { Spacer(); ProgressView(); Spacer() }
-            }
-            if let error = model.pageError {
-                InlineErrorRow(error: error) {
-                    Task {
-                        if model.hasMore, let last = model.items.last {
-                            await model.loadMoreIfNeeded(last)
-                        } else {
-                            await model.load()
-                        }
-                    }
-                }
-            }
-        }
-        .listStyle(.plain)
-        .overlay { overlay }
-        .wsRefreshable { await model.load() }
-        .modifier(OptionalSearchable(text: $model.search, prompt: searchPrompt))
-        .task(id: model.search) {
-            if !model.items.isEmpty { try? await Task.sleep(for: .milliseconds(350)) }
-            guard !Task.isCancelled else { return }
-            await model.load()
+        } else {
+            list(selecting: false)
         }
     }
 
     @ViewBuilder
-    private var overlay: some View {
+    private func pane(for item: Item) -> some View {
+        if let destination {
+            destination(item)
+        } else if let route, let screen = AppDestinations.view(for: route(item)) {
+            screen
+        } else if let routeLink {
+            // A route the Mac can't show beside the list yet: its row, as a link to its own page.
+            VStack(alignment: .leading, spacing: 12) {
+                Text("This opens on its own page").font(.wsHeadline)
+                routeLink(item).buttonStyle(.bordered)
+            }
+            .padding(24)
+        }
+    }
+
+    @ViewBuilder
+    private func list(selecting: Bool) -> some View {
+        // Only the Mac's list selects: a selection binding changes how an iPad list behaves.
+        if selecting {
+            List(selection: $selection) { rows(selecting: true) }.modifier(ListChrome(list: self))
+        } else {
+            List { rows(selecting: false) }.modifier(ListChrome(list: self))
+        }
+    }
+
+    @ViewBuilder
+    private func rows(selecting: Bool) -> some View {
+        ForEach(model.items) { item in
+            Group {
+                if let destination, !selecting {
+                    NavigationLink { destination(item) } label: { row(item) }
+                } else if let routeLink, !selecting {
+                    routeLink(item)
+                } else {
+                    row(item)
+                }
+            }
+            .tag(item.id)
+            .task { await model.loadMoreIfNeeded(item) }
+        }
+        if model.isLoadingMore {
+            HStack { Spacer(); ProgressView(); Spacer() }
+        }
+        if let error = model.pageError {
+            InlineErrorRow(error: error) {
+                Task {
+                    if model.hasMore, let last = model.items.last {
+                        await model.loadMoreIfNeeded(last)
+                    } else {
+                        await model.load()
+                    }
+                }
+            }
+        }
+    }
+
+    /// Style, states, refresh, search and loading for either list.
+    private struct ListChrome: ViewModifier {
+        let list: PagedList
+
+        func body(content: Content) -> some View {
+            content
+                .listStyle(.plain)
+                .overlay { list.overlay }
+                .wsRefreshable { await list.model.load() }
+                .modifier(OptionalSearchable(text: list.$model.search, prompt: list.searchPrompt))
+                .task(id: list.model.search) {
+                    if !list.model.items.isEmpty { try? await Task.sleep(for: .milliseconds(350)) }
+                    guard !Task.isCancelled else { return }
+                    await list.model.load()
+                }
+        }
+    }
+
+    @ViewBuilder
+    fileprivate var overlay: some View {
         switch model.state {
         case .idle:
             SkeletonList()
@@ -134,10 +257,18 @@ struct PagedList<Item: Identifiable & Sendable, Row: View>: View where Item.ID: 
 private struct OptionalSearchable: ViewModifier {
     @Binding var text: String
     let prompt: String?
+    @FocusState private var searching: Bool
 
     func body(content: Content) -> some View {
         if let prompt {
-            content.searchable(text: $text, prompt: prompt)
+            if #available(iOS 18.0, *) {
+                // Edit › Search This List (⌘F) on the Mac puts the cursor in the search field.
+                content.searchable(text: $text, prompt: prompt)
+                    .searchFocused($searching)
+                    .focusedSceneValue(\.macFind, MacNewItem(title: "Search This List") { searching = true })
+            } else {
+                content.searchable(text: $text, prompt: prompt)
+            }
         } else {
             content
         }

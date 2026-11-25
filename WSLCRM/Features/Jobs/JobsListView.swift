@@ -57,10 +57,22 @@ final class JobsListViewModel {
     }
 }
 
+/// The jobs one of Field Service's numbers counts: the Jobs list with that filter on.
+struct JobsPresetRoute: Hashable {
+    enum Preset: Hashable { case open, inProgress, overdue, uninvoiced }
+    let preset: Preset
+}
+
 struct JobsListView: View {
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var model: JobsListViewModel?
+    /// Opened from a number on Field Service: the jobs it counts.
+    private let preset: JobsPresetRoute.Preset?
+
+    init(preset: JobsPresetRoute.Preset? = nil) {
+        self.preset = preset
+    }
 
     var body: some View {
         Group {
@@ -73,7 +85,17 @@ struct JobsListView: View {
         }
         .navigationTitle("Jobs")
         .onAppear {
-            if model == nil { model = JobsListViewModel(api: services.fieldService) }
+            if model == nil {
+                let model = JobsListViewModel(api: services.fieldService)
+                switch preset {
+                case .open: model.query.status = .open
+                case .inProgress: model.query.status = .inProgress
+                case .overdue: model.query.overdue = true
+                case .uninvoiced: model.query.status = .all; model.query.uninvoiced = true
+                case nil: break
+                }
+                self.model = model
+            }
         }
     }
 }
@@ -90,29 +112,47 @@ private struct JobsListContent: View {
     @State private var jobTypes: [JobTypeDetail] = []
     @State private var creating = false
     @State private var created: JobRoute?
-
-    var body: some View {
-        List {
-            ForEach(model.jobs) { job in
-                NavigationLink(value: JobRoute(uuid: job.uuid)) {
-                    JobRow(job: job)
+    /// The jobs: links on iPhone and iPad; on the Mac rows that select (the job opens beside the list).
+    @ViewBuilder
+    private func rows(selecting: Bool) -> some View {
+        ForEach(model.jobs) { job in
+            Group {
+                if selecting {
+                    JobRow(job: job).tag(job.uuid)
+                } else {
+                    NavigationLink(value: JobRoute(uuid: job.uuid)) { JobRow(job: job) }
                 }
-                .task { await model.loadMoreIfNeeded(current: job) }
-                .accessibilityIdentifier("jobs.row.\(job.jobNumber)")
             }
-            if model.isLoadingMore {
-                HStack { Spacer(); ProgressView(); Spacer() }
-            }
-            if let error = model.pageError {
-                InlineErrorRow(error: error) {
-                    Task {
-                        if model.hasMore, let last = model.jobs.last {
-                            await model.loadMoreIfNeeded(current: last)
-                        } else {
-                            await model.load()
-                        }
+            .task { await model.loadMoreIfNeeded(current: job) }
+            .accessibilityIdentifier("jobs.row.\(job.jobNumber)")
+        }
+        if model.isLoadingMore {
+            HStack { Spacer(); ProgressView(); Spacer() }
+        }
+        if let error = model.pageError {
+            InlineErrorRow(error: error) {
+                Task {
+                    if model.hasMore, let last = model.jobs.last {
+                        await model.loadMoreIfNeeded(current: last)
+                    } else {
+                        await model.load()
                     }
                 }
+            }
+        }
+    }
+
+    /// The Mac's open job, beside the list.
+    @State private var macSelection: String?
+
+    var body: some View {
+        Group {
+            if MacSupport.isMac {
+                MacListDetail(selection: $macSelection, ids: model.jobs.map(\.uuid)) {
+                    List(selection: $macSelection) { rows(selecting: true) }.listStyle(.plain)
+                } pane: { JobDetailView(jobUuid: $0) }
+            } else {
+                List { rows(selecting: false) }
             }
         }
         .listStyle(.plain)

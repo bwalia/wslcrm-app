@@ -65,8 +65,9 @@ struct ATSInterviewsView: View {
                   emptyTitle: filtered ? "No interviews like that" : "No interviews yet",
                   emptySystemImage: "bubble.left.and.bubble.right",
                   emptyDescription: filtered ? "Change the filters to see more."
-                      : "Invite candidates from a job’s pipeline, or import interview files from Snazzy Pro.") { interview in
-            NavigationLink(value: ATSScreen.interview(interview.uuid)) { ATSInterviewRow(interview: interview) }
+                      : "Invite candidates from a job’s pipeline, or import interview files from Snazzy Pro.",
+                  route: { interview in ATSScreen.interview(interview.uuid) }) { interview in
+            ATSInterviewRow(interview: interview)
                 .accessibilityIdentifier("ats.interview.\(interview.uuid)")
         }
         .safeAreaInset(edge: .top, spacing: 0) {

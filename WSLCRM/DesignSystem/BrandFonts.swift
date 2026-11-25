@@ -42,10 +42,9 @@ enum BrandFont {
         UIFont(name: face.rawValue, size: 12) != nil
     }
 
-    /// The Mac reads from further away than a phone, and a Mac window is wide: every size steps up
-    /// there, so text isn't left looking tiny on a big screen (the system's own Mac text styles
-    /// don't apply to the brand's custom faces).
-    static let platformScale: CGFloat = ProcessInfo.processInfo.isMacCatalystApp ? 1.18 : 1
+    /// One scale everywhere. The Mac was 18% bigger for a while; at that size it read like a phone screen blown up,
+    /// so it uses the same sizes as the phone, which are already larger than the Mac's own text (13pt body).
+    static let platformScale: CGFloat = 1
 
     static func font(_ face: Face, size: CGFloat, relativeTo style: Font.TextStyle) -> Font {
         .custom(face.rawValue, size: (size * platformScale).rounded(), relativeTo: style)

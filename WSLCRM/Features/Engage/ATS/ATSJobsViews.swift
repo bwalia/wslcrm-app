@@ -43,8 +43,9 @@ struct ATSJobsView: View {
                   emptyTitle: status.isEmpty ? "No jobs yet" : "No jobs like that", emptySystemImage: "briefcase",
                   emptyDescription: status.isEmpty ? "Create one to start hiring." : "Choose “All statuses” to see every job.",
                   emptyActionTitle: "New job",
-                  emptyAction: status.isEmpty && session.permissions.can(.create, moduleName: ATSModule.jobs) ? { creating = true } : nil) { job in
-            NavigationLink(value: ATSScreen.job(job.uuid)) { ATSJobRow(job: job) }
+                  emptyAction: status.isEmpty && session.permissions.can(.create, moduleName: ATSModule.jobs) ? { creating = true } : nil,
+                  route: { job in ATSScreen.job(job.uuid) }) { job in
+            ATSJobRow(job: job)
                 .accessibilityIdentifier("ats.job.\(job.uuid)")
         }
         .safeAreaInset(edge: .top, spacing: 0) { createdBanner }
