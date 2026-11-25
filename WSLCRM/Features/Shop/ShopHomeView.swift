@@ -158,20 +158,29 @@ struct ShopHomeView: View {
     @State private var members: [Record] = []
 
     var body: some View {
-        List {
-            if let kpis = state.value {
-                content(kpis)
-            } else if let error = state.error {
-                Section { InlineErrorRow(error: error) { Task { await load() } } }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                header
+                if let kpis = state.value {
+                    content(kpis)
+                } else if let error = state.error {
+                    InlineErrorRow(error: error) { Task { await load() } }.brandCard(padding: 12, radius: 14)
+                } else {
+                    LazyVGrid(columns: tileColumns(4), spacing: 10) {
+                        ForEach(0..<4, id: \.self) { _ in
+                            MetricCard(title: "Loading", value: "00", systemImage: "circle").redacted(reason: .placeholder)
+                        }
+                    }
+                }
+                ShopVipMembersSection(rows: members)
+                areas
             }
-            ShopVipMembersSection(rows: members)
-            manageSection
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(maxWidth: 1100)
+            .frame(maxWidth: .infinity)
         }
-        .listStyle(.insetGrouped)
-        .wsReadableWidth(1200)
-        .overlay {
-            if state.value == nil, state.error == nil { SkeletonList() }
-        }
+        .brandCanvas()
         .navigationTitle("Shop")
         .toolbar {
             if session.shopPolicy.canUpdate {
@@ -206,204 +215,237 @@ struct ShopHomeView: View {
         }
     }
 
+    // MARK: Header
+
+    /// The date, and the shop's day in one line once the numbers are in.
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)).uppercased())
+                .font(.brandEyebrow)
+                .tracking(1.2)
+                .foregroundStyle(.secondaryText)
+            Text(summary)
+                .font(.brandTitle)
+                .foregroundStyle(Color(.label))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+        }
+    }
+
+    private var summary: String {
+        guard let k = state.value else { return "Orders, quotes, stock and suppliers" }
+        var parts = ["\(k.ordersToday) \(k.ordersToday == 1 ? "order" : "orders") today"]
+        if k.awaitingFulfilment > 0 { parts.append("\(k.awaitingFulfilment) to fulfil") }
+        if let revenue = ShopMoney.format(k.revenuePaid30dMinor, currency: k.currency) { parts.append("\(revenue) in 30 days") }
+        return parts.joined(separator: " · ")
+    }
+
+    // MARK: Numbers and what needs doing
+
     @ViewBuilder
     private func content(_ kpis: ShopKPIs) -> some View {
         let alerts = alerts(for: kpis)
         if !alerts.isEmpty {
-            Section {
+            VStack(alignment: .leading, spacing: 8) {
                 ForEach(alerts, id: \.self) { text in
                     Label(text, systemImage: "exclamationmark.triangle.fill")
-                        .font(.wsSubheadline)
+                        .font(.wsSubheadline.weight(.medium))
                         .foregroundStyle(Tone.warning.textColor)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(Tone.warning.color.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Tone.warning.color.opacity(0.35)))
                 }
             }
         }
         if let actionError {
-            Section { InlineErrorRow(error: actionError) }
+            InlineErrorRow(error: actionError).brandCard(padding: 12, radius: 14)
         }
 
-        Section {
-            LazyVGrid(columns: .tiles(sizeClass), spacing: 10) {
-                tile(StatTile(title: "Orders · 30 days", value: "\(kpis.orders30d)", systemImage: "cart"),
-                     hint: "\(kpis.ordersToday) today, \(kpis.orders7d) in 7 days") { ShopOrdersListView(initialFilter: .placedDays(30)) }
+        VStack(alignment: .leading, spacing: 10) {
+            DashboardSectionHeader("Last 30 days")
+            let money = { (minor: Int) in ShopMoney.format(minor, currency: kpis.currency) ?? "—" }
+            LazyVGrid(columns: tileColumns(8), spacing: 10) {
+                tile("Orders · 30 days", "\(kpis.orders30d)", "cart", hint: "\(kpis.ordersToday) today, \(kpis.orders7d) in 7 days") {
+                    ShopOrdersListView(initialFilter: .placedDays(30))
+                }
                 if session.shopPolicy.canSeeAnalytics {
                     NavigationLink(value: NativeScreenRoute(SalesScreen.shopAnalytics)) {
-                        StatTile(title: "Revenue · 30 days (inc VAT)",
-                                 value: ShopMoney.format(kpis.revenuePaid30dMinor, currency: kpis.currency) ?? "—",
-                                 systemImage: "sterlingsign.circle")
+                        MetricCard(title: "Revenue · 30 days (inc VAT)", value: money(kpis.revenuePaid30dMinor),
+                                   systemImage: "sterlingsign.circle", compact: isCompact)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressableCard)
                 } else {
-                    tile(StatTile(title: "Revenue · 30 days (inc VAT)",
-                                  value: ShopMoney.format(kpis.revenuePaid30dMinor, currency: kpis.currency) ?? "—",
-                                  systemImage: "sterlingsign.circle"),
+                    tile("Revenue · 30 days (inc VAT)", money(kpis.revenuePaid30dMinor), "sterlingsign.circle",
                          hint: "Orders paid in the last 30 days") { ShopOrdersListView(initialFilter: .paidDays(30)) }
                 }
-                tile(StatTile(title: "Orders today", value: "\(kpis.ordersToday)", systemImage: "calendar"),
-                     hint: "\(kpis.orders7d) in the last 7 days") { ShopOrdersListView(initialFilter: .placedDays(1)) }
-                tile(StatTile(title: "To fulfil", value: "\(kpis.awaitingFulfilment)", systemImage: "shippingbox"),
+                tile("Orders today", "\(kpis.ordersToday)", "calendar", hint: "\(kpis.orders7d) in the last 7 days") {
+                    ShopOrdersListView(initialFilter: .placedDays(1))
+                }
+                tile("To fulfil", "\(kpis.awaitingFulfilment)", "shippingbox", tone: kpis.awaitingFulfilment > 0 ? .warning : .brand,
                      hint: "Paid orders waiting to be sent") { ShopOrdersListView(initialStatus: .paid) }
-                tile(StatTile(title: "Open quotes", value: "\(kpis.openQuotes) · \(ShopMoney.format(kpis.openQuotesValueMinor, currency: kpis.currency) ?? "")",
-                              systemImage: "doc.text"),
+                tile("Open quotes · \(money(kpis.openQuotesValueMinor))", "\(kpis.openQuotes)", "doc.text",
                      hint: "Pipeline value") { ShopQuotesListView(initialFilter: .open) }
-                tile(StatTile(title: "Quote → order", value: kpis.quoteConversionRate.formatted(.percent.precision(.fractionLength(0...1))),
-                              systemImage: "arrow.right.circle"),
-                     hint: "Conversion") { ShopQuotesListView(initialStatus: .converted) }
-                tile(StatTile(title: "Low stock", value: "\(kpis.lowStockCount)", systemImage: "exclamationmark.triangle"),
+                tile("Quote → order", kpis.quoteConversionRate.formatted(.percent.precision(.fractionLength(0...1))),
+                     "arrow.right.circle", hint: "Conversion") { ShopQuotesListView(initialStatus: .converted) }
+                tile("Low stock", "\(kpis.lowStockCount)", "exclamationmark.triangle", tone: kpis.lowStockCount > 0 ? .danger : .brand,
                      hint: "Items at or below their threshold") { ShopStockView(lowOnly: true) }
-                tile(StatTile(title: "AI chats · 7 days", value: "\(kpis.chats7d)", systemImage: "bubble.left.and.bubble.right"),
-                     hint: "Assistant sessions") { ShopChatsListView() }
+                tile("AI chats · 7 days", "\(kpis.chats7d)", "bubble.left.and.bubble.right", hint: "Assistant sessions") {
+                    ShopChatsListView()
+                }
             }
-            .listRowInsets(EdgeInsets())
-            .listRowBackground(Color.clear)
         }
 
         if kpis.awaitingFulfilment > 0 || !kpis.lowStock.isEmpty {
-            Section("Needs attention") {
+            DashboardPanel(title: "Needs attention") {
                 if kpis.awaitingFulfilment > 0 {
                     NavigationLink {
                         ShopOrdersListView(initialStatus: .paid)
                     } label: {
-                        Label("\(kpis.awaitingFulfilment) paid order\(kpis.awaitingFulfilment == 1 ? "" : "s") to fulfil",
-                              systemImage: "shippingbox.fill")
+                        PanelRow(title: "\(kpis.awaitingFulfilment) paid order\(kpis.awaitingFulfilment == 1 ? "" : "s") to fulfil",
+                                 systemImage: "shippingbox.fill", tint: Tone.warning.textColor)
                     }
+                    .buttonStyle(.panelRow)
                 }
                 ForEach(kpis.lowStock.prefix(5)) { row in
                     NavigationLink {
                         ShopStockView(lowOnly: true)
                     } label: {
-                        ShopStockRowView(row: row)
+                        ShopStockRowView(row: row).padding(.horizontal, 10).padding(.vertical, 8).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.panelRow)
+                }
+            }
+        }
+
+        if !kpis.latestOrders.isEmpty || !kpis.latestQuotes.isEmpty {
+            LazyVGrid(columns: isCompact ? [GridItem(.flexible())] : [GridItem(.flexible(), spacing: 12, alignment: .top), GridItem(.flexible(), alignment: .top)],
+                      alignment: .leading, spacing: 12) {
+                if !kpis.latestOrders.isEmpty {
+                    DashboardPanel(title: "Latest orders") {
+                        ForEach(kpis.latestOrders) { order in
+                            NavigationLink { ShopOrderDetailView(summary: order) } label: {
+                                ShopOrderRow(order: order).padding(.horizontal, 10).padding(.vertical, 8).contentShape(Rectangle())
+                            }
+                            .buttonStyle(.panelRow)
+                        }
+                        NavigationLink { ShopOrdersListView() } label: { PanelRow(title: "Every online order", systemImage: "cart") }
+                            .buttonStyle(.panelRow)
+                    }
+                }
+                if !kpis.latestQuotes.isEmpty {
+                    DashboardPanel(title: "Latest quotes") {
+                        ForEach(kpis.latestQuotes) { quote in
+                            NavigationLink { ShopQuoteDetailView(summary: quote) } label: {
+                                ShopQuoteRow(quote: quote).padding(.horizontal, 10).padding(.vertical, 8).contentShape(Rectangle())
+                            }
+                            .buttonStyle(.panelRow)
+                        }
+                        NavigationLink { ShopQuotesListView() } label: { PanelRow(title: "Every quote", systemImage: "doc.text") }
+                            .buttonStyle(.panelRow)
                     }
                 }
             }
         }
+    }
 
-        if !kpis.latestOrders.isEmpty {
-            Section("Latest orders") {
-                ForEach(kpis.latestOrders) { order in
-                    NavigationLink { ShopOrderDetailView(summary: order) } label: { ShopOrderRow(order: order) }
+    private var isCompact: Bool { sizeClass == .compact }
+
+    /// Two a row on a phone; on an iPad or a Mac up to four.
+    private func tileColumns(_ count: Int) -> [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 10), count: isCompact ? 2 : max(1, min(count, 4)))
+    }
+
+    // MARK: Areas
+
+    /// Every part of the shop's back office, as the app's own screens: a panel per part.
+    private var areas: some View {
+        LazyVGrid(columns: isCompact ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: 300), spacing: 12, alignment: .top)],
+                  alignment: .leading, spacing: 12) {
+            DashboardPanel(title: "Sell") {
+                if session.shopPolicy.canCreate {
+                    panelLink("New quote or order", "square.and.pencil", id: "shop.newQuote", value: NativeScreenRoute(SalesScreen.newQuote))
+                }
+                panelLink("Online shop orders", "cart", id: "shop.orders") { ShopOrdersListView() }
+                panelLink("Quotes", "doc.text", id: "shop.quotes") { ShopQuotesListView() }
+                panelLink("Deals", "lock.doc", id: "shop.deals") { ShopDealsListView() }
+                // "Chats" as on the dashboard's shop tabs: what customers asked the shop's AI assistant.
+                panelLink("Chats", "bubble.left.and.bubble.right", id: "shop.chats") { ShopChatsListView() }
+                if session.permissions.shows(.orders) || session.permissions.can(.read, .shop) {
+                    panelLink("Every order (online, phone and till)", "list.bullet.rectangle", id: "shop.salesOrders",
+                              value: NativeScreen.orders)
+                }
+                if session.permissions.can(.create, .orders) {
+                    panelLink("Point of Sale", "storefront", id: "shop.pos", value: NativeScreenRoute(SalesScreen.pos))
+                }
+                if session.shopPolicy.canSeeAnalytics {
+                    panelLink("Analytics", "chart.bar.xaxis", id: "shop.analytics", value: NativeScreenRoute(SalesScreen.shopAnalytics))
                 }
             }
-        }
-        if !kpis.latestQuotes.isEmpty {
-            Section("Latest quotes") {
-                ForEach(kpis.latestQuotes) { quote in
-                    NavigationLink { ShopQuoteDetailView(summary: quote) } label: { ShopQuoteRow(quote: quote) }
+            DashboardPanel(title: "Catalogue") {
+                panelLink("Online shop products", "shippingbox", id: "shop.products") { ShopProductsListView() }
+                panelLink("Categories", "folder", id: "shop.categories") { ShopCategoriesView() }
+                panelLink("Stock", "cube.box", id: "shop.stock") { ShopStockView() }
+                panelLink("Market prices", "chart.line.uptrend.xyaxis", id: "shop.market") { ShopMarketView() }
+                panelLink(ModuleCatalog.shopPriceChanges.title, ModuleCatalog.shopPriceChanges.systemImage, id: "shop.priceChanges",
+                          value: NativeScreenRoute("shop.price_changes"))
+                panelLink(ModuleCatalog.shopBelowCost.title, ModuleCatalog.shopBelowCost.systemImage, id: "shop.belowCost",
+                          value: ResourceReportRoute(ModuleCatalog.shopBelowCost.id))
+            }
+            DashboardPanel(title: "Buying") {
+                panelLink("Suppliers", "truck.box", id: "shop.suppliers") { ShopSuppliersListView() }
+                if session.permissions.can(.read, .purchaseOrders) {
+                    panelLink("Purchase orders", "doc.plaintext", id: "shop.purchaseOrders") { PurchaseOrdersListView() }
+                    panelLink(ModuleCatalog.purchaseInvoices.title, ModuleCatalog.purchaseInvoices.systemImage,
+                              id: "shop.purchaseInvoices", value: NativeScreenRoute("shop.purchase_invoices"))
                 }
+                panelLink(ModuleCatalog.shopMessageTemplates.title, ModuleCatalog.shopMessageTemplates.systemImage,
+                          id: "shop.templates") { ShopTemplatesView() }
+            }
+            DashboardPanel(title: "Customers") {
+                panelLink(ModuleCatalog.shopMembers.title, ModuleCatalog.shopMembers.systemImage, id: "shop.members") { ShopMembersView() }
+                resourceLink(ModuleCatalog.shopWaitlist, id: "shop.waitlist")
+                resourceLink(ModuleCatalog.shopCredits, id: "shop.credits")
+                panelLink("Assistant knowledge", "books.vertical", id: "shop.knowledge") { ShopKnowledgeView() }
+                resourceLink(ModuleCatalog.shopLegal, id: "shop.legal")
+            }
+            DashboardPanel(title: "Settings") {
+                settingsLink(ModuleCatalog.shopSettings, id: "shop.settings")
+                settingsLink(ModuleCatalog.shopMembershipSettings, id: "shop.membershipSettings")
             }
         }
     }
 
-    /// Every part of the shop's back office, as the app's own screens.
-    @ViewBuilder
-    private var manageSection: some View {
-        Section("Sell") {
-            if session.shopPolicy.canCreate {
-                NavigationLink(value: NativeScreenRoute(SalesScreen.newQuote)) {
-                    Label("New quote or order", systemImage: "square.and.pencil")
-                }
-                .accessibilityIdentifier("shop.newQuote")
-            }
-            NavigationLink { ShopOrdersListView() } label: { Label("Online shop orders", systemImage: "cart") }
-                .accessibilityIdentifier("shop.orders")
-            NavigationLink { ShopQuotesListView() } label: { Label("Quotes", systemImage: "doc.text") }
-                .accessibilityIdentifier("shop.quotes")
-            NavigationLink { ShopDealsListView() } label: { Label("Deals", systemImage: "lock.doc") }
-                .accessibilityIdentifier("shop.deals")
-            // "Chats" as on the dashboard's shop tabs: what customers asked the shop's AI assistant.
-            NavigationLink { ShopChatsListView() } label: { Label("Chats", systemImage: "bubble.left.and.bubble.right") }
-                .accessibilityIdentifier("shop.chats")
-            if session.permissions.shows(.orders) || session.permissions.can(.read, .shop) {
-                NavigationLink(value: NativeScreen.orders) {
-                    Label("Every order (online, phone and till)", systemImage: "list.bullet.rectangle")
-                }
-                    .accessibilityIdentifier("shop.salesOrders")
-            }
-            if session.permissions.can(.create, .orders) {
-                NavigationLink(value: NativeScreenRoute(SalesScreen.pos)) {
-                    Label("Point of Sale", systemImage: "storefront")
-                }
-                .accessibilityIdentifier("shop.pos")
-            }
-            if session.shopPolicy.canSeeAnalytics {
-                NavigationLink(value: NativeScreenRoute(SalesScreen.shopAnalytics)) {
-                    Label("Analytics", systemImage: "chart.bar.xaxis")
-                }
-                .accessibilityIdentifier("shop.analytics")
-            }
-        }
-        Section("Catalogue") {
-            NavigationLink { ShopProductsListView() } label: { Label("Online shop products", systemImage: "shippingbox") }
-                .accessibilityIdentifier("shop.products")
-            NavigationLink { ShopCategoriesView() } label: { Label("Categories", systemImage: "folder") }
-                .accessibilityIdentifier("shop.categories")
-            NavigationLink { ShopStockView() } label: { Label("Stock", systemImage: "cube.box") }
-                .accessibilityIdentifier("shop.stock")
-            NavigationLink { ShopMarketView() } label: { Label("Market prices", systemImage: "chart.line.uptrend.xyaxis") }
-                .accessibilityIdentifier("shop.market")
-            NavigationLink(value: NativeScreenRoute("shop.price_changes")) {
-                Label(ModuleCatalog.shopPriceChanges.title, systemImage: ModuleCatalog.shopPriceChanges.systemImage)
-            }
-            .accessibilityIdentifier("shop.priceChanges")
-            NavigationLink(value: ResourceReportRoute(ModuleCatalog.shopBelowCost.id)) {
-                Label(ModuleCatalog.shopBelowCost.title, systemImage: ModuleCatalog.shopBelowCost.systemImage)
-            }
-            .accessibilityIdentifier("shop.belowCost")
-        }
-        Section("Buying") {
-            NavigationLink { ShopSuppliersListView() } label: { Label("Suppliers", systemImage: "truck.box") }
-                .accessibilityIdentifier("shop.suppliers")
-            if session.permissions.can(.read, .purchaseOrders) {
-                NavigationLink { PurchaseOrdersListView() } label: { Label("Purchase orders", systemImage: "doc.plaintext") }
-                    .accessibilityIdentifier("shop.purchaseOrders")
-                NavigationLink(value: NativeScreenRoute("shop.purchase_invoices")) {
-                    Label(ModuleCatalog.purchaseInvoices.title, systemImage: ModuleCatalog.purchaseInvoices.systemImage)
-                }
-                .accessibilityIdentifier("shop.purchaseInvoices")
-            }
-            NavigationLink { ShopTemplatesView() } label: {
-                Label(ModuleCatalog.shopMessageTemplates.title, systemImage: ModuleCatalog.shopMessageTemplates.systemImage)
-            }
-            .accessibilityIdentifier("shop.templates")
-        }
-        Section("Customers") {
-            NavigationLink { ShopMembersView() } label: {
-                Label(ModuleCatalog.shopMembers.title, systemImage: ModuleCatalog.shopMembers.systemImage)
-            }
-            .accessibilityIdentifier("shop.members")
-            resourceLink(ModuleCatalog.shopWaitlist, id: "shop.waitlist")
-            resourceLink(ModuleCatalog.shopCredits, id: "shop.credits")
-            NavigationLink { ShopKnowledgeView() } label: { Label("Assistant knowledge", systemImage: "books.vertical") }
-                .accessibilityIdentifier("shop.knowledge")
-            resourceLink(ModuleCatalog.shopLegal, id: "shop.legal")
-        }
-        Section("Settings") {
-            settingsLink(ModuleCatalog.shopSettings, id: "shop.settings")
-            settingsLink(ModuleCatalog.shopMembershipSettings, id: "shop.membershipSettings")
-        }
+    private func panelLink<Destination: View>(_ title: String, _ systemImage: String, id: String,
+                                              @ViewBuilder destination: @escaping () -> Destination) -> some View {
+        NavigationLink(destination: destination) { PanelRow(title: title, systemImage: systemImage) }
+            .buttonStyle(.panelRow)
+            .accessibilityIdentifier(id)
     }
 
-    /// A KPI tile that opens its list, like the dashboard's tiles.
-    private func tile<Destination: View>(_ tile: StatTile, hint: String,
+    private func panelLink<Value: Hashable>(_ title: String, _ systemImage: String, id: String, value: Value) -> some View {
+        NavigationLink(value: value) { PanelRow(title: title, systemImage: systemImage) }
+            .buttonStyle(.panelRow)
+            .accessibilityIdentifier(id)
+    }
+
+    /// A number that opens its list, like the dashboard's tiles.
+    private func tile<Destination: View>(_ title: String, _ value: String, _ systemImage: String, tone: Tone = .brand, hint: String,
                                          @ViewBuilder destination: @escaping () -> Destination) -> some View {
         NavigationLink(destination: destination) {
-            tile.accessibilityHint(hint)
+            MetricCard(title: title, value: value, systemImage: systemImage, tone: tone, compact: isCompact)
+                .accessibilityHint(hint)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressableCard)
     }
 
     private func resourceLink(_ descriptor: ResourceDescriptor, id: String) -> some View {
-        NavigationLink(value: ResourceListRoute(descriptor.id)) {
-            Label(descriptor.title, systemImage: descriptor.systemImage)
-        }
-        .accessibilityIdentifier(id)
+        panelLink(descriptor.title, descriptor.systemImage, id: id, value: ResourceListRoute(descriptor.id))
     }
 
     private func settingsLink(_ descriptor: ResourceDescriptor, id: String) -> some View {
-        NavigationLink(value: ResourceRoute(descriptorID: descriptor.id, recordID: "settings")) {
-            Label(descriptor.title, systemImage: descriptor.systemImage)
-        }
-        .accessibilityIdentifier(id)
+        panelLink(descriptor.title, descriptor.systemImage, id: id,
+                  value: ResourceRoute(descriptorID: descriptor.id, recordID: "settings"))
     }
 
     private func alerts(for kpis: ShopKPIs) -> [String] {

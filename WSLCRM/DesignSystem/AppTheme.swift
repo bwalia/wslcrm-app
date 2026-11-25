@@ -77,8 +77,8 @@ struct ThemeAccent: Identifiable, Hashable, Sendable {
         return traits.userInterfaceStyle == .dark ? textDark.uiColor : text.uiColor
     }
 
-    /// nil for the house theme: the asset catalog's accent stays in charge.
-    var tint: Color? { isHouse ? nil : Color(uiColor: dynamic(accent, accentDark)) }
+    /// The house theme names the asset catalog's accent: `.accentColor(nil)` falls back to system blue on iOS.
+    var tint: Color? { isHouse ? Color("AccentColor") : Color(uiColor: dynamic(accent, accentDark)) }
     var fillColor: Color { isHouse ? Color("AccentColor-Fill") : Color(uiColor: dynamic(fill, fillDark)) }
     var textColor: Color { isHouse ? Color("AccentColor-Text") : Color(uiColor: dynamic(text, textDark)) }
     /// For swatches and icon previews.

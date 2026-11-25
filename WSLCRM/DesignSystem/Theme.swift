@@ -183,6 +183,86 @@ private struct NumberCardChrome: ViewModifier {
     }
 }
 
+/// A titled card of rows on a dashboard: what a list's section was, drawn as a panel so several sit side by side on a
+/// wide window. Rows are `PanelRow` links (or any view); the title is the dashboard's eyebrow style.
+struct DashboardPanel<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title.uppercased())
+                .font(.brandEyebrow)
+                .tracking(1.1)
+                .foregroundStyle(.secondaryText)
+                .padding(.horizontal, 14)
+                .padding(.top, 12)
+                .padding(.bottom, 2)
+                .accessibilityAddTraits(.isHeader)
+            VStack(alignment: .leading, spacing: 0) { content }
+                .padding(.horizontal, 4)
+                .padding(.bottom, 6)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: MacSupport.isMac ? 12 : 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: MacSupport.isMac ? 12 : 18, style: .continuous).stroke(Palette.hairline))
+        .shadow(color: .black.opacity(MacSupport.isMac ? 0.06 : 0.05), radius: MacSupport.isMac ? 3 : 10,
+                y: MacSupport.isMac ? 1 : 3)
+    }
+}
+
+/// A row in a panel: icon, words, and a chevron; it highlights under the pointer and when pressed.
+struct PanelRow: View {
+    let title: String
+    let systemImage: String
+    var detail: String?
+    var tint: Color?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(tint ?? Color.accentColor)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.wsBody).foregroundStyle(Color(.label))
+                if let detail { Text(detail).font(.wsCaption).foregroundStyle(.secondaryText) }
+            }
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondaryText)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .contentShape(Rectangle())
+    }
+}
+
+/// The press and pointer highlight for panel rows (`.buttonStyle(.panelRow)` on their links).
+struct PanelRowStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        PanelRowBody(configuration: configuration)
+    }
+
+    private struct PanelRowBody: View {
+        let configuration: Configuration
+        @State private var hovering = false
+
+        var body: some View {
+            configuration.label
+                .background(Color(.label).opacity(configuration.isPressed ? 0.10 : hovering ? 0.05 : 0),
+                            in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .onHover { hovering = $0 }
+                .animation(.easeOut(duration: 0.12), value: hovering)
+        }
+    }
+}
+
+extension ButtonStyle where Self == PanelRowStyle {
+    static var panelRow: PanelRowStyle { PanelRowStyle() }
+}
+
 /// A number on a dashboard: big Unbounded figure, small caption, tinted icon. A number that needs someone (a danger
 /// or warning tone: overdue, unassigned, waiting) carries its colour: a soft wash, a coloured edge and figure, so the
 /// eye finds it first.
@@ -207,7 +287,8 @@ struct MetricCard: View {
             Text(title)
                 .font(.brandCaption)
                 .foregroundStyle(.secondaryText)
-                .lineLimit(2)
+                // Two lines kept on a phone, so cards side by side are the same height.
+                .lineLimit(2, reservesSpace: compact)
         }
         .numberCard(tone: tone, padding: compact ? 12 : 14)
         .accessibilityElement(children: .combine)

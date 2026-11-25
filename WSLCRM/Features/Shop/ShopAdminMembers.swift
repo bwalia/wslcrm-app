@@ -234,27 +234,33 @@ struct ShopMemberDetailView: View {
 }
 
 /// The shop home's card: the newest VIP members, anyone who joined in the last two weeks called out.
-/// The home screen loads the rows (members in force) so no `.task` sits on a Section inside its List.
+/// The home screen loads the rows (members in force).
 struct ShopVipMembersSection: View {
     let rows: [Record]
 
+    /// The shop dashboard's panel of VIP members: who joined lately, the latest five, and the way to all of them.
     var body: some View {
         if !rows.isEmpty {
             let fresh = rows.filter { ShopMemberStats.isNew($0) }
-            Section {
+            DashboardPanel(title: "VIP members (\(rows.count))") {
                 if !fresh.isEmpty {
                     Label("\(fresh.count == 1 ? "1 new VIP" : "\(fresh.count) new VIPs") in the last 14 days. Give them a call.",
                           systemImage: "crown.fill")
                         .font(.wsSubheadline.weight(.medium))
                         .foregroundStyle(Tone.warning.textColor)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
                 }
                 ForEach(rows.prefix(5)) { record in
-                    NavigationLink { ShopMemberDetailView(record: record) } label: { ShopMemberRow(record: record, highlightNew: true) }
+                    NavigationLink { ShopMemberDetailView(record: record) } label: {
+                        ShopMemberRow(record: record, highlightNew: true).padding(.horizontal, 10).padding(.vertical, 8)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.panelRow)
                 }
-                NavigationLink { ShopMembersView() } label: { Text("All \(rows.count) members") }
+                NavigationLink { ShopMembersView() } label: { PanelRow(title: "All \(rows.count) members", systemImage: "person.2") }
+                    .buttonStyle(.panelRow)
                     .accessibilityIdentifier("shop.home.allMembers")
-            } header: {
-                Text("VIP members (\(rows.count))")
             }
         }
     }
