@@ -682,4 +682,29 @@ platform :mac do
     hand_out_latest_build!(key: key, platform: :mac)
     UI.success("Mac build uploaded and handed to #{testflight_tester_emails.join(', ')}")
   end
+
+  desc "Upload the Mac build and submit it for Mac App Store review (released by hand once approved)"
+  lane :release do
+    pkg = Actions.lane_context[SharedValues::PKG_OUTPUT_PATH] || mac_pkg_path
+    UI.user_error!("No Mac package at #{pkg}") unless File.exist?(pkg.to_s)
+
+    key = asc_api_key
+    # Wait for processing: review needs a processed build.
+    upload_to_testflight(api_key: key, pkg: pkg, app_identifier: APP_ID, app_platform: "osx",
+                         skip_waiting_for_build_processing: false, uses_non_exempt_encryption: false)
+    deliver(
+      api_key: key,
+      app_identifier: APP_ID,
+      platform: "osx",
+      build_number: ENV["BUILD_NUMBER"].to_s.empty? ? nil : ENV["BUILD_NUMBER"],
+      submit_for_review: true,
+      automatic_release: false,
+      force: true,
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      skip_metadata: true,
+      precheck_include_in_app_purchases: false,
+      submission_information: { add_id_info_uses_idfa: false }
+    )
+  end
 end

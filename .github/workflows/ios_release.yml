@@ -49,6 +49,15 @@ on:
         options:
           - Int
           - Prod
+      apps:
+        description: "App Store only: which apps to submit for review"
+        required: false
+        type: choice
+        default: both
+        options:
+          - both
+          - iphone
+          - mac
       version:
         description: "Marketing version override (blank = project.yml)"
         required: false
@@ -232,12 +241,27 @@ jobs:
           bundle exec fastlane mac build_pkg
           bundle exec fastlane mac beta
 
+      # Mac App Store: the same Prod build, submitted for review alongside the iPhone app.
+      - name: Mac app — sign, build and submit for App Store review
+        if: >-
+          vars.MAC_TESTFLIGHT == 'true' && env.BUILDS_APP == 'true'
+          && github.event_name == 'workflow_dispatch' && inputs.target == 'app_store' && inputs.apps != 'iphone'
+        continue-on-error: true
+        env:
+          BUILD_NUMBER: ${{ steps.build.outputs.build_number }}
+          EXPORT_OPTIONS_PLIST: ${{ runner.temp }}/ExportOptions-Mac.plist
+        run: |
+          set -euo pipefail
+          bundle exec fastlane mac prepare_signing
+          bundle exec fastlane mac build_pkg
+          bundle exec fastlane mac release
+
       - name: Re-invite testers to the latest build
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'invite_testers'
         run: bundle exec fastlane ios invite_testers
 
       - name: Submit for App Store review
-        if: github.event_name == 'workflow_dispatch' && inputs.target == 'app_store'
+        if: github.event_name == 'workflow_dispatch' && inputs.target == 'app_store' && inputs.apps != 'mac'
         run: bundle exec fastlane ios release
 
       - name: Archive IPA artifact
