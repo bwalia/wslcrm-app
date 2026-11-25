@@ -112,27 +112,29 @@ struct StatTile: View {
     let systemImage: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             // Icon above the words: side by side, a narrow tile broke words mid-way ("Ope / n").
             Image(systemName: systemImage)
-                .font(.wsCaption.weight(.semibold))
-                .foregroundStyle(Color(.label))
+                .font(.wsFootnote.weight(.semibold))
+                .foregroundStyle(Tone.brand.textColor)
+                .frame(width: 28, height: 28)
+                .background(Tone.brand.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .accessibilityHidden(true)
+            Text(value)
+                .font(.wsTitle.monospacedDigit())
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
             Text(title)
-                .font(.wsCaption.weight(.semibold))
+                .font(.wsFootnote)
                 // `.secondary` is 60% of label colour: it fails the contrast audit on this card.
-                .foregroundStyle(Color(.label))
+                .foregroundStyle(Color(.label).opacity(0.85))
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(value)
-                .font(.wsTitle2.bold().monospacedDigit())
-                .minimumScaleFactor(0.6)
-                .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 }

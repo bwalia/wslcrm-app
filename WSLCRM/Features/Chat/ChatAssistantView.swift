@@ -287,6 +287,8 @@ private struct ChatAssistantScreen: View {
             }
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
+            // A Mac window: the conversation reads as a column, not lines across the whole display.
+            .wsReadableWidth(920)
             .onChange(of: model.turns.count) { withAnimation(.snappy) { proxy.scrollTo("bottom", anchor: .bottom) } }
             .onChange(of: model.running) { withAnimation(.snappy) { proxy.scrollTo("bottom", anchor: .bottom) } }
             .onChange(of: model.pendingSummary) { withAnimation(.snappy) { proxy.scrollTo("bottom", anchor: .bottom) } }
@@ -478,10 +480,39 @@ private struct ChatAssistantScreen: View {
                             ForEach(Array(acted.enumerated()), id: \.offset) { _, action in actionChip(action) }
                         }
                     }
+                    let screens = screensTouched(by: turn)
+                    if !screens.isEmpty {
+                        ChatFlowLayout(spacing: 8) {
+                            ForEach(screens, id: \.key) { entry in openChip(entry) }
+                        }
+                    }
                 }
                 Spacer(minLength: 24)
             }
         }
+    }
+
+    /// The screens this reply's actions worked in, that the person has: "Open Leads" beside what was done.
+    private func screensTouched(by turn: ChatAgentTurn) -> [AppCatalog.Entry] {
+        guard turn.tasks.isEmpty else { return [] }
+        let catalog = AppCatalog(menu: session.menu)
+        return AgentActionScreens.keys(for: turn.actions).compactMap { catalog.entry(forKey: $0) }
+    }
+
+    private func openChip(_ entry: AppCatalog.Entry) -> some View {
+        Button {
+            if case .menu(let destination) = entry.destination { linkTarget = .menu(destination, title: entry.name) }
+        } label: {
+            Label("Open \(entry.name)", systemImage: entry.systemImage)
+                .font(.wsFootnote.weight(.semibold))
+                .foregroundStyle(Tone.brand.textColor)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(Tone.brand.color.opacity(0.12), in: Capsule())
+                .overlay(Capsule().stroke(Tone.brand.color.opacity(0.3)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("assistant.open.\(entry.key)")
     }
 
     private func actionChip(_ action: ChatAgentAction) -> some View {
@@ -694,6 +725,14 @@ private struct ChatAssistantScreen: View {
     private func send(_ text: String, model: ChatAssistantModel) async {
         guard text.trimmedOrNil != nil else { return }
         focused = false
+        // "Open leads", "show me my tasks": just go there — no need to wait on the model.
+        let catalog = AppCatalog(menu: session.menu)
+        if case .open(let place) = CommandRouter.decide(text, places: catalog.places), place.key != AppMenu.aiChatKey,
+           case .menu(let destination)? = catalog.entry(forKey: place.key)?.destination {
+            model.draft = ""
+            linkTarget = .menu(destination, title: place.name)
+            return
+        }
         onStarted?()
         await model.send(text)
     }

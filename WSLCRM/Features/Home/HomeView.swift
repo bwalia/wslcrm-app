@@ -5,6 +5,10 @@ import SwiftUI
 struct HomeView: View {
     let hubs: [NavigationPolicy.Home]
     let open: (AppTab) -> Void
+    /// Home's navigation stack: the command box opens screens and the assistant on it.
+    @Binding var path: NavigationPath
+    /// Bumped by ⌘K ("Ask AI…") to put the cursor in the command box.
+    @Binding var focusRequest: Int
 
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
@@ -22,59 +26,34 @@ struct HomeView: View {
     @State private var notifications = NotificationsModel()
     @State private var showingNotifications = false
     @State private var isDeliveryPartner = false
+    @State private var lastRequest: String?
+    @State private var agentBusy = false
 
     var body: some View {
         let catalog = AppCatalog(menu: session.menu)
+        let wide = sizeClass == .regular && !typeSize.isAccessibilitySize
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                HomeHero(showingProfile: $showingProfile, showingNotifications: $showingNotifications,
-                         unread: notifications.unread)
-
-                if let toast {
-                    Label(toast, systemImage: "checkmark.circle.fill")
-                        .font(.brandCallout)
-                        .foregroundStyle(Tone.success.textColor)
-                        .brandCard(padding: 12, radius: 14)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
-
-                if MenuLoadFailedCard.applies(hasWorkspace: session.workspace != nil, error: session.permissionsError,
-                                              menuIsEmpty: session.menu.isEmpty) {
-                    MenuLoadFailedCard()
-                }
-                if !invitations.items.isEmpty || !invitations.feedback.isNone { invitationsSection }
-                // Delivery partners (no workspace needed): their drops, signed for on delivery.
-                if isDeliveryPartner {
-                    NavigationLink(value: NativeScreenRoute(SalesScreen.myDeliveries)) {
-                        HStack {
-                            MyDeliveries.entryLabel.font(.brandHeadline)
-                            Spacer()
-                            Image(systemName: "chevron.right").foregroundStyle(.secondaryText)
-                        }
-                        .brandCard(padding: 16, radius: 16)
+            VStack(alignment: .leading, spacing: 20) {
+                HomeHeader(showingProfile: $showingProfile, showingNotifications: $showingNotifications,
+                           unread: notifications.unread)
+                if wide {
+                    // A Mac or iPad window: the agent and today's work on the left, the launcher on the right.
+                    HStack(alignment: .top, spacing: 24) {
+                        VStack(alignment: .leading, spacing: 24) { primaryColumn(catalog: catalog) }
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                        VStack(alignment: .leading, spacing: 24) { secondaryColumn(catalog: catalog) }
+                            .frame(width: 380, alignment: .topLeading)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("home.myDeliveries")
-                }
-                if !HomeDigest.sources(session: session).isEmpty { todaySection }
-                if !hubs.isEmpty { workSection }
-                quickActions(catalog: catalog)
-                if !catalog.nativeEntries.isEmpty { appsSection(catalog: catalog) }
-                if NoAccessCard.applies(hasWorkspace: session.workspace != nil, menuFailed: session.permissionsError != nil,
-                                        hasApps: !catalog.groups.isEmpty, hasWork: !hubs.isEmpty,
-                                        isDeliveryPartner: isDeliveryPartner) {
-                    NoAccessCard()
-                }
-                // The AI Navigator, once its native screen is in this person's menu.
-                if let chat = catalog.entry(forKey: AppMenu.aiChatKey) {
-                    AppEntryLink(entry: chat) { AssistantCardLabel() }
-                        .accessibilityIdentifier("home.assistant")
+                } else {
+                    VStack(alignment: .leading, spacing: 24) {
+                        primaryColumn(catalog: catalog)
+                        secondaryColumn(catalog: catalog)
+                    }
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, wide ? 28 : 16)
             .padding(.bottom, 32)
-            // A big iPad or Mac window: Home stays a readable column in the middle instead of scattering.
-            .frame(maxWidth: 1100)
+            .frame(maxWidth: 1440)
             .frame(maxWidth: .infinity)
         }
         .brandCanvas()
@@ -88,6 +67,7 @@ struct HomeView: View {
             await digest.load(session: session, services: services)
             await invitations.load(services.workspace())
             await notifications.load(services.workspace())
+            await loadLastRequest()
         }
         .task(id: session.workspace?.uuid) {
             await digest.load(session: session, services: services)
@@ -95,6 +75,8 @@ struct HomeView: View {
             await notifications.load(services.workspace())
             isDeliveryPartner = await MyDeliveries.isPartner(services)
         }
+        // Each time Home comes back into view: the agent may have finished while the person was elsewhere.
+        .onAppear { Task { await loadLastRequest() } }
         .sheet(isPresented: $showingNotifications) { NotificationsView(model: notifications) }
         .onAppear {
             // Said once after joining or making a workspace (the switch rebuilt Home).
@@ -118,6 +100,88 @@ struct HomeView: View {
         }
         .navigationDestination(item: $createdRequest) { ServiceRequestDetailView(requestUuid: $0.uuid) }
         .accessibilityIdentifier("home.dashboard")
+    }
+
+    // MARK: Columns
+
+    /// The agent, then what needs the person and their work.
+    @ViewBuilder
+    private func primaryColumn(catalog: AppCatalog) -> some View {
+        CommandCenter(places: catalog.places, signals: digest.signals, canAsk: canAsk(catalog),
+                      lastRequest: lastRequest, agentBusy: agentBusy, focusRequest: $focusRequest,
+                      onOpen: { openPlace($0, catalog: catalog) },
+                      onAsk: { ask($0) },
+                      onContinue: { path.append(NativeScreenRoute(ChatAssistantRoute.screenID(path: nil))) })
+
+        if let toast {
+            Label(toast, systemImage: "checkmark.circle.fill")
+                .font(.brandCallout)
+                .foregroundStyle(Tone.success.textColor)
+                .brandCard(padding: 12, radius: 14)
+                .transition(.move(edge: .top).combined(with: .opacity))
+        }
+
+        if MenuLoadFailedCard.applies(hasWorkspace: session.workspace != nil, error: session.permissionsError,
+                                      menuIsEmpty: session.menu.isEmpty) {
+            MenuLoadFailedCard()
+        }
+        if !invitations.items.isEmpty || !invitations.feedback.isNone { invitationsSection }
+        // Delivery partners (no workspace needed): their drops, signed for on delivery.
+        if isDeliveryPartner {
+            NavigationLink(value: NativeScreenRoute(SalesScreen.myDeliveries)) {
+                HStack {
+                    MyDeliveries.entryLabel.font(.brandHeadline)
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundStyle(.secondaryText)
+                }
+                .brandCard(padding: 16, radius: 16)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("home.myDeliveries")
+        }
+        if !HomeDigest.sources(session: session).isEmpty { todaySection }
+        if !hubs.isEmpty { workSection }
+    }
+
+    /// One-tap actions and the launcher.
+    @ViewBuilder
+    private func secondaryColumn(catalog: AppCatalog) -> some View {
+        quickActions(catalog: catalog)
+        if !catalog.nativeEntries.isEmpty { appsSection(catalog: catalog) }
+        if NoAccessCard.applies(hasWorkspace: session.workspace != nil, menuFailed: session.permissionsError != nil,
+                                hasApps: !catalog.groups.isEmpty, hasWork: !hubs.isEmpty,
+                                isDeliveryPartner: isDeliveryPartner) {
+            NoAccessCard()
+        }
+    }
+
+    // MARK: Command box
+
+    private func canAsk(_ catalog: AppCatalog) -> Bool {
+        catalog.entry(forKey: AppMenu.aiChatKey) != nil
+    }
+
+    private func openPlace(_ place: CommandRouter.Place, catalog: AppCatalog) {
+        guard let entry = catalog.entry(forKey: place.key), case .menu(let destination) = entry.destination else { return }
+        if entry.key == AppMenu.aiChatKey {
+            path.append(NativeScreenRoute(ChatAssistantRoute.screenID(path: nil)))
+        } else {
+            path.append(ChatLinkTarget.menu(destination, title: entry.name))
+        }
+    }
+
+    /// Hands a request to the all-round agent, on its own screen, where it is sent at once.
+    private func ask(_ request: String) {
+        path.append(NativeScreenRoute(ChatAssistantRoute.screenID(path: nil, ask: request)))
+        lastRequest = request
+        agentBusy = true
+    }
+
+    private func loadLastRequest() async {
+        guard canAsk(AppCatalog(menu: session.menu)) else { return }
+        guard let conversation = try? await ChatAPI(client: services.client).agentConversation(path: nil) else { return }
+        lastRequest = conversation.turns.last(where: \.isUser)?.content.trimmedOrNil
+        agentBusy = conversation.status == .running
     }
 
     // MARK: Invitations
@@ -222,10 +286,6 @@ struct HomeView: View {
 
     private func actions(catalog: AppCatalog) -> [QuickAction] {
         var actions: [QuickAction] = []
-        if case .menu(let chat)? = catalog.entry(forKey: AppMenu.aiChatKey)?.destination {
-            actions.append(QuickAction(id: "ai", title: "Ask AI", systemImage: "sparkles",
-                                       color: Palette.tileColors[1], destination: chat))
-        }
         if let access = session.propertyDeals, PDWriteGates.canCapture(access, session.permissions) {
             actions.append(QuickAction(id: "capture", title: "Capture", systemImage: "camera.viewfinder",
                                        color: Palette.tileColors[0]) { showingCapture = true })
@@ -242,7 +302,7 @@ struct HomeView: View {
     private func quickActions(catalog: AppCatalog) -> some View {
         let items = actions(catalog: catalog)
         // Side by side, but two to a row at the largest text sizes so the names stay readable.
-        let perRow = max(1, min(items.count, typeSize.isAccessibilitySize ? 2 : 4))
+        let perRow = max(1, min(items.count, typeSize.isAccessibilitySize ? 2 : (sizeClass == .regular ? 3 : 4)))
         return VStack(alignment: .leading, spacing: 10) {
             DashboardSectionHeader("Quick actions")
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: perRow),
@@ -278,14 +338,14 @@ struct HomeView: View {
     // MARK: Your apps
 
     private func appsSection(catalog: AppCatalog) -> some View {
-        let entries = Array(catalog.nativeEntries.prefix(8))
+        let entries = Array(catalog.nativeEntries.prefix(sizeClass == .regular ? 12 : 8))
         return VStack(alignment: .leading, spacing: 10) {
             DashboardSectionHeader("Your apps") {
                 Button("See all") { open(.apps) }
                     .accessibilityIdentifier("home.apps.all")
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top),
-                                     count: typeSize.isAccessibilitySize ? 2 : 4), spacing: 16) {
+                                     count: typeSize.isAccessibilitySize ? 2 : (sizeClass == .regular ? 3 : 4)), spacing: 16) {
                 ForEach(entries) { entry in
                     AppEntryLink(entry: entry) {
                         VStack(spacing: 8) {
@@ -315,11 +375,11 @@ struct HomeView: View {
 
 }
 
-// MARK: - Hero
+// MARK: - Header
 
-/// The top of Home: the brand's dark surface with an accent glow, the date, a greeting in the
-/// display face, the workspace, and the person's avatar (their profile and settings).
-private struct HomeHero: View {
+/// The top line of Home, on the canvas: the brand, the date and a greeting, the workspace, notifications and the
+/// person's avatar. Kept slim so the agent's box below it is the first thing the eye lands on.
+private struct HomeHeader: View {
     @Binding var showingProfile: Bool
     @Binding var showingNotifications: Bool
     let unread: Int
@@ -328,96 +388,107 @@ private struct HomeHero: View {
     @State private var choosingWorkspace = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .center) {
-                BrandMark(size: 30)
-                    .padding(6)
-                    .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                Spacer()
-                Button { showingNotifications = true } label: {
-                    Image(systemName: unread > 0 ? "bell.badge.fill" : "bell")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(.white.opacity(0.12), in: Circle())
-                        .overlay(alignment: .topTrailing) {
-                            if unread > 0 {
-                                Text(unread > 99 ? "99+" : "\(unread)")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 1)
-                                    .background(Color.red, in: Capsule())
-                                    .offset(x: 6, y: -4)
-                            }
-                        }
-                }
-                .accessibilityLabel(unread > 0 ? "Notifications, \(unread) unread" : "Notifications")
-                .accessibilityIdentifier("home.notifications")
-                Button { showingProfile = true } label: {
-                    Text(session.user?.initials ?? "?")
-                        .font(BrandFont.font(.semibold, size: 15, relativeTo: .subheadline))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(Color.accentColor, in: Circle())
-                        .overlay(Circle().stroke(.white.opacity(0.35), lineWidth: 2))
-                }
-                .accessibilityLabel("Profile and settings")
-                .accessibilityIdentifier("home.profile")
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 14) {
+                identity
+                Spacer(minLength: 12)
+                workspaceButton
+                controls
             }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)).uppercased())
-                    .font(.brandEyebrow)
-                    .tracking(1.4)
-                    .foregroundStyle(Palette.onDarkMuted)
-                Text(greeting)
-                    .font(.brandHero)
-                    .foregroundStyle(.white)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
-            }
-
-            HStack(spacing: 8) {
-                if let workspace = session.workspace {
-                    Button {
-                        choosingWorkspace = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "building.2")
-                            Text(workspace.name).lineLimit(1)
-                            Image(systemName: "chevron.down").imageScale(.small)
-                        }
-                        .font(.brandCaption)
-                        .foregroundStyle(Palette.onDarkInk)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.white.opacity(0.12), in: Capsule())
-                    }
-                    .accessibilityIdentifier("home.workspace")
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center) {
+                    identity
+                    Spacer(minLength: 8)
+                    controls
                 }
-                if sync.pendingCount > 0 {
-                    Pill(text: "\(sync.pendingCount) to sync", systemImage: "arrow.triangle.2.circlepath",
-                         foreground: Palette.onDarkInk, background: .white.opacity(0.12))
-                }
+                workspaceButton
             }
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            ZStack {
-                Palette.heroGradient
-                RadialGradient(colors: [Color.accentColor.opacity(0.55), .clear], center: .topTrailing,
-                               startRadius: 10, endRadius: 260)
-                RadialGradient(colors: [Palette.tileColors[1].opacity(0.35), .clear], center: .bottomLeading,
-                               startRadius: 10, endRadius: 220)
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .padding(.top, 8)
-        .environment(\.colorScheme, .dark)
+        .padding(.top, 12)
         .sheet(isPresented: $choosingWorkspace) {
             NavigationStack { WorkspacePickerView(isInitialChoice: false) }
+        }
+    }
+
+    private var identity: some View {
+        HStack(alignment: .center, spacing: 12) {
+            BrandMark(size: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)).uppercased())
+                    .font(.brandEyebrow)
+                    .tracking(1.2)
+                    .foregroundStyle(.secondaryText)
+                Text(greeting)
+                    .font(.brandDisplay)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    .accessibilityAddTraits(.isHeader)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var workspaceButton: some View {
+        HStack(spacing: 8) {
+            if let workspace = session.workspace {
+                Button {
+                    choosingWorkspace = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "building.2")
+                        Text(workspace.name).lineLimit(1)
+                        Image(systemName: "chevron.down").imageScale(.small)
+                    }
+                    .font(.brandFootnote)
+                    .foregroundStyle(Color(.label))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Palette.card, in: Capsule())
+                    .overlay(Capsule().stroke(Palette.hairline))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("home.workspace")
+            }
+            if sync.pendingCount > 0 {
+                Pill(text: "\(sync.pendingCount) to sync", systemImage: "arrow.triangle.2.circlepath")
+            }
+        }
+    }
+
+    private var controls: some View {
+        HStack(spacing: 10) {
+            Button { showingNotifications = true } label: {
+                Image(systemName: unread > 0 ? "bell.badge.fill" : "bell")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color(.label))
+                    .frame(width: 44, height: 44)
+                    .background(Palette.card, in: Circle())
+                    .overlay(Circle().stroke(Palette.hairline))
+                    .overlay(alignment: .topTrailing) {
+                        if unread > 0 {
+                            Text(unread > 99 ? "99+" : "\(unread)")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Color.red, in: Capsule())
+                                .offset(x: 6, y: -4)
+                        }
+                    }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(unread > 0 ? "Notifications, \(unread) unread" : "Notifications")
+            .accessibilityIdentifier("home.notifications")
+            Button { showingProfile = true } label: {
+                Text(session.user?.initials ?? "?")
+                    .font(.brandCallout.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Color.accentColor, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Profile and settings")
+            .accessibilityIdentifier("home.profile")
         }
     }
 
@@ -429,7 +500,7 @@ private struct HomeHero: View {
         default: "Good evening"
         }
         guard let name = session.user?.firstName, !name.isEmpty else { return part }
-        return "\(part),\n\(name)"
+        return "\(part), \(name)"
     }
 }
 
@@ -500,37 +571,6 @@ private struct HubCard: View {
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .brandCard(padding: 14, radius: 18)
         .accessibilityElement(children: .combine)
-    }
-}
-
-/// The AI Navigator, offered at the foot of Home (its native chat screen).
-private struct AssistantCardLabel: View {
-    var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 48, height: 48)
-                .background(
-                    LinearGradient(colors: [Color.accentColor, Palette.tileColors[1]],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing),
-                    in: Circle())
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Ask the AI Navigator")
-                    .font(.brandHeadline)
-                    .foregroundStyle(Color(.label))
-                Text("Questions about customers, jobs, deals — in plain English.")
-                    .font(.brandFootnote)
-                    .foregroundStyle(.secondaryText)
-                    .multilineTextAlignment(.leading)
-            }
-            Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .foregroundStyle(.secondaryText)
-                .accessibilityHidden(true)
-        }
-        .brandCard(padding: 16)
     }
 }
 

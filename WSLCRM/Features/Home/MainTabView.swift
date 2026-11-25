@@ -19,6 +19,7 @@ struct MainTabView: View {
     @State private var homePath = NavigationPath()
     @State private var hubPaths: [NavigationPolicy.Home: NavigationPath] = [:]
     @State private var appPaths: [String: NavigationPath] = [:]
+    @State private var commandFocus = 0
 
     var body: some View {
         let policy = NavigationPolicy(session: session)
@@ -26,7 +27,8 @@ struct MainTabView: View {
                                        pins: HomePreferences.shared.pins)
         TabView(selection: $selection) {
             NavigationStack(path: $homePath) {
-                HomeView(hubs: policy.ordered, open: { open($0, slots: slots) })
+                HomeView(hubs: policy.ordered, open: { open($0, slots: slots) }, path: $homePath,
+                         focusRequest: $commandFocus)
                     .withAppDestinations()
                     .navigationDestination(for: HubScreenRoute.self) { $0.hub.rootView }
                     .navigationDestination(for: ChatLinkTarget.self) { ChatLinkDestinationView(target: $0) }
@@ -46,6 +48,7 @@ struct MainTabView: View {
 
             NavigationStack {
                 AppsView()
+                    .askAIButton(path: nil)
                     .withAppDestinations()
                     .safeAreaInset(edge: .top, spacing: 0) { syncBanner }
             }
@@ -63,6 +66,16 @@ struct MainTabView: View {
         }
         .onChange(of: session.workspace?.uuid) { activatePreferences() }
         .onChange(of: router.pending) { openPendingLink() }
+        // ⌘K, from anywhere: Home's command box.
+        .onReceive(NotificationCenter.default.publisher(for: .wsAskAI)) { _ in focusCommandBox() }
+        .background {
+            #if !targetEnvironment(macCatalyst)
+            // An iPad with a keyboard (the Mac has it in its menu bar: Edit › Ask AI…).
+            Button("Ask AI", action: focusCommandBox)
+                .keyboardShortcut("k", modifiers: .command)
+                .hidden()
+            #endif
+        }
         // A shortcut that was unpinned while open: back to Home rather than an empty selection.
         .onChange(of: slots.map(\.tab)) { _, tabs in
             if case .home = selection { return }
@@ -77,6 +90,7 @@ struct MainTabView: View {
         case .hub(let hub):
             NavigationStack(path: hubPath(hub)) {
                 hub.rootView
+                    .askAIButton(path: Self.assistantPath(forKey: hub.menuKey, menu: session.menu))
                     .withAppDestinations()
                     .safeAreaInset(edge: .top, spacing: 0) { syncBanner }
             }
@@ -85,6 +99,7 @@ struct MainTabView: View {
                 Group {
                     if let destination = NativeModules.destination(forKey: key) { destination.rootView }
                 }
+                .askAIButton(path: Self.assistantPath(forKey: key, menu: session.menu))
                 .withAppDestinations()
                 .safeAreaInset(edge: .top, spacing: 0) { syncBanner }
             }
@@ -98,6 +113,18 @@ struct MainTabView: View {
         } else if case .hub(let hub) = tab {
             homePath.append(HubScreenRoute(hub: hub))
         }
+    }
+
+    private func focusCommandBox() {
+        selection = .home
+        homePath = NavigationPath()
+        commandFocus += 1
+    }
+
+    /// The page assistant for an area: its dashboard path from the menu, so the agent there knows that page.
+    static func assistantPath(forKey key: String?, menu: AppMenu) -> String? {
+        guard let key else { return nil }
+        return (menu.sections.flatMap(\.items) + menu.secondary).first { $0.key == key }?.path?.trimmedOrNil
     }
 
     private func appPath(_ key: String) -> Binding<NavigationPath> {
