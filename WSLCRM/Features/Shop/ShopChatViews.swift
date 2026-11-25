@@ -1,3 +1,4 @@
+import QuickLook
 import SwiftUI
 
 // The shop AI assistant's chats (dashboard /dashboard/shop/chats and /chats/[uuid]): every transcript, who the
@@ -78,6 +79,9 @@ struct ShopChatDetailView: View {
     @State private var state: LoadState<ShopChatRecord> = .idle
     @State private var makingLead = false
     @State private var notice: String?
+    @State private var transcriptURL: URL?
+    @State private var loadingTranscript = false
+    @State private var transcriptError: APIError?
 
     var body: some View {
         List {
@@ -101,6 +105,23 @@ struct ShopChatDetailView: View {
         .sheet(isPresented: $makingLead) {
             if let chat = state.value { MakeChatLeadSheet(chat: chat) { await made() } }
         }
+        // The system's PDF preview: Share saves it to Files, mails it or AirDrops it.
+        .quickLookPreview($transcriptURL)
+    }
+
+    private func downloadTranscript(_ chat: ShopChatRecord) async {
+        loadingTranscript = true
+        transcriptError = nil
+        defer { loadingTranscript = false }
+        do {
+            let data = try await services.shop.chatTranscript(chat.uuid)
+            let who = (chat.contactName ?? chat.email ?? "visitor").replacingOccurrences(of: "/", with: "-")
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("Chat with \(who).pdf")
+            try data.write(to: url, options: .atomic)
+            transcriptURL = url
+        } catch {
+            transcriptError = error.asAPIError
+        }
     }
 
     private func made() async {
@@ -119,6 +140,18 @@ struct ShopChatDetailView: View {
             }
             if let summary = chat.summary?.trimmedOrNil {
                 Label(summary, systemImage: "text.alignleft").font(.wsSubheadline)
+            }
+            if state.value != nil {
+                Button { Task { await downloadTranscript(chat) } } label: {
+                    if loadingTranscript {
+                        ProgressView().frame(minHeight: 44)
+                    } else {
+                        Label("Download the transcript (PDF)", systemImage: "arrow.down.doc").frame(minHeight: 44)
+                    }
+                }
+                .disabled(loadingTranscript)
+                .accessibilityIdentifier("shop.chat.transcript")
+                if let transcriptError { InlineErrorRow(error: transcriptError) { Task { await downloadTranscript(chat) } } }
             }
         }
 
