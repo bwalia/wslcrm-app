@@ -614,7 +614,14 @@ platform :mac do
     cert(api_key: api_key, type: "mac_installer_distribution", platform: "macos",
          keychain_path: kc_path, keychain_password: kc_pass, output_path: tmp_dir)
     push_added = ensure_push_capability!(api_key)
-    get_provisioning_profile(api_key: api_key, app_identifier: APP_ID, platform: "catalyst", force: push_added)
+    begin
+      get_provisioning_profile(api_key: api_key, app_identifier: APP_ID, platform: "catalyst", force: push_added)
+    rescue StandardError => e
+      # The profile on file was made for a certificate this keychain doesn't have (`cert` picked another
+      # installed one): make a new profile for the certificate we sign with.
+      UI.important("No Mac profile matches the installed certificate (#{e.message.lines.first&.strip}); making a new one")
+      get_provisioning_profile(api_key: api_key, app_identifier: APP_ID, platform: "catalyst", force: true)
+    end
     unless profile_has_push?(lane_context[SharedValues::SIGH_PROFILE_PATH])
       UI.important("Mac profile has no push entitlement; making a new one")
       get_provisioning_profile(api_key: api_key, app_identifier: APP_ID, platform: "catalyst", force: true)
