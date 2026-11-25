@@ -79,13 +79,14 @@ struct PurchaseOrdersListView: View {
                 if let stats, route.projectUuid == nil {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 10) {
-                            StatTile(title: "Open (\(stats.openCount))", value: stats.amounts(\.openValue), systemImage: "shippingbox")
-                            StatTile(title: "Overdue", value: "\(stats.overdueCount)", systemImage: "exclamationmark.triangle")
+                            StatTile(title: "Open (\(stats.openCount))", value: stats.amounts(\.openValue), systemImage: "shippingbox", compact: true)
+                            StatTile(title: "Overdue", value: "\(stats.overdueCount)", systemImage: "exclamationmark.triangle", compact: true)
                             StatTile(title: "To bill (\(stats.toBillCount))", value: stats.amounts(\.toBillValue),
                                      systemImage: "sterlingsign.circle")
-                            StatTile(title: "Billed", value: stats.amounts(\.billedValue), systemImage: "checkmark.seal")
+                            StatTile(title: "Billed", value: stats.amounts(\.billedValue), systemImage: "checkmark.seal", compact: true)
                         }
-                        .frame(height: 76)
+                        // The tiles set the strip's height (a fixed one clipped them).
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal)
                     }
                     .padding(.vertical, 6)

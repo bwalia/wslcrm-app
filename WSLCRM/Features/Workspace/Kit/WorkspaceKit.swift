@@ -388,9 +388,8 @@ struct MetricTile: View {
                 .foregroundStyle(tone == .neutral ? Color.primary : tone.textColor)
             if let detail { Text(detail).font(.wsFootnote).foregroundStyle(.secondaryText) }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+        // The same card as every other number in the app.
+        .numberCard(tone: tone, padding: 12)
         .accessibilityElement(children: .combine)
     }
 }

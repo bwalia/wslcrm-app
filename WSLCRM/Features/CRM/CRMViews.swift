@@ -110,20 +110,19 @@ struct StatTile: View {
     let title: String
     let value: String
     let systemImage: String
+    /// A strip of numbers: the icon beside the figure, so the strip stays low.
+    var compact = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Icon above the words: side by side, a narrow tile broke words mid-way ("Ope / n").
-            Image(systemName: systemImage)
-                .font(.wsFootnote.weight(.semibold))
-                .foregroundStyle(Tone.brand.textColor)
-                .frame(width: 28, height: 28)
-                .background(Tone.brand.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .accessibilityHidden(true)
-            Text(value)
-                .font(.wsTitle.monospacedDigit())
-                .minimumScaleFactor(0.6)
-                .lineLimit(1)
+        VStack(alignment: .leading, spacing: compact ? 6 : 8) {
+            // Icon above the words: side by side, a narrow tile broke words mid-way ("Ope / n"). The compact form puts
+            // the icon beside the figure, not the words.
+            if compact {
+                HStack(spacing: 8) { icon; figure }
+            } else {
+                icon
+                figure
+            }
             Text(title)
                 .font(.wsFootnote)
                 // `.secondary` is 60% of label colour: it fails the contrast audit on this card.
@@ -132,10 +131,25 @@ struct StatTile: View {
                 .minimumScaleFactor(0.8)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        // The same card as every other number in the app.
+        .numberCard(padding: compact ? 12 : 14)
         .accessibilityElement(children: .combine)
+    }
+
+    private var icon: some View {
+        Image(systemName: systemImage)
+            .font(.wsFootnote.weight(.semibold))
+            .foregroundStyle(Tone.brand.textColor)
+            .frame(width: 28, height: 28)
+            .background(Tone.brand.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .accessibilityHidden(true)
+    }
+
+    private var figure: some View {
+        Text(value)
+            .font(.wsTitle.monospacedDigit())
+            .minimumScaleFactor(0.6)
+            .lineLimit(1)
     }
 }
 

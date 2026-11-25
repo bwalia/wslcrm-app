@@ -159,23 +159,27 @@ private struct InvoicesListBody: View {
     private var statsStrip: some View {
         if let stats {
             ScrollView(.horizontal, showsIndicators: false) {
+                // The tiles set the strip's height (a fixed one clipped their tops and bottoms).
                 HStack(spacing: 10) {
-                    StatTile(title: "Invoiced", value: money(stats.totalInvoiced), systemImage: "doc.text")
-                    StatTile(title: "Outstanding", value: money(stats.totalOutstanding), systemImage: "hourglass")
+                    MetricCard(title: "Invoiced", value: money(stats.totalInvoiced), systemImage: "doc.text", compact: true)
+                    MetricCard(title: "Outstanding", value: money(stats.totalOutstanding), systemImage: "hourglass",
+                               compact: true)
                     // Tapping it shows just the overdue invoices (tap again for all of them).
                     Button { filter = filter == .overdue ? nil : .overdue } label: {
-                        StatTile(title: "Overdue (\(stats.overdueCount))", value: money(stats.totalOverdue),
-                                 systemImage: "exclamationmark.triangle")
-                            .overlay(RoundedRectangle(cornerRadius: 12)
+                        MetricCard(title: "Overdue (\(stats.overdueCount))", value: money(stats.totalOverdue),
+                                   systemImage: "exclamationmark.triangle",
+                                   tone: stats.overdueCount > 0 || filter == .overdue ? .danger : .brand, compact: true)
+                            .overlay(RoundedRectangle(cornerRadius: MacSupport.isMac ? 12 : 18, style: .continuous)
                                 .strokeBorder(Tone.danger.color, lineWidth: filter == .overdue ? 2 : 0))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressableCard)
                     .accessibilityHint(filter == .overdue ? "Shows every invoice again" : "Shows only overdue invoices")
                     .accessibilityIdentifier("invoices.overdueTile")
-                    StatTile(title: "Paid", value: money(stats.totalPaid), systemImage: "checkmark.seal")
+                    MetricCard(title: "Paid", value: money(stats.totalPaid), systemImage: "checkmark.seal", compact: true)
                 }
-                .frame(height: 76)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal)
+                .padding(.vertical, 2)
             }
             .padding(.vertical, 6)
             .background(.bar)
@@ -410,6 +414,39 @@ struct InvoiceDetailView: View {
         }
     }
 
+    /// The Mac's actions in the invoice's header: email (or chase), record a payment, mark as sent; void and delete
+    /// behind More. The same permissions and states as the phone's Actions section.
+    private func macActions(_ invoice: Invoice) -> some View {
+        let permissions = session.permissions
+        let canUpdate = permissions.can(.update, .invoices)
+        let canVoid = canUpdate && invoice.canVoid
+        let canDelete = permissions.can(.delete, .invoices) && invoice.canDelete
+        return RecordActionBar(showsMore: canVoid || canDelete) {
+            if canUpdate && invoice.canEmail {
+                Button { emailing = true } label: {
+                    Label(invoice.emailActionTitle,
+                          systemImage: invoice.displayStatus == .overdue ? "bell.badge.fill" : "envelope.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(invoice.displayStatus == .overdue ? Tone.warning.solidColor : nil)
+                .accessibilityIdentifier("invoice.email")
+            }
+            if permissions.can(.create, .payments) && invoice.canRecordPayment {
+                Button { recordingPayment = true } label: { Label("Record payment", systemImage: "sterlingsign.circle") }
+            }
+            if canUpdate && invoice.canSend {
+                Button { Task { _ = await mutate("Marked as sent.") { try await services.invoices.send(invoiceUuid) } } } label: {
+                    Label("Mark as sent", systemImage: "paperplane")
+                }
+                .help("Mark as sent without emailing")
+            }
+        } more: {
+            if canVoid { Button("Void invoice", systemImage: "xmark.circle", role: .destructive) { confirmVoid = true } }
+            if canDelete { Button("Delete draft", systemImage: "trash", role: .destructive) { confirmDelete = true } }
+        }
+        .disabled(busy)
+    }
+
     private func content(_ invoice: Invoice) -> some View {
         let permissions = session.permissions
         let canUpdate = permissions.can(.update, .invoices)
@@ -429,6 +466,7 @@ struct InvoiceDetailView: View {
                     Text([invoice.issueDate.map { "Issued \(Formatters.day($0.date()) ?? "")" },
                           invoice.dueDate.map { "Due \(Formatters.day($0.date()) ?? "")" }].compactMap { $0 }.joined(separator: " · "))
                         .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                    if MacSupport.isMac { macActions(invoice) }
                 }
                 .padding(.vertical, 4)
                 if invoice.displayNumber != invoice.invoiceNumber {
@@ -445,7 +483,9 @@ struct InvoiceDetailView: View {
                 }
             }
 
-            if canUpdate && (invoice.canEmail || invoice.canVoid) || (permissions.can(.create, .payments) && invoice.canRecordPayment)
+            // The Mac has these in the header (macActions).
+            if !MacSupport.isMac, canUpdate && (invoice.canEmail || invoice.canVoid)
+                || (permissions.can(.create, .payments) && invoice.canRecordPayment)
                 || (permissions.can(.delete, .invoices) && invoice.canDelete) {
                 Section("Actions") {
                     if canUpdate && invoice.canEmail {

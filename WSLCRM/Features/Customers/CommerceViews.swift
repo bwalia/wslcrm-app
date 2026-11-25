@@ -57,12 +57,13 @@ struct OrdersListView: View {
                 if let stats {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 10) {
-                            StatTile(title: "Pending", value: "\(stats.pendingOrders)", systemImage: "clock")
-                            StatTile(title: "Processing", value: "\(stats.processingOrders)", systemImage: "shippingbox")
-                            StatTile(title: "Delivered", value: "\(stats.deliveredOrders)", systemImage: "checkmark.seal")
-                            StatTile(title: "Revenue", value: Formatters.money(stats.totalRevenue, currency: nil) ?? "", systemImage: "sterlingsign")
+                            StatTile(title: "Pending", value: "\(stats.pendingOrders)", systemImage: "clock", compact: true)
+                            StatTile(title: "Processing", value: "\(stats.processingOrders)", systemImage: "shippingbox", compact: true)
+                            StatTile(title: "Delivered", value: "\(stats.deliveredOrders)", systemImage: "checkmark.seal", compact: true)
+                            StatTile(title: "Revenue", value: Formatters.money(stats.totalRevenue, currency: nil) ?? "", systemImage: "sterlingsign", compact: true)
                         }
-                        .frame(height: 76)
+                        // The tiles set the strip's height (a fixed one clipped them).
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal)
                     }
                     .padding(.vertical, 6)

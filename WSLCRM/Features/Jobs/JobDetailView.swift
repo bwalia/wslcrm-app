@@ -272,11 +272,41 @@ private struct JobDetailContent: View {
         }
     }
 
+    /// The Mac's status changes in the job's header: starting and completing prominent, the others beside them, cancel
+    /// behind More. The same transitions and rules as the phone's Actions section.
+    private func macActions(_ detail: JobDetail) -> some View {
+        let transitions = orderedTransitions(detail.allowedTransitions)
+        return RecordActionBar(showsMore: transitions.contains(.cancelled)) {
+            ForEach(transitions.filter { $0 != .cancelled }, id: \.self) { status in
+                if status == .completed || status == .inProgress {
+                    statusButton(status).buttonStyle(.borderedProminent).tint(status.tone.solidColor)
+                } else {
+                    statusButton(status)
+                }
+            }
+        } more: {
+            Button("Cancel job", systemImage: JobStatus.cancelled.systemImage, role: .destructive) {
+                cancelReason = ""
+                cancellingJob = true
+            }
+            .accessibilityIdentifier("job.action.cancelled")
+        }
+        .disabled(model.busyKey != nil)
+    }
+
+    private func statusButton(_ status: JobStatus) -> some View {
+        Button { Task { await model.changeJobStatus(to: status) } } label: {
+            Label(status.actionTitle, systemImage: status.systemImage)
+        }
+        .accessibilityIdentifier("job.action.\(status.rawValue)")
+    }
+
     private func loaded(_ detail: JobDetail) -> some View {
         let policy = model.policy
         return List {
             Section {
                 header(detail)
+                if MacSupport.isMac, policy.canChangeJobStatus(detail) { macActions(detail) }
                 if let cachedAt = model.cachedAt {
                     CachedDataNotice(savedAt: cachedAt)
                 }
@@ -293,7 +323,8 @@ private struct JobDetailContent: View {
                 Section { InlineErrorRow(error: manageError) }
             }
 
-            if policy.canChangeJobStatus(detail) {
+            // The Mac has these in the header (macActions).
+            if policy.canChangeJobStatus(detail), !MacSupport.isMac {
                 Section("Actions") {
                     ForEach(orderedTransitions(detail.allowedTransitions), id: \.self) { status in
                         Button {

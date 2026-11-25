@@ -244,3 +244,26 @@ struct MacListDetail<ID: Hashable, ListContent: View, Pane: View>: View {
         }
     }
 }
+
+/// A record's actions on the Mac, in its header: the main ones as desktop buttons (the first prominent), the rest —
+/// destructive ones — behind More, instead of the phone's full-width rows down the page.
+struct RecordActionBar<Actions: View, More: View>: View {
+    var showsMore = true
+    @ViewBuilder let actions: Actions
+    @ViewBuilder let more: More
+
+    var body: some View {
+        HStack(spacing: 8) {
+            actions
+            if showsMore {
+                Menu { more } label: { Label("More", systemImage: "ellipsis.circle") }
+                    .fixedSize()
+                    .accessibilityIdentifier("record.more")
+            }
+            Spacer(minLength: 0)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+        .padding(.top, 6)
+    }
+}

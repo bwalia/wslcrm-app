@@ -148,6 +148,41 @@ struct Pill: View {
     }
 }
 
+extension Tone {
+    /// Overdue, unassigned, waiting: a number in this tone needs someone.
+    var needsAttention: Bool { self == .danger || self == .warning }
+}
+
+extension View {
+    /// The card every number in the app sits on (MetricCard, StatTile, MetricTile): the card surface, a hairline edge
+    /// and a soft shadow. A number that needs someone carries its tone's colour: a soft wash and a coloured edge.
+    func numberCard(tone: Tone = .brand, padding: CGFloat = 14) -> some View {
+        modifier(NumberCardChrome(tone: tone, padding: padding))
+    }
+}
+
+private struct NumberCardChrome: ViewModifier {
+    let tone: Tone
+    let padding: CGFloat
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: MacSupport.isMac ? 12 : 18, style: .continuous)
+        content
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                shape.fill(Palette.card)
+                if tone.needsAttention {
+                    shape.fill(LinearGradient(colors: [tone.color.opacity(0.13), tone.color.opacity(0.03)],
+                                              startPoint: .topLeading, endPoint: .bottomTrailing))
+                }
+            }
+            .overlay(shape.stroke(tone.needsAttention ? tone.color.opacity(0.40) : Palette.hairline))
+            .shadow(color: .black.opacity(MacSupport.isMac ? 0.06 : 0.05), radius: MacSupport.isMac ? 3 : 10,
+                    y: MacSupport.isMac ? 1 : 3)
+    }
+}
+
 /// A number on a dashboard: big Unbounded figure, small caption, tinted icon. A number that needs someone (a danger
 /// or warning tone: overdue, unassigned, waiting) carries its colour: a soft wash, a coloured edge and figure, so the
 /// eye finds it first.
@@ -159,11 +194,9 @@ struct MetricCard: View {
     /// A phone's dashboard of many numbers: the icon beside the figure, so the cards are a third shorter.
     var compact = false
 
-    private var needsAttention: Bool { tone == .danger || tone == .warning }
-    private var radius: CGFloat { MacSupport.isMac ? 12 : 18 }
+    private var needsAttention: Bool { tone.needsAttention }
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         VStack(alignment: .leading, spacing: compact ? 6 : 10) {
             if compact {
                 HStack(spacing: 10) { icon; figure }
@@ -176,18 +209,7 @@ struct MetricCard: View {
                 .foregroundStyle(.secondaryText)
                 .lineLimit(2)
         }
-        .padding(compact ? 12 : 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            shape.fill(Palette.card)
-            if needsAttention {
-                shape.fill(LinearGradient(colors: [tone.color.opacity(0.13), tone.color.opacity(0.03)],
-                                          startPoint: .topLeading, endPoint: .bottomTrailing))
-            }
-        }
-        .overlay(shape.stroke(needsAttention ? tone.color.opacity(0.40) : Palette.hairline))
-        .shadow(color: .black.opacity(MacSupport.isMac ? 0.06 : 0.05), radius: MacSupport.isMac ? 3 : 12,
-                y: MacSupport.isMac ? 1 : 4)
+        .numberCard(tone: tone, padding: compact ? 12 : 14)
         .accessibilityElement(children: .combine)
     }
 
