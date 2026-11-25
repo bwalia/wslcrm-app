@@ -362,7 +362,13 @@ struct NotificationsView: View {
             .navigationTitle("Notifications")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    // The Mac's leading slot is a round button, so a word is cut to "D…": show the usual close cross there.
+                    Button { dismiss() } label: {
+                        if MacSupport.isMac { Image(systemName: "xmark") } else { Text("Done") }
+                    }
+                    .accessibilityLabel("Done")
+                }
                 if model.unread > 0 {
                     ToolbarItem(placement: .primaryAction) {
                         Button("Mark all read") { Task { await model.markAllRead(api) } }

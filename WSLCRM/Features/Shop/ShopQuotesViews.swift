@@ -169,6 +169,16 @@ struct ShopQuoteDetailView: View {
     }
 
     var body: some View {
+        // Opened by uuid alone (a push, an alert) and it couldn't be loaded: say so, not an empty quote.
+        if quote == nil, summary.quoteNumber == "…", let loadError {
+            RecordUnavailableView(noun: "quote", systemImage: "doc.text", error: loadError) { Task { await load() } }
+                .navigationTitle("Quote")
+        } else {
+            details
+        }
+    }
+
+    private var details: some View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 8) {

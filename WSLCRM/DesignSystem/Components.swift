@@ -269,6 +269,30 @@ struct InlineErrorRow: View {
 }
 
 /// Full-screen error state for when a screen has nothing to show.
+/// A record opened from a link (a push, an alert, a notification) that couldn't be loaded: "not found"
+/// (deleted, or not in this workspace) in plain words, or the error with Try again. Instead of an empty
+/// record with its actions.
+struct RecordUnavailableView: View {
+    let noun: String
+    let systemImage: String
+    let error: APIError
+    let retry: () -> Void
+
+    var body: some View {
+        if case .notFound = error {
+            ContentUnavailableView {
+                Label("\(noun.prefix(1).uppercased() + noun.dropFirst()) not found", systemImage: systemImage)
+            } description: {
+                Text("It may have been deleted, or it belongs to another workspace. Switch workspace, or ask "
+                     + "whoever sent it.")
+            }
+            .accessibilityIdentifier("record.notFound")
+        } else {
+            ErrorStateView(error: error, retry: retry)
+        }
+    }
+}
+
 struct ErrorStateView: View {
     let error: APIError
     let retry: () -> Void
