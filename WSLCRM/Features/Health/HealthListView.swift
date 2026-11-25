@@ -119,8 +119,9 @@ struct HealthListView<Row: View>: View {
                   emptySystemImage: descriptor.systemImage,
                   emptyDescription: isFiltered ? "Change or clear the filters to see more." : descriptor.list.emptyDescription,
                   emptyActionTitle: createDescriptor.map { "New \($0.noun)" },
-                  emptyAction: canCreate && !isFiltered ? { creating = true } : nil) { record in
-            NavigationLink(value: destination(record)) { row(record) }
+                  emptyAction: canCreate && !isFiltered ? { creating = true } : nil,
+                  route: { record in destination(record) }) { record in
+            row(record)
                 .accessibilityIdentifier("health.row.\(record.id)")
         }
         .overlay {

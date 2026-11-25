@@ -162,3 +162,35 @@ private struct ReadableWidth: ViewModifier {
     }
 }
 
+
+/// The Mac's list-beside-record, as in Mail: `list` (which selects into `selection`) on the left, the chosen record's
+/// screen on the right. The first record opens with the list; one that leaves it (deleted, filtered out) hands over to
+/// the first. The record's screen leaves the toolbar's Refresh button to the list.
+struct MacListDetail<ID: Hashable, ListContent: View, Pane: View>: View {
+    @Binding var selection: ID?
+    let ids: [ID]
+    @ViewBuilder let list: ListContent
+    @ViewBuilder let pane: (ID) -> Pane
+
+    var body: some View {
+        HStack(spacing: 0) {
+            // An empty list (loading, nothing yet, an error) has the whole width for its message.
+            list.frame(minWidth: 320, idealWidth: 380, maxWidth: ids.isEmpty ? .infinity : 440)
+            if !ids.isEmpty {
+                Divider()
+                Group {
+                    if let selection, ids.contains(selection) {
+                        pane(selection).id(selection).environment(\.macRefreshButtonHidden, true)
+                    } else {
+                        ContentUnavailableView("Choose one from the list", systemImage: "sidebar.left",
+                                               description: Text("It opens here, next to the list."))
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .onChange(of: ids, initial: true) { _, ids in
+            if selection == nil || !ids.contains(where: { $0 == selection }) { selection = ids.first }
+        }
+    }
+}

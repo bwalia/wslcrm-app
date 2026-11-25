@@ -90,29 +90,47 @@ private struct JobsListContent: View {
     @State private var jobTypes: [JobTypeDetail] = []
     @State private var creating = false
     @State private var created: JobRoute?
-
-    var body: some View {
-        List {
-            ForEach(model.jobs) { job in
-                NavigationLink(value: JobRoute(uuid: job.uuid)) {
-                    JobRow(job: job)
+    /// The jobs: links on iPhone and iPad; on the Mac rows that select (the job opens beside the list).
+    @ViewBuilder
+    private func rows(selecting: Bool) -> some View {
+        ForEach(model.jobs) { job in
+            Group {
+                if selecting {
+                    JobRow(job: job).tag(job.uuid)
+                } else {
+                    NavigationLink(value: JobRoute(uuid: job.uuid)) { JobRow(job: job) }
                 }
-                .task { await model.loadMoreIfNeeded(current: job) }
-                .accessibilityIdentifier("jobs.row.\(job.jobNumber)")
             }
-            if model.isLoadingMore {
-                HStack { Spacer(); ProgressView(); Spacer() }
-            }
-            if let error = model.pageError {
-                InlineErrorRow(error: error) {
-                    Task {
-                        if model.hasMore, let last = model.jobs.last {
-                            await model.loadMoreIfNeeded(current: last)
-                        } else {
-                            await model.load()
-                        }
+            .task { await model.loadMoreIfNeeded(current: job) }
+            .accessibilityIdentifier("jobs.row.\(job.jobNumber)")
+        }
+        if model.isLoadingMore {
+            HStack { Spacer(); ProgressView(); Spacer() }
+        }
+        if let error = model.pageError {
+            InlineErrorRow(error: error) {
+                Task {
+                    if model.hasMore, let last = model.jobs.last {
+                        await model.loadMoreIfNeeded(current: last)
+                    } else {
+                        await model.load()
                     }
                 }
+            }
+        }
+    }
+
+    /// The Mac's open job, beside the list.
+    @State private var macSelection: String?
+
+    var body: some View {
+        Group {
+            if MacSupport.isMac {
+                MacListDetail(selection: $macSelection, ids: model.jobs.map(\.uuid)) {
+                    List(selection: $macSelection) { rows(selecting: true) }.listStyle(.plain)
+                } pane: { JobDetailView(jobUuid: $0) }
+            } else {
+                List { rows(selecting: false) }
             }
         }
         .listStyle(.plain)

@@ -76,6 +76,8 @@ struct ServiceRequestsListView: View {
     @State private var deleting: ServiceRequest?
     @State private var notice: String?
     @State private var deleteError: APIError?
+    /// The Mac's open request, beside the list.
+    @State private var macSelection: String?
 
     var body: some View {
         Group {
@@ -104,28 +106,44 @@ struct ServiceRequestsListView: View {
         }
     }
 
+    /// The requests: links on iPhone and iPad; on the Mac rows that select (the request opens beside the list).
+    @ViewBuilder
+    private func rows(_ model: ServiceRequestsListViewModel, selecting: Bool) -> some View {
+        if let notice {
+            Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor)
+        }
+        if let deleteError { InlineErrorRow(error: deleteError) }
+        ForEach(model.items) { request in
+            Group {
+                if selecting {
+                    ServiceRequestRow(request: request).tag(request.uuid)
+                } else {
+                    NavigationLink(value: ServiceRequestRoute(uuid: request.uuid)) { ServiceRequestRow(request: request) }
+                }
+            }
+            .accessibilityIdentifier("requests.row.\(request.title)")
+            .task { await model.loadMoreIfNeeded(request) }
+            .swipeActions(allowsFullSwipe: false) {
+                if session.permissions.can(.delete, .fsServiceRequests) {
+                    Button("Delete", role: .destructive) { deleting = request }
+                }
+            }
+        }
+        if model.isLoadingMore { HStack { Spacer(); ProgressView(); Spacer() } }
+        if let error = model.pageError {
+            InlineErrorRow(error: error) { Task { await model.load() } }
+        }
+    }
+
     private func content(_ model: ServiceRequestsListViewModel) -> some View {
         @Bindable var model = model
-        return List {
-            if let notice {
-                Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor)
-            }
-            if let deleteError { InlineErrorRow(error: deleteError) }
-            ForEach(model.items) { request in
-                NavigationLink(value: ServiceRequestRoute(uuid: request.uuid)) {
-                    ServiceRequestRow(request: request)
-                }
-                .accessibilityIdentifier("requests.row.\(request.title)")
-                .task { await model.loadMoreIfNeeded(request) }
-                .swipeActions(allowsFullSwipe: false) {
-                    if session.permissions.can(.delete, .fsServiceRequests) {
-                        Button("Delete", role: .destructive) { deleting = request }
-                    }
-                }
-            }
-            if model.isLoadingMore { HStack { Spacer(); ProgressView(); Spacer() } }
-            if let error = model.pageError {
-                InlineErrorRow(error: error) { Task { await model.load() } }
+        return Group {
+            if MacSupport.isMac {
+                MacListDetail(selection: $macSelection, ids: model.items.map(\.uuid)) {
+                    List(selection: $macSelection) { rows(model, selecting: true) }.listStyle(.plain)
+                } pane: { ServiceRequestDetailView(requestUuid: $0) }
+            } else {
+                List { rows(model, selecting: false) }
             }
         }
         .listStyle(.plain)

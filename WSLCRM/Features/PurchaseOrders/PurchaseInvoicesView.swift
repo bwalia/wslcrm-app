@@ -110,10 +110,9 @@ struct PurchaseInvoicesView: View {
                       emptyDescription: canRecord ? "Bills from your suppliers. Record one that came by email."
                           : "Bills from your suppliers, recorded by your team or sent through the supplier portal.",
                       emptyActionTitle: "Record a supplier invoice",
-                      emptyAction: canRecord && state.isEmpty ? { recording = true } : nil) { record in
-                NavigationLink(value: ResourceRoute(descriptorID: descriptor.id, recordID: record.id, seed: record)) {
-                    RecordRow(record: record, list: descriptor.list)
-                }
+                      emptyAction: canRecord && state.isEmpty ? { recording = true } : nil,
+                      route: { record in ResourceRoute(descriptorID: descriptor.id, recordID: record.id, seed: record) }) { record in
+                RecordRow(record: record, list: descriptor.list)
                 .accessibilityIdentifier("purchaseInvoice.row.\(record.id)")
             }
             .safeAreaInset(edge: .top, spacing: 0) { header }

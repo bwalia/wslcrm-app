@@ -24,10 +24,9 @@ struct ContractsListView: View {
                             ? "Maintenance contracts set the service levels the desk works to."
                             : "No contracts match these filters.",
                           emptyActionTitle: "New contract",
-                          emptyAction: canCreate && filters.isEmpty ? { creating = true } : nil) { record in
-                    NavigationLink(value: ResourceRoute(descriptorID: descriptor.id, recordID: record.id, seed: record)) {
-                        ContractRow(contract: record)
-                    }
+                          emptyAction: canCreate && filters.isEmpty ? { creating = true } : nil,
+                          route: { record in ResourceRoute(descriptorID: descriptor.id, recordID: record.id, seed: record) }) { record in
+                    ContractRow(contract: record)
                     .accessibilityIdentifier("contracts.row.\(record.id)")
                 }
             } else {

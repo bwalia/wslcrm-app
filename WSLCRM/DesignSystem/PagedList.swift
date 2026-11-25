@@ -74,6 +74,10 @@ struct PagedList<Item: Identifiable & Sendable, Row: View>: View where Item.ID: 
     var emptyActionTitle: String?
     var emptyAction: (() -> Void)?
     private let destination: ((Item) -> AnyView)?
+    /// A row that opens a route (`NavigationLink(value:)`): the link on iPhone and iPad, its screen beside the list on
+    /// the Mac (`AppDestinations`).
+    private let routeLink: ((Item) -> AnyView)?
+    private let route: ((Item) -> AnyHashable)?
     @ViewBuilder let row: (Item) -> Row
     @State private var selection: Item.ID?
 
@@ -88,6 +92,26 @@ struct PagedList<Item: Identifiable & Sendable, Row: View>: View where Item.ID: 
         self.emptyActionTitle = emptyActionTitle
         self.emptyAction = emptyAction
         self.destination = nil
+        self.routeLink = nil
+        self.route = nil
+        self.row = row
+    }
+
+    init<Route: Hashable>(model: PagedListModel<Item>, searchPrompt: String? = nil, emptyTitle: String,
+                          emptySystemImage: String, emptyDescription: String? = nil, emptyActionTitle: String? = nil,
+                          emptyAction: (() -> Void)? = nil, route: @escaping (Item) -> Route,
+                          @ViewBuilder row: @escaping (Item) -> Row) {
+        self.model = model
+        self.searchPrompt = searchPrompt
+        self.emptyTitle = emptyTitle
+        self.emptySystemImage = emptySystemImage
+        self.emptyDescription = emptyDescription
+        self.emptyActionTitle = emptyActionTitle
+        self.emptyAction = emptyAction
+        self.destination = nil
+        // The concrete route type, so the stack's navigationDestination(for:) still matches it.
+        self.routeLink = { item in AnyView(NavigationLink(value: route(item)) { row(item) }) }
+        self.route = { AnyHashable(route($0)) }
         self.row = row
     }
 
@@ -103,33 +127,36 @@ struct PagedList<Item: Identifiable & Sendable, Row: View>: View where Item.ID: 
         self.emptyActionTitle = emptyActionTitle
         self.emptyAction = emptyAction
         self.destination = { AnyView(destination($0)) }
+        self.routeLink = nil
+        self.route = nil
         self.row = row
     }
 
     var body: some View {
-        if MacSupport.isMac, let destination {
-            HStack(spacing: 0) {
+        if MacSupport.isMac, destination != nil || route != nil {
+            MacListDetail(selection: $selection, ids: model.items.map(\.id)) {
                 list(selecting: true)
-                    .frame(minWidth: 320, idealWidth: 380, maxWidth: 440)
-                Divider()
-                Group {
-                    if let selection, let item = model.items.first(where: { $0.id == selection }) {
-                        destination(item).id(selection)
-                            .environment(\.macRefreshButtonHidden, true)
-                    } else if !model.items.isEmpty {
-                        ContentUnavailableView("Choose one from the list", systemImage: "sidebar.left",
-                                               description: Text("It opens here, next to the list."))
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            // The first record opens with the list, so the right-hand side is never blank; a record that leaves
-            // the list (deleted, filtered out) hands over to the first one.
-            .onChange(of: model.items.map(\.id), initial: true) { _, ids in
-                if selection == nil || !ids.contains(where: { $0 == selection }) { selection = ids.first }
+            } pane: { id in
+                if let item = model.items.first(where: { $0.id == id }) { pane(for: item) }
             }
         } else {
             list(selecting: false)
+        }
+    }
+
+    @ViewBuilder
+    private func pane(for item: Item) -> some View {
+        if let destination {
+            destination(item)
+        } else if let route, let screen = AppDestinations.view(for: route(item)) {
+            screen
+        } else if let routeLink {
+            // A route the Mac can't show beside the list yet: its row, as a link to its own page.
+            VStack(alignment: .leading, spacing: 12) {
+                Text("This opens on its own page").font(.wsHeadline)
+                routeLink(item).buttonStyle(.bordered)
+            }
+            .padding(24)
         }
     }
 
@@ -149,6 +176,8 @@ struct PagedList<Item: Identifiable & Sendable, Row: View>: View where Item.ID: 
             Group {
                 if let destination, !selecting {
                     NavigationLink { destination(item) } label: { row(item) }
+                } else if let routeLink, !selecting {
+                    routeLink(item)
                 } else {
                     row(item)
                 }

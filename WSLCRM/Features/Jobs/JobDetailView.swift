@@ -804,6 +804,31 @@ struct VisitRoute: Hashable { let uuid: String }
 struct InvoiceRoute: Hashable { let uuid: String }
 struct ServiceRequestRoute: Hashable { let uuid: String }
 
+/// The screen a list row's route opens, for the Mac's list-beside-record (`PagedList(route:)`). The same screens
+/// `withAppDestinations` registers below: add a route here when a list of it should open beside itself on the Mac.
+@MainActor
+enum AppDestinations {
+    static func view(for route: AnyHashable) -> AnyView? {
+        switch route.base {
+        case let r as JobRoute: AnyView(JobDetailView(jobUuid: r.uuid))
+        case let r as VisitRoute: AnyView(VisitDetailView(visitUuid: r.uuid))
+        case let r as ServiceRequestRoute: AnyView(ServiceRequestDetailView(requestUuid: r.uuid))
+        case let r as InvoiceRoute: AnyView(InvoiceDetailView(invoiceUuid: r.uuid))
+        case let r as AssetRoute: AnyView(AssetDetailView(product: r.product))
+        case let r as SiteRoute: AnyView(SiteDetailView(site: r.site))
+        case let r as CustomerAssetRoute: AnyView(CustomerAssetDetailView(assetUuid: r.uuid))
+        case let r as TimesheetRoute: AnyView(TimesheetDetailView(uuid: r.uuid))
+        case let r as TaskRoute: AnyView(TaskDetailView(uuid: r.uuid))
+        case let r as PDDealRoute: AnyView(PDDealView(dealUuid: r.uuid))
+        case let r as LeadRoute: AnyView(LeadDetailView(leadUuid: r.uuid))
+        case let r as PurchaseOrderRoute: AnyView(PurchaseOrderDetailView(uuid: r.uuid))
+        case let r as ResourceRoute: AnyView(ResourceDetailView(route: r))
+        case let r as NativeScreenRoute: AnyView(NativeScreenView(route: r))
+        default: nil
+        }
+    }
+}
+
 extension View {
     /// Registers value-based destinations once, at the root of a navigation stack.
     func withAppDestinations() -> some View {

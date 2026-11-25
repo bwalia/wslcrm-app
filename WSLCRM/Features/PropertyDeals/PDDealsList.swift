@@ -140,10 +140,9 @@ private struct PDDealsListContent: View {
                   emptyTitle: Self.emptyTitle(query.show), emptySystemImage: "house",
                   emptyDescription: Self.emptyDescription(query.show),
                   emptyActionTitle: "New deal",
-                  emptyAction: PDWriteGates.canCreateDeal(session.propertyDeals) ? { creating = true } : nil) { deal in
-            NavigationLink(value: PDDealRoute(uuid: deal.uuid)) {
-                PDDealRow(deal: deal, fallbackCurrency: session.propertyDeals?.me.settings?.currency)
-            }
+                  emptyAction: PDWriteGates.canCreateDeal(session.propertyDeals) ? { creating = true } : nil,
+                  route: { deal in PDDealRoute(uuid: deal.uuid) }) { deal in
+            PDDealRow(deal: deal, fallbackCurrency: session.propertyDeals?.me.settings?.currency)
             .accessibilityIdentifier("pd.deals.row.\(deal.uuid)")
         }
         .safeAreaInset(edge: .top, spacing: 0) {
