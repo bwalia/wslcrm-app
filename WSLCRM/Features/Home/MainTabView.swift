@@ -229,6 +229,24 @@ struct MainTabView: View {
                 homePath = path
                 return
             }
+            // A lead or an order: the record itself, on Home, when the person may see it.
+            switch link.target {
+            case .lead(let uuid):
+                guard session.permissions.can(.read, .crmLeads) else { return }
+                selection = .home
+                var path = NavigationPath()
+                path.append(LeadRoute(uuid: uuid))
+                homePath = path
+                return
+            case .order(let uuid):
+                guard session.permissions.can(.read, .shop) else { return }
+                selection = .home
+                var path = NavigationPath()
+                path.append(ShopOrderRoute(uuid: uuid))
+                homePath = path
+                return
+            default: break
+            }
             let policy = NavigationPolicy(session: session)
             let hub: NavigationPolicy.Home = link.target.isPA ? .propertyPA : .propertyDeals
             guard hub == .propertyPA ? policy.showsPropertyPA : policy.showsPropertyDeals else { return }
@@ -282,6 +300,8 @@ struct MainTabView: View {
         case .task(let uuid): path.append(PDTaskRoute(uuid: uuid))
         case .approval(let uuid): path.append(PDApprovalRoute(uuid: uuid))
         case .deal(let uuid): path.append(PDDealRoute(uuid: uuid))
+        case .lead(let uuid): path.append(LeadRoute(uuid: uuid))
+        case .order(let uuid): path.append(ShopOrderRoute(uuid: uuid))
         case .today, .paCard, .paBrief, .chat: break
         }
         return path

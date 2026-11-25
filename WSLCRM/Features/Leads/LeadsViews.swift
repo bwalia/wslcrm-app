@@ -92,9 +92,7 @@ struct LeadsHomeView: View {
                 return lead
             }
         }
-        .navigationDestination(for: LeadRoute.self) { route in
-            LeadDetailView(leadUuid: route.uuid)
-        }
+        // LeadRoute opens through withAppDestinations (every tab's stack), as a push to a lead does.
     }
 }
 

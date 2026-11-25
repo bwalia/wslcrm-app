@@ -6,6 +6,8 @@ import Observation
 /// Property Deals pushes carry `{ namespace_id, route: task|approval|deal|digest, uuid, plugin }`
 /// (opsapi `docs/property-deals/API.md` §3). The same targets open from
 /// `wslcrm://pd/<route>/<uuid>?namespace_id=<uuid>`, which is also how UI tests drive it.
+/// Lead alerts (new lead, a reply, back again: opsapi lib/crm/lead-notify.lua) carry `route: lead`, and new
+/// shop orders `route: order`; they also open from `wslcrm://lead/<uuid>` and `wslcrm://order/<uuid>`.
 struct AppDeepLink: Equatable, Sendable, Identifiable {
     enum Target: Equatable, Sendable {
         case task(String)
@@ -24,6 +26,10 @@ struct AppDeepLink: Equatable, Sendable, Identifiable {
         case paCapture(String)
         /// A new chat message (`type: chat_message`, `channel_uuid`): open that conversation.
         case chat(String)
+        /// A lead: new, replied, back again, a step due.
+        case lead(String)
+        /// A shop order that just came in.
+        case order(String)
 
         var isPA: Bool {
             switch self {
@@ -68,9 +74,11 @@ struct AppDeepLink: Equatable, Sendable, Identifiable {
             self.init(namespaceId: namespace, target: .chat(channel))
             return
         }
-        guard url.scheme == "wslcrm", url.host == "pd" || url.host == "pa" else { return nil }
+        guard url.scheme == "wslcrm", let host = url.host, ["pd", "pa", "lead", "order"].contains(host) else { return nil }
         let parts = url.pathComponents.filter { $0 != "/" }
-        guard let target = Self.target(route: parts.first, uuid: parts.dropFirst().first) else { return nil }
+        let route = host == "lead" || host == "order" ? host : parts.first
+        let uuid = host == "lead" || host == "order" ? parts.first : parts.dropFirst().first
+        guard let target = Self.target(route: route, uuid: uuid) else { return nil }
         let namespace = URLComponents(url: url, resolvingAgainstBaseURL: false)?
             .queryItems?.first { $0.name == "namespace_id" }?.value
         self.init(namespaceId: namespace, target: target)
@@ -87,6 +95,8 @@ struct AppDeepLink: Equatable, Sendable, Identifiable {
         case ("pa_brief", _): return .paBrief
         case ("handoff", let id?): return .handoff(id)
         case ("pa_capture_ready", let id?): return .paCapture(id)
+        case ("lead", let id?): return .lead(id)
+        case ("order", let id?): return .order(id)
         default: return nil
         }
     }

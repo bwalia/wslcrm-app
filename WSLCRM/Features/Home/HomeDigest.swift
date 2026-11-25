@@ -26,6 +26,9 @@ final class HomeDigest {
     private(set) var hasLoaded = false
     /// Work per hub, for ordering the person's work areas.
     private(set) var activity: [NavigationPolicy.Home: Int] = [:]
+    /// Leads waiting for this person: those who replied (answer them), then new ones nobody has contacted.
+    private(set) var leadsReplied: [LeadCard] = []
+    private(set) var leadsFresh: [LeadCard] = []
 
     /// The modules Home can summarise for this person (nothing to load means no "Today" section).
     static func sources(session: SessionStore) -> Set<Source> {
@@ -91,6 +94,9 @@ final class HomeDigest {
                                         timesheetsToApprove: await timesheetsWaiting)
         signals = digest.signals
         activity = digest.activity
+        let leadSteps = await steps
+        leadsReplied = leadSteps?.replied ?? []
+        leadsFresh = leadSteps?.fresh ?? []
         hasLoaded = true
         HomePreferences.shared.record(activity: digest.activity)
     }
