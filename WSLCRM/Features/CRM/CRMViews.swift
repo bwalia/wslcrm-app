@@ -177,14 +177,13 @@ struct CRMAccountsListView: View {
             PagedList(model: model, searchPrompt: "Name or email", emptyTitle: "No accounts", emptySystemImage: "building.2",
                       emptyDescription: "Companies you work with.",
                       emptyActionTitle: "New account",
-                      emptyAction: session.canCreate(.crmAccounts) ? { creating = true } : nil) { account in
-                NavigationLink {
+                      emptyAction: session.canCreate(.crmAccounts) ? { creating = true } : nil,
+                      destination: { account in
                     CRMAccountDetailView(accountUuid: account.uuid) { updated in
                         if let updated { model.replace(updated) } else { model.remove(id: account.id) }
                     }
-                } label: {
-                    CRMAccountRow(account: account)
-                }
+                }) { account in
+                CRMAccountRow(account: account)
                 .accessibilityIdentifier("crm.account.\(account.uuid)")
             }
             .onChange(of: filter) { _, value in
@@ -530,19 +529,18 @@ struct CRMContactsListView: View {
             PagedList(model: model, searchPrompt: "Name or email", emptyTitle: "No contacts", emptySystemImage: "person.crop.circle",
                       emptyDescription: "The people at your accounts.",
                       emptyActionTitle: "New contact",
-                      emptyAction: session.canCreate(.crmContacts) ? { creating = true } : nil) { contact in
-                NavigationLink {
+                      emptyAction: session.canCreate(.crmContacts) ? { creating = true } : nil,
+                      destination: { contact in
                     CRMContactDetailView(contactUuid: contact.uuid)
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(contact.fullName).font(.wsHeadline)
-                        if let line = [contact.jobTitle, contact.accountName, contact.email].compactMap({ $0 })
-                            .joined(separator: " · ").nonEmpty {
-                            Text(line).font(.wsSubheadline).foregroundStyle(.secondaryText)
-                        }
+                }) { contact in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(contact.fullName).font(.wsHeadline)
+                    if let line = [contact.jobTitle, contact.accountName, contact.email].compactMap({ $0 })
+                        .joined(separator: " · ").nonEmpty {
+                        Text(line).font(.wsSubheadline).foregroundStyle(.secondaryText)
                     }
-                    .padding(.vertical, 4)
                 }
+                .padding(.vertical, 4)
                 .accessibilityIdentifier("crm.contact.\(contact.uuid)")
             }
             .onChange(of: filter) { _, value in

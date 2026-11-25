@@ -126,14 +126,13 @@ private struct ProductsContent: View {
                   emptySystemImage: "shippingbox",
                   emptyDescription: model.show == .inactive
                       ? "Products you mark inactive (not for sale) are kept here."
-                      : "The things you sell or service. Products marked inactive are under Show: Inactive.") { product in
-            NavigationLink {
+                      : "The things you sell or service. Products marked inactive are under Show: Inactive.",
+                  destination: { product in
                 ProductDetailView(productUuid: product.uuid, stores: model.stores, catalogCurrency: model.currency) { updated in
                     if let updated { model.list.replace(updated) } else { model.list.remove(id: product.id) }
                 }
-            } label: {
-                ProductRow(product: product, currency: model.currency)
-            }
+            }) { product in
+            ProductRow(product: product, currency: model.currency)
             .accessibilityIdentifier("products.row.\(product.name)")
         }
         .safeAreaInset(edge: .top, spacing: 0) {

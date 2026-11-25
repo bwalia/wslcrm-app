@@ -53,12 +53,11 @@ struct ShopQuotesListView: View {
         }) { model in
             PagedList(model: model, searchPrompt: "Quote number, email or company", emptyTitle: "No quotes",
                       emptySystemImage: "doc.text",
-                      emptyDescription: filter?.empty ?? "Quotes requested from the shop, its assistant or staff appear here.") { quote in
-                NavigationLink {
+                      emptyDescription: filter?.empty ?? "Quotes requested from the shop, its assistant or staff appear here.",
+                      destination: { quote in
                     ShopQuoteDetailView(summary: quote) { model.replace($0) }
-                } label: {
-                    ShopQuoteRow(quote: quote)
-                }
+                }) { quote in
+                ShopQuoteRow(quote: quote)
             }
             .safeAreaInset(edge: .top) {
                 ScrollView(.horizontal, showsIndicators: false) {

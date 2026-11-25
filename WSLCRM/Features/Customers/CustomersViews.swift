@@ -43,14 +43,13 @@ struct CustomersListView: View {
                       emptySystemImage: "person.crop.rectangle.stack",
                       emptyDescription: "People who buy from you.",
                       emptyActionTitle: "Add a customer",
-                      emptyAction: session.permissions.can(.create, .customers) ? { creating = true } : nil) { customer in
-                NavigationLink {
+                      emptyAction: session.permissions.can(.create, .customers) ? { creating = true } : nil,
+                      destination: { customer in
                     CustomerDetailView(customerUuid: customer.uuid) { updated in
                         if let updated { model.replace(updated) } else { model.remove(id: customer.id) }
                     }
-                } label: {
-                    CustomerRow(customer: customer)
-                }
+                }) { customer in
+                CustomerRow(customer: customer)
                 .accessibilityIdentifier("customers.row.\(customer.displayName)")
             }
             .onChange(of: sort) { _, value in

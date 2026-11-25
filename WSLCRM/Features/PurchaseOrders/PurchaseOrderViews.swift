@@ -65,15 +65,14 @@ struct PurchaseOrdersListView: View {
                           : "A purchase order is what you ask a supplier for: what, how many and the price.",
                       emptyActionTitle: "New purchase order",
                       emptyAction: session.permissions.can(.create, .purchaseOrders)
-                          && filter == nil && supplier.isEmpty && raisedFrom == nil && raisedTo == nil ? { creating = true } : nil) { po in
-                NavigationLink {
+                          && filter == nil && supplier.isEmpty && raisedFrom == nil && raisedTo == nil ? { creating = true } : nil,
+                      destination: { po in
                     PurchaseOrderDetailView(uuid: po.id) { updated in
                         if let updated { holder.list.replace(updated) } else { holder.list.remove(id: po.id) }
                         Task { stats = try? await services.purchaseOrders.stats() }
                     }
-                } label: {
-                    PurchaseOrderRow(po: po)
-                }
+                }) { po in
+                PurchaseOrderRow(po: po)
                 .accessibilityIdentifier("po.row.\(po.poNumber)")
             }
             .safeAreaInset(edge: .top) {

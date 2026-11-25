@@ -55,15 +55,14 @@ private struct BillingLicencesList: View {
                   emptyDescription: "A licence is a key a customer types into desktop or self-hosted software. Keys are issued when a licensed app is sold, or by hand here.",
                   emptyActionTitle: "Issue a licence",
                   emptyAction: session.permissions.can(.create, moduleName: BillingModule.licences)
-                      && appFilter.isEmpty && statusFilter.isEmpty ? { issuing = true } : nil) { row in
-            NavigationLink {
+                      && appFilter.isEmpty && statusFilter.isEmpty ? { issuing = true } : nil,
+                  destination: { row in
                 BillingLicenceDetail(uuid: row.id, seed: row) { message in
                     feedback = .done(message)
                     Task { await model.load() }
                 }
-            } label: {
-                BillingLicenceRow(row: row)
-            }
+            }) { row in
+            BillingLicenceRow(row: row)
             .accessibilityIdentifier("billing.licence.\(row.id)")
         }
         .navigationTitle("Licences")

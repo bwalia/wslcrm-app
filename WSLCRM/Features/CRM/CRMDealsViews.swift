@@ -87,8 +87,11 @@ struct CRMDealsListView: View {
                       emptyDescription: filtered ? "No deals match this filter."
                                                  : "Deals you are working on show here.",
                       emptyActionTitle: "New deal",
-                      emptyAction: !filtered && session.canCreate(.crmDeals) ? { creating = true } : nil) { deal in
-                NavigationLink { CRMDealDetailView(dealUuid: deal.uuid) } label: { DealRow(deal: deal) }
+                      emptyAction: !filtered && session.canCreate(.crmDeals) ? { creating = true } : nil,
+                      destination: { deal in
+ CRMDealDetailView(dealUuid: deal.uuid)
+                }) { deal in
+ DealRow(deal: deal)
                     .accessibilityIdentifier("crm.deal.\(deal.uuid)")
             }
             .onChange(of: status) { _, value in

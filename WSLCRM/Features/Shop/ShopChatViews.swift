@@ -17,12 +17,11 @@ struct ShopChatsListView: View {
                       emptySystemImage: "bubble.left.and.bubble.right",
                       emptyDescription: consentOnly
                           ? "No customer has agreed yet that their chat may be used to improve the advice."
-                          : "Conversations customers have with the shop assistant appear here.") { chat in
-                NavigationLink {
+                          : "Conversations customers have with the shop assistant appear here.",
+                      destination: { chat in
                     ShopChatDetailView(uuid: chat.uuid, seed: chat)
-                } label: {
-                    ShopChatRow(chat: chat)
-                }
+                }) { chat in
+                ShopChatRow(chat: chat)
             }
         }
         .id(consentOnly)

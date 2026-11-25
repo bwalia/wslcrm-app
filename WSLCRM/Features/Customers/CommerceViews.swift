@@ -30,29 +30,28 @@ struct OrdersListView: View {
             PagedListModel<Order> { search, page in try await commerce.orders(search: search, status: nil, page: page) }
         }) { model in
             PagedList(model: model, searchPrompt: "Order number or customer", emptyTitle: "No orders", emptySystemImage: "cart",
-                      emptyDescription: "Orders from stores you manage appear here.") { order in
-                NavigationLink {
+                      emptyDescription: "Orders from stores you manage appear here.",
+                      destination: { order in
                     OrderDetailView(summary: order)
-                } label: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(order.orderNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
-                            Spacer()
-                            order.status.badge
-                        }
-                        HStack {
-                            Text(order.customer?.displayName ?? "No customer").font(.wsHeadline)
-                            Spacer()
-                            Text(Formatters.money(order.totalAmount, currency: order.currency) ?? "")
-                                .font(.wsHeadline.monospacedDigit())
-                        }
-                        Text([order.storeName, order.itemCount.map { "\($0) item\($0 == 1 ? "" : "s")" }, Formatters.dateTime(order.createdAt)]
-                            .compactMap { $0 }.joined(separator: " · "))
-                            .font(.wsFootnote).foregroundStyle(.secondaryText)
+                }) { order in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(order.orderNumber).font(.wsSubheadline.monospacedDigit().weight(.semibold))
+                        Spacer()
+                        order.status.badge
                     }
-                    .padding(.vertical, 4)
-                    .accessibilityElement(children: .combine)
+                    HStack {
+                        Text(order.customer?.displayName ?? "No customer").font(.wsHeadline)
+                        Spacer()
+                        Text(Formatters.money(order.totalAmount, currency: order.currency) ?? "")
+                            .font(.wsHeadline.monospacedDigit())
+                    }
+                    Text([order.storeName, order.itemCount.map { "\($0) item\($0 == 1 ? "" : "s")" }, Formatters.dateTime(order.createdAt)]
+                        .compactMap { $0 }.joined(separator: " · "))
+                        .font(.wsFootnote).foregroundStyle(.secondaryText)
                 }
+                .padding(.vertical, 4)
+                .accessibilityElement(children: .combine)
             }
             .safeAreaInset(edge: .top) {
                 if let stats {

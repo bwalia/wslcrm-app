@@ -89,16 +89,24 @@ extension View {
     }
 }
 
+extension EnvironmentValues {
+    /// A screen shown beside a list on the Mac leaves the toolbar's Refresh button to the list (one, not two).
+    @Entry var macRefreshButtonHidden = false
+}
+
 private struct RefreshControl: ViewModifier {
     let action: @MainActor @Sendable () async -> Void
     @State private var id = UUID()
+    @Environment(\.macRefreshButtonHidden) private var buttonHidden
 
     func body(content: Content) -> some View {
         #if targetEnvironment(macCatalyst)
         content
             .refreshable(action: action)
             .toolbar {
-                ToolbarItem(placement: .automatic) { MacRefreshButton(action: action) }
+                if !buttonHidden {
+                    ToolbarItem(placement: .automatic) { MacRefreshButton(action: action) }
+                }
             }
             .onAppear { MacRefreshCenter.shared.appeared(id, action: action) }
             .onDisappear { MacRefreshCenter.shared.disappeared(id) }
@@ -153,3 +161,4 @@ private struct ReadableWidth: ViewModifier {
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 }
+

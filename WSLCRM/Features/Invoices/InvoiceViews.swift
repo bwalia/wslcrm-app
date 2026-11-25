@@ -145,14 +145,13 @@ private struct InvoicesListBody: View {
                       : session.permissions.can(.create, .invoices) ? "Make your first invoice: who it's for, what for and how much."
                       : "Invoices your team makes show here. Ask the workspace owner if you need to make them too.",
                   emptyActionTitle: isFiltered ? nil : "New invoice",
-                  emptyAction: !isFiltered && session.permissions.can(.create, .invoices) ? { creating = true } : nil) { invoice in
-            NavigationLink {
+                  emptyAction: !isFiltered && session.permissions.can(.create, .invoices) ? { creating = true } : nil,
+                  destination: { invoice in
                 InvoiceDetailView(invoiceUuid: invoice.id) { updated in
                     if let updated { holder.list.replace(updated) } else { holder.list.remove(id: invoice.id) }
                 }
-            } label: {
-                InvoiceRow(invoice: invoice)
-            }
+            }) { invoice in
+            InvoiceRow(invoice: invoice)
         }
     }
 

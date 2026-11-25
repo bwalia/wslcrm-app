@@ -48,10 +48,10 @@ struct MacSidebar: View {
     }
 
     // Sidebar sizes: smaller than the page's text, as in Apple's own Mac apps.
-    static let rowFont = BrandFont.font(.medium, size: 12.5, relativeTo: .body)
-    private static let headerFont = BrandFont.font(.semibold, size: 10, relativeTo: .caption)
-    private static let titleFont = BrandFont.font(.semibold, size: 12.5, relativeTo: .headline)
-    private static let detailFont = BrandFont.font(.medium, size: 10, relativeTo: .caption)
+    static let rowFont = BrandFont.font(.medium, size: 14, relativeTo: .body)
+    private static let headerFont = BrandFont.font(.semibold, size: 11, relativeTo: .caption)
+    private static let titleFont = BrandFont.font(.semibold, size: 14, relativeTo: .headline)
+    private static let detailFont = BrandFont.font(.medium, size: 11, relativeTo: .caption)
 
     private func header(_ title: String) -> some View {
         Text(title)

@@ -60,6 +60,10 @@ final class PagedListModel<Item: Identifiable & Sendable> where Item.ID: Sendabl
 }
 
 /// Standard list screen: skeleton → rows / empty / error, search, pull to refresh, infinite scroll.
+///
+/// Give it `destination` (the screen a row opens) and it makes the row a link on iPhone and iPad; on the Mac the
+/// list sits on the left with the chosen record beside it, as in Mail, so someone can go down a list without losing
+/// their place. Lists that build their own links in `row` stay as they are everywhere.
 struct PagedList<Item: Identifiable & Sendable, Row: View>: View where Item.ID: Sendable {
     @Bindable var model: PagedListModel<Item>
     var searchPrompt: String?
@@ -67,44 +71,127 @@ struct PagedList<Item: Identifiable & Sendable, Row: View>: View where Item.ID: 
     let emptySystemImage: String
     var emptyDescription: String?
     /// The way out of an empty list, e.g. "Add a customer". Shown only when nothing is searched.
-    var emptyActionTitle: String? = nil
-    var emptyAction: (() -> Void)? = nil
+    var emptyActionTitle: String?
+    var emptyAction: (() -> Void)?
+    private let destination: ((Item) -> AnyView)?
     @ViewBuilder let row: (Item) -> Row
+    @State private var selection: Item.ID?
+
+    init(model: PagedListModel<Item>, searchPrompt: String? = nil, emptyTitle: String, emptySystemImage: String,
+         emptyDescription: String? = nil, emptyActionTitle: String? = nil, emptyAction: (() -> Void)? = nil,
+         @ViewBuilder row: @escaping (Item) -> Row) {
+        self.model = model
+        self.searchPrompt = searchPrompt
+        self.emptyTitle = emptyTitle
+        self.emptySystemImage = emptySystemImage
+        self.emptyDescription = emptyDescription
+        self.emptyActionTitle = emptyActionTitle
+        self.emptyAction = emptyAction
+        self.destination = nil
+        self.row = row
+    }
+
+    init<Detail: View>(model: PagedListModel<Item>, searchPrompt: String? = nil, emptyTitle: String,
+                       emptySystemImage: String, emptyDescription: String? = nil, emptyActionTitle: String? = nil,
+                       emptyAction: (() -> Void)? = nil, @ViewBuilder destination: @escaping (Item) -> Detail,
+                       @ViewBuilder row: @escaping (Item) -> Row) {
+        self.model = model
+        self.searchPrompt = searchPrompt
+        self.emptyTitle = emptyTitle
+        self.emptySystemImage = emptySystemImage
+        self.emptyDescription = emptyDescription
+        self.emptyActionTitle = emptyActionTitle
+        self.emptyAction = emptyAction
+        self.destination = { AnyView(destination($0)) }
+        self.row = row
+    }
 
     var body: some View {
-        List {
-            ForEach(model.items) { item in
-                row(item)
-                    .task { await model.loadMoreIfNeeded(item) }
-            }
-            if model.isLoadingMore {
-                HStack { Spacer(); ProgressView(); Spacer() }
-            }
-            if let error = model.pageError {
-                InlineErrorRow(error: error) {
-                    Task {
-                        if model.hasMore, let last = model.items.last {
-                            await model.loadMoreIfNeeded(last)
-                        } else {
-                            await model.load()
-                        }
+        if MacSupport.isMac, let destination {
+            HStack(spacing: 0) {
+                list(selecting: true)
+                    .frame(minWidth: 320, idealWidth: 380, maxWidth: 440)
+                Divider()
+                Group {
+                    if let selection, let item = model.items.first(where: { $0.id == selection }) {
+                        destination(item).id(selection)
+                            .environment(\.macRefreshButtonHidden, true)
+                    } else if !model.items.isEmpty {
+                        ContentUnavailableView("Choose one from the list", systemImage: "sidebar.left",
+                                               description: Text("It opens here, next to the list."))
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-        }
-        .listStyle(.plain)
-        .overlay { overlay }
-        .wsRefreshable { await model.load() }
-        .modifier(OptionalSearchable(text: $model.search, prompt: searchPrompt))
-        .task(id: model.search) {
-            if !model.items.isEmpty { try? await Task.sleep(for: .milliseconds(350)) }
-            guard !Task.isCancelled else { return }
-            await model.load()
+            // The first record opens with the list, so the right-hand side is never blank; a record that leaves
+            // the list (deleted, filtered out) hands over to the first one.
+            .onChange(of: model.items.map(\.id), initial: true) { _, ids in
+                if selection == nil || !ids.contains(where: { $0 == selection }) { selection = ids.first }
+            }
+        } else {
+            list(selecting: false)
         }
     }
 
     @ViewBuilder
-    private var overlay: some View {
+    private func list(selecting: Bool) -> some View {
+        // Only the Mac's list selects: a selection binding changes how an iPad list behaves.
+        if selecting {
+            List(selection: $selection) { rows(selecting: true) }.modifier(ListChrome(list: self))
+        } else {
+            List { rows(selecting: false) }.modifier(ListChrome(list: self))
+        }
+    }
+
+    @ViewBuilder
+    private func rows(selecting: Bool) -> some View {
+        ForEach(model.items) { item in
+            Group {
+                if let destination, !selecting {
+                    NavigationLink { destination(item) } label: { row(item) }
+                } else {
+                    row(item)
+                }
+            }
+            .tag(item.id)
+            .task { await model.loadMoreIfNeeded(item) }
+        }
+        if model.isLoadingMore {
+            HStack { Spacer(); ProgressView(); Spacer() }
+        }
+        if let error = model.pageError {
+            InlineErrorRow(error: error) {
+                Task {
+                    if model.hasMore, let last = model.items.last {
+                        await model.loadMoreIfNeeded(last)
+                    } else {
+                        await model.load()
+                    }
+                }
+            }
+        }
+    }
+
+    /// Style, states, refresh, search and loading for either list.
+    private struct ListChrome: ViewModifier {
+        let list: PagedList
+
+        func body(content: Content) -> some View {
+            content
+                .listStyle(.plain)
+                .overlay { list.overlay }
+                .wsRefreshable { await list.model.load() }
+                .modifier(OptionalSearchable(text: list.$model.search, prompt: list.searchPrompt))
+                .task(id: list.model.search) {
+                    if !list.model.items.isEmpty { try? await Task.sleep(for: .milliseconds(350)) }
+                    guard !Task.isCancelled else { return }
+                    await list.model.load()
+                }
+        }
+    }
+
+    @ViewBuilder
+    fileprivate var overlay: some View {
         switch model.state {
         case .idle:
             SkeletonList()

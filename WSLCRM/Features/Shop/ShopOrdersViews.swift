@@ -50,12 +50,11 @@ struct ShopOrdersListView: View {
         }) { model in
             PagedList(model: model, searchPrompt: "Order number, email or company", emptyTitle: "No orders",
                       emptySystemImage: "cart",
-                      emptyDescription: filter == nil ? "Orders placed on the shop appear here." : "No orders: \(filter!.label.lowercased()).") { order in
-                NavigationLink {
+                      emptyDescription: filter == nil ? "Orders placed on the shop appear here." : "No orders: \(filter!.label.lowercased()).",
+                      destination: { order in
                     ShopOrderDetailView(summary: order) { model.replace($0) }
-                } label: {
-                    ShopOrderRow(order: order)
-                }
+                }) { order in
+                ShopOrderRow(order: order)
             }
         }
         // A new filter needs a new model: the fetch closure captures it.
