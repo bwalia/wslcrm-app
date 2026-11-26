@@ -77,7 +77,8 @@ struct ShopOrderNextStepSection: View {
             Text("Next step")
                 // On the header (one view): on the Section they would be copied onto every row and clash.
                 .task(id: "\(order.status.rawValue)|\(order.totalMinor)|\(order.tracking?.trackingNumber ?? "")") {
-                    printFile = ShopOrderPrint.file(order: order, extras: extras)
+                    let design = await DocumentDesigns.get(.order, services: services, workspace: session.workspace?.uuid)
+                    printFile = ShopOrderPrint.file(order: order, extras: extras, company: session.workspace?.name, design: design)
                 }
                 .sheet(isPresented: $raisingPO) {
                     ShopRaisePOSheet(order: order) { created in
@@ -818,52 +819,70 @@ private struct ShopOrderUpdateEmailComposer: View {
 
 // MARK: - Print
 
-/// The order as an A4 PDF, to print or share (the web prints the page).
+/// The order as an A4 PDF, to print or share, drawn to the workspace's order design
+/// (`DocumentDesigns.get(.order, …)`). Internal notes are never printed: this goes to the customer.
 @MainActor
 enum ShopOrderPrint {
-    static func file(order: ShopOrder, extras: ShopOrderExtras) -> URL? {
-        DocumentPDF.file(named: "Order \(order.orderNumber).pdf") { canvas in
-            let bold = UIFont.boldSystemFont(ofSize: 16)
-            let body = UIFont.systemFont(ofSize: 10)
-            let small = UIFont.systemFont(ofSize: 9)
-            let left = DocumentPDF.margin
-            let width = DocumentPDF.pageSize.width - 2 * left
-            canvas.y += canvas.text("Order \(order.orderNumber)", x: left, font: bold, width: width) + 4
-            canvas.y += canvas.text([order.status.label, Formatters.dateTime(order.createdAt).map { "placed \($0)" }]
-                .compactMap { $0 }.joined(separator: " · "), x: left, font: small, color: .darkGray, width: width) + 12
-            let customer = [order.customer?.name, order.customer?.company, order.email ?? order.customer?.email, order.customer?.phone]
-                .compactMap { $0?.trimmedOrNil }.joined(separator: "\n")
-            if !customer.isEmpty {
-                canvas.y += canvas.text(customer, x: left, font: body, width: width / 2)
+    static func file(order: ShopOrder, extras: ShopOrderExtras, company: String? = nil,
+                     design: DocumentDesign = .standard(.order)) -> URL? {
+        let money = { (minor: Int) in ShopMoney.format(minor, currency: order.currency) ?? "" }
+        let head = DocumentLetterhead.current(name: company)
+        return DesignedPDF.file(named: "Order \(order.orderNumber).pdf", design: design) { page in
+            let d = page.design
+            page.header(head, number: "# \(order.orderNumber)",
+                        status: d.shows("status") ? (order.status.label.uppercased(), d.accent) : nil)
+            page.rich(d.intro)
+
+            let name = order.customerName
+            let lines = [order.customer?.company?.trimmedOrNil == name ? nil : order.customer?.company,
+                         order.email ?? order.customer?.email, order.customer?.phone].compactMap { $0?.trimmedOrNil }
+            var meta: [(String, String)] = [("Order date", Formatters.day(order.createdAt) ?? "—")]
+            if let po = extras.customerPoNumber?.trimmedOrNil { meta.append(("Your PO number", po)) }
+            if let quote = order.quoteNumber?.trimmedOrNil { meta.append(("Quote", quote)) }
+            if let paid = Formatters.day(order.paidAt) { meta.append(("Paid", paid)) }
+            page.parties(label: d.billToLabel, name: name, lines: lines, meta: meta, callout: ("Order total", money(order.totalMinor)))
+
+            if d.shows("delivery_address"),
+               let ship = ShopAnyAddress.format(order.shippingAddress) ?? extras.deliveryAddress?.formatted {
+                let when = [extras.deliveryDate, extras.deliveryWindow].compactMap { $0?.trimmedOrNil }.joined(separator: ", ")
+                page.labelled("DELIVER TO", ship + (when.isEmpty ? "" : "\nDelivery: \(when)"))
             }
-            if let ship = ShopAnyAddress.format(order.shippingAddress) ?? extras.deliveryAddress?.formatted {
-                canvas.y += canvas.text("Deliver to: \(ship)", x: left, font: body, width: width) + 4
+
+            let numW: CGFloat = d.shows("item_numbers") ? 26 : 0
+            let taxW: CGFloat = d.shows("tax_column") ? 64 : 0
+            let itemW = page.width - numW - 46 - 78 - taxW - 82
+            var cols: [(String, CGFloat, NSTextAlignment)] = []
+            if numW > 0 { cols.append(("#", numW, .center)) }
+            cols += [("Item", itemW, .left), ("Qty", 46, .right), ("Unit price", 78, .right)]
+            if taxW > 0 { cols.append(("VAT", taxW, .right)) }
+            cols.append(("Amount", 82, .right))
+            page.tableHead(cols)
+            for (i, line) in order.lines.enumerated() {
+                let item = line.productName + (line.sku?.trimmedOrNil.map { "\nSKU \($0)" } ?? "")
+                var cells: [(String, CGFloat, NSTextAlignment, Bool)] = []
+                if numW > 0 { cells.append(("\(i + 1)", numW, .center, false)) }
+                cells += [(item, itemW, .left, false), ("\(line.qty)", 46, .right, false), (money(line.unitPriceMinor), 78, .right, false)]
+                if taxW > 0 { cells.append((money(line.lineVatMinor), taxW, .right, false)) }
+                cells.append((money(line.lineTotalMinor), 82, .right, true))
+                page.tableRow(cells, index: i, head: cols)
             }
-            if let po = extras.customerPoNumber { canvas.y += canvas.text("Customer PO \(po)", x: left, font: body, width: width) }
-            canvas.y += 12
-            canvas.rule()
-            canvas.y += 8
-            for line in order.lines {
-                canvas.pageBreakIfNeeded(keeping: 30)
-                let height = canvas.text("\(line.qty) × \(line.productName)", x: left, font: body, width: width - 120)
-                canvas.text(ShopMoney.format(line.lineTotalMinor, currency: order.currency) ?? "", x: left + width - 110,
-                            font: body, width: 110, alignment: .right)
-                canvas.y += height + 6
-            }
-            canvas.rule()
-            canvas.y += 8
-            for (label, minor) in [("Subtotal", order.subtotalMinor), ("Delivery", order.shippingMinor), ("VAT", order.vatMinor),
-                                   ("Total", order.totalMinor)] {
-                canvas.text(label, x: left + width - 260, font: label == "Total" ? UIFont.boldSystemFont(ofSize: 11) : body, width: 140)
-                let h = canvas.text(ShopMoney.format(minor, currency: order.currency) ?? "", x: left + width - 110,
-                                    font: label == "Total" ? UIFont.boldSystemFont(ofSize: 11) : body, width: 110, alignment: .right)
-                canvas.y += h + 4
-            }
+            page.y += 18
+
+            let rows = [("Subtotal", money(order.subtotalMinor), false), ("Delivery", money(order.shippingMinor), false),
+                        ("VAT", money(order.vatMinor), false)]
+            page.ensure(CGFloat(rows.count) * 20 + 60)
+            let top = page.y
+            page.totals(rows, callout: ("Total", money(order.totalMinor)))
             if let tracking = order.tracking, !tracking.isEmpty {
-                canvas.y += 12
-                canvas.text("Tracking: " + [tracking.carrier, tracking.trackingNumber].compactMap { $0 }.joined(separator: " "),
-                            x: left, font: body, width: width)
+                let t = [tracking.carrier, tracking.trackingNumber].compactMap { $0 }.joined(separator: " ")
+                page.y = max(page.y, page.sideNote("TRACKING", t, top: top) + 18)
             }
+            if d.shows("payment_details"), order.status == .pendingPayment, extras.paymentMethod == "bank_transfer" {
+                page.howToPay(extras.paymentMethods, reference: extras.paymentReference ?? order.orderNumber)
+            }
+            page.rich(d.terms)
+            page.footer(fallback: "Thank you for your order.", note: nil,
+                        rightLines: [head.name, "Order \(order.orderNumber)"].filter { !$0.isEmpty })
         }
     }
 }

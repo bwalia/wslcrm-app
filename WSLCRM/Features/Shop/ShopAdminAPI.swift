@@ -24,6 +24,12 @@ extension ShopAPI {
         try await client.send(.get(Self.adminBase + "/chats/\(uuid)"), as: Envelope.Standard<ShopChatRecord>.self).data
     }
 
+    /// The chat as a PDF: who said what, and when (`GET /chats/:uuid/transcript`). The visitor's IP address and
+    /// the AI's tool steps are left out, because a transcript gets passed on.
+    func chatTranscript(_ uuid: String) async throws -> Data {
+        try await client.sendRaw(.get(Self.adminBase + "/chats/\(uuid)/transcript")).0
+    }
+
     /// Makes the chat a CRM lead with an email or a phone number the team has. Returns the lead's uuid.
     func makeChatLead(_ uuid: String, _ body: ShopChatLeadBody) async throws -> String {
         struct Made: Decodable, Sendable { let leadUuid: String }
