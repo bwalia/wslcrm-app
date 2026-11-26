@@ -11,6 +11,8 @@ struct CommandCenter: View {
     /// The person's last request to the all-round assistant, to pick up where they left off.
     let lastRequest: String?
     let agentBusy: Bool
+    /// A pending "put the cursor in the box" (⌘K, Ask AI), cleared once done. A request made while switching to Home
+    /// (the Mac rebuilds Home on a sidebar switch) is picked up when this view appears, not lost.
     @Binding var focusRequest: Int
     let onOpen: (CommandRouter.Place) -> Void
     let onAsk: (String) -> Void
@@ -82,8 +84,16 @@ struct CommandCenter: View {
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .shadow(color: Palette.indigo.opacity(0.35), radius: 18, y: 8)
         .environment(\.colorScheme, .dark)
-        .onChange(of: focusRequest) { focused = true }
+        .onChange(of: focusRequest) { takeFocusRequest() }
+        .task { takeFocusRequest() }
         .accessibilityIdentifier("home.command")
+    }
+
+    private func takeFocusRequest() {
+        guard focusRequest > 0 else { return }
+        focusRequest = 0
+        // The next run loop: focus set while the view is still being inserted is dropped on the Mac.
+        DispatchQueue.main.async { focused = true }
     }
 
     // MARK: Composer
@@ -112,7 +122,7 @@ struct CommandCenter: View {
                 Image(systemName: "arrow.up")
                     .font(.brandHeadline.weight(.bold))
                     .foregroundStyle(.white)
-                    .frame(width: 40, height: 40)
+                    .frame(width: 44, height: 44)
                     .background(text.trimmedOrNil == nil ? Color.white.opacity(0.15) : Color.accentColor, in: Circle())
             }
             .disabled(text.trimmedOrNil == nil)

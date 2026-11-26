@@ -11,7 +11,7 @@ Fishers (`bwalia/fishers`, `ios/fastlane`), adapted to this repo.
 | **TestFlight (manual)** | same, Run workflow → **testflight** | Any time |
 | **Re-invite testers** | same, Run workflow → **invite_testers** | Re-send invites for the latest build, no rebuild |
 | **App Store build** | same, Run workflow → **testflight**, build **Prod** | Production build for the App Store (see "App Store") |
-| **App Store review** | same, Run workflow → **app_store** | After TestFlight sign-off |
+| **App Store review** | same, Run workflow → **app_store**, build **Prod**, apps **both / iphone / mac** | After TestFlight sign-off. Never cancelled by later pushes. |
 
 Testers get **Workstation CRM** (scheme `WSLCRM-Int`): the house brand (`docs/brand/`),
 pointed at the int server. Every configuration shares the bundle id `uk.co.workstation.wslcrm`,
@@ -138,8 +138,9 @@ password in `~/.secrets/wslcrm/keychain-password`.
 The Mac app (Mac Catalyst) has the same bundle ID, so it is a macOS build on the same App Store
 Connect app, with the same build number as the iPhone build and the same testers. After the
 iPhone upload, the release job runs `fastlane mac prepare_signing`, `mac build_pkg` and
-`mac beta`. It is **off until the repository variable `MAC_TESTFLIGHT` is `true`**, and a Mac
-failure never fails the iPhone release.
+`mac beta`. It is **off until the repository variable `MAC_TESTFLIGHT` is `true`**. A Mac TestFlight
+failure never fails the iPhone release (it shows as a warning); a failed Mac App Store submission fails the
+run (see "App Store").
 
 Before turning it on, once:
 
@@ -164,12 +165,14 @@ address is kept out of this public repo, in the repository variable **`WSLCRM_PR
 2. App Store Connect → the app → iOS App 1.0.0 and macOS App 1.0.0 → **Build** → pick that build.
 3. **Add for Review** → **Submit to App Review**. Release is manual after approval.
 
-Or let the workflow submit: **What to do** `app_store`, **Which build** `Prod`, **Which apps** `both`,
-`iphone` or `mac`. The Mac app needs `MAC_TESTFLIGHT` = `true` (a Mac-only run without it stops at once)
-and its macOS listing filled in by hand first (screenshots, description, App Privacy): the lane skips
-metadata. If the Mac submission fails, the iPhone one still runs and the run then fails with "The Mac app
-was NOT submitted", so a green run means everything asked for was submitted. The build number is the next
-after the highest iPhone or Mac TestFlight build, so a Mac-only release never repeats a number.
+Or let the workflow submit: **What to do** `app_store`, **Which build** `Prod` (any other build stops at once),
+**Which apps** `both`, `iphone` or `mac`. The iPhone app is submitted first, then the Mac app. The Mac app needs
+`MAC_TESTFLIGHT` = `true` (a Mac-only run without it stops at once) and its macOS listing filled in by hand
+first (screenshots, description, App Privacy): the lanes skip metadata. If the Mac submission fails, the run fails
+at the end with "The Mac app was NOT submitted", so a green run means everything asked for was submitted. Each
+build is attached to `VERSION_NAME` (created in App Store Connect when it's new). The build number is the next
+after the highest iPhone or Mac TestFlight build, so a Mac-only release never repeats a number. An App Store run
+has its own queue: a merge to `main` during it no longer cancels it.
 
 Apple's reviewers sign in, so App Review Information needs a demo login **on the production
 server**, with some sample data in its workspace. The listing itself (name, description,
@@ -189,7 +192,7 @@ VERSION_NAME=1.0.0 bundle exec fastlane ios ci_build_number
 
 | Path | Role |
 |------|------|
-| `fastlane/Fastfile` | Lanes: `ios test`, `ci_build_number`, `prepare_signing`, `build_ipa`, `beta`, `invite_testers`, `release`; `mac prepare_signing`, `build_pkg`, `beta` |
+| `fastlane/Fastfile` | Lanes: `ios test`, `ci_build_number`, `prepare_signing`, `build_ipa`, `beta`, `invite_testers`, `release`; `mac prepare_signing`, `build_pkg`, `beta`, `release` (Mac App Store) |
 | `fastlane/Appfile` | Bundle id |
 | `Gemfile`, `Gemfile.lock` | fastlane and the gems Ruby 4 no longer ships |
 | `scripts/ci/load-ios-secrets.sh` | GitHub secrets, else Vault, into the job's environment; writes the `.p8` to a temp file |

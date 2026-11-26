@@ -225,8 +225,6 @@ private struct ChatAssistantScreen: View {
     @State private var subscription: UUID?
     @State private var spokenReplies: Int?
     @State private var linkTarget: ChatLinkTarget?
-    @State private var linkMessage: String?
-    @State private var failedAction: ChatAgentAction?
     @State private var showingAreas = false
     @State private var otherArea: ChatAssistantRoute?
     /// The route's queued request has been sent (once per screen).
@@ -336,18 +334,6 @@ private struct ChatAssistantScreen: View {
         .navigationDestination(item: $otherArea) { ChatAssistantView(route: $0) }
         .sheet(isPresented: $showingAreas) {
             ChatAssistantAreasSheet { otherArea = $0 }
-        }
-        .alert("That page isn't in the app yet", isPresented: Binding(get: { linkMessage != nil },
-                                                                     set: { if !$0 { linkMessage = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(linkMessage ?? "")
-        }
-        .alert("This step didn't work", isPresented: Binding(get: { failedAction != nil },
-                                                            set: { if !$0 { failedAction = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("\(failedAction?.displayLabel ?? ""): \(failedAction?.error ?? "")")
         }
         .chatAlerts { target in
             if case .assistant(let path) = target, path != route.path { otherArea = ChatAssistantRoute(path: path) }
@@ -518,7 +504,8 @@ private struct ChatAssistantScreen: View {
     private func actionChip(_ action: ChatAgentAction) -> some View {
         let failed = action.error != nil
         return Button {
-            if failed { failedAction = action }
+            // Said in the notice above the box (the app's own, dismissible), not a system alert.
+            if failed { model?.error = "This step didn't work: \(action.displayLabel). \(action.error ?? "")" }
         } label: {
             Label(action.displayLabel, systemImage: failed ? "exclamationmark.circle" : "checkmark")
                 .font(.wsCaption.weight(.semibold))
@@ -773,7 +760,7 @@ private struct ChatAssistantScreen: View {
             linkTarget = target
             return .handled
         case .notInApp:
-            linkMessage = "The assistant pointed to a page the app doesn't have a screen for yet. Ask it to do the job here instead."
+            model?.error = "That page isn't in the app yet. Ask the assistant to do the job here instead."
             return .handled
         case .external:
             return .systemAction

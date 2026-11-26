@@ -40,6 +40,12 @@ def release_configuration
   ENV.fetch("RELEASE_CONFIGURATION", "").strip.then { |s| s.empty? ? DEFAULT_CONFIGURATION : s }
 end
 
+# The marketing version (the workflow sets VERSION_NAME); nil lets deliver use the one on file.
+def app_version_name
+  v = ENV["VERSION_NAME"].to_s.strip
+  v.empty? ? nil : v
+end
+
 def team_id
   ENV.fetch("APPLE_TEAM_ID") do
     UI.user_error!("APPLE_TEAM_ID is not set — add it to WSLVault kv/wslcrm/ios or GitHub secrets")
@@ -597,6 +603,8 @@ platform :ios do
                          skip_waiting_for_build_processing: true)
     deliver(
       api_key: key,
+      # The version the build belongs to (deliver attaches the build to it, creating it when it's new).
+      app_version: app_version_name,
       submit_for_review: true,
       automatic_release: false,
       force: true,
@@ -707,6 +715,7 @@ platform :mac do
       api_key: key,
       app_identifier: APP_ID,
       platform: "osx",
+      app_version: app_version_name,
       build_number: ENV["BUILD_NUMBER"].to_s.empty? ? nil : ENV["BUILD_NUMBER"],
       submit_for_review: true,
       automatic_release: false,

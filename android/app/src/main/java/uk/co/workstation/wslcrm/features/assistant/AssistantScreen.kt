@@ -3,6 +3,8 @@ package uk.co.workstation.wslcrm.features.assistant
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -93,17 +95,36 @@ fun AssistantScreen(
     var draft by rememberSaveable { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // What just happened ("Confirmed.", "Cancelled.", "New conversation."), said in the composer like iOS does.
+    var notice by remember { mutableStateOf<String?>(null) }
+    var deciding by remember { mutableStateOf(false) }
     var askSent by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val places = remember(session.menu) { CommandRouter.places(session.menu) }
 
-    suspend fun guarded(action: suspend () -> Unit) {
+    /** Runs [action]; on failure shows the reason and returns false. A 409 means a run is already going (another
+     * device, a double tap): reload so the reply is followed, as iOS does. */
+    suspend fun guarded(action: suspend () -> Unit): Boolean {
         try {
             action()
+            return true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            error = e.asAPIError.message
+            val err = e.asAPIError
+            error = err.message
+            if (err.serverError?.status == 409) runCatching { conversation = api.conversation() }
+            return false
+        }
+    }
+
+    fun decide(approve: Boolean) {
+        if (deciding) return
+        deciding = true
+        error = null
+        scope.launch {
+            if (guarded { conversation = api.confirm(approve) }) notice = if (approve) "Confirmed." else "Cancelled. Nothing was changed."
+            deciding = false
         }
     }
 
@@ -120,9 +141,11 @@ fun AssistantScreen(
         if (content.length > 4000) { error = "That's a bit long for one message — keep it under 4,000 characters."; return }
         sending = true
         error = null
+        notice = null
         draft = ""
         scope.launch {
-            guarded { conversation = api.send(content) }
+            // A failed send puts the message back in the box, so nothing typed is lost.
+            if (!guarded { conversation = api.send(content) } && draft.isEmpty()) draft = content
             sending = false
         }
     }
@@ -168,7 +191,11 @@ fun AssistantScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = { scope.launch { guarded { api.reset(); conversation = api.conversation() } } },
+                        onClick = {
+                            scope.launch {
+                                if (guarded { api.reset(); conversation = api.conversation() }) notice = "New conversation started."
+                            }
+                        },
                         enabled = conversation?.isRunning != true && turnCount > 0,
                         modifier = Modifier.testTag("assistant.new"),
                     ) { Icon(Icons.Default.EditNote, "New conversation") }
@@ -182,6 +209,8 @@ fun AssistantScreen(
                 busy = sending || conversation?.isRunning == true,
                 error = error,
                 onDismissError = { error = null },
+                notice = notice,
+                onDismissNotice = { notice = null },
                 onSend = { send(draft) },
             )
         },
@@ -210,9 +239,7 @@ fun AssistantScreen(
                 }
                 current.pendingSummary?.takeIf { !current.isRunning }?.let { summary ->
                     item {
-                        PendingCard(summary,
-                            onConfirm = { scope.launch { guarded { conversation = api.confirm(true) } } },
-                            onCancel = { scope.launch { guarded { conversation = api.confirm(false) } } })
+                        PendingCard(summary, busy = deciding, onConfirm = { decide(true) }, onCancel = { decide(false) })
                     }
                 }
                 if (current.isRunning) item { Thinking() }
@@ -320,7 +347,8 @@ private fun AssistantBubble(turn: AgentTurn, opens: List<AppMenu.Item>, onOpen: 
                             Modifier
                                 .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), CircleShape)
                                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape)
-                                .clickable { onOpen(item) }
+                                .heightIn(min = 48.dp)
+                                .clickable(role = Role.Button) { onOpen(item) }
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
                                 .testTag("assistant.open.${item.key}"),
                             verticalAlignment = Alignment.CenterVertically,
@@ -339,7 +367,7 @@ private fun AssistantBubble(turn: AgentTurn, opens: List<AppMenu.Item>, onOpen: 
 }
 
 @Composable
-private fun PendingCard(summary: String, onConfirm: () -> Unit, onCancel: () -> Unit) {
+private fun PendingCard(summary: String, busy: Boolean, onConfirm: () -> Unit, onCancel: () -> Unit) {
     Column(
         Modifier.fillMaxWidth().padding(start = 36.dp)
             .background(Tone.DANGER.color.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
@@ -354,9 +382,10 @@ private fun PendingCard(summary: String, onConfirm: () -> Unit, onCancel: () -> 
         }
         SecondaryText("Nothing happens until you confirm.")
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(onClick = onConfirm, colors = ButtonDefaults.buttonColors(containerColor = Tone.DANGER.solidColor),
+            // One answer at a time: a double tap used to send a second call that came back as a 409.
+            Button(onClick = onConfirm, enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Tone.DANGER.solidColor),
                 modifier = Modifier.testTag("assistant.confirm")) { Text("Confirm") }
-            OutlinedButton(onClick = onCancel, modifier = Modifier.testTag("assistant.cancel")) { Text("Cancel") }
+            OutlinedButton(onClick = onCancel, enabled = !busy, modifier = Modifier.testTag("assistant.cancel")) { Text("Cancel") }
         }
     }
 }
@@ -384,6 +413,8 @@ private fun Composer(
     busy: Boolean,
     error: String?,
     onDismissError: () -> Unit,
+    notice: String?,
+    onDismissNotice: () -> Unit,
     onSend: () -> Unit,
 ) {
     Surface(tonalElevation = 3.dp) {
@@ -395,6 +426,12 @@ private fun Composer(
                         Icon(Icons.Default.Warning, null, tint = Tone.DANGER.textColor, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.size(6.dp))
                         Text(error, style = MaterialTheme.typography.bodyMedium)
+                    }
+                } else if (notice != null) {
+                    Row(verticalAlignment = Alignment.Top, modifier = Modifier.clickable(onClick = onDismissNotice).testTag("assistant.notice")) {
+                        Icon(Icons.Default.Check, null, tint = Tone.SUCCESS.textColor, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.size(6.dp))
+                        Text(notice, style = MaterialTheme.typography.bodyMedium, color = Tone.SUCCESS.textColor)
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {

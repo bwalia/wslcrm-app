@@ -1,6 +1,7 @@
 package uk.co.workstation.wslcrm.features.assistant
 
 import uk.co.workstation.wslcrm.features.menu.AppMenu
+import uk.co.workstation.wslcrm.features.menu.MenuDestination
 
 /**
  * Reads what someone typed into the command box (Home, or the assistant) and decides whether it is a place to go —
@@ -85,9 +86,11 @@ object CommandRouter {
         "chat" to listOf("chat", "messages", "ai navigator", "assistant"),
     )
 
-    /** Every page in the person's menu, as places the command box can open. */
+    /** Every page in the person's menu that the app can open, as places the command box can open. An item with
+     * nowhere to go (no screen, no page) isn't offered: tapping it did nothing. */
     fun places(menu: AppMenu): List<Place> =
         menu.sections.flatMap { it.items }.filter { it.key !in setOf("dashboard", "apps") }
+            .filter { it.key == AppMenu.AI_CHAT_KEY || MenuDestination.of(it) != null }
             .map { Place(it.key, it.name, it.icon, aliases[it.key].orEmpty()) }
             .distinctBy { it.key }
 

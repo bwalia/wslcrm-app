@@ -5,11 +5,13 @@ name: iOS Release (TestFlight & App Store)
 #   AUTO (merge to main) : push to main touching the app → fastlane ios beta → TestFlight
 #   MANUAL               : workflow_dispatch — TestFlight by default
 #   TAG                  : push a v*.*.* tag → TestFlight, version taken from the tag
-#   APP STORE            : workflow_dispatch with target = app_store (after QA)
+#   APP STORE            : workflow_dispatch with target = app_store, build = Prod (after QA); apps = both,
+#                          iphone or mac. The iPhone app is submitted first, then the Mac app; a Mac failure
+#                          fails the run at the end ("Mac App Store result"). Never cancelled by later pushes.
 #
-# Pipeline: ci_build_number → prepare_signing → build_ipa → beta
+# Pipeline: ci_build_number → prepare_signing → build_ipa → beta (TestFlight) | release (App Store)
 # Testers get the Workstation CRM build against int (WSLCRM-Int) unless a dispatch picks another.
-# The App Store build is Prod (WSLCRM-Prod): Run workflow → testflight, build Prod.
+# The App Store build is Prod (WSLCRM-Prod); an App Store run with any other build stops at once.
 # Runner: the self-hosted Mac Studio. This repo is public, so nothing here runs for pull
 # requests — only for pushes to main, tags and manual runs, which need write access.
 # Secrets: GitHub Actions or WSLVault kv/wslcrm/ios. See docs/IOS_RELEASE.md.
@@ -64,9 +66,10 @@ on:
         default: ""
 
 concurrency:
-  group: wslcrm-ios-release
-  # Keep only the tip-of-main release when several merges land close together.
-  cancel-in-progress: true
+  # TestFlight runs keep only the tip of main when several merges land close together. An App Store run has its
+  # own group and is never cancelled: a push landing mid-submission used to kill a 45-minute review run.
+  group: wslcrm-ios-release-${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'app_store') && 'app-store' || 'testflight' }}
+  cancel-in-progress: ${{ !(github.event_name == 'workflow_dispatch' && inputs.target == 'app_store') }}
 
 permissions:
   contents: read
@@ -205,6 +208,13 @@ jobs:
           echo "Resolved version: $v"
           echo "VERSION_NAME=$v" >> "$GITHUB_ENV"
 
+      # The App Store gets the Prod build only (it talks to the production server).
+      - name: Check an App Store run is the Prod build
+        if: github.event_name == 'workflow_dispatch' && inputs.target == 'app_store' && inputs.build != 'Prod'
+        run: |
+          echo "::error::The App Store gets the Prod build. Run again with Which build = Prod."
+          exit 1
+
       # An App Store run for the Mac only, with the Mac app switched off, used to do nothing and still go green.
       - name: Check the Mac app is switched on
         if: >-
@@ -252,8 +262,13 @@ jobs:
           bundle exec fastlane mac build_pkg
           bundle exec fastlane mac beta
 
+      # The iPhone app goes first: the Mac step takes ~20 minutes and must not use up the job's time before it.
+      - name: Submit for App Store review
+        if: github.event_name == 'workflow_dispatch' && inputs.target == 'app_store' && inputs.apps != 'mac'
+        run: bundle exec fastlane ios release
+
       # Mac App Store: the same Prod build, submitted for review alongside the iPhone app. It carries on after a
-      # failure so the iPhone submission below still runs; "Mac App Store result" then fails the run, so a Mac app
+      # failure so the steps after it still run; "Mac App Store result" then fails the run, so a Mac app
       # that wasn't submitted never looks like a success.
       - name: Mac app — sign, build and submit for App Store review
         id: mac_store
@@ -273,10 +288,6 @@ jobs:
       - name: Re-invite testers to the latest build
         if: github.event_name == 'workflow_dispatch' && inputs.target == 'invite_testers'
         run: bundle exec fastlane ios invite_testers
-
-      - name: Submit for App Store review
-        if: github.event_name == 'workflow_dispatch' && inputs.target == 'app_store' && inputs.apps != 'mac'
-        run: bundle exec fastlane ios release
 
       - name: Archive IPA artifact
         if: always() && env.BUILDS_APP == 'true'
