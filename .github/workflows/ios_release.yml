@@ -205,17 +205,27 @@ jobs:
           echo "Resolved version: $v"
           echo "VERSION_NAME=$v" >> "$GITHUB_ENV"
 
+      # An App Store run for the Mac only, with the Mac app switched off, used to do nothing and still go green.
+      - name: Check the Mac app is switched on
+        if: >-
+          github.event_name == 'workflow_dispatch' && inputs.target == 'app_store' && inputs.apps == 'mac'
+          && vars.MAC_TESTFLIGHT != 'true'
+        run: |
+          echo "::error::Submitting only the Mac app needs the repo variable MAC_TESTFLIGHT set to true (docs/IOS_RELEASE.md, Mac app)."
+          exit 1
+
       - name: Compute next build number
         if: env.BUILDS_APP == 'true'
         id: build
         run: bundle exec fastlane ios ci_build_number
 
+      # A Mac-only App Store run builds no iPhone app (it would be built and never uploaded).
       - name: Prepare code signing
-        if: env.BUILDS_APP == 'true'
+        if: env.BUILDS_APP == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.target == 'app_store' && inputs.apps == 'mac')
         run: bundle exec fastlane ios prepare_signing
 
       - name: Build signed IPA
-        if: env.BUILDS_APP == 'true'
+        if: env.BUILDS_APP == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.target == 'app_store' && inputs.apps == 'mac')
         env:
           BUILD_NUMBER: ${{ steps.build.outputs.build_number }}
         run: bundle exec fastlane ios build_ipa
@@ -228,6 +238,7 @@ jobs:
       # same App Store Connect app. Off until the repo variable MAC_TESTFLIGHT is "true" (see
       # docs/IOS_RELEASE.md, "Mac app"). A Mac failure never fails the iPhone release.
       - name: Mac app — sign, build and upload to TestFlight
+        id: mac_beta
         if: >-
           vars.MAC_TESTFLIGHT == 'true' && env.BUILDS_APP == 'true'
           && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target == 'testflight'))
@@ -241,8 +252,11 @@ jobs:
           bundle exec fastlane mac build_pkg
           bundle exec fastlane mac beta
 
-      # Mac App Store: the same Prod build, submitted for review alongside the iPhone app.
+      # Mac App Store: the same Prod build, submitted for review alongside the iPhone app. It carries on after a
+      # failure so the iPhone submission below still runs; "Mac App Store result" then fails the run, so a Mac app
+      # that wasn't submitted never looks like a success.
       - name: Mac app — sign, build and submit for App Store review
+        id: mac_store
         if: >-
           vars.MAC_TESTFLIGHT == 'true' && env.BUILDS_APP == 'true'
           && github.event_name == 'workflow_dispatch' && inputs.target == 'app_store' && inputs.apps != 'iphone'
@@ -282,7 +296,19 @@ jobs:
             echo "### WSLCRM iOS"
             echo "- build: \`$RELEASE_SCHEME\` ($RELEASE_CONFIGURATION)"
             echo "- version: \`${VERSION_NAME:-n/a}\` (build \`${{ steps.build.outputs.build_number || 'n/a' }}\`)"
+            echo "- apps: \`${{ inputs.apps || 'n/a' }}\`"
+            echo "- Mac TestFlight: ${{ steps.mac_beta.outcome || 'not run' }}"
+            echo "- Mac App Store: ${{ steps.mac_store.outcome || 'not run' }}"
           } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.mac_beta.outcome }}" = "failure" ]; then
+            echo "::warning::The Mac app didn't reach TestFlight (the iPhone release is unaffected). See the Mac step's log."
+          fi
+
+      - name: Mac App Store result
+        if: always() && steps.mac_store.outcome == 'failure'
+        run: |
+          echo "::error::The Mac app was NOT submitted for App Store review. See the 'Mac app — sign, build and submit' step's log."
+          exit 1
 
       - name: Clean up signing material
         if: always()

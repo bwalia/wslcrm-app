@@ -164,6 +164,13 @@ address is kept out of this public repo, in the repository variable **`WSLCRM_PR
 2. App Store Connect → the app → iOS App 1.0.0 and macOS App 1.0.0 → **Build** → pick that build.
 3. **Add for Review** → **Submit to App Review**. Release is manual after approval.
 
+Or let the workflow submit: **What to do** `app_store`, **Which build** `Prod`, **Which apps** `both`,
+`iphone` or `mac`. The Mac app needs `MAC_TESTFLIGHT` = `true` (a Mac-only run without it stops at once)
+and its macOS listing filled in by hand first (screenshots, description, App Privacy): the lane skips
+metadata. If the Mac submission fails, the iPhone one still runs and the run then fails with "The Mac app
+was NOT submitted", so a green run means everything asked for was submitted. The build number is the next
+after the highest iPhone or Mac TestFlight build, so a Mac-only release never repeats a number.
+
 Apple's reviewers sign in, so App Review Information needs a demo login **on the production
 server**, with some sample data in its workspace. The listing itself (name, description,
 screenshots, App Privacy, age rating) lives in App Store Connect, not in this repo.
