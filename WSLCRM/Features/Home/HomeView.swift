@@ -148,6 +148,12 @@ struct HomeView: View {
         if !digest.leadsReplied.isEmpty || !digest.leadsFresh.isEmpty {
             HomeLeadsPanel(replied: digest.leadsReplied, fresh: digest.leadsFresh)
         }
+        // To-dos the team gave this person on customers and leads.
+        if !digest.recordTodos.isEmpty {
+            HomeTodosPanel(todos: digest.recordTodos, myUUID: session.user?.uuid, error: digest.todoError) { todo in
+                Task { await digest.completeTodo(todo, api: services.recordNotes) }
+            }
+        }
         if !HomeDigest.sources(session: session).isEmpty { todaySection }
         if !hubs.isEmpty { workSection }
     }

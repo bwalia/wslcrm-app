@@ -8,6 +8,8 @@ struct Services: Sendable {
     let crm: CRMAPI
     let leads: LeadsAPI
     let commerce: CommerceAPI
+    /// Notes and to-dos on customers and leads.
+    let recordNotes: RecordNotesAPI
     let invoices: InvoicesAPI
     let purchaseOrders: PurchaseOrdersAPI
     let simpro: SimproAPI
@@ -25,6 +27,7 @@ struct Services: Sendable {
         crm = CRMAPI(client: client)
         leads = LeadsAPI(client: client)
         commerce = CommerceAPI(client: client)
+        recordNotes = RecordNotesAPI(client: client)
         invoices = InvoicesAPI(client: client)
         purchaseOrders = PurchaseOrdersAPI(client: client)
         simpro = SimproAPI(client: client)

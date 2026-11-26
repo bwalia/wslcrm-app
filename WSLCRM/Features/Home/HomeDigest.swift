@@ -29,6 +29,9 @@ final class HomeDigest {
     /// Leads waiting for this person: those who replied (answer them), then new ones nobody has contacted.
     private(set) var leadsReplied: [LeadCard] = []
     private(set) var leadsFresh: [LeadCard] = []
+    /// Open to-dos given to this person on customers and leads (Home's "Your to-dos").
+    private(set) var recordTodos: [RecordNote] = []
+    var todoError: String?
 
     /// The modules Home can summarise for this person (nothing to load means no "Today" section).
     static func sources(session: SessionStore) -> Set<Source> {
@@ -58,8 +61,12 @@ final class HomeDigest {
     }
 
     func load(session: SessionStore, services: Services) async {
+        let showsTodos = MyTodosScreen.isAvailable(session)
+        let notesAPI = services.recordNotes
+        async let todos = showsTodos ? try? await notesAPI.myTodos(status: .open) : nil
         let sources = Self.sources(session: session)
         guard !sources.isEmpty else {
+            recordTodos = RecordNotesTimeline.sortedTodos(await todos ?? [])
             signals = []
             hasLoaded = true
             return
@@ -97,8 +104,20 @@ final class HomeDigest {
         let leadSteps = await steps
         leadsReplied = leadSteps?.replied ?? []
         leadsFresh = leadSteps?.fresh ?? []
+        recordTodos = RecordNotesTimeline.sortedTodos(await todos ?? [])
         hasLoaded = true
         HomePreferences.shared.record(activity: digest.activity)
+    }
+
+    /// Ticks one of my to-dos off from Home: it leaves the list once the server has it.
+    func completeTodo(_ todo: RecordNote, api: RecordNotesAPI) async {
+        do {
+            _ = try await api.update(todo.uuid, .markDone(!todo.done))
+            recordTodos.removeAll { $0.uuid == todo.uuid }
+            todoError = nil
+        } catch {
+            todoError = "Couldn't tick it off: \(error.asAPIError.plainMessage)"
+        }
     }
 
     /// Turns each module's summary into signals (kept apart so it can be unit-tested).

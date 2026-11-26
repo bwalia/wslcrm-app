@@ -59,13 +59,16 @@ struct InboxNotification: Identifiable, Equatable, Sendable {
         actorName = nil
         let data = row.string("data").flatMap { try? JSONDecoder().decode(JSONValue.self, from: Data($0.utf8)) }
             .map(WorkspaceAPI.object)
-        record = AppDeepLink.target(route: data?.string("route"), uuid: data?.string("uuid"))
+        // A to-do on a lead (`record_note.todo`) names its record as subject_type / subject_uuid.
+        record = AppDeepLink.target(route: data?.string("route") ?? data?.string("subject_type"),
+                                    uuid: data?.string("uuid") ?? data?.string("subject_uuid"))
         actionPath = nil
     }
 
     var systemImage: String {
         if source == .alerts {
             switch type {
+            case "record_note.todo": return "checklist"
             case "crm_leads.lead_replied": return "arrowshape.turn.up.left.fill"
             case "crm_leads.hot_lead": return "flame"
             case let t where t.hasPrefix("crm_leads.step"): return "clock"
