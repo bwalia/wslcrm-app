@@ -27,12 +27,38 @@ struct MacSidebar: View {
     @Environment(SessionStore.self) private var session
     @State private var choosingWorkspace = false
     @State private var showingProfile = false
+    /// "Filter menu…" at the top: narrows the sidebar to the matching items, as the web's sidebar does.
+    @State private var filter = ""
 
     var body: some View {
+        let query = filter.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shows = { (title: String) in query.isEmpty || title.localizedCaseInsensitiveContains(query) }
+        let starts: [(String, AppTab)] = [("Home", .home), ("All apps", .apps)].filter { shows($0.0) }
+        let pinned = self.pinned.filter { shows($0.title) }
+        let hubs = self.hubs.filter { shows($0.title) }
+        let groups = AppCatalog.filter(self.groups, query)
+        // Return opens the first match.
+        let first = starts.first?.1 ?? pinned.first?.tab ?? hubs.first.map { .hub($0) }
+            ?? groups.first?.entries.first.map { .app($0.key) }
         List(selection: Binding(get: { selection }, set: { if let tab = $0 { selection = tab } })) {
-            Section {
-                row("Home", systemImage: "house", tab: .home, tint: .accentColor, badge: failedCount)
-                row("All apps", systemImage: "square.grid.2x2", tab: .apps, tint: .secondary)
+            if !starts.isEmpty {
+                Section {
+                    ForEach(starts, id: \.1) { title, tab in
+                        tab == .home
+                            ? row(title, systemImage: "house", tab: tab, tint: .accentColor, badge: failedCount)
+                            : row(title, systemImage: "square.grid.2x2", tab: tab, tint: .secondary)
+                    }
+                }
+            }
+            if first == nil {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Nothing in the menu matches “\(query)”.")
+                        .foregroundStyle(.secondaryText)
+                    Button("Show the whole menu") { filter = "" }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(Color.accentColor)
+                }
+                .padding(.vertical, 4)
             }
             if !pinned.isEmpty {
                 Section {
@@ -62,7 +88,13 @@ struct MacSidebar: View {
         .listStyle(.sidebar)
         .font(Self.rowFont)
         .environment(\.defaultMinListRowHeight, 30)
-        .safeAreaInset(edge: .top, spacing: 0) { workspaceHeader }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                workspaceHeader
+                filterField { if let first { selection = first } }
+            }
+            .background(.bar)
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) { profileFooter }
         .navigationSplitViewColumnWidth(min: 230, ideal: 260, max: 340)
         .sheet(isPresented: $choosingWorkspace) {
@@ -122,10 +154,40 @@ struct MacSidebar: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(.bar)
-        .overlay(alignment: .bottom) { Divider() }
         .help("Switch workspace")
         .accessibilityIdentifier("sidebar.workspace")
+    }
+
+    /// Narrows the menu as the person types; Return opens the first match, Escape clears it.
+    private func filterField(open: @escaping () -> Void) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondaryText)
+            TextField("Filter menu…", text: $filter)
+                .textFieldStyle(.plain)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .onSubmit(open)
+                .onKeyPress(.escape) {
+                    filter = ""
+                    return .handled
+                }
+                .accessibilityIdentifier("sidebar.filter")
+            if !filter.isEmpty {
+                Button { filter = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondaryText)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear the filter")
+            }
+        }
+        .font(Self.rowFont)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Palette.hairline))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .overlay(alignment: .bottom) { Divider() }
     }
 
     /// Who is signed in: profile, settings and sign out.
