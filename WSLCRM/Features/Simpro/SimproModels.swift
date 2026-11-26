@@ -574,7 +574,7 @@ enum ReportFormat {
         switch type {
         case "money":
             guard let n = number(value) else { return value.stringValue ?? "—" }
-            return n.formatted(.currency(code: "GBP").locale(Locale(identifier: "en_GB")))
+            return n.formatted(.currency(code: Formatters.defaultCurrency).locale(Locale(identifier: "en_GB")))
         case "number", "hours":
             guard let n = number(value) else { return value.stringValue ?? "—" }
             let text = n.formatted(.number.precision(.fractionLength(0...2)).locale(Locale(identifier: "en_GB")))

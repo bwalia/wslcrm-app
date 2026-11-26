@@ -254,7 +254,7 @@ enum PAMapping {
         let money = field.map { $0.contains("price") || $0.contains("amount") } ?? false
         switch value {
         case .number(let n) where money:
-            return Formatters.money(Decimal(n), currency: "GBP")
+            return Formatters.money(Decimal(n), currency: Formatters.defaultCurrency)
         case .array(let items):
             let names: [String] = items.compactMap {
                 guard case .object(let o) = $0, case .string(let name)? = o["name"] else { return $0.displayString }
@@ -267,7 +267,7 @@ enum PAMapping {
             for key in ["title", "kind", "amount", "at", "conditions"] {
                 guard let v = o[key] else { continue }
                 if key == "amount", case .number(let n) = v {
-                    parts.append(Formatters.money(Decimal(n), currency: "GBP") ?? v.displayString)
+                    parts.append(Formatters.money(Decimal(n), currency: Formatters.defaultCurrency) ?? v.displayString)
                 } else {
                     parts.append(v.displayString)
                 }
@@ -294,7 +294,7 @@ enum PAMapping {
         return o.keys.sorted().compactMap { key -> String? in
             guard let value = o[key], value != .null else { return nil }
             let text: String = if case .number(let n) = value, key.contains("minimum") || key.contains("price") {
-                Formatters.money(Decimal(n), currency: "GBP") ?? value.displayString
+                Formatters.money(Decimal(n), currency: Formatters.defaultCurrency) ?? value.displayString
             } else {
                 value.displayString
             }
@@ -465,7 +465,7 @@ extension PAMapping {
                     if let due = s(o, "due_at").flatMap(APIDate.parse) { why = "Was due \(Formatters.dateTime(due) ?? "")" }
                 case .dealRisk:
                     if let money = n(o, "money_at_risk"), money > 0 {
-                        why = "\(Formatters.money(Decimal(money), currency: "GBP") ?? "") at risk"
+                        why = "\(Formatters.money(Decimal(money), currency: Formatters.defaultCurrency) ?? "") at risk"
                     }
                 default:
                     break

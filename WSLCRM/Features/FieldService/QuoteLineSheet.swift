@@ -178,7 +178,7 @@ struct QuoteLineSheet: View {
 struct QuoteSheetSummary: View {
     let items: [JobItem]
     var showsPrices = false
-    var currency = Formatters.fallbackCurrency
+    var currency = Formatters.defaultCurrency
 
     var body: some View {
         let groups: [(String, String, [JobItem])] = [

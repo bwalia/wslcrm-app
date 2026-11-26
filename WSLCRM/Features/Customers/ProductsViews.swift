@@ -588,7 +588,7 @@ struct ProductForm: View {
         _comparePrice = State(initialValue: product?.comparePrice.map { "\($0)" } ?? "")
         _costPrice = State(initialValue: product?.costPrice.map { "\($0)" } ?? "")
         _lowStock = State(initialValue: product.map { String($0.lowStockThreshold) } ?? "")
-        _chosenCurrency = State(initialValue: catalogCurrency ?? "GBP")
+        _chosenCurrency = State(initialValue: catalogCurrency ?? Formatters.defaultCurrency)
     }
 
     /// The first product sets the catalogue's currency; later ones use it.

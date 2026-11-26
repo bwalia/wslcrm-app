@@ -26,7 +26,7 @@ extension ModuleCatalog {
         shopSettings, purchaseInvoices, shopWaitlist,
     ]
 
-    private static let gbp = FieldKind.money(currencyKey: nil, minorUnits: true, currency: "GBP")
+    private static let gbp = FieldKind.money(currencyKey: nil, minorUnits: true, currency: Formatters.defaultCurrency)
 
     // MARK: Message templates
 
@@ -429,7 +429,7 @@ extension ModuleCatalog {
                        subtitle: [FieldSpec("number", "Number"), FieldSpec("invoice_date", "Dated", .date),
                                   FieldSpec("due_date", "Due", .date)],
                        badge: FieldSpec("state", "Status", .status(purchaseInvoiceStatus)),
-                       trailing: FieldSpec("total", "Total", .money(currencyKey: "currency", minorUnits: false, currency: "GBP")),
+                       trailing: FieldSpec("total", "Total", .money(currencyKey: "currency", minorUnits: false, currency: Formatters.defaultCurrency)),
                        filters: [FilterSpec("state", "Status", [
                            Choice("owed", "Owed"), Choice("overdue"), Choice("unpaid"), Choice("part_paid", "Part paid"),
                            Choice("paid"), Choice("proforma", "Pro forma"), Choice("credit", "Credit notes"),
@@ -448,11 +448,11 @@ extension ModuleCatalog {
                 FieldSpec("recorded_by", "Recorded by", .choice([Choice("staff", "Our team"), Choice("supplier", "The supplier")])),
             ]),
             SectionSpec("Amounts", [
-                FieldSpec("net", "Net", .money(currencyKey: "currency", minorUnits: false, currency: "GBP")),
-                FieldSpec("vat", "VAT", .money(currencyKey: "currency", minorUnits: false, currency: "GBP")),
-                FieldSpec("total", "Total", .money(currencyKey: "currency", minorUnits: false, currency: "GBP")),
-                FieldSpec("paid", "Paid", .money(currencyKey: "currency", minorUnits: false, currency: "GBP")),
-                FieldSpec("outstanding", "Still owed", .money(currencyKey: "currency", minorUnits: false, currency: "GBP")),
+                FieldSpec("net", "Net", .money(currencyKey: "currency", minorUnits: false, currency: Formatters.defaultCurrency)),
+                FieldSpec("vat", "VAT", .money(currencyKey: "currency", minorUnits: false, currency: Formatters.defaultCurrency)),
+                FieldSpec("total", "Total", .money(currencyKey: "currency", minorUnits: false, currency: Formatters.defaultCurrency)),
+                FieldSpec("paid", "Paid", .money(currencyKey: "currency", minorUnits: false, currency: Formatters.defaultCurrency)),
+                FieldSpec("outstanding", "Still owed", .money(currencyKey: "currency", minorUnits: false, currency: Formatters.defaultCurrency)),
             ]),
         ],
         summary: "Bills from your suppliers.",

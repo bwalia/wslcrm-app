@@ -49,9 +49,9 @@ struct PDEditDealSheet: View {
                         }
                     }
                     Section("Money") {
-                        money("Offer (£)", "offer_amount")
-                        money("Agreed price (£)", "agreed_price")
-                        money("Late penalty per day (£)", "late_penalty_per_day")
+                        money("Offer (\(Formatters.currencySymbol))", "offer_amount")
+                        money("Agreed price (\(Formatters.currencySymbol))", "agreed_price")
+                        money("Late penalty per day (\(Formatters.currencySymbol))", "late_penalty_per_day")
                         TextField("Penalty cap (days)", text: binding("late_penalty_cap_days")).keyboardType(.numberPad)
                         TextField("Finance route, e.g. cash, mortgage, bridging", text: binding("finance_route"))
                     }

@@ -87,7 +87,7 @@ extension Record {
     }
 
     /// Money in pounds (Property Deals stores whole currency units, not pence).
-    func pounds(_ path: String, currency: String? = "GBP") -> String? {
+    func pounds(_ path: String, currency: String? = Formatters.defaultCurrency) -> String? {
         Formatters.money(decimal(path), currency: currency)
     }
 

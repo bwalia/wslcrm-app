@@ -58,14 +58,14 @@ enum StoreCatalog {
                 FieldSpec("country", "Country"),
             ]),
             SectionSpec("Money and time", [
-                FieldSpec("currency", "Currency", placeholder: "GBP"), taxRate,
+                FieldSpec("currency", "Currency", placeholder: Formatters.defaultCurrency), taxRate,
                 FieldSpec("timezone", "Time zone", placeholder: "Europe/London"),
             ]),
             SectionSpec("Shipping", [
                 FieldSpec("shipping_enabled", "Ships orders", .bool),
                 FieldSpec("can_self_ship", "Delivers itself", .bool),
-                FieldSpec("shipping_flat_rate", "Flat delivery charge (£)", .decimal(places: 2)),
-                FieldSpec("free_shipping_threshold", "Free delivery over (£)", .decimal(places: 2)),
+                FieldSpec("shipping_flat_rate", "Flat delivery charge (\(Formatters.currencySymbol))", .decimal(places: 2)),
+                FieldSpec("free_shipping_threshold", "Free delivery over (\(Formatters.currencySymbol))", .decimal(places: 2)),
             ]),
             SectionSpec("Images", [
                 FieldSpec("logo_url", "Logo address", .url, placeholder: "https://"),

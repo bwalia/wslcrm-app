@@ -60,7 +60,7 @@ extension ModuleCatalog {
                                   FieldSpec("end_date", "Ends", .date)],
                        badge: FieldSpec("status", "Status", .status(contractStatus)),
                        trailing: FieldSpec("annual_value", "A year", .money(currencyKey: "currency", minorUnits: false,
-                                                                           currency: "GBP")),
+                                                                           currency: Formatters.defaultCurrency)),
                        filters: [FilterSpec("status", "Status", contractStatusChoices),
                                  FilterSpec("expiring_within_days", "Renewal", [Choice("90", "Ends within 90 days")])],
                        emptyTitle: "No contracts yet",
@@ -78,7 +78,7 @@ extension ModuleCatalog {
                 FieldSpec("extension_months", "Can be extended by (months)", .integer),
             ], footer: "No end date means the contract runs until it is cancelled."),
             SectionSpec("Value", [
-                FieldSpec("annual_value", "A year", .money(currencyKey: "currency", minorUnits: false, currency: "GBP")),
+                FieldSpec("annual_value", "A year", .money(currencyKey: "currency", minorUnits: false, currency: Formatters.defaultCurrency)),
             ]),
             SectionSpec("Service levels", [
                 FieldSpec("response_hours", "Respond within (hours)", .integer),
@@ -113,10 +113,10 @@ extension ModuleCatalog {
                 FieldSpec("extension_months", "Can be extended by (months)", .integer),
             ]),
             SectionSpec("Value", [
-                FieldSpec("annual_value", "Value a year", .money(currencyKey: "currency", minorUnits: false, currency: "GBP")),
+                FieldSpec("annual_value", "Value a year", .money(currencyKey: "currency", minorUnits: false, currency: Formatters.defaultCurrency)),
                 FieldSpec("currency", "Currency", .choice([Choice("GBP", "Pounds (GBP)"), Choice("EUR", "Euros (EUR)"),
                                                            Choice("USD", "US dollars (USD)")]),
-                          defaultValue: .string("GBP")),
+                          defaultValue: .string(Formatters.defaultCurrency)),
             ]),
             SectionSpec("Service levels", [
                 FieldSpec("response_hours", "Respond within (hours)", .integer),
@@ -216,7 +216,7 @@ extension ModuleCatalog {
                                         symbols: ["true": "checkmark.circle", "false": "pause.circle"],
                                         labels: ["true": "Active", "false": "Not in use"])
 
-    private static let partMoney = FieldKind.money(currencyKey: nil, minorUnits: false, currency: "GBP")
+    private static let partMoney = FieldKind.money(currencyKey: nil, minorUnits: false, currency: Formatters.defaultCurrency)
 
     static let fsParts = ResourceDescriptor(
         id: "fs.parts", title: "Parts", noun: "part", systemImage: "shippingbox",

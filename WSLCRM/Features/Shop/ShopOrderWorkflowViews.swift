@@ -499,7 +499,7 @@ struct ShopRaisePOSheet: View {
                             Toggle("Include free-text lines", isOn: $includeCustom)
                         }
                     } header: {
-                        Text("Lines and supplier cost (£ ex VAT, each)")
+                        Text("Lines and supplier cost (\(Formatters.currencySymbol) ex VAT, each)")
                     } footer: {
                         if preview.missingCosts > 0 { Text("Leave a cost empty to fill it in on the PO later.") }
                     }

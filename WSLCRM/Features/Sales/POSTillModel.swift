@@ -33,7 +33,7 @@ final class POSTillModel {
         storeUuid = UserDefaults.standard.string(forKey: Self.storeKey) ?? ""
     }
 
-    var currency: String { catalogue.value?.store.currency ?? "GBP" }
+    var currency: String { catalogue.value?.store.currency ?? Formatters.defaultCurrency }
     var products: [POSProduct] { catalogue.value?.products ?? [] }
 
     var storeName: String? {

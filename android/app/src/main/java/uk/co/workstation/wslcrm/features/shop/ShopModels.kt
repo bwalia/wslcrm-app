@@ -84,7 +84,7 @@ enum class ShopStockReason(val wire: String) { ADJUSTMENT("adjustment"), RESTOCK
 object ShopMoney {
     fun amount(minor: Long?): BigDecimal? = minor?.let { BigDecimal.valueOf(it, 2) }
 
-    fun format(minor: Long?, currency: String? = "GBP"): String? = Formatters.money(amount(minor), currency ?: "GBP")
+    fun format(minor: Long?, currency: String? = null): String? = Formatters.money(amount(minor), currency)
 
     /** "1,249.99" or "£12.5" typed by a person -> 124999 / 1250. Null for anything that isn't money. */
     fun minor(text: String): Long? {
@@ -232,7 +232,7 @@ data class ShopOrder(
     val vatMinor: Long = 0,
     val shippingMinor: Long = 0,
     val totalMinor: Long = 0,
-    val currency: String = "GBP",
+    val currency: String = Formatters.defaultCurrency,
     val paidAt: Instant? = null,
     val createdAt: Instant? = null,
     val tracking: ShopTracking? = null,
@@ -264,7 +264,7 @@ data class ShopOrder(
                 vatMinor = money("vatMinor") ?: 0,
                 shippingMinor = money("shippingMinor") ?: 0,
                 totalMinor = money("totalMinor") ?: 0,
-                currency = string("currency") ?: "GBP",
+                currency = string("currency") ?: Formatters.defaultCurrency,
                 paidAt = date("paidAt"),
                 createdAt = date("createdAt"),
                 tracking = optional("tracking", ShopTracking),
@@ -296,7 +296,7 @@ data class ShopQuote(
     val vatMinor: Long = 0,
     val shippingMinor: Long = 0,
     val totalMinor: Long = 0,
-    val currency: String = "GBP",
+    val currency: String = Formatters.defaultCurrency,
     val validUntil: Instant? = null,
     val viewedAt: Instant? = null,
     val notes: String? = null,
@@ -341,7 +341,7 @@ data class ShopQuote(
                 vatMinor = money("vatMinor") ?: 0,
                 shippingMinor = money("shippingMinor") ?: 0,
                 totalMinor = money("totalMinor") ?: 0,
-                currency = string("currency") ?: "GBP",
+                currency = string("currency") ?: Formatters.defaultCurrency,
                 validUntil = date("validUntil"),
                 viewedAt = date("viewedAt"),
                 notes = string("notes"),
@@ -436,7 +436,7 @@ data class ShopKPIs(
                 lowStock = low,
                 chats7d = rawInt("chats_7d") ?: 0,
                 unverifiedPrices = flexibleInt("unverifiedPrices") ?: 0,
-                currency = string("currency") ?: "GBP",
+                currency = string("currency") ?: Formatters.defaultCurrency,
                 paymentsEnabled = flexibleBool("paymentsEnabled") ?: false,
                 webhookConfigured = flexibleBool("webhookConfigured") ?: false,
                 latestOrders = lossyList("latestOrders", ShopOrder),
@@ -492,7 +492,7 @@ data class ShopProductSummary(
                 uuid = requireString("uuid"), sku = sku, slug = string("slug").orEmpty(), name = string("name") ?: sku,
                 brand = string("brand"), productType = string("productType").orEmpty(), priceMode = string("priceMode") ?: "fixed",
                 status = string("status") ?: "draft", basePriceMinor = money("basePriceMinor") ?: 0,
-                fromPriceMinor = money("fromPriceMinor"), currency = string("currency") ?: "GBP",
+                fromPriceMinor = money("fromPriceMinor"), currency = string("currency") ?: Formatters.defaultCurrency,
                 stockQty = stock, held = held, available = available, lowStockThreshold = threshold,
                 lowStock = flexibleBool("lowStock") ?: (available <= threshold),
                 priceVerified = flexibleBool("priceVerified") ?: false, isFeatured = flexibleBool("isFeatured") ?: false,

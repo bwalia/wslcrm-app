@@ -397,7 +397,7 @@ struct ShopDealDetailView: View {
 
 struct ShopSupplierRequestRow: View {
     let request: ShopSupplierRequest
-    var currency = "GBP"
+    var currency = Formatters.defaultCurrency
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {

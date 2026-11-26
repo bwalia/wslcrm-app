@@ -227,7 +227,7 @@ struct CreateStoreOrderView: View {
 
     // MARK: Totals and checks (the web's)
 
-    private var currency: String { catalogue?.store.currency ?? "GBP" }
+    private var currency: String { catalogue?.store.currency ?? Formatters.defaultCurrency }
     private var subtotal: Decimal { SalesMoney.r2(lines.reduce(Decimal(0)) { $0 + $1.unitPrice * Decimal($1.quantity) }) }
     private var tax: Decimal { SalesMoney.r2(subtotal * (catalogue?.store.taxRate ?? 0)) }
     private var total: Decimal {

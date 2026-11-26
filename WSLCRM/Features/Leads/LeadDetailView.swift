@@ -190,7 +190,7 @@ struct LeadDetailView: View {
                         StatusBadge(text: "AI score \(score)", systemImage: "sparkles", tone: score >= 70 ? .success : .neutral)
                     }
                     if let value = lead.estimatedValue, value > 0,
-                       let text = Formatters.money(value, currency: lead.currency ?? LeadsAPI.defaultCurrency) {
+                       let text = Formatters.money(value, currency: lead.currency ?? Formatters.defaultCurrency) {
                         Text(text + (lead.valueFromAI ? " (AI)" : "")).font(.wsHeadline.monospacedDigit())
                     }
                 }
@@ -387,7 +387,7 @@ struct LeadDetailView: View {
             Section {
                 NavigationLink { CRMDealDetailView(dealUuid: deal) } label: {
                     Label("Converted to the deal \(lead.convertedDealName ?? "")"
-                          + (lead.convertedDealValue.flatMap { Formatters.money($0, currency: lead.currency ?? LeadsAPI.defaultCurrency) }
+                          + (lead.convertedDealValue.flatMap { Formatters.money($0, currency: lead.currency ?? Formatters.defaultCurrency) }
                              .map { " (\($0))" } ?? "") + ". Work continues there.",
                           systemImage: "briefcase.fill")
                 }
@@ -452,7 +452,7 @@ struct LeadDetailView: View {
     @ViewBuilder
     private func ai(_ lead: Lead) -> some View {
         let analysis = lead.analysis
-        let currency = lead.currency ?? LeadsAPI.defaultCurrency
+        let currency = lead.currency ?? Formatters.defaultCurrency
         Section {
             if analysis?.isRunning == true || lead.aiStatus == "pending" || lead.aiStatus == "running" {
                 Label("The AI is reading this lead and sizing the deal…", systemImage: "hourglass").foregroundStyle(.secondaryText)
@@ -719,7 +719,7 @@ struct LeadDetailView: View {
             DetailRow(label: "Channel", value: lead.channel)
             DetailRow(label: "Campaign", value: lead.campaign)
             DetailRow(label: "Priority", value: lead.priority.map(Formatters.humanize))
-            DetailRow(label: "Value", value: lead.estimatedValue.flatMap { Formatters.money($0, currency: lead.currency ?? LeadsAPI.defaultCurrency) }
+            DetailRow(label: "Value", value: lead.estimatedValue.flatMap { Formatters.money($0, currency: lead.currency ?? Formatters.defaultCurrency) }
                 .map { $0 + (lead.valueFromAI ? " (AI)" : "") })
             DetailRow(label: "Expected close", value: lead.expectedCloseDate.flatMap { CalendarDay(string: $0) }.flatMap { Formatters.day($0.date()) })
             DetailRow(label: "Came in", value: Formatters.dateTime(lead.createdAt))
@@ -829,7 +829,7 @@ struct LeadDetailView: View {
                 await reload(updated)
             }
         case .convert:
-            ConvertSheet(lead: lead, currency: lead.currency ?? bundle?.settings.currency ?? LeadsAPI.defaultCurrency) { body in
+            ConvertSheet(lead: lead, currency: lead.currency ?? bundle?.settings.currency ?? Formatters.defaultCurrency) { body in
                 let result = try await services.leads.convert(lead.uuid, body)
                 notice = "Deal created\(result.dealName.map { ": \($0)" } ?? ""). Work continues there."
                 await reload(try await services.leads.lead(lead.uuid))
@@ -848,7 +848,7 @@ struct LeadDetailView: View {
             }
         case .qualify:
             QualifySheet(lead: lead, questions: bundle?.settings.qualificationQuestions ?? [],
-                         currency: lead.currency ?? bundle?.settings.currency ?? LeadsAPI.defaultCurrency) { body in
+                         currency: lead.currency ?? bundle?.settings.currency ?? Formatters.defaultCurrency) { body in
                 let updated = try await services.leads.qualify(lead.uuid, body)
                 notice = body.move ? "Qualified." : "Saved."
                 await reload(updated)

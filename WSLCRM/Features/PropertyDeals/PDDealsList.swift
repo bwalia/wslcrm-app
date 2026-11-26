@@ -297,9 +297,9 @@ struct PDNewDealSheet: View {
                         }
                     }
                     TextField("Deal name (optional)", text: $name)
-                    TextField("Offer (£)", text: $offer).keyboardType(.decimalPad)
+                    TextField("Offer (\(Formatters.currencySymbol))", text: $offer).keyboardType(.decimalPad)
                     PDOptionalDayPicker(label: "Target completion", date: $target)
-                    TextField("Late penalty per day (£)", text: $penalty).keyboardType(.decimalPad)
+                    TextField("Late penalty per day (\(Formatters.currencySymbol))", text: $penalty).keyboardType(.decimalPad)
                     TextField("Penalty cap (days)", text: $cap).keyboardType(.numberPad)
                 }
             }
@@ -561,7 +561,7 @@ private struct PDBoardDealRow: View {
                     Text("\(overdue) overdue").foregroundStyle(Tone.danger.textColor)
                 }
                 if let risk = deal.decimal("money_at_risk"), risk > 0 {
-                    Text("\(Formatters.money(risk, currency: "GBP") ?? "") at risk").foregroundStyle(Tone.danger.textColor)
+                    Text("\(Formatters.money(risk, currency: Formatters.defaultCurrency) ?? "") at risk").foregroundStyle(Tone.danger.textColor)
                 }
                 if let target = PDDates.day(deal.string("target_completion_date")) { Text("Target \(target)") }
             }

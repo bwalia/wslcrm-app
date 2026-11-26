@@ -285,9 +285,9 @@ struct TimesheetRow: View {
                     Label("Billable", systemImage: "sterlingsign.circle").font(.wsSubheadline)
                 }
                 if let amount = timesheet.amount, amount > 0 {
-                    Text(Formatters.money(Decimal(amount), currency: "GBP") ?? "")
+                    Text(Formatters.money(Decimal(amount), currency: Formatters.defaultCurrency) ?? "")
                         .font(.wsSubheadline.weight(.semibold))
-                        .accessibilityLabel("Comes to \(Formatters.money(Decimal(amount), currency: "GBP") ?? "")")
+                        .accessibilityLabel("Comes to \(Formatters.money(Decimal(amount), currency: Formatters.defaultCurrency) ?? "")")
                 }
                 if showsActor || timesheet.isMachineTime {
                     ActorChip(actor: timesheet.actor)
@@ -394,10 +394,10 @@ struct TimesheetDetailView: View {
                 DetailRow(label: "Project", value: sheet.projectName)
                 DetailRow(label: "Billable", value: sheet.isBillable ? "Yes" : "No")
                 if let rate = sheet.hourlyRate {
-                    DetailRow(label: "Hourly rate", value: Formatters.money(Decimal(rate), currency: "GBP"))
+                    DetailRow(label: "Hourly rate", value: Formatters.money(Decimal(rate), currency: Formatters.defaultCurrency))
                 }
                 if let amount = sheet.amount {
-                    DetailRow(label: "Amount", value: Formatters.money(Decimal(amount), currency: "GBP") ?? "—")
+                    DetailRow(label: "Amount", value: Formatters.money(Decimal(amount), currency: Formatters.defaultCurrency) ?? "—")
                 }
                 LabeledContent("Logged by") { ActorChip(actor: sheet.actor) }
                 DetailRow(label: "Submitted", value: Formatters.dateTime(sheet.submittedAt))
@@ -815,7 +815,7 @@ struct LogTimeSheet: View {
                         .keyboardType(.decimalPad)
                         .accessibilityIdentifier("timesheet.rate")
                     if let amount {
-                        LabeledContent("Comes to about", value: Formatters.money(Decimal(amount), currency: "GBP") ?? "")
+                        LabeledContent("Comes to about", value: Formatters.money(Decimal(amount), currency: Formatters.defaultCurrency) ?? "")
                     }
                 } header: {
                     Text("Charging")

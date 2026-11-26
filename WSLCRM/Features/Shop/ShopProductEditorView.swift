@@ -191,11 +191,11 @@ struct ShopProductEditorView: View {
                 Text("Configurable (options)").tag("configurable")
                 Text("Quote only").tag("quote_only")
             }
-            LabeledContent("Base price (£ ex VAT)") {
+            LabeledContent("Base price (\(Formatters.currencySymbol) ex VAT)") {
                 TextField("0.00", text: $draft.basePrice).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                     .accessibilityIdentifier("shopProductEditor.price")
             }
-            LabeledContent("Cost (£ ex VAT)") {
+            LabeledContent("Cost (\(Formatters.currencySymbol) ex VAT)") {
                 TextField("unknown", text: $draft.cost).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
             }
             if let supplier = draft.supplierCostMinor {

@@ -131,7 +131,7 @@ extension ModuleCatalog {
                        badge: FieldSpec("active", "Status", .status(StatusStyle(
                            tones: ["true": .success, "false": .neutral], labels: ["true": "Active", "false": "Off"]))),
                        trailing: FieldSpec("commission_paid", "Received", .money(currencyKey: "currency", minorUnits: false,
-                                                                                 currency: "GBP")),
+                                                                                 currency: Formatters.defaultCurrency)),
                        emptyTitle: "No partners yet",
                        emptyDescription: "Add the companies you pass work to. The AI suggests them on leads that match "
                            + "what they supply, and you earn the commission.",
@@ -151,7 +151,7 @@ extension ModuleCatalog {
             SectionSpec("So far", [
                 FieldSpec("referrals", "Referrals sent", .integer), FieldSpec("won", "Won", .integer),
                 FieldSpec("commission_paid", "Commission received", .money(currencyKey: "currency", minorUnits: false,
-                                                                          currency: "GBP")),
+                                                                          currency: Formatters.defaultCurrency)),
             ]),
         ],
         form: FormSpec([
@@ -188,7 +188,7 @@ extension ModuleCatalog {
                        subtitle: [FieldSpec("partner_name", "Partner"), FieldSpec("sent_at", "Sent", .date)],
                        badge: FieldSpec("status", "Status", .status(referralStatus)),
                        trailing: FieldSpec("commission_amount", "Commission",
-                                           .money(currencyKey: "currency", minorUnits: false, currency: "GBP")),
+                                           .money(currencyKey: "currency", minorUnits: false, currency: Formatters.defaultCurrency)),
                        filters: [FilterSpec("status", "Status", [
                            Choice("sent", "Waiting for the partner"), Choice("accepted", "Accepted"),
                            Choice("won", "Won"), Choice("commission_invoiced", "Commission invoiced"),
@@ -199,9 +199,9 @@ extension ModuleCatalog {
         detail: [
             SectionSpec(nil, [
                 FieldSpec("partner_name", "Partner"), FieldSpec("deal_value", "Deal value",
-                                                                .money(currencyKey: "currency", minorUnits: false, currency: "GBP")),
+                                                                .money(currencyKey: "currency", minorUnits: false, currency: Formatters.defaultCurrency)),
                 FieldSpec("commission_amount", "Commission", .money(currencyKey: "currency", minorUnits: false,
-                                                                    currency: "GBP")),
+                                                                    currency: Formatters.defaultCurrency)),
                 FieldSpec("invoice_number", "Commission invoice"), FieldSpec("partner_reference", "Their reference"),
                 FieldSpec("partner_notes", "Their notes", .multiline), FieldSpec("message", "Your message", .multiline),
                 FieldSpec("sent_at", "Sent", .dateTime), FieldSpec("responded_at", "Answered", .dateTime),

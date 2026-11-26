@@ -194,7 +194,7 @@ struct JobTypeDetailView: View {
             if let description = type.description, !description.isEmpty {
                 Text(description).font(.wsSubheadline).foregroundStyle(.secondaryText)
             }
-            DetailRow(label: "Default hourly rate", value: type.defaultHourlyRate.flatMap { Formatters.money($0, currency: "GBP") }
+            DetailRow(label: "Default hourly rate", value: type.defaultHourlyRate.flatMap { Formatters.money($0, currency: Formatters.defaultCurrency) }
                       ?? "Not set")
             if let jobs = type.jobCount { DetailRow(label: "Jobs of this type", value: jobs.formatted()) }
         }

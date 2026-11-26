@@ -193,7 +193,7 @@ struct ShopDealRequestForm: View {
                                 .frame(maxWidth: 70)
                                 .textFieldStyle(.roundedBorder)
                             Text("×").foregroundStyle(.secondaryText)
-                            TextField("Price each, £ ex VAT", text: $line.price)
+                            TextField("Price each, \(Formatters.currencySymbol) ex VAT", text: $line.price)
                                 .keyboardType(.decimalPad)
                                 .textFieldStyle(.roundedBorder)
                                 .foregroundStyle(line.priceIsValid ? Color.primary : Tone.danger.textColor)

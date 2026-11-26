@@ -77,8 +77,8 @@ enum WorkspaceAdminCatalog {
                 FieldSpec("kind", "Kind", .choice(paymentKinds), required: true, defaultValue: .string("bank_transfer")),
                 FieldSpec("label", "Name", placeholder: "e.g. Barclays GBP account",
                           help: "Leave empty and a name is made for you."),
-                FieldSpec("currency", "Currency", placeholder: "GBP", help: "Three letters, such as GBP.",
-                          defaultValue: .string("GBP")),
+                FieldSpec("currency", "Currency", placeholder: Formatters.defaultCurrency, help: "Three letters, such as GBP.",
+                          defaultValue: .string(Formatters.defaultCurrency)),
             ]),
             SectionSpec("Bank details", [
                 FieldSpec("account_name", "Account name", help: "Needed for a bank transfer."),

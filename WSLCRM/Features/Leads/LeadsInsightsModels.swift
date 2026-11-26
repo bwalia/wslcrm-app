@@ -326,7 +326,7 @@ struct LeadSettings: Codable, Sendable, Equatable {
         aiProviderUuid = try? c.decodeIfPresent(String.self, forKey: .aiProviderUuid)
         aiDailyCostUsd = c.decodeFlexibleDecimal(forKey: .aiDailyCostUsd) ?? 5
         aiHotScore = c.decodeFlexibleInt(forKey: .aiHotScore) ?? 70
-        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? "GBP"
+        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? Formatters.defaultCurrency
         qualificationQuestions = c.decodeLossyArray(Question.self, forKey: .qualificationQuestions)
         lostReasons = (try? c.decodeIfPresent([String].self, forKey: .lostReasons)) ?? []
         // `{}` when empty — or `[]` (lua-cjson's empty table).

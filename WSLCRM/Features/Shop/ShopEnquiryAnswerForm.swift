@@ -77,7 +77,7 @@ struct ShopEnquiryAnswerForm: View {
                             .multilineTextAlignment(.trailing)
                             .accessibilityIdentifier("enquiryAnswer.stock")
                     }
-                    LabeledContent("Price each, £ ex VAT") {
+                    LabeledContent("Price each, \(Formatters.currencySymbol) ex VAT") {
                         TextField("0.00", text: $draft.price)
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)

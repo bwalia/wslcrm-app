@@ -105,7 +105,7 @@ private struct LeadStatsStrip: View {
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 10)], spacing: 10) {
             StatTile(title: "Open leads", value: "\(stats.openLeads)", systemImage: "person.crop.circle.badge.plus")
-            StatTile(title: "Pipeline value", value: Formatters.money(stats.openValue, currency: stats.currency ?? LeadsAPI.defaultCurrency) ?? "",
+            StatTile(title: "Pipeline value", value: Formatters.money(stats.openValue, currency: stats.currency ?? Formatters.defaultCurrency) ?? "",
                      systemImage: "sterlingsign.circle")
             StatTile(title: "Late next steps", value: "\(stats.overdueLeads)", systemImage: "exclamationmark.circle")
         }
@@ -141,7 +141,7 @@ private struct LeadsPipelinePane: View {
 
     private static let todayLimit = 5
     static let refreshEvery: Duration = .seconds(30)
-    private var currency: String { board.value?.currency ?? LeadsAPI.defaultCurrency }
+    private var currency: String { board.value?.currency ?? Formatters.defaultCurrency }
     private var isManager: Bool { steps?.isManager ?? session.permissions.can(.manage, .crmLeads) }
     private var canMove: Bool { session.permissions.can(.update, .crmLeads) }
 
@@ -532,7 +532,7 @@ struct LeadListView: View {
 
 struct LeadRow: View {
     let card: LeadCard
-    var currency: String = LeadsAPI.defaultCurrency
+    var currency: String = Formatters.defaultCurrency
     var showsStage = true
     var showsOwner = false
 
@@ -630,7 +630,7 @@ struct LeadInsightsView: View {
 
     @ViewBuilder
     private func content(_ funnel: LeadFunnel) -> some View {
-        let currency = funnel.currency ?? LeadsAPI.defaultCurrency
+        let currency = funnel.currency ?? Formatters.defaultCurrency
         let converted = funnel.steps.first { $0.key == "converted" }?.reached ?? 0
         Section {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 10)], spacing: 10) {

@@ -73,8 +73,8 @@ enum ShopMoney {
         minor.map { Decimal($0) / 100 }
     }
 
-    static func format(_ minor: Int?, currency: String? = "GBP") -> String? {
-        Formatters.money(amount(minor), currency: currency ?? "GBP")
+    static func format(_ minor: Int?, currency: String? = Formatters.defaultCurrency) -> String? {
+        Formatters.money(amount(minor), currency: currency ?? Formatters.defaultCurrency)
     }
 
     /// "1,249.99" or "1249.99" typed by a person → 124999. Nil for anything that isn't money.
@@ -149,7 +149,7 @@ struct ShopKPIs: Sendable, Decodable {
         chats7d = c.decodeFlexibleInt(forKey: .chats7d) ?? 0
         activeProducts = c.decodeFlexibleInt(forKey: .activeProducts) ?? 0
         unverifiedPrices = c.decodeFlexibleInt(forKey: .unverifiedPrices) ?? 0
-        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? "GBP"
+        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? Formatters.defaultCurrency
         paymentsEnabled = c.decodeFlexibleBool(forKey: .paymentsEnabled) ?? false
         webhookConfigured = c.decodeFlexibleBool(forKey: .webhookConfigured) ?? false
         latestOrders = c.decodeLossyArray(ShopOrder.self, forKey: .latestOrders)
@@ -408,7 +408,7 @@ extension ShopOrder: Decodable {
         vatMinor = c.decodeFlexibleInt(forKey: .vatMinor) ?? 0
         shippingMinor = c.decodeFlexibleInt(forKey: .shippingMinor) ?? 0
         totalMinor = c.decodeFlexibleInt(forKey: .totalMinor) ?? 0
-        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? "GBP"
+        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? Formatters.defaultCurrency
         paidAt = c.decodeDate(forKey: .paidAt)
         createdAt = c.decodeDate(forKey: .createdAt)
         updatedAt = c.decodeDate(forKey: .updatedAt)
@@ -537,7 +537,7 @@ extension ShopQuote: Decodable {
         vatMinor = c.decodeFlexibleInt(forKey: .vatMinor) ?? 0
         shippingMinor = c.decodeFlexibleInt(forKey: .shippingMinor) ?? 0
         totalMinor = c.decodeFlexibleInt(forKey: .totalMinor) ?? 0
-        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? "GBP"
+        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? Formatters.defaultCurrency
         validUntil = c.decodeDate(forKey: .validUntil)
         viewedAt = c.decodeDate(forKey: .viewedAt)
         notes = try? c.decodeIfPresent(String.self, forKey: .notes)
@@ -688,7 +688,7 @@ extension ShopProductSummary: Decodable {
         status = (try? c.decodeIfPresent(String.self, forKey: .status)) ?? "draft"
         basePriceMinor = c.decodeFlexibleInt(forKey: .basePriceMinor) ?? 0
         fromPriceMinor = c.decodeFlexibleInt(forKey: .fromPriceMinor)
-        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? "GBP"
+        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? Formatters.defaultCurrency
         stockQty = c.decodeFlexibleInt(forKey: .stockQty) ?? 0
         held = c.decodeFlexibleInt(forKey: .held) ?? 0
         available = c.decodeFlexibleInt(forKey: .available) ?? (stockQty - held)
@@ -1240,7 +1240,7 @@ struct ShopMarketSource: Identifiable, Hashable, Sendable, Decodable {
         productUuid = c.decodeFlexibleString(forKey: .productUuid)
         fetchMode = c.decodeFlexibleString(forKey: .fetchMode) ?? "direct"
         pricesIncludeVat = c.decodeFlexibleBool(forKey: .pricesIncludeVat) ?? true
-        currency = c.decodeFlexibleString(forKey: .currency) ?? "GBP"
+        currency = c.decodeFlexibleString(forKey: .currency) ?? Formatters.defaultCurrency
         match = ShopMarketMatch(try? c.decodeIfPresent(JSONValue.self, forKey: .match))
         pendingAnomalies = c.decodeFlexibleInt(forKey: .pendingAnomalies) ?? 0
     }

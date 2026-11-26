@@ -65,7 +65,7 @@ struct ShopQuoteBuilderView: View {
                 if setValidUntil {
                     DatePicker("Valid until", selection: $validUntil, in: Date()..., displayedComponents: .date)
                 }
-                LabeledContent("Shipping (£ ex VAT)") {
+                LabeledContent("Shipping (\(Formatters.currencySymbol) ex VAT)") {
                     TextField("0.00", text: $shipping).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                         .accessibilityIdentifier("shopBuilder.shipping")
                 }
@@ -133,12 +133,12 @@ struct ShopQuoteBuilderView: View {
                     }
                     Text(vip != nil
                          ? "Worked out from the membership terms (order value tiers and the yearly cap) when you save."
-                         : "The customer has no membership in force, so this will be £0 unless they join.")
+                         : "The customer has no membership in force, so this will be \(Formatters.currencySymbol)0 unless they join.")
                         .font(.wsFootnote).foregroundStyle(.secondaryText)
                 }
             }
             .accessibilityIdentifier("shopBuilder.trade")
-            LabeledContent("Extra discount (£ ex VAT)") {
+            LabeledContent("Extra discount (\(Formatters.currencySymbol) ex VAT)") {
                 TextField("0.00", text: $terms.discount).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
             }
             TextField("Discount label, e.g. Founding member welcome", text: $terms.discountLabel)

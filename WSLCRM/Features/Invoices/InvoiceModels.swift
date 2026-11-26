@@ -163,7 +163,7 @@ extension Invoice: Decodable {
         customerEmail = try? c.decodeIfPresent(String.self, forKey: .customerEmail)
         issueDate = c.decodeDay(forKey: .issueDate)
         dueDate = c.decodeDay(forKey: .dueDate)
-        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? Formatters.fallbackCurrency
+        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? Formatters.defaultCurrency
         subtotal = c.decodeFlexibleDecimal(forKey: .subtotal) ?? 0
         taxAmount = c.decodeFlexibleDecimal(forKey: .taxAmount) ?? 0
         totalAmount = c.decodeFlexibleDecimal(forKey: .totalAmount) ?? 0
@@ -280,7 +280,7 @@ struct CustomerBillablePreview: Decodable, Sendable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? "GBP"
+        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? Formatters.defaultCurrency
         entries = c.decodeLossyArray(Entry.self, forKey: .entries)
         let totals = try? c.decodeIfPresent(Totals.self, forKey: .totals)
         count = totals?.count?.value ?? entries.count
@@ -474,7 +474,7 @@ struct JobInvoicePreview: Decodable, Sendable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? Formatters.fallbackCurrency
+        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? Formatters.defaultCurrency
         lines = c.decodeLossyArray(Line.self, forKey: .lines)
         subtotal = c.decodeFlexibleDecimal(forKey: .subtotal) ?? 0
         taxAmount = c.decodeFlexibleDecimal(forKey: .taxAmount) ?? 0

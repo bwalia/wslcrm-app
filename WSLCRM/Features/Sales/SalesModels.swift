@@ -107,7 +107,7 @@ struct POSCatalogue: Sendable, Decodable {
 
         enum CodingKeys: String, CodingKey { case uuid, name, currency, taxRate }
 
-        init(uuid: String, name: String, currency: String = "GBP", taxRate: Decimal = 0) {
+        init(uuid: String, name: String, currency: String = Formatters.defaultCurrency, taxRate: Decimal = 0) {
             self.uuid = uuid
             self.name = name
             self.currency = currency
@@ -118,7 +118,7 @@ struct POSCatalogue: Sendable, Decodable {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             uuid = c.decodeFlexibleString(forKey: .uuid) ?? ""
             name = c.decodeFlexibleString(forKey: .name) ?? "Store"
-            currency = c.decodeFlexibleString(forKey: .currency)?.trimmedOrNil ?? "GBP"
+            currency = c.decodeFlexibleString(forKey: .currency)?.trimmedOrNil ?? Formatters.defaultCurrency
             taxRate = c.decodeFlexibleDecimal(forKey: .taxRate) ?? 0
         }
     }
@@ -280,7 +280,7 @@ struct POSReceipt: Identifiable, Hashable, Sendable, Decodable {
         case uuid, orderNumber, soldAt, store, items, currency, subtotal, tax, discount, total, payment, customerEmail
     }
 
-    init(uuid: String, orderNumber: String, soldAt: Date? = nil, store: Store, items: [Item], currency: String = "GBP",
+    init(uuid: String, orderNumber: String, soldAt: Date? = nil, store: Store, items: [Item], currency: String = Formatters.defaultCurrency,
          subtotal: Decimal, tax: Decimal = 0, discount: Decimal = 0, total: Decimal, payment: Payment = Payment(),
          customerEmail: String? = nil) {
         self.uuid = uuid
@@ -304,7 +304,7 @@ struct POSReceipt: Identifiable, Hashable, Sendable, Decodable {
         soldAt = c.decodeDate(forKey: .soldAt)
         store = (try? c.decode(Store.self, forKey: .store)) ?? Store(name: "Store")
         items = c.decodeLossyArray(Item.self, forKey: .items)
-        currency = c.decodeFlexibleString(forKey: .currency)?.trimmedOrNil ?? "GBP"
+        currency = c.decodeFlexibleString(forKey: .currency)?.trimmedOrNil ?? Formatters.defaultCurrency
         subtotal = c.decodeFlexibleDecimal(forKey: .subtotal) ?? 0
         tax = c.decodeFlexibleDecimal(forKey: .tax) ?? 0
         discount = c.decodeFlexibleDecimal(forKey: .discount) ?? 0
@@ -369,7 +369,7 @@ struct POSSummary: Sendable, Decodable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         date = c.decodeFlexibleString(forKey: .date) ?? ""
         timezone = c.decodeFlexibleString(forKey: .timezone) ?? "UTC"
-        currency = c.decodeFlexibleString(forKey: .currency)?.trimmedOrNil ?? "GBP"
+        currency = c.decodeFlexibleString(forKey: .currency)?.trimmedOrNil ?? Formatters.defaultCurrency
         sales = c.decodeFlexibleInt(forKey: .sales) ?? 0
         total = c.decodeFlexibleDecimal(forKey: .total) ?? 0
         byMethod = c.decodeLossyArray(Method.self, forKey: .byMethod)
@@ -513,7 +513,7 @@ struct SalesOrder: Identifiable, Hashable, Sendable, Decodable {
         stage = SalesOrderStage(rawValue: stageRaw)
         payment = c.decodeFlexibleString(forKey: .payment)
         total = c.decodeFlexibleDecimal(forKey: .total) ?? 0
-        currency = c.decodeFlexibleString(forKey: .currency)?.trimmedOrNil ?? "GBP"
+        currency = c.decodeFlexibleString(forKey: .currency)?.trimmedOrNil ?? Formatters.defaultCurrency
         customerName = c.decodeFlexibleString(forKey: .customerName)?.trimmedOrNil
         customerEmail = c.decodeFlexibleString(forKey: .customerEmail)?.trimmedOrNil
         company = c.decodeFlexibleString(forKey: .company)?.trimmedOrNil
@@ -549,9 +549,10 @@ struct SalesOrderStats: Sendable, Equatable {
     /// Paid totals per currency (`{"GBP": "7318.80"}`; an empty one arrives as `[]`).
     var revenue: [String: Decimal] = [:]
 
-    /// GBP first, else the first currency.
+    /// The app's currency first, else the first currency.
     var headlineRevenue: (currency: String, amount: Decimal)? {
-        if let gbp = revenue["GBP"] { return ("GBP", gbp) }
+        let code = Formatters.defaultCurrency
+        if let amount = revenue[code] { return (code, amount) }
         return revenue.sorted { $0.key < $1.key }.first.map { ($0.key, $0.value) }
     }
 
@@ -663,7 +664,7 @@ struct StoreOrder: Sendable {
     var status: String { record.string("status") ?? "pending" }
     var financialStatus: String? { record.string("financial_status") }
     var fulfillmentStatus: String? { record.string("fulfillment_status") }
-    var currency: String { record.string("currency") ?? "GBP" }
+    var currency: String { record.string("currency") ?? Formatters.defaultCurrency }
     var channel: String? { record.string("source") }
     var paymentMethod: String? { record.string("payment_method") }
     var createdAt: Date? { record.date("created_at") }

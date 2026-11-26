@@ -625,7 +625,9 @@ struct InvoiceDetailView: View {
             }
             ForEach(vat.breakdown, id: \.self) { rate in
                 LabeledContent(rate.label) {
-                    Text("net \(Formatters.money(rate.net, currency: "GBP") ?? "") · VAT \(Formatters.money(rate.vat, currency: "GBP") ?? "")")
+                    // The invoice's own currency.
+                    let currency = state.value?.currency
+                    Text("net \(Formatters.money(rate.net, currency: currency) ?? "") · VAT \(Formatters.money(rate.vat, currency: currency) ?? "")")
                         .font(.wsSubheadline.monospacedDigit())
                 }
             }
@@ -894,7 +896,7 @@ struct InvoiceCreateSheet: View {
     @State private var customerAddress: String
     @State private var issueDate = Date()
     @State private var terms = 30
-    @State private var currency = Formatters.fallbackCurrency
+    @State private var currency = Formatters.defaultCurrency
     @State private var poNumber = ""
     @State private var methodUuid = ""
     @State private var methods: [PaymentMethodInfo] = []

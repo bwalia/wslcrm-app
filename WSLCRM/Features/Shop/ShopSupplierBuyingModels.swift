@@ -222,7 +222,7 @@ struct ShopSupplierPurchaseOrder: Identifiable, Hashable, Sendable, Decodable {
         poNumber = c.decodeFlexibleString(forKey: .poNumber) ?? "—"
         status = c.decodeFlexibleString(forKey: .status)
         reference = c.decodeFlexibleString(forKey: .reference)
-        currency = c.decodeFlexibleString(forKey: .currency) ?? "GBP"
+        currency = c.decodeFlexibleString(forKey: .currency) ?? Formatters.defaultCurrency
         total = c.decodeFlexibleDecimal(forKey: .total)
         createdAt = c.decodeDate(forKey: .createdAt)
         shopOrderUuid = c.decodeFlexibleString(forKey: .shopOrderUuid)

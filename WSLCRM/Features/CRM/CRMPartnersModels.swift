@@ -29,7 +29,7 @@ struct Referral: Identifiable, Hashable, Sendable {
     var invoiceUuid: String?
     var invoiceNumber: String?
 
-    var money: String { currency ?? "GBP" }
+    var money: String { currency ?? Formatters.defaultCurrency }
 }
 
 extension Referral: Decodable {
@@ -84,7 +84,7 @@ struct Partner: Identifiable, Hashable, Sendable {
 
     var commissionText: String {
         commissionType == "fixed"
-            ? "\(Formatters.money(commissionValue, currency: currency ?? "GBP") ?? "") per deal"
+            ? "\(Formatters.money(commissionValue, currency: currency ?? Formatters.defaultCurrency) ?? "") per deal"
             : "\(commissionValue.formatted())% of the deal"
     }
 }

@@ -53,7 +53,7 @@ private struct GuidedVisitContent: View {
         }
         .sheet(item: $proposingPart) { proposal in
             PartProposalSheet(model: proposal,
-                              currency: model.displayedVisit?.jobCurrency ?? Formatters.fallbackCurrency) { message in
+                              currency: model.displayedVisit?.jobCurrency ?? Formatters.defaultCurrency) { message in
                 model.notice = message
                 Task { await model.load() }
             }
@@ -212,7 +212,7 @@ private struct GuidedVisitContent: View {
                         Text("On this sheet")
                             .font(.wsCaption.weight(.bold)).textCase(.uppercase).foregroundStyle(.secondaryText)
                         QuoteSheetSummary(items: detail.items, showsPrices: model.showsPrices,
-                                          currency: visit.jobCurrency ?? Formatters.fallbackCurrency)
+                                          currency: visit.jobCurrency ?? Formatters.defaultCurrency)
                         ForEach(model.pendingItemSummaries) { pending in
                             HStack {
                                 Text(pending.summary)

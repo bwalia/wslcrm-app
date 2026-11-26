@@ -161,7 +161,7 @@ extension PurchaseOrder: Decodable {
         issueDate = c.decodeDay(forKey: .issueDate)
         expectedDate = c.decodeDay(forKey: .expectedDate)
         deliveryAddress = try? c.decodeIfPresent(String.self, forKey: .deliveryAddress)
-        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? Formatters.fallbackCurrency
+        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? Formatters.defaultCurrency
         notes = try? c.decodeIfPresent(String.self, forKey: .notes)
         subtotal = c.decodeFlexibleDecimal(forKey: .subtotal) ?? 0
         taxTotal = c.decodeFlexibleDecimal(forKey: .taxTotal) ?? 0
@@ -317,7 +317,7 @@ struct PurchaseOrderStats: Decodable, Sendable {
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
-            currency = c.decodeFlexibleString(forKey: .currency)?.trimmedOrNil ?? "GBP"
+            currency = c.decodeFlexibleString(forKey: .currency)?.trimmedOrNil ?? Formatters.defaultCurrency
             openValue = c.decodeFlexibleDecimal(forKey: .openValue) ?? 0
             toBillValue = c.decodeFlexibleDecimal(forKey: .toBillValue) ?? 0
             billedValue = c.decodeFlexibleDecimal(forKey: .billedValue) ?? 0
@@ -343,7 +343,7 @@ struct PurchaseOrderStats: Decodable, Sendable {
 
     /// One amount per currency ("£1,200.00 + €300.00"); £0.00 when there are no orders.
     func amounts(_ value: KeyPath<CurrencyTotals, Decimal>) -> String {
-        guard !byCurrency.isEmpty else { return Formatters.money(0, currency: "GBP") ?? "0" }
+        guard !byCurrency.isEmpty else { return Formatters.money(0, currency: Formatters.defaultCurrency) ?? "0" }
         return byCurrency.map { Formatters.money($0[keyPath: value], currency: $0.currency) ?? "" }.joined(separator: " + ")
     }
 }

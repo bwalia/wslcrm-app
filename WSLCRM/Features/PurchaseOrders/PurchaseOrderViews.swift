@@ -798,7 +798,7 @@ struct PurchaseOrderCreateSheet: View {
     @State private var hasExpected = true
     @State private var expected = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
     @State private var deliveryAddress = ""
-    @State private var currency = Formatters.fallbackCurrency
+    @State private var currency = Formatters.defaultCurrency
     @State private var lines = [MoneyDraftLine(PurchaseOrderLineBody(description: "", quantity: 1, unitPrice: 0, taxRate: 20))]
     @State private var saving = false
     @State private var error: APIError?

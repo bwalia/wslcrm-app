@@ -83,7 +83,7 @@ struct ProjectSettingsView: View {
                 DetailRow(label: "Due", value: project.dueDay.map { $0.date().shortDay } ?? "Not set")
                 DetailRow(label: "Billing customer",
                           value: project.customerUuid == nil ? "None — internal project" : customerName ?? "Finding the customer…")
-                let currency = project.budgetCurrency ?? ProjectMoney.defaultCurrency
+                let currency = project.budgetCurrency ?? Formatters.defaultCurrency
                 if let budget = project.budget, budget > 0 {
                     let spent = project.budgetSpent ?? 0
                     LabeledContent("Budget",

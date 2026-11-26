@@ -455,14 +455,14 @@ struct LeadParkSheet: View {
 
 struct ConvertSheet: View {
     let lead: Lead
-    var currency: String = LeadsAPI.defaultCurrency
+    var currency: String = Formatters.defaultCurrency
     let save: (LeadConvertBody) async throws -> Void
     @State private var name = ""
     @State private var value: String
     @State private var hasClose: Bool
     @State private var close: Date
 
-    init(lead: Lead, currency: String = LeadsAPI.defaultCurrency, save: @escaping (LeadConvertBody) async throws -> Void) {
+    init(lead: Lead, currency: String = Formatters.defaultCurrency, save: @escaping (LeadConvertBody) async throws -> Void) {
         self.lead = lead
         self.currency = currency
         self.save = save

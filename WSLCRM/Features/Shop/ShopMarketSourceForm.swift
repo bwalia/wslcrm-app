@@ -6,7 +6,7 @@ struct ShopMarketSourceDraft: Equatable, Sendable {
     var url = ""
     var fetchMode = "direct"
     var pricesIncludeVat = true
-    var currency = "GBP"
+    var currency = Formatters.defaultCurrency
     var isActive = true
     var mpn = ""
     var gtin = ""
@@ -96,7 +96,7 @@ struct ShopMarketSourceForm: View {
                     .autocorrectionDisabled()
                     .accessibilityIdentifier("marketSource.url")
                 LabeledContent("Currency") {
-                    TextField("GBP", text: $draft.currency)
+                    TextField(Formatters.defaultCurrency, text: $draft.currency)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
                         .multilineTextAlignment(.trailing)

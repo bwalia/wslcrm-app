@@ -484,7 +484,7 @@ struct PAGhlSync: Decodable, Sendable, Hashable {
 /// Shared wording for PA values, matching the web (`ConfirmSheet.valueText`).
 enum PAText {
     static func money(_ amount: Double) -> String? {
-        Formatters.money(Decimal(amount), currency: "GBP")
+        Formatters.money(Decimal(amount), currency: Formatters.defaultCurrency)
     }
 
     /// `[{name, role}]` → "Sarah (owner), Tom".

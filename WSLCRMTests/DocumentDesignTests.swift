@@ -173,4 +173,33 @@ final class DocumentDesignTests: XCTestCase {
             try Data(contentsOf: plain).write(to: URL(fileURLWithPath: path + "/invoice-standard.pdf"))
         }
     }
+
+    // MARK: Currency
+
+    func testTheAppCurrencyIsPoundsUnlessChangedAndADocumentKeepsItsOwn() throws {
+        let saved = UserDefaults.standard.string(forKey: Formatters.currencyKey)
+        defer { UserDefaults.standard.set(saved, forKey: Formatters.currencyKey) }
+        UserDefaults.standard.removeObject(forKey: Formatters.currencyKey)
+        XCTAssertEqual(Formatters.defaultCurrency, "GBP", "pounds, whatever the device's region")
+        XCTAssertEqual(Formatters.currencySymbol, "£")
+        XCTAssertEqual(Formatters.money(12.5, currency: nil), Decimal(12.5).formatted(.currency(code: "GBP")))
+        XCTAssertEqual(ShopAnalyticsFormat.compactPounds(1_260), "£1.3k")
+
+        func decode(_ currency: String?) throws -> Invoice {
+            let field = currency.map { #""currency":"\#($0)","# } ?? ""
+            return try JSONDecoder.opsAPI().decode(Invoice.self, from: Data("""
+            {"id":"inv-9","invoice_number":"INV-0009","status":"sent",\(field)"subtotal":"10","tax_amount":"0","total_amount":"10",
+             "amount_paid":"0","balance_due":"10","line_items":[],"payments":[]}
+            """.utf8))
+        }
+        XCTAssertEqual(try decode(nil).currency, "GBP", "an invoice without a currency is in the app's")
+        XCTAssertEqual(try decode("EUR").currency, "EUR", "an invoice in euros stays in euros")
+
+        UserDefaults.standard.set("eur", forKey: Formatters.currencyKey)
+        XCTAssertEqual(Formatters.defaultCurrency, "EUR", "one setting for the whole app")
+        XCTAssertEqual(Formatters.currencySymbol, "€")
+        XCTAssertEqual(try decode(nil).currency, "EUR")
+        XCTAssertEqual(Formatters.money(5, currency: "USD"), Decimal(5).formatted(.currency(code: "USD")),
+                       "an amount with its own currency ignores the setting")
+    }
 }

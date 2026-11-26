@@ -92,7 +92,7 @@ struct ShopRefundSheet: View {
                     }
                     .pickerStyle(.segmented)
                     if !full {
-                        LabeledContent("Value returned (£ ex VAT)") {
+                        LabeledContent("Value returned (\(Formatters.currencySymbol) ex VAT)") {
                             TextField("0.00", text: $returnedNet).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                                 .accessibilityIdentifier("refund.amount")
                         }

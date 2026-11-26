@@ -425,7 +425,7 @@ struct ReferSheet: View {
                         }
                         TextField(kind == "percent" ? "Percent" : "Amount", text: $rate).keyboardType(.decimalPad)
                     } footer: {
-                        Text("Your commission: \(Formatters.money(commission, currency: currency ?? "GBP") ?? "")")
+                        Text("Your commission: \(Formatters.money(commission, currency: currency ?? Formatters.defaultCurrency) ?? "")")
                     }
                     Section("Message to the partner (optional)") {
                         TextField("What they should know", text: $message, axis: .vertical).lineLimit(2...6)
@@ -543,7 +543,7 @@ struct PartnersHubView: View {
                 }
                 .accessibilityIdentifier("partners.directory")
                 LabeledContent("Commission received",
-                               value: Formatters.money(partners.reduce(0) { $0 + $1.commissionPaid }, currency: "GBP") ?? "")
+                               value: Formatters.money(partners.reduce(0) { $0 + $1.commissionPaid }, currency: Formatters.defaultCurrency) ?? "")
                 if let partnersError {
                     InlineErrorRow(error: partnersError) { Task { await load() } }
                 }
