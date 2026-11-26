@@ -20,6 +20,8 @@ struct ShopOrderNextStepSection: View {
     /// One key per receive attempt series, so a retry after a lost reply can't record the goods twice.
     @State private var receiveKey = MoneyRetryKey()
     @State private var printFile: URL?
+    /// Why the simple design was used though the workspace chose a template (the PDF service was down).
+    @State private var printNotice: String?
     @State private var notice: String?
     @State private var error: APIError?
 
@@ -70,6 +72,7 @@ struct ShopOrderNextStepSection: View {
             if let file = printFile {
                 ShareLink(item: file) { Label("Print or share the order", systemImage: "printer") }
                     .accessibilityIdentifier("shopOrder.print")
+                if let printNotice { Label(printNotice, systemImage: "info.circle").foregroundStyle(.secondaryText) }
             }
             if let notice { Label(notice, systemImage: "checkmark.circle").foregroundStyle(Tone.success.textColor) }
             if let error { InlineErrorRow(error: error) }
@@ -78,7 +81,13 @@ struct ShopOrderNextStepSection: View {
                 // On the header (one view): on the Section they would be copied onto every row and clash.
                 .task(id: "\(order.status.rawValue)|\(order.totalMinor)|\(order.tracking?.trackingNumber ?? "")") {
                     let design = await DocumentDesigns.get(.order, services: services, workspace: session.workspace?.uuid)
-                    printFile = ShopOrderPrint.file(order: order, extras: extras, company: session.workspace?.name, design: design)
+                    // The workspace's HTML template from the server when it chose one, else drawn here.
+                    let made = await WorkspacePDF.make(.order, uuid: order.uuid, design: design, client: services.client,
+                                                       filename: "Order \(order.orderNumber).pdf") {
+                        ShopOrderPrint.file(order: order, extras: extras, company: session.workspace?.name, design: design)
+                    }
+                    printFile = made.url
+                    printNotice = made.notice
                 }
                 .sheet(isPresented: $raisingPO) {
                     ShopRaisePOSheet(order: order) { created in

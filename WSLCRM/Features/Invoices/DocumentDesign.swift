@@ -2,7 +2,8 @@ import UIKit
 
 /// How a workspace's invoices and orders look: logo, colours, font, heading, which parts show, and its own
 /// intro, terms and footer (`GET /api/v2/document-designs`, set on the web dashboard under Workspace →
-/// Invoice and order design). The PDFs are still drawn here on the device; the design only says how.
+/// Invoice and order design). The PDFs are drawn here on the device, unless the workspace chose an HTML
+/// template for them: then the server makes them (`WorkspacePDF`).
 struct DocumentDesign: Sendable, Equatable {
     enum Kind: String, Sendable { case invoice, order }
     enum Style: String, Sendable { case band, clean, minimal }
@@ -22,6 +23,8 @@ struct DocumentDesign: Sendable, Equatable {
     var terms: RichNode?
     var footer: RichNode?
     var logo: Data?
+    /// The workspace chose an HTML template (`source: "template"`): the server makes this kind's PDF.
+    var usesTemplate = false
 
     /// The standard design: what a workspace that never changed it gets.
     static func standard(_ kind: Kind) -> DocumentDesign {
@@ -63,6 +66,7 @@ struct DocumentDesign: Sendable, Equatable {
         terms = raw.terms
         footer = raw.footer
         logo = Self.logoData(raw.logo)
+        usesTemplate = raw.source == "template"
     }
 
     init(title: String, billToLabel: String) {
@@ -71,12 +75,12 @@ struct DocumentDesign: Sendable, Equatable {
     }
 
     struct Raw: Decodable, Sendable {
-        var style, accent, header, font, title, billToLabel, logoPosition, logoSize, logo: String?
+        var style, accent, header, font, title, billToLabel, logoPosition, logoSize, logo, source: String?
         var show: [String: Bool]?
         var intro, terms, footer: RichNode?
 
         enum CodingKeys: String, CodingKey {
-            case style, accent, header, font, title, billToLabel, logoPosition, logoSize, logo, show, intro, terms, footer
+            case style, accent, header, font, title, billToLabel, logoPosition, logoSize, logo, show, intro, terms, footer, source
         }
 
         // Field by field: one bad value doesn't lose the rest of the design.
@@ -85,6 +89,7 @@ struct DocumentDesign: Sendable, Equatable {
             func s(_ k: CodingKeys) -> String? { try? c.decodeIfPresent(String.self, forKey: k) }
             style = s(.style); accent = s(.accent); header = s(.header); font = s(.font); title = s(.title)
             billToLabel = s(.billToLabel); logoPosition = s(.logoPosition); logoSize = s(.logoSize); logo = s(.logo)
+            source = s(.source)
             show = try? c.decodeIfPresent([String: Bool].self, forKey: .show)
             intro = try? c.decodeIfPresent(RichNode.self, forKey: .intro)
             terms = try? c.decodeIfPresent(RichNode.self, forKey: .terms)
@@ -609,5 +614,48 @@ enum DesignedPDF {
         }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         return (try? data.write(to: url, options: .atomic)) != nil ? url : nil
+    }
+}
+
+/// An invoice's or order's PDF, the one every download, preview, share and email uses: from the workspace's HTML
+/// template on the server when it chose one (`GET /api/v2/invoices/:uuid/pdf`, `GET /api/v2/shop/admin/orders/:uuid/pdf`),
+/// otherwise drawn here to its design. If the server can't make it, it is drawn here, so a PDF is never blocked
+/// (the web does the same, `lib/document-output.ts`).
+@MainActor
+enum WorkspacePDF {
+    struct Result {
+        let url: URL?
+        /// Said to the person when the template was chosen but the simple design was used.
+        let notice: String?
+    }
+
+    static func make(_ kind: DocumentDesign.Kind, uuid: String, design: DocumentDesign, client: APIClient,
+                     filename: String, draw: () -> URL?) async -> Result {
+        guard design.usesTemplate else { return Result(url: draw(), notice: nil) }
+        do {
+            let path = kind == .invoice ? "/api/v2/invoices/\(uuid)/pdf" : "/api/v2/shop/admin/orders/\(uuid)/pdf"
+            var endpoint = Endpoint.get(path)
+            endpoint.headers["Accept"] = "application/pdf"
+            let (data, _) = try await client.sendRaw(endpoint)
+            if data.starts(with: Data("%PDF".utf8)) {
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+                try data.write(to: url, options: .atomic)
+                return Result(url: url, notice: nil)
+            }
+            return Result(url: draw(), notice: fallbackNotice(nil))
+        } catch {
+            return Result(url: draw(), notice: fallbackNotice(error))
+        }
+    }
+
+    /// Why the simple design was used, in plain words; nothing when there's nothing to say: the workspace went back
+    /// to the designer since the design was read (409 `DESIGN_NOT_TEMPLATE`), or an older server has no PDF route (404).
+    nonisolated static func fallbackNotice(_ error: Error?) -> String? {
+        switch error as? APIError {
+        case .notFound: nil
+        case .validation(let e) where e.status == 409: nil
+        case .server(let e) where e.status == 503: "The PDF service isn't available, so this uses the simple design."
+        default: "The template's PDF couldn't be made, so this uses the simple design."
+        }
     }
 }

@@ -174,6 +174,78 @@ final class DocumentDesignTests: XCTestCase {
         }
     }
 
+    // MARK: The workspace's HTML template (`source: "template"`)
+
+    func testATemplateChoiceIsRead() throws {
+        let p = try Self.payload(#"{"data":{"invoice":{"source":"template","template_uuid":"t-1","template_name":"Classic"},"order":{"source":"design"}}}"#)
+        XCTAssertTrue(DocumentDesign(kind: .invoice, raw: try XCTUnwrap(p.invoice)).usesTemplate)
+        XCTAssertFalse(DocumentDesign(kind: .order, raw: try XCTUnwrap(p.order)).usesTemplate)
+        XCTAssertFalse(DocumentDesign.standard(.invoice).usesTemplate, "an older server sends no source: drawn here")
+    }
+
+    /// Asks `WorkspacePDF.make` for an invoice with the server answering `status` (and `body`).
+    private func make(_ kind: DocumentDesign.Kind = .invoice, template: Bool = true, status: Int, body: Data,
+                      calls: Counter = Counter()) async throws -> (WorkspacePDF.Result, drawn: Bool) {
+        let client = APIClient(baseURL: URL(string: "https://api.test")!, session: StubURLProtocol.session { request in
+            calls.increment(request.url?.path ?? "")
+            return StubURLProtocol.Response(status: status, body: body,
+                                            headers: ["Content-Type": status == 200 ? "application/pdf" : "application/json"])
+        }, tokenStore: InMemoryTokenStore(AuthTokens(accessToken: "a", refreshToken: "r")), sleep: { _ in })
+        await client.setNamespace("ns")
+        var design = DocumentDesign.standard(kind)
+        design.usesTemplate = template
+        let invoice = try ShopEasyTests.invoice(status: "sent", due: "2099-01-01")
+        var drawn = false
+        let result = await WorkspacePDF.make(kind, uuid: "inv-1", design: design, client: client, filename: "INV-0004.pdf") {
+            drawn = true
+            return InvoicePDFRenderer.render(invoice, design: design)
+        }
+        return (result, drawn)
+    }
+
+    private static let serverPDF = Data("%PDF-1.7 from the template".utf8)
+
+    func testTheDesignerIsDrawnHereWithoutAskingTheServer() async throws {
+        let calls = Counter()
+        let (result, drawn) = try await make(template: false, status: 200, body: Self.serverPDF, calls: calls)
+        XCTAssertTrue(drawn)
+        XCTAssertEqual(calls.value("/api/v2/invoices/inv-1/pdf"), 0)
+        XCTAssertNil(result.notice)
+    }
+
+    func testATemplatePDFComesFromTheServer() async throws {
+        let calls = Counter()
+        let (result, drawn) = try await make(status: 200, body: Self.serverPDF, calls: calls)
+        XCTAssertFalse(drawn)
+        XCTAssertEqual(calls.value("/api/v2/invoices/inv-1/pdf"), 1)
+        XCTAssertEqual(try Data(contentsOf: try XCTUnwrap(result.url)), Self.serverPDF, "the email attaches these bytes too")
+        XCTAssertNil(result.notice)
+        let order = Counter()
+        _ = try await make(.order, status: 200, body: Self.serverPDF, calls: order)
+        XCTAssertEqual(order.value("/api/v2/shop/admin/orders/inv-1/pdf"), 1)
+    }
+
+    func testWhenTheServerCantTheSimpleDesignIsDrawnHere() async throws {
+        let notTemplate = Data(#"{"success":false,"code":"DESIGN_NOT_TEMPLATE","error":"drawn with the designer"}"#.utf8)
+        let down = Data(#"{"success":false,"code":"PDF_SERVICE_UNAVAILABLE","error":"PDF service not configured"}"#.utf8)
+        let cases: [(Int, Data, String?)] = [
+            (409, notTemplate, nil),
+            (404, Data(#"{"error":"Not found"}"#.utf8), nil),
+            (503, down, "The PDF service isn't available, so this uses the simple design."),
+            (422, Data(#"{"success":false,"code":"TEMPLATE_ERROR","error":"line 3"}"#.utf8),
+             "The template's PDF couldn't be made, so this uses the simple design."),
+            (200, Data("<html>not a pdf</html>".utf8), "The template's PDF couldn't be made, so this uses the simple design."),
+        ]
+        for (status, body, notice) in cases {
+            let (result, drawn) = try await make(status: status, body: body)
+            XCTAssertTrue(drawn, "\(status) draws it here")
+            let data = try Data(contentsOf: try XCTUnwrap(result.url))
+            XCTAssertTrue(data.starts(with: Data("%PDF".utf8)))
+            XCTAssertNotEqual(data, Self.serverPDF)
+            XCTAssertEqual(result.notice, notice, "\(status)")
+        }
+    }
+
     // MARK: Currency
 
     func testTheAppCurrencyIsPoundsUnlessChangedAndADocumentKeepsItsOwn() throws {
