@@ -76,6 +76,13 @@ struct CustomersListView: View {
                 }
                 .accessibilityIdentifier("customers.sort")
             }
+            // To-dos the team gave me on customers and leads.
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink(value: NativeScreenRoute(MyTodosScreen.id)) {
+                    Label("My to-dos", systemImage: "checklist")
+                }
+                .accessibilityIdentifier("customers.myTodos")
+            }
             if session.permissions.can(.create, .customers) {
                 ToolbarItem(placement: .primaryAction) {
                     Button("New customer", systemImage: "plus") { creating = true }
@@ -111,6 +118,9 @@ private struct CustomerRow: View {
     }
 }
 
+/// Opens a customer by value (a push, an in-app alert, `wslcrm://customer/<uuid>`).
+struct CustomerRoute: Hashable { let uuid: String }
+
 struct CustomerDetailView: View {
     let customerUuid: String
     var onChange: (Customer?) -> Void = { _ in }
@@ -126,6 +136,8 @@ struct CustomerDetailView: View {
     @State private var newOrder = false
     @State private var openedInvoice: InvoiceRoute?
     @State private var openedOrder: CreatedStoreOrder?
+    /// The customer's notes and to-dos (shared with the full thread).
+    @State private var notes: RecordNotesModel?
 
     var body: some View {
         Group {
@@ -145,6 +157,7 @@ struct CustomerDetailView: View {
                                                                      entityType: "customer", entityUUID: customerUuid)
             billing = await CustomerBilling.load(services: services, session: session, customerUuid: customerUuid)
         }
+        .task(id: customerUuid) { await loadNotes() }
         .sheet(isPresented: $newInvoice) {
             if let customer = state.value {
                 InvoiceCreateSheet(prefill: PickedCustomer(customer)) { body, key in
@@ -167,7 +180,10 @@ struct CustomerDetailView: View {
                                  opening: "Order \(created.orderNumber ?? "") created.")
         }
         .task { await load() }
-        .wsRefreshable { await load() }
+        .wsRefreshable {
+            await load()
+            await notes?.load()
+        }
         .toolbar {
             if session.permissions.can(.update, .customers), state.value != nil {
                 ToolbarItem(placement: .topBarTrailing) { Button("Edit") { editing = true } }
@@ -230,6 +246,8 @@ struct CustomerDetailView: View {
             if let notice {
                 Section { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
             }
+            // What the team wrote about them: visible as soon as the customer opens, not under "Details".
+            if let notes { RecordNotesSection(model: notes) }
             // The Mac has these in the header (macActions).
             if canStartSale, !MacSupport.isMac {
                 Section {
@@ -334,6 +352,14 @@ struct CustomerDetailView: View {
     /// Sales orders list shop orders with shop.read and store orders with orders.read.
     private var canSeeOrders: Bool {
         session.permissions.shows(.orders) || session.permissions.can(.read, .shop)
+    }
+
+    /// Notes need `customers.read`, as on the server; without it the section isn't shown.
+    private func loadNotes() async {
+        guard session.permissions.can(.read, .customers) else { return }
+        if notes?.subjectUUID != customerUuid { notes = RecordNotesModel(subjectType: .customer, subjectUUID: customerUuid) }
+        notes?.connect(services.recordNotes, me: session.user?.uuid)
+        await notes?.load()
     }
 
     private func load() async {

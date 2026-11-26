@@ -29,6 +29,8 @@ struct AppDeepLink: Equatable, Sendable, Identifiable {
         case chat(String)
         /// A lead: new, replied, back again, a step due.
         case lead(String)
+        /// A customer (a to-do given to someone on them: `record_note.todo`).
+        case customer(String)
         /// A shop order that just came in.
         case order(String)
         /// A shop quote the customer accepted.
@@ -79,7 +81,7 @@ struct AppDeepLink: Equatable, Sendable, Identifiable {
             self.init(namespaceId: namespace, target: .chat(channel))
             return
         }
-        let records = ["lead", "order", "quote", "invoice"]
+        let records = ["lead", "customer", "order", "quote", "invoice"]
         guard url.scheme == "wslcrm", let host = url.host, (["pd", "pa"] + records).contains(host) else { return nil }
         let parts = url.pathComponents.filter { $0 != "/" }
         let route = records.contains(host) ? host : parts.first
@@ -103,6 +105,7 @@ struct AppDeepLink: Equatable, Sendable, Identifiable {
         case ("handoff", let id?): return .handoff(id)
         case ("pa_capture_ready", let id?): return .paCapture(id)
         case ("lead", let id?): return .lead(id)
+        case ("customer", let id?): return .customer(id)
         case ("order", let id?): return .order(id)
         case ("quote", let id?): return .quote(id)
         case ("invoice", let id?): return .invoice(id)

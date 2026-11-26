@@ -901,6 +901,7 @@ extension View {
             .navigationDestination(for: VisitsPresetRoute.self) { VisitsScheduleView(preset: $0.preset) }
             .navigationDestination(for: PurchaseOrderRoute.self) { PurchaseOrderDetailView(uuid: $0.uuid) }
             .navigationDestination(for: LeadRoute.self) { LeadDetailView(leadUuid: $0.uuid) }
+            .navigationDestination(for: CustomerRoute.self) { CustomerDetailView(customerUuid: $0.uuid) }
             .navigationDestination(for: ShopOrderRoute.self) { ShopOrderDetailView(uuid: $0.uuid) }
             .navigationDestination(for: ShopQuoteRoute.self) { ShopQuoteDetailView(uuid: $0.uuid) }
             .navigationDestination(for: FieldServiceArea.self) { area in
