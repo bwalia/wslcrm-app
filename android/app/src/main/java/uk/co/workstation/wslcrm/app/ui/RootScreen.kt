@@ -41,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -286,6 +287,32 @@ private sealed interface HomeLayer {
     data class Page(val route: WebPageRoute) : HomeLayer
 }
 
+private val HomeLayerSaver = Saver<HomeLayer?, ArrayList<String?>>(
+    save = {
+        when (it) {
+            null -> arrayListOf()
+            is HomeLayer.Assistant -> arrayListOf("assistant", it.ask)
+            is HomeLayer.Page -> arrayListOf("page", it.route.title, it.route.path)
+        }
+    },
+    restore = {
+        when (it.getOrNull(0)) {
+            "assistant" -> HomeLayer.Assistant(it.getOrNull(1))
+            "page" -> {
+                val title = it.getOrNull(1)
+                val path = it.getOrNull(2)
+                if (title != null && path != null) HomeLayer.Page(WebPageRoute(title, path)) else null
+            }
+            else -> null
+        }
+    },
+)
+
+private val RouteSaver = Saver<WebPageRoute?, ArrayList<String>>(
+    save = { if (it == null) arrayListOf() else arrayListOf(it.title, it.path) },
+    restore = { if (it.size == 2) WebPageRoute(it[0], it[1]) else null },
+)
+
 @Composable
 private fun MainScreen(session: SessionStore) {
     val navigation = NavigationPolicy(session.permissions)
@@ -300,8 +327,9 @@ private fun MainScreen(session: SessionStore) {
     }
     var selected by rememberSaveable { mutableStateOf(Tab.HOME) }
     if (selected !in tabs) selected = Tab.HOME
-    var homeLayer by remember { mutableStateOf<HomeLayer?>(null) }
-    var aiPage by remember { mutableStateOf<WebPageRoute?>(null) }
+    // Kept across rotation and process death: the page or agent the person was on stays open.
+    var homeLayer by rememberSaveable(stateSaver = HomeLayerSaver) { mutableStateOf<HomeLayer?>(null) }
+    var aiPage by rememberSaveable(stateSaver = RouteSaver) { mutableStateOf<WebPageRoute?>(null) }
 
     /** Opens a menu page from Home or the agent: the shop's own screens, the agent, or the page in the app. */
     fun open(item: AppMenu.Item) {

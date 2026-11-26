@@ -3,6 +3,11 @@ package uk.co.workstation.wslcrm.features.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -183,12 +188,14 @@ private fun Header(session: SessionStore) {
             Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.getDefault())).uppercase(),
                 style = MaterialTheme.typography.labelMedium, color = AppColors.secondaryText, letterSpacing = MaterialTheme.typography.labelMedium.letterSpacing * 1.5f)
             Text(if (name != null) "$part, $name" else part, style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() })
             session.workspace?.let { SecondaryText(it.name, maxLines = 1) }
         }
         session.user?.let { user ->
             Text(user.initials, color = Color.White, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.background(MaterialTheme.colorScheme.primary, CircleShape).padding(14.dp))
+                modifier = Modifier.background(MaterialTheme.colorScheme.primary, CircleShape).padding(14.dp)
+                    .semantics { contentDescription = "Signed in as ${user.firstName ?: user.initials}" })
         }
     }
 }
@@ -262,7 +269,8 @@ private fun CommandCenter(
             TextField(
                 value = text,
                 onValueChange = { text = it },
-                modifier = Modifier.weight(1f).testTag("home.command.field"),
+                modifier = Modifier.weight(1f).testTag("home.command.field")
+                    .semantics { contentDescription = if (canAsk) "Ask AI or search" else "Search pages" },
                 placeholder = { Text(if (canAsk) "e.g. “Which quotes should I chase?”" else "Search pages…", color = onDarkMuted) },
                 maxLines = 4,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.White),
@@ -312,7 +320,7 @@ private fun CommandCenter(
                     Text(prompt, color = onDarkInk, style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.background(Color.White.copy(alpha = 0.1f), CircleShape)
                             .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
-                            .clickable { go(CommandRouter.Decision.Ask(prompt)) }
+                            .heightIn(min = 48.dp).clickable(role = Role.Button) { go(CommandRouter.Decision.Ask(prompt)) }
                             .padding(horizontal = 14.dp, vertical = 9.dp)
                             .testTag("home.command.suggestion"))
                 }
@@ -320,7 +328,7 @@ private fun CommandCenter(
             if (lastRequest != null) {
                 Row(
                     Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
-                        .clickable(onClick = onContinue).padding(12.dp).testTag("home.command.continue"),
+                        .heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onContinue).padding(12.dp).testTag("home.command.continue"),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(Icons.Default.Replay, null, tint = onDarkInk)
@@ -341,7 +349,7 @@ private fun CommandCenter(
 @Composable
 private fun ResultRow(icon: ImageVector, title: String, detail: String?, id: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(6.dp).testTag("home.command.result.$id"),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onClick).padding(6.dp).testTag("home.command.result.$id"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, null, tint = onDarkInk, modifier = Modifier.background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(9.dp)).padding(7.dp))
@@ -385,7 +393,7 @@ private fun NeedsToday(signals: List<HomeSignal>, loaded: Boolean, onOpenShop: (
                 signals.forEach { signal ->
                     Column(
                         Modifier.width(tileWidth).background(AppColors.card, RoundedCornerShape(18.dp))
-                            .clickable(onClick = onOpenShop).padding(14.dp).testTag("home.signal.${signal.id}"),
+                            .clickable(role = Role.Button, onClick = onOpenShop).padding(14.dp).testTag("home.signal.${signal.id}"),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Icon(signal.icon, null, tint = signal.tone.textColor,
@@ -414,7 +422,7 @@ private fun Apps(menu: AppMenu, columns: Int, onOpen: (AppMenu.Item) -> Unit) {
             FlowRow(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 items.forEach { item ->
                     Column(
-                        Modifier.width(cell).clickable { onOpen(item) }.padding(vertical = 6.dp).testTag("home.app.${item.key}"),
+                        Modifier.width(cell).clickable(role = Role.Button) { onOpen(item) }.padding(vertical = 6.dp).testTag("home.app.${item.key}"),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {

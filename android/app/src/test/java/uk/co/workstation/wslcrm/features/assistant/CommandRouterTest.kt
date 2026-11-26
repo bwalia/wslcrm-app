@@ -64,4 +64,27 @@ class CommandRouterTest {
         assertEquals("nope", conversation.turns[1].actions.single().error)
         assertEquals(listOf("Do X"), conversation.suggestions)
     }
+
+    @Test fun placesOnlyListWhatCanOpen() {
+        val menu = uk.co.workstation.wslcrm.features.menu.AppMenu(
+            sections = listOf(uk.co.workstation.wslcrm.features.menu.AppMenu.Section(null, null, listOf(
+                uk.co.workstation.wslcrm.features.menu.AppMenu.Item("crm_leads", "Leads", null, "/dashboard/leads"),
+                uk.co.workstation.wslcrm.features.menu.AppMenu.Item("shop", "Shop", null, null),
+                uk.co.workstation.wslcrm.features.menu.AppMenu.Item("chat", "AI Navigator", null, null),
+                uk.co.workstation.wslcrm.features.menu.AppMenu.Item("reports", "Reports", null, null),
+                uk.co.workstation.wslcrm.features.menu.AppMenu.Item("dashboard", "Dashboard", null, "/dashboard"),
+            ))),
+            secondary = emptyList(),
+        )
+        // "reports" has no screen and no page: offering it made a tap do nothing.
+        assertEquals(listOf("crm_leads", "shop", "chat"), CommandRouter.places(menu).map { it.key })
+    }
+
+    @Test fun agentBodiesUseTheServersNames() {
+        val json = uk.co.workstation.wslcrm.core.networking.OpsJson.encoder
+        val send = json.encodeToString(AgentMessageBody.serializer(), AgentMessageBody("hi", null, "2026-11-26"))
+        assertTrue(send, send.contains("\"local_date\":\"2026-11-26\"") && send.contains("\"message\":\"hi\""))
+        val confirm = json.encodeToString(AgentConfirmBody.serializer(), AgentConfirmBody(true, "/dashboard", "2026-11-26"))
+        assertTrue(confirm, confirm.contains("\"approve\":true") && confirm.contains("\"local_date\":\"2026-11-26\""))
+    }
 }
