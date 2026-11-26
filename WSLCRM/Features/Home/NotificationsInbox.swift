@@ -59,7 +59,7 @@ struct InboxNotification: Identifiable, Equatable, Sendable {
         actorName = nil
         let data = row.string("data").flatMap { try? JSONDecoder().decode(JSONValue.self, from: Data($0.utf8)) }
             .map(WorkspaceAPI.object)
-        // A to-do on a lead (`record_note.todo`) names its record as subject_type / subject_uuid.
+        // `route` + `uuid` name the record; an older server's to-do alert only had subject_type / subject_uuid.
         record = AppDeepLink.target(route: data?.string("route") ?? data?.string("subject_type"),
                                     uuid: data?.string("uuid") ?? data?.string("subject_uuid"))
         actionPath = nil

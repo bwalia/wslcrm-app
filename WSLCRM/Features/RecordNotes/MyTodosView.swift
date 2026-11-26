@@ -57,6 +57,12 @@ struct MyTodosView: View {
                 }
                 .listRowBackground(Color.clear)
             }
+            if model.truncated {
+                Label("Showing the first \(todos.count)\(model.total.map { " of \($0)" } ?? ""). Tick some off to see the rest.",
+                      systemImage: "info.circle")
+                    .font(.wsFootnote)
+                    .foregroundStyle(.secondaryText)
+            }
             ForEach(todos) { todo in
                 MyTodoRow(todo: todo, myUUID: session.user?.uuid) {
                     Task { await model.setDone(todo, !todo.done, api: services.recordNotes) }
@@ -141,6 +147,9 @@ struct RecordSubjectScreen: View {
 /// right here. Hidden when there are none.
 struct HomeTodosPanel: View {
     let todos: [RecordNote]
+    /// The server's counts (all my open to-dos, and how many are late); fall back to the list.
+    var total: Int?
+    var overdue: Int?
     let myUUID: String?
     var error: String?
     let toggle: (RecordNote) -> Void
@@ -149,7 +158,8 @@ struct HomeTodosPanel: View {
 
     var body: some View {
         DashboardPanel(title: "Your to-dos") {
-            let overdue = todos.filter { $0.isOverdue() }.count
+            let overdue = overdue ?? todos.filter { $0.isOverdue() }.count
+            let total = max(total ?? todos.count, todos.count)
             Text(overdue > 0 ? "\(overdue) overdue. Tick them off when they're done."
                  : "On your customers and leads. Tick them off when they're done.")
                 .font(.wsFootnote)
@@ -177,7 +187,7 @@ struct HomeTodosPanel: View {
                 .accessibilityIdentifier("home.todo.\(todo.uuid)")
             }
             NavigationLink(value: NativeScreenRoute(MyTodosScreen.id)) {
-                PanelRow(title: todos.count > Self.limit ? "All \(todos.count) to-dos" : "All my to-dos",
+                PanelRow(title: total > Self.limit ? "All \(total) to-dos" : "All my to-dos",
                          systemImage: "checklist")
             }
             .buttonStyle(.panelRow)

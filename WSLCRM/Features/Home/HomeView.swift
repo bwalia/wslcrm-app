@@ -150,7 +150,8 @@ struct HomeView: View {
         }
         // To-dos the team gave this person on customers and leads.
         if !digest.recordTodos.isEmpty {
-            HomeTodosPanel(todos: digest.recordTodos, myUUID: session.user?.uuid, error: digest.todoError) { todo in
+            HomeTodosPanel(todos: digest.recordTodos, total: digest.recordTodosTotal, overdue: digest.recordTodosOverdue,
+                           myUUID: session.user?.uuid, error: digest.todoError) { todo in
                 Task { await digest.completeTodo(todo, api: services.recordNotes) }
             }
         }

@@ -108,6 +108,10 @@ struct RecordNote: Decodable, Identifiable, Hashable, Sendable {
     var createdAt: Date?
     var editedAt: Date?
     var isMine: Bool
+    /// What the server lets me do with it (`can_edit`: the author; `can_delete`: the author or an admin).
+    /// Nil from an older server, which didn't say: then only the author may.
+    var serverCanEdit: Bool?
+    var serverCanDelete: Bool?
     /// Only on my-todos rows: which customer or lead it is for.
     var subject: NoteSubject?
 
@@ -115,11 +119,14 @@ struct RecordNote: Decodable, Identifiable, Hashable, Sendable {
     var isTodo: Bool { kind == .todo }
     var knownTag: RecordNoteTag? { tag.flatMap(RecordNoteTag.init) }
     var authorName: String { author?.name ?? "Someone" }
+    var canEdit: Bool { serverCanEdit ?? isMine }
+    var canDelete: Bool { serverCanDelete ?? isMine }
 
     init(uuid: String, subjectType: RecordNoteSubjectType? = nil, kind: RecordNoteKind = .note, body: String,
          tag: String? = nil, author: NotePerson? = nil, assignee: NotePerson? = nil, dueDate: CalendarDay? = nil,
          done: Bool = false, doneAt: Date? = nil, doneBy: NotePerson? = nil, createdAt: Date? = nil,
-         editedAt: Date? = nil, isMine: Bool = false, subject: NoteSubject? = nil) {
+         editedAt: Date? = nil, isMine: Bool = false, canEdit: Bool? = nil, canDelete: Bool? = nil,
+         subject: NoteSubject? = nil) {
         self.uuid = uuid
         self.subjectType = subjectType
         self.kind = kind
@@ -134,6 +141,8 @@ struct RecordNote: Decodable, Identifiable, Hashable, Sendable {
         self.createdAt = createdAt
         self.editedAt = editedAt
         self.isMine = isMine
+        self.serverCanEdit = canEdit
+        self.serverCanDelete = canDelete
         self.subject = subject
     }
 
@@ -153,12 +162,14 @@ struct RecordNote: Decodable, Identifiable, Hashable, Sendable {
         createdAt = c.decodeDate(forKey: .createdAt)
         editedAt = c.decodeDate(forKey: .editedAt)
         isMine = c.decodeFlexibleBool(forKey: .isMine) ?? false
+        serverCanEdit = c.decodeFlexibleBool(forKey: .canEdit)
+        serverCanDelete = c.decodeFlexibleBool(forKey: .canDelete)
         subject = try? c.decodeIfPresent(NoteSubject.self, forKey: .subject)
     }
 
     enum CodingKeys: String, CodingKey {
         case uuid, subjectType, kind, body, tag, author, assignee, dueDate, done, doneAt, doneBy, createdAt, editedAt,
-             isMine, subject
+             isMine, canEdit, canDelete, subject
     }
 
     /// An open to-do whose due day has passed.
@@ -223,6 +234,54 @@ struct RecordNotesPage: Decodable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey { case data, meta }
+}
+
+/// `GET /record-notes/my-todos` meta: `{ total, overdue, truncated }` (absent on an older server).
+struct MyTodosMeta: Decodable, Sendable, Equatable {
+    var total: Int?
+    var overdue: Int?
+    var truncated: Bool
+
+    init(total: Int? = nil, overdue: Int? = nil, truncated: Bool = false) {
+        self.total = total
+        self.overdue = overdue
+        self.truncated = truncated
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        total = c.decodeFlexibleInt(forKey: .total)
+        overdue = c.decodeFlexibleInt(forKey: .overdue)
+        truncated = c.decodeFlexibleBool(forKey: .truncated) ?? false
+    }
+
+    enum CodingKeys: String, CodingKey { case total, overdue, truncated }
+}
+
+/// My to-dos and the server's counts.
+struct MyTodosPage: Decodable, Sendable {
+    let todos: [RecordNote]
+    let meta: MyTodosMeta
+
+    init(todos: [RecordNote], meta: MyTodosMeta = MyTodosMeta()) {
+        self.todos = todos
+        self.meta = meta
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        todos = c.decodeLossyArray(RecordNote.self, forKey: .data)
+        meta = (try? c.decodeIfPresent(MyTodosMeta.self, forKey: .meta)) ?? MyTodosMeta()
+    }
+
+    enum CodingKeys: String, CodingKey { case data, meta }
+
+    /// How many are shown as late: the server's count, else counted here (an older server).
+    func overdueCount(now: Date = Date()) -> Int {
+        meta.overdue ?? todos.filter { $0.isOverdue(now: now) }.count
+    }
+
+    var totalCount: Int { meta.total ?? todos.count }
 }
 
 /// Someone a to-do can be given to (`GET /api/v2/record-notes/people`).

@@ -15,11 +15,12 @@ final class RecordNotesTests: XCTestCase {
      "data":[
       {"uuid":"n1","subject_type":"customer","kind":"note","body":"Visited the school.\\n\\nThey want a new printer.",
        "tag":null,"author":{"uuid":"u1","name":"Sam Lee"},"assignee":null,"due_date":null,"done":false,
-       "done_at":null,"done_by":null,"created_at":"2026-11-24T09:15:00Z","edited_at":null,"is_mine":true},
+       "done_at":null,"done_by":null,"created_at":"2026-11-24T09:15:00Z","edited_at":null,"is_mine":true,"can_edit":true,"can_delete":true},
       {"uuid":"n2","subject_type":"customer","kind":"todo","body":"Quote for 3 printers","tag":"quote",
        "author":{"uuid":"u1","name":"Sam Lee"},"assignee":{"uuid":"u2","name":"Priya Shah"},"due_date":"2026-11-25",
        "done":true,"done_at":"2026-11-26T10:00:00Z","done_by":{"uuid":"u2","name":"Priya Shah"},
-       "created_at":"2026-11-25T16:40:00Z","edited_at":"2026-11-25T16:45:00Z","is_mine":false}
+       "created_at":"2026-11-25T16:40:00Z","edited_at":"2026-11-25T16:45:00Z","is_mine":false,
+       "can_edit":false,"can_delete":true}
      ],
      "meta":{"has_more":true,"open_todos":2,"subject":{"type":"customer","uuid":"c1","name":"Hilltop School"}}}
     """
@@ -54,6 +55,9 @@ final class RecordNotesTests: XCTestCase {
         XCTAssertEqual(todo.doneBy?.uuid, "u2")
         XCTAssertNotNil(todo.editedAt)
         XCTAssertFalse(todo.isMine)
+        XCTAssertTrue(decoded.notes[0].canEdit)
+        XCTAssertFalse(todo.canEdit, "only the author changes the words")
+        XCTAssertTrue(todo.canDelete, "the server says an admin may delete someone else's")
 
         XCTAssertTrue(decoded.meta.hasMore)
         XCTAssertEqual(decoded.meta.openTodos, 2)
@@ -90,6 +94,40 @@ final class RecordNotesTests: XCTestCase {
         XCTAssertFalse(note.done)
         XCTAssertFalse(note.isMine)
         XCTAssertNil(note.author)
+        XCTAssertFalse(note.canEdit, "an older server without can_edit: only the author")
+        XCTAssertFalse(note.canDelete)
+        let mine = try decode(RecordNote.self, #"{"uuid":"y","body":"Hi","is_mine":true}"#)
+        XCTAssertTrue(mine.canEdit)
+        XCTAssertTrue(mine.canDelete)
+    }
+
+    func testMyTodosDecodeWithTheServersCounts() throws {
+        let page = try decode(MyTodosPage.self, """
+        {"success":true,"data":[{"uuid":"t1","kind":"todo","body":"Ring them","due_date":"2020-01-01",
+          "subject":{"type":"customer","uuid":"c1","name":"Hilltop School"}}],
+         "meta":{"total":620,"overdue":12,"truncated":true}}
+        """)
+        XCTAssertEqual(page.todos.count, 1)
+        XCTAssertEqual(page.meta, MyTodosMeta(total: 620, overdue: 12, truncated: true))
+        XCTAssertEqual(page.totalCount, 620)
+        XCTAssertEqual(page.overdueCount(), 12, "the server's count, not the page's")
+    }
+
+    func testMyTodosFromAnOlderServerCountTheirOwn() throws {
+        let page = try decode(MyTodosPage.self,
+                              #"{"success":true,"data":[{"uuid":"t1","kind":"todo","body":"x","due_date":"2020-01-01"}]}"#)
+        XCTAssertEqual(page.meta, MyTodosMeta())
+        XCTAssertEqual(page.totalCount, 1)
+        XCTAssertEqual(page.overdueCount(), 1)
+        XCTAssertTrue(try decode(MyTodosPage.self, #"{"success":true,"data":[],"meta":{"total":0,"overdue":0,"truncated":false}}"#)
+            .todos.isEmpty)
+    }
+
+    func testATodoAlertOpensItsCustomerOrLead() {
+        XCTAssertEqual(AppDeepLink.target(route: "customer", uuid: "c1"), .customer("c1"))
+        XCTAssertEqual(AppDeepLink.target(route: "lead", uuid: "l1"), .lead("l1"))
+        XCTAssertEqual(AppDeepLink(url: URL(string: "wslcrm://customer/c1")!)?.target, .customer("c1"))
+        XCTAssertEqual(AppDeepLink(userInfo: ["route": "customer", "uuid": "c1"])?.target, .customer("c1"))
     }
 
     func testPeopleDecodeIncludingAnEmptyList() throws {

@@ -31,6 +31,9 @@ final class HomeDigest {
     private(set) var leadsFresh: [LeadCard] = []
     /// Open to-dos given to this person on customers and leads (Home's "Your to-dos").
     private(set) var recordTodos: [RecordNote] = []
+    /// The server's counts for them (nil from an older server).
+    private(set) var recordTodosTotal: Int?
+    private(set) var recordTodosOverdue: Int?
     var todoError: String?
 
     /// The modules Home can summarise for this person (nothing to load means no "Today" section).
@@ -66,7 +69,7 @@ final class HomeDigest {
         async let todos = showsTodos ? try? await notesAPI.myTodos(status: .open) : nil
         let sources = Self.sources(session: session)
         guard !sources.isEmpty else {
-            recordTodos = RecordNotesTimeline.sortedTodos(await todos ?? [])
+            applyTodos(await todos)
             signals = []
             hasLoaded = true
             return
@@ -104,16 +107,25 @@ final class HomeDigest {
         let leadSteps = await steps
         leadsReplied = leadSteps?.replied ?? []
         leadsFresh = leadSteps?.fresh ?? []
-        recordTodos = RecordNotesTimeline.sortedTodos(await todos ?? [])
+        applyTodos(await todos)
         hasLoaded = true
         HomePreferences.shared.record(activity: digest.activity)
+    }
+
+    private func applyTodos(_ page: MyTodosPage?) {
+        recordTodos = RecordNotesTimeline.sortedTodos(page?.todos ?? [])
+        recordTodosTotal = page?.meta.total
+        recordTodosOverdue = page?.meta.overdue
     }
 
     /// Ticks one of my to-dos off from Home: it leaves the list once the server has it.
     func completeTodo(_ todo: RecordNote, api: RecordNotesAPI) async {
         do {
             _ = try await api.update(todo.uuid, .markDone(!todo.done))
+            let wasLate = todo.isOverdue()
             recordTodos.removeAll { $0.uuid == todo.uuid }
+            recordTodosTotal = recordTodosTotal.map { max(0, $0 - 1) }
+            if wasLate { recordTodosOverdue = recordTodosOverdue.map { max(0, $0 - 1) } }
             todoError = nil
         } catch {
             todoError = "Couldn't tick it off: \(error.asAPIError.plainMessage)"

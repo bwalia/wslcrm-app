@@ -118,6 +118,9 @@ private struct CustomerRow: View {
     }
 }
 
+/// Opens a customer by value (a push, an in-app alert, `wslcrm://customer/<uuid>`).
+struct CustomerRoute: Hashable { let uuid: String }
+
 struct CustomerDetailView: View {
     let customerUuid: String
     var onChange: (Customer?) -> Void = { _ in }

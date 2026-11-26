@@ -45,10 +45,8 @@ struct RecordNotesAPI: Sendable {
     }
 
     /// To-dos given to me across every customer and lead I can see, each with its record's name.
-    func myTodos(status: TodoStatus) async throws -> [RecordNote] {
-        let envelope: ListData<RecordNote> = try await client.send(
-            .get("\(Self.base)/my-todos", query: [URLQueryItem(name: "status", value: status.rawValue)]))
-        return envelope.items
+    func myTodos(status: TodoStatus) async throws -> MyTodosPage {
+        try await client.send(.get("\(Self.base)/my-todos", query: [URLQueryItem(name: "status", value: status.rawValue)]))
     }
 
     /// Who a to-do can be given to.

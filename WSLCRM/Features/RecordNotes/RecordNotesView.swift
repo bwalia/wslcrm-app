@@ -102,16 +102,14 @@ struct RecordNotesView: View {
     }
 
     private var actions: RecordNoteActions {
-        let permissions = session.permissions
-        // As the server: the author, or a workspace owner/admin (users.manage), may delete.
-        let isAdmin = permissions.isAdmin || permissions.isOwner || permissions.can(.manage, moduleName: "users")
-        return RecordNoteActions(
+        // The server says per note what I may do (`can_edit`, `can_delete`).
+        RecordNoteActions(
             toggleDone: { note in Task { await model.setDone(note, !note.done) } },
             edit: { note in model.composer.startEdit(note) },
             reassign: { note in reassigning = note },
             changeDue: { note in changingDue = note },
             delete: { note in deleting = note },
-            canDelete: { note in note.isMine || isAdmin })
+            canDelete: { note in note.canDelete })
     }
 
     @ViewBuilder
@@ -290,7 +288,7 @@ struct RecordNoteRow: View {
                 actions.changeDue(note)
             }
         }
-        if note.isMine {
+        if note.canEdit {
             Button("Edit", systemImage: "pencil") { actions.edit(note) }
         }
         Button("Copy", systemImage: "doc.on.doc") { UIPasteboard.general.string = note.body }

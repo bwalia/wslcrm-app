@@ -234,13 +234,19 @@ final class MyTodosModel {
     var status: RecordNotesAPI.TodoStatus = .open
     var notice: String?
     var error: APIError?
+    /// More to-dos than the server sends at once (`meta.truncated`).
+    private(set) var truncated = false
+    private(set) var total: Int?
 
     var items: [RecordNote] { state.value ?? [] }
 
     func load(_ api: RecordNotesAPI) async {
         if state.value == nil { state = .loading }
         do {
-            state = .loaded(RecordNotesTimeline.sortedTodos(try await api.myTodos(status: status)))
+            let page = try await api.myTodos(status: status)
+            state = .loaded(RecordNotesTimeline.sortedTodos(page.todos))
+            truncated = page.meta.truncated
+            total = page.meta.total
             error = nil
         } catch {
             let apiError = error.asAPIError
@@ -258,6 +264,7 @@ final class MyTodosModel {
             let leaves = (status == .open && done) || (status == .done && !done)
             if leaves {
                 list.removeAll { $0.uuid == note.uuid }
+                total = total.map { max(0, $0 - 1) }
             } else if let index = list.firstIndex(where: { $0.uuid == note.uuid }) {
                 list[index] = saved
             }
