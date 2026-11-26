@@ -19,6 +19,7 @@ struct MainTabView: View {
     @State private var homePath = NavigationPath()
     @State private var hubPaths: [NavigationPolicy.Home: NavigationPath] = [:]
     @State private var appPaths: [String: NavigationPath] = [:]
+    @State private var appsPath = NavigationPath()
     @State private var commandFocus = 0
 
     var body: some View {
@@ -113,9 +114,10 @@ struct MainTabView: View {
         // The Go menu (⌘1–⌘9) walks the sidebar in its order.
         let tabs: [(String, AppTab)] = [("Home", .home)] + pinned.map { ($0.title, $0.tab) }
             + hubs.map { ($0.title, .hub($0)) } + groups.flatMap(\.entries).map { ($0.name, .app($0.key)) }
-        let areas = tabs.map { title, tab in MacArea(title: title) { selection = tab } }
+        let areas = tabs.map { title, tab in MacArea(title: title) { showArea(tab) } }
         return NavigationSplitView {
-            MacSidebar(selection: $selection, pinned: pinned, hubs: hubs, groups: groups, failedCount: sync.failedCount)
+            MacSidebar(selection: Binding(get: { selection }, set: { showArea($0) }),
+                       pinned: pinned, hubs: hubs, groups: groups, failedCount: sync.failedCount)
         } detail: {
             Group {
                 switch selection {
@@ -142,7 +144,7 @@ struct MainTabView: View {
     }
 
     private var appsStack: some View {
-        NavigationStack {
+        NavigationStack(path: $appsPath) {
             AppsView()
                 .askAIButton(path: nil)
                 .withAppDestinations()
@@ -179,6 +181,20 @@ struct MainTabView: View {
         } else if case .hub(let hub) = tab {
             homePath.append(HubScreenRoute(hub: hub))
         }
+    }
+
+    /// The Mac sidebar and Go menu: Home is always the Home dashboard, wherever the person went from it, and choosing
+    /// the area already shown goes back to its first screen, as a Mac sidebar does.
+    private func showArea(_ tab: AppTab) {
+        if tab == .home || tab == selection {
+            switch tab {
+            case .home: homePath = NavigationPath()
+            case .apps: appsPath = NavigationPath()
+            case .hub(let hub): hubPaths[hub] = nil
+            case .app(let key): appPaths[key] = nil
+            }
+        }
+        selection = tab
     }
 
     private func focusCommandBox() {

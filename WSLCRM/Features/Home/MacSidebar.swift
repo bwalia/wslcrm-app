@@ -31,8 +31,7 @@ struct MacSidebar: View {
     var body: some View {
         List(selection: Binding(get: { selection }, set: { if let tab = $0 { selection = tab } })) {
             Section {
-                row("Home", systemImage: "house", tab: .home, tint: .accentColor)
-                    .badge(failedCount)
+                row("Home", systemImage: "house", tab: .home, tint: .accentColor, badge: failedCount)
                 row("All apps", systemImage: "square.grid.2x2", tab: .apps, tint: .secondary)
             }
             if !pinned.isEmpty {
@@ -86,12 +85,15 @@ struct MacSidebar: View {
             .foregroundStyle(.secondaryText)
     }
 
-    private func row(_ title: String, systemImage: String, tab: AppTab, tint: Color) -> some View {
+    private func row(_ title: String, systemImage: String, tab: AppTab, tint: Color, badge: Int = 0) -> some View {
         Label {
             Text(title).lineLimit(1)
         } icon: {
             Image(systemName: systemImage).foregroundStyle(tint)
         }
+        // Inside the tag: a badge put on after it hid the tag from the List, so Home could never be selected again
+        // once the person left it.
+        .badge(badge)
         .tag(tab)
         .accessibilityIdentifier("sidebar.\(title)")
     }
