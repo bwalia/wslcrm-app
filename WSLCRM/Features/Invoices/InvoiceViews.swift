@@ -276,6 +276,7 @@ struct InvoiceDetailView: View {
     /// What just happened before this screen opened ("Invoice created").
     var opening: String?
     @Environment(\.services) private var services
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var state: LoadState<Invoice> = .idle
@@ -436,8 +437,7 @@ struct InvoiceDetailView: View {
                     Label(invoice.emailActionTitle,
                           systemImage: invoice.displayStatus == .overdue ? "bell.badge.fill" : "envelope.fill")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(invoice.displayStatus == .overdue ? Tone.warning.solidColor : nil)
+                .buttonStyle(.action(prominent: true, tone: invoice.displayStatus == .overdue ? .warning : .brand))
                 .accessibilityIdentifier("invoice.email")
             }
             if permissions.can(.create, .payments) && invoice.canRecordPayment {
@@ -459,13 +459,14 @@ struct InvoiceDetailView: View {
     private func content(_ invoice: Invoice) -> some View {
         let permissions = session.permissions
         let canUpdate = permissions.can(.update, .invoices)
-        return List {
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    invoice.displayStatus.badge
-                    Text(invoice.customerName ?? "No customer").font(.wsTitle2.bold())
-                    if let email = invoice.customerEmail { Text(email).foregroundStyle(.secondaryText) }
-                    HStack(alignment: .firstTextBaseline) {
+        let wide = sizeClass != .compact
+        return DetailPage {
+            DetailHeader(invoice.customerName ?? "No customer",
+                         subtitle: [invoice.displayNumber, invoice.customerEmail].compactMap { $0 }.joined(separator: " · "),
+                         avatar: .icon("doc.text", Palette.tile(for: "invoices"))) {
+                DetailChips { invoice.displayStatus.badge }
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(Formatters.money(invoice.totalAmount, currency: invoice.currency) ?? "").font(.wsTitle.monospacedDigit().bold())
                         if invoice.balanceDue > 0 && invoice.amountPaid > 0 {
                             Text("\(Formatters.money(invoice.balanceDue, currency: invoice.currency) ?? "") due")
@@ -475,29 +476,25 @@ struct InvoiceDetailView: View {
                     Text([invoice.issueDate.map { "Issued \(Formatters.day($0.date()) ?? "")" },
                           invoice.dueDate.map { "Due \(Formatters.day($0.date()) ?? "")" }].compactMap { $0 }.joined(separator: " · "))
                         .font(.wsSubheadline).foregroundStyle(.secondaryText)
-                    if MacSupport.isMac { macActions(invoice) }
                 }
-                .padding(.vertical, 4)
-                if invoice.displayNumber != invoice.invoiceNumber {
-                    DetailRow(label: "Internal number", value: invoice.invoiceNumber)
-                }
-                DetailRow(label: "Customer PO", value: invoice.poNumber)
-                DetailRow(label: "Payment terms", value: invoice.paymentTermsDays.map { "\($0) days" })
-                if let address = invoice.customerAddress { MapsLinkRow(address: address) }
+            } actions: {
+                if wide { macActions(invoice) }
             }
+            if !wide { references(invoice) }
+        } main: {
             if notice != nil || actionError != nil || pdfNotice != nil {
-                Section {
+                DetailSection {
                     if let actionError { InlineErrorRow(error: actionError) }
                     if let notice { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
                     if let pdfNotice { Label(pdfNotice, systemImage: "info.circle").foregroundStyle(.secondaryText) }
                 }
             }
 
-            // The Mac has these in the header (macActions).
-            if !MacSupport.isMac, canUpdate && (invoice.canEmail || invoice.canVoid)
+            // A wide page has these in the header (macActions).
+            if !wide, canUpdate && (invoice.canEmail || invoice.canVoid)
                 || (permissions.can(.create, .payments) && invoice.canRecordPayment)
                 || (permissions.can(.delete, .invoices) && invoice.canDelete) {
-                Section("Actions") {
+                DetailSection("Actions") {
                     if canUpdate && invoice.canEmail {
                         // #611: emailing attaches the PDF this app renders and marks a draft sent.
                         Button { emailing = true } label: {
@@ -533,21 +530,21 @@ struct InvoiceDetailView: View {
                 .disabled(busy)
             }
 
-            Section {
+            DetailSection {
                 ForEach(invoice.lineItems) { item in
                     Button {
                         if canUpdate && invoice.canEditItems { editingItem = item }
                     } label: {
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(item.description).font(.wsBody).foregroundStyle(.primary)
+                                Text(item.description).font(.wsBody).foregroundStyle(Color(.label))
                                 Text("\(item.quantity.formatted()) × \(Formatters.money(item.unitPrice, currency: invoice.currency) ?? "")"
                                      + (item.taxRate > 0 ? " · VAT \(item.taxRate.formatted())%" : "")
                                      + (item.discountPercent > 0 ? " · −\(item.discountPercent.formatted())%" : ""))
                                     .font(.wsCaption).foregroundStyle(.secondaryText)
                             }
                             Spacer()
-                            Text(Formatters.money(item.lineTotal, currency: invoice.currency) ?? "").monospacedDigit().foregroundStyle(.primary)
+                            Text(Formatters.money(item.lineTotal, currency: invoice.currency) ?? "").monospacedDigit().foregroundStyle(Color(.label))
                         }
                     }
                     .disabled(!(canUpdate && invoice.canEditItems))
@@ -557,22 +554,12 @@ struct InvoiceDetailView: View {
                         .frame(minHeight: 44)
                 }
             } header: {
-                Text("Line items")
+                DetailSectionTitle("Line items", systemImage: "list.bullet")
             }
 
-            Section("Totals") {
-                DetailRow(label: "Subtotal", value: Formatters.money(invoice.subtotal, currency: invoice.currency))
-                if invoice.discountAmount > 0 {
-                    DetailRow(label: "Discounts", value: "−" + (Formatters.money(invoice.discountAmount, currency: invoice.currency) ?? ""))
-                }
-                DetailRow(label: "Tax", value: Formatters.money(invoice.taxAmount, currency: invoice.currency))
-                DetailRow(label: "Total", value: Formatters.money(invoice.totalAmount, currency: invoice.currency))
-                DetailRow(label: "Paid", value: Formatters.money(invoice.amountPaid, currency: invoice.currency))
-                DetailRow(label: "Balance due", value: Formatters.money(invoice.balanceDue, currency: invoice.currency))
-            }
-
+            if !wide { totals(invoice) }
             if !invoice.payments.isEmpty {
-                Section("Payments") {
+                DetailSection("Payments", systemImage: "sterlingsign.circle") {
                     ForEach(invoice.payments) { payment in
                         HStack {
                             VStack(alignment: .leading) {
@@ -582,6 +569,14 @@ struct InvoiceDetailView: View {
                                     .font(.wsCaption).foregroundStyle(.secondaryText)
                             }
                             Spacer()
+                            // A wide page has no swipe: the bin is on the row.
+                            if wide, permissions.can(.delete, .payments) {
+                                Button(role: .destructive) { deletingPayment = payment } label: {
+                                    Image(systemName: "trash").accessibilityLabel("Delete payment")
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Delete payment")
+                            }
                         }
                         .swipeActions(allowsFullSwipe: false) {
                             if permissions.can(.delete, .payments) {
@@ -593,30 +588,63 @@ struct InvoiceDetailView: View {
             }
 
             if let method = invoice.paymentMethod, invoice.status != .paid, invoice.status != .void {
-                Section {
+                DetailSection {
                     Text(method.heading).font(.wsHeadline)
                     ForEach(method.rows, id: \.0) { row in CopyableRow(label: row.0, value: row.1) }
                     if let instructions = method.instructions { Text(instructions).font(.wsSubheadline) }
                     CopyableRow(label: "Reference", value: invoice.displayNumber)
                 } header: {
-                    Text("How to pay")
+                    DetailSectionTitle("How to pay", systemImage: "building.columns")
                 } footer: {
                     Text("As printed on the invoice. Change it with Edit › How to pay.")
                 }
             }
 
             if let notes = invoice.notes, !notes.isEmpty {
-                Section("Notes") { Text(notes) }
+                DetailSection("Notes", systemImage: "text.quote") { Text(notes).wsParagraph() }
             }
             if let vat { vatSection(vat) }
+        } side: {
+            if wide {
+                totals(invoice)
+                if invoice.displayNumber != invoice.invoiceNumber || invoice.poNumber != nil || invoice.paymentTermsDays != nil
+                    || invoice.customerAddress != nil {
+                    DetailSection("Details", systemImage: "list.bullet.rectangle") { references(invoice) }
+                }
+            }
         }
-        .listStyle(.insetGrouped)
+    }
+
+    /// What it adds up to, and what's still owed.
+    private func totals(_ invoice: Invoice) -> some View {
+        DetailSection("Totals", systemImage: "sum") {
+            DetailRow(label: "Subtotal", value: Formatters.money(invoice.subtotal, currency: invoice.currency), monospacedDigits: true)
+            if invoice.discountAmount > 0 {
+                DetailRow(label: "Discounts", value: "−" + (Formatters.money(invoice.discountAmount, currency: invoice.currency) ?? ""),
+                          monospacedDigits: true)
+            }
+            DetailRow(label: "Tax", value: Formatters.money(invoice.taxAmount, currency: invoice.currency), monospacedDigits: true)
+            DetailRow(label: "Total", value: Formatters.money(invoice.totalAmount, currency: invoice.currency), monospacedDigits: true)
+            DetailRow(label: "Paid", value: Formatters.money(invoice.amountPaid, currency: invoice.currency), monospacedDigits: true)
+            DetailRow(label: "Balance due", value: Formatters.money(invoice.balanceDue, currency: invoice.currency), monospacedDigits: true)
+        }
+    }
+
+    /// The invoice's references and where it goes.
+    @ViewBuilder
+    private func references(_ invoice: Invoice) -> some View {
+        if invoice.displayNumber != invoice.invoiceNumber {
+            DetailRow(label: "Internal number", value: invoice.invoiceNumber)
+        }
+        DetailRow(label: "Customer PO", value: invoice.poNumber)
+        DetailRow(label: "Payment terms", value: invoice.paymentTermsDays.map { "\($0) days" })
+        if let address = invoice.customerAddress { MapsLinkRow(address: address) }
     }
 
     /// "VAT invoice check": what a valid UK VAT invoice must show and this one is missing, and the e-invoice.
     @ViewBuilder
     private func vatSection(_ vat: VatInvoiceCheck) -> some View {
-        Section {
+        DetailSection {
             Label(vat.ok ? "This is a valid VAT invoice" : "Before sending this as a VAT invoice",
                   systemImage: vat.ok ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                 .foregroundStyle(vat.ok ? Tone.success.textColor : Tone.warning.textColor)
@@ -666,7 +694,7 @@ struct InvoiceDetailView: View {
                 ForEach(einvoice.warnings, id: \.self) { Text($0).font(.wsCaption).foregroundStyle(.secondaryText) }
             }
         } header: {
-            Text("VAT invoice check")
+            DetailSectionTitle("VAT invoice check", systemImage: "checkmark.seal")
         }
     }
 

@@ -329,56 +329,40 @@ private struct EmployeeDetail: View {
 
     var body: some View {
         let fieldService = session.permissions.employeeFieldService
-        List {
-            if let loadError { Section { InlineErrorRow(error: loadError) { Task { await load() } } } }
-            Section {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(shown.string("user_name") ?? shown.string("user_email") ?? "Employee").font(.wsTitle3.bold())
-                    if let title = shown.string("job_title") { Text(title).font(.wsSubheadline).foregroundStyle(.secondaryText) }
-                    HStack(spacing: 6) {
-                        if shown.bool("is_engineer") == true {
-                            StatusBadge(text: "Field engineer", systemImage: "wrench.and.screwdriver", tone: .info)
-                        }
-                        StatusBadge(text: shown.bool("is_active") == false ? "Not available for new work" : "Available for new work",
-                                    systemImage: shown.bool("is_active") == false ? "pause.circle" : "checkmark.circle",
-                                    tone: shown.bool("is_active") == false ? .neutral : .success)
+        let name = shown.string("user_name") ?? shown.string("user_email") ?? "Employee"
+        DetailPage {
+            DetailHeader(name, subtitle: shown.string("job_title"), avatar: .monogram(name)) {
+                DetailChips {
+                    if shown.bool("is_engineer") == true {
+                        StatusBadge(text: "Field engineer", systemImage: "wrench.and.screwdriver", tone: .info)
                     }
+                    StatusBadge(text: shown.bool("is_active") == false ? "Not available for new work" : "Available for new work",
+                                systemImage: shown.bool("is_active") == false ? "pause.circle" : "checkmark.circle",
+                                tone: shown.bool("is_active") == false ? .neutral : .success)
                 }
-                .padding(.vertical, 4)
             }
+            if let loadError { InlineErrorRow(error: loadError) { Task { await load() } } }
+        } main: {
             FeedbackSection(feedback: feedback)
-            Section("Sign-in") {
-                DetailRow(label: "Signs in as", value: shown.string("user_email"))
-            }
-            Section("Work") {
+            DetailSection("Work", systemImage: "briefcase") {
                 DetailRow(label: "Employee code", value: shown.string("employee_code"))
                 DetailRow(label: "Team", value: shown.string("region"))
-                DetailRow(label: "Hourly cost", value: shown.decimal("hourly_cost_rate").flatMap { Formatters.money($0, currency: Formatters.defaultCurrency) })
+                DetailRow(label: "Hourly cost", value: shown.decimal("hourly_cost_rate").flatMap { Formatters.money($0, currency: Formatters.defaultCurrency) },
+                          monospacedDigits: true)
                 let skills = shown.array("skills").compactMap(\.stringValue)
                 if !skills.isEmpty { DetailRow(label: "Skills", value: skills.joined(separator: ", ")) }
                 if fieldService { DetailRow(label: "F-Gas certificate", value: shown.string("fgas_certificate_no")) }
             }
-            Section("Contact") {
-                if let phone = shown.string("phone") { PhoneLinkRow(name: "Phone", phone: phone) }
-                if let email = shown.string("email") { EmailLinkRow(email: email) }
-                if shown.string("phone") == nil && shown.string("email") == nil {
-                    Text("No work phone or email.").foregroundStyle(.secondaryText)
-                }
-            }
             let details = EmployeeForm.details(shown)
             if !details.isEmpty {
-                Section("Additional information") {
+                DetailSection("Additional information", systemImage: "list.bullet.rectangle") {
                     ForEach(Array(details.enumerated()), id: \.offset) { _, line in
                         DetailRow(label: line.0, value: line.1.isEmpty ? "—" : line.1)
                     }
                 }
             }
-            Section {
-                DetailRow(label: "Added", value: Formatters.dateTime(shown.date("created_at")))
-                DetailRow(label: "Last changed", value: Formatters.dateTime(shown.date("updated_at")))
-            }
             if session.permissions.can(.delete, moduleName: "employees") {
-                Section {
+                DetailSection {
                     DeleteButton(title: "Remove employee profile",
                                  message: "Only the profile goes. Their sign-in and workspace membership stay.") {
                         await perform($feedback, done: "Employee profile removed.") {
@@ -387,6 +371,19 @@ private struct EmployeeDetail: View {
                         }
                     }
                 }
+            }
+        } side: {
+            DetailSection("Contact", systemImage: "person.crop.circle") {
+                DetailRow(label: "Signs in as", value: shown.string("user_email"))
+                if let phone = shown.string("phone") { PhoneLinkRow(name: "Phone", phone: phone) }
+                if let email = shown.string("email") { EmailLinkRow(email: email) }
+                if shown.string("phone") == nil && shown.string("email") == nil {
+                    Text("No work phone or email.").foregroundStyle(.secondaryText)
+                }
+            }
+            DetailSection("Record", systemImage: "clock") {
+                DetailRow(label: "Added", value: Formatters.dateTime(shown.date("created_at")))
+                DetailRow(label: "Last changed", value: Formatters.dateTime(shown.date("updated_at")))
             }
         }
         .navigationTitle(shown.string("user_name") ?? "Employee")

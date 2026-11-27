@@ -170,6 +170,7 @@ struct AssetDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle("Asset")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }

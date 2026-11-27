@@ -132,6 +132,7 @@ struct ShopOrderRoute: Hashable { let uuid: String }
 struct ShopOrderDetailView: View {
     let summary: ShopOrder
     var onChange: ((ShopOrder) -> Void)?
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var order: ShopOrder?
@@ -158,30 +159,93 @@ struct ShopOrderDetailView: View {
         }
     }
 
-    private var details: some View {
-        List {
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(current.orderNumber).font(.wsTitle3.bold().monospacedDigit())
-                    current.status.badge
-                    Text(ShopMoney.format(current.totalMinor, currency: current.currency) ?? "").font(.wsTitle2.monospacedDigit())
-                    Text(["Placed \(Formatters.dateTime(current.createdAt) ?? "—")",
-                          current.paidAt.map { "paid \(Formatters.dateTime($0) ?? "")" }].compactMap { $0 }.joined(separator: ", "))
-                        .font(.wsFootnote).foregroundStyle(.secondaryText)
-                }
-                .padding(.vertical, 4)
-                if let loadError { InlineErrorRow(error: loadError) { Task { await load() } } }
+    private var customerSection: some View {
+        DetailSection("Customer", systemImage: "person.crop.circle") {
+            DetailRow(label: "Name", value: current.customer?.name)
+            DetailRow(label: "Company", value: current.customer?.company)
+            if let email = current.email ?? current.customer?.email { EmailLinkRow(email: email) }
+            if let phone = current.customer?.phone { PhoneLinkRow(name: current.customer?.name, phone: phone) }
+            if let address = ShopAddress.format(current.shippingAddress) ?? current.customer?.formattedAddress {
+                MapsLinkRow(address: address)
             }
+            DetailRow(label: "VAT number", value: current.customer?.vatNumber)
+            if let agreed = extras.deliveryAddress?.formatted {
+                DetailRow(label: "Deliver directly to", value: agreed)
+            }
+            DetailRow(label: "Delivery method", value: extras.deliveryMethod)
+            if let day = extras.deliveryDate {
+                DetailRow(label: "Agreed delivery", value: [day, extras.deliveryWindow.map(Self.windowLabel)].compactMap { $0 }.joined(separator: ", "))
+            }
+            DetailRow(label: "Bill to", value: ShopAnyAddress.format(extras.billingAddress))
+            if session.shopPolicy.canUpdate && ShopOrderWorkflow.canEditDeliveryAddress(current.status) && order != nil {
+                Button { editingAddress = true } label: { Label("Change delivery address", systemImage: "mappin.and.ellipse") }
+                    .accessibilityIdentifier("shopOrder.changeAddress")
+            }
+        }
+    }
 
+    private var totalsSection: some View {
+        ShopTotalsSection(subtotal: current.subtotalMinor, vat: current.vatMinor, shipping: current.shippingMinor,
+                          total: current.totalMinor, currency: current.currency)
+    }
+
+    private var paymentSection: some View {
+        DetailSection("Payment", systemImage: "creditcard") {
+            if let received = extras.paidAmountMinor {
+                DetailRow(label: "Received", value: ShopMoney.format(received, currency: current.currency))
+            }
+            // A Stripe refund is money back: shop.manage (POST /orders/:uuid/refund).
+            if current.status.isRefundable && session.shopPolicy.canManage && order != nil {
+                Button { refunding = true } label: {
+                    Label("Refund the customer", systemImage: "arrow.uturn.backward.circle")
+                }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("shopOrder.refund")
+            }
+            if current.stripeMode != nil || current.stripePaymentIntentId != nil || extras.stripeSessionId != nil {
+                DisclosureGroup("Technical details") {
+                    DetailRow(label: "Stripe mode", value: current.stripeMode.map(Formatters.humanize))
+                    if let intent = current.stripePaymentIntentId { CopyableRow(label: "Payment intent", value: intent) }
+                    if let session = extras.stripeSessionId { CopyableRow(label: "Checkout session", value: session) }
+                }
+                .accessibilityIdentifier("shopOrder.technical")
+            }
+            if let quoteNumber = current.quoteNumber, let quoteUuid = current.quoteUuid {
+                NavigationLink {
+                    ShopQuoteDetailView(uuid: quoteUuid)
+                } label: {
+                    LabeledContent("From quote", value: quoteNumber)
+                }
+            }
+            if let link = current.publicUrl.flatMap(URL.init(string:)), link.scheme != nil {
+                ShareLink(item: link) { Label("Share customer's order link", systemImage: "square.and.arrow.up") }
+            }
+        }
+    }
+
+    private var details: some View {
+        let wide = sizeClass != .compact
+        return DetailPage {
+            DetailHeader(current.orderNumber,
+                         subtitle: [current.customer?.company ?? current.customer?.name,
+                                    "Placed \(Formatters.dateTime(current.createdAt) ?? "—")",
+                                    current.paidAt.map { "paid \(Formatters.dateTime($0) ?? "")" }].compactMap { $0 }
+                             .joined(separator: " · "),
+                         avatar: .icon("shippingbox", Palette.tile(for: "shop_orders"))) {
+                DetailChips { current.status.badge }
+                Text(ShopMoney.format(current.totalMinor, currency: current.currency) ?? "").font(.wsTitle2.monospacedDigit())
+            }
+            if let loadError { InlineErrorRow(error: loadError) { Task { await load() } } }
+        } main: {
             if order != nil {
                 ShopOrderNextStepSection(order: current, extras: extras, busy: busy, changeStatus: changeStatus) { await load() }
             }
-            if let actionError { Section { InlineErrorRow(error: actionError) } }
+            if let actionError { DetailSection { InlineErrorRow(error: actionError) } }
             if let notice {
-                Section { Label(notice, systemImage: "checkmark.circle").foregroundStyle(Tone.success.textColor) }
+                DetailSection { Label(notice, systemImage: "checkmark.circle").foregroundStyle(Tone.success.textColor) }
             }
             if extras.deliveryChangePending && extras.deliveryChangeRequests.isEmpty {
-                Section { Label("The customer asked to change the delivery.", systemImage: "exclamationmark.bubble") }
+                DetailSection { Label("The customer asked to change the delivery.", systemImage: "exclamationmark.bubble") }
             }
 
             if !extras.deliveryChangeRequests.isEmpty {
@@ -192,35 +256,13 @@ struct ShopOrderDetailView: View {
                 ShopOrderUpdateEmailSection(order: current) { await load() }
             }
 
-            Section("Customer") {
-                DetailRow(label: "Name", value: current.customer?.name)
-                DetailRow(label: "Company", value: current.customer?.company)
-                if let email = current.email ?? current.customer?.email { EmailLinkRow(email: email) }
-                if let phone = current.customer?.phone { PhoneLinkRow(name: current.customer?.name, phone: phone) }
-                if let address = ShopAddress.format(current.shippingAddress) ?? current.customer?.formattedAddress {
-                    MapsLinkRow(address: address)
-                }
-                DetailRow(label: "VAT number", value: current.customer?.vatNumber)
-                if let agreed = extras.deliveryAddress?.formatted {
-                    DetailRow(label: "Deliver directly to", value: agreed)
-                }
-                DetailRow(label: "Delivery method", value: extras.deliveryMethod)
-                if let day = extras.deliveryDate {
-                    DetailRow(label: "Agreed delivery", value: [day, extras.deliveryWindow.map(Self.windowLabel)].compactMap { $0 }.joined(separator: ", "))
-                }
-                DetailRow(label: "Bill to", value: ShopAnyAddress.format(extras.billingAddress))
-                if session.shopPolicy.canUpdate && ShopOrderWorkflow.canEditDeliveryAddress(current.status) && order != nil {
-                    Button { editingAddress = true } label: { Label("Change delivery address", systemImage: "mappin.and.ellipse") }
-                        .accessibilityIdentifier("shopOrder.changeAddress")
-                }
-            }
+            if !wide { customerSection }
 
             ShopLinesSection(lines: current.lines, currency: current.currency)
 
-            ShopTotalsSection(subtotal: current.subtotalMinor, vat: current.vatMinor, shipping: current.shippingMinor,
-                              total: current.totalMinor, currency: current.currency)
+            if !wide { totalsSection }
 
-            Section {
+            DetailSection {
                 if let tracking = current.tracking, !tracking.isEmpty {
                     DetailRow(label: "Carrier", value: tracking.carrier)
                     DetailRow(label: "Tracking number", value: tracking.trackingNumber)
@@ -241,7 +283,7 @@ struct ShopOrderDetailView: View {
                     .accessibilityIdentifier("shopOrder.editFulfilment")
                 }
             } header: {
-                Text("Fulfilment")
+                DetailSectionTitle("Fulfilment", systemImage: "truck.box")
             }
 
             if order != nil {
@@ -256,36 +298,12 @@ struct ShopOrderDetailView: View {
 
             ShopOrderPaperworkSection(order: current, extras: extras) { await load() }
 
-            Section("Payment") {
-                if let received = extras.paidAmountMinor {
-                    DetailRow(label: "Received", value: ShopMoney.format(received, currency: current.currency))
-                }
-                // A Stripe refund is money back: shop.manage (POST /orders/:uuid/refund).
-                if current.status.isRefundable && session.shopPolicy.canManage && order != nil {
-                    Button { refunding = true } label: {
-                        Label("Refund the customer", systemImage: "arrow.uturn.backward.circle")
-                    }
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("shopOrder.refund")
-                }
-                if current.stripeMode != nil || current.stripePaymentIntentId != nil || extras.stripeSessionId != nil {
-                    DisclosureGroup("Technical details") {
-                        DetailRow(label: "Stripe mode", value: current.stripeMode.map(Formatters.humanize))
-                        if let intent = current.stripePaymentIntentId { CopyableRow(label: "Payment intent", value: intent) }
-                        if let session = extras.stripeSessionId { CopyableRow(label: "Checkout session", value: session) }
-                    }
-                    .accessibilityIdentifier("shopOrder.technical")
-                }
-                if let quoteNumber = current.quoteNumber, let quoteUuid = current.quoteUuid {
-                    NavigationLink {
-                        ShopQuoteDetailView(uuid: quoteUuid)
-                    } label: {
-                        LabeledContent("From quote", value: quoteNumber)
-                    }
-                }
-                if let link = current.publicUrl.flatMap(URL.init(string:)), link.scheme != nil {
-                    ShareLink(item: link) { Label("Share customer's order link", systemImage: "square.and.arrow.up") }
-                }
+            if !wide { paymentSection }
+        } side: {
+            if wide {
+                customerSection
+                totalsSection
+                paymentSection
             }
         }
         .navigationTitle("Order")
@@ -420,7 +438,7 @@ private struct ShopFulfilmentForm: View {
 
     var body: some View {
         Form {
-            Section("Tracking") {
+            DetailSection("Tracking") {
                 TextField("Carrier", text: binding(\.carrier))
                     .textContentType(.organizationName)
                 TextField("Tracking number", text: binding(\.trackingNumber))
@@ -432,7 +450,7 @@ private struct ShopFulfilmentForm: View {
                     .autocorrectionDisabled()
             }
             if !shipping {
-                Section {
+                DetailSection {
                     TextField("Only staff see these", text: $notes, axis: .vertical)
                         .lineLimit(3...8)
                 } header: {
@@ -479,7 +497,7 @@ struct ShopLinesSection: View {
     var onEdit: ((ShopLine) -> Void)?
 
     var body: some View {
-        Section("Items") {
+        DetailSection("Items") {
             if lines.isEmpty {
                 Text("No items").foregroundStyle(.secondaryText)
             }
@@ -537,7 +555,7 @@ struct ShopTotalsSection: View {
     let currency: String
 
     var body: some View {
-        Section("Totals") {
+        DetailSection("Totals") {
             DetailRow(label: "Subtotal (ex VAT)", value: ShopMoney.format(subtotal, currency: currency))
             DetailRow(label: "VAT", value: ShopMoney.format(vat, currency: currency))
             DetailRow(label: "Shipping", value: ShopMoney.format(shipping, currency: currency))

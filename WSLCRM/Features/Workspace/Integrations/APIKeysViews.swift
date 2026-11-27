@@ -121,6 +121,7 @@ private struct APIKeyDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle(key.string("name") ?? "API key")
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("Revoke “\(key.string("name") ?? "this key")”?", isPresented: $confirming,

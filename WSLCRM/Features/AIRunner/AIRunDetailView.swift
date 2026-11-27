@@ -111,6 +111,7 @@ struct AIRunDetailView: View {
             }
             log(d)
         }
+        .wsDetailList()
         .wsRefreshable { await load() }
         .confirmationDialog("Cancel this run?", isPresented: $confirmingCancel, titleVisibility: .visible) {
             Button("Cancel run", role: .destructive) {

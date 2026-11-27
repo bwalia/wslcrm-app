@@ -23,18 +23,24 @@ struct CRMActivitiesSection: View {
 
     var body: some View {
         if canRead {
-            Section {
+            DetailSection {
                 if let notice {
                     Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor)
                 }
                 if let error { InlineErrorRow(error: error) { Task { await load() } } }
                 ForEach(rows) { record in
                     NavigationLink(value: ResourceRoute(descriptorID: descriptor.id, recordID: record.id, seed: record)) {
-                        RecordRow(record: record, list: descriptor.list)
+                        RecordRow(record: record, list: descriptor.list).foregroundStyle(Color(.label))
                     }
                     .swipeActions(allowsFullSwipe: false) {
                         if canUpdate, ["pending", "planned"].contains(record.string("status") ?? "") {
                             Button("Done") { Task { await complete(record) } }.tint(.green)
+                        }
+                    }
+                    // A Mac has no swipe: the same as a right-click.
+                    .contextMenu {
+                        if canUpdate, ["pending", "planned"].contains(record.string("status") ?? "") {
+                            Button("Mark done", systemImage: "checkmark.circle") { Task { await complete(record) } }
                         }
                     }
                     .accessibilityIdentifier("crm.activity.\(record.id)")
@@ -60,7 +66,7 @@ struct CRMActivitiesSection: View {
                         }
                 }
             } header: {
-                Text("Activities").task(id: reload) { await load() }
+                DetailSectionTitle("Activities", systemImage: "checklist").task(id: reload) { await load() }
             }
         }
     }

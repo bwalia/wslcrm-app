@@ -250,25 +250,49 @@ struct MacListDetail<ID: Hashable, ListContent: View, Pane: View>: View {
     }
 }
 
-/// A record's actions on the Mac, in its header: the main ones as desktop buttons (the first prominent), the rest —
-/// destructive ones — behind More, instead of the phone's full-width rows down the page.
+/// A record's actions, in its header: the main ones as buttons of one height (the first, given
+/// `.buttonStyle(.action(prominent: true))`, is the primary), the rest — destructive ones — behind More, instead of
+/// full-width rows down the page. Wraps onto a second line in a narrow window; scrolls sideways on a phone.
 struct RecordActionBar<Actions: View, More: View>: View {
     var showsMore = true
     @ViewBuilder let actions: Actions
     @ViewBuilder let more: More
+    @Environment(\.detailLayout) private var layout
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
-        HStack(spacing: 8) {
-            actions
-            if showsMore {
-                Menu { more } label: { Label("More", systemImage: "ellipsis.circle") }
-                    .fixedSize()
-                    .accessibilityIdentifier("record.more")
+        if sizeClass == .compact {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) { buttons }
+                    .padding(.vertical, 2)
             }
-            Spacer(minLength: 0)
+            .scrollClipDisabled()
+        } else {
+            ChatFlowLayout(spacing: 8) { buttons }
+                .padding(.top, layout == .cards ? 2 : 6)
         }
-        .buttonStyle(.bordered)
-        .controlSize(.large)
-        .padding(.top, 6)
+    }
+
+    @ViewBuilder
+    private var buttons: some View {
+        Group { actions }
+            .buttonStyle(.action)
+        if showsMore {
+            Menu { more } label: { Label("More", systemImage: "ellipsis") }
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
+                .buttonStyle(.action)
+                .fixedSize()
+                .accessibilityIdentifier("record.more")
+                .help("More actions")
+        }
+    }
+}
+
+extension RecordActionBar where More == EmptyView {
+    init(@ViewBuilder actions: () -> Actions) {
+        showsMore = false
+        self.actions = actions()
+        more = EmptyView()
     }
 }

@@ -72,6 +72,7 @@ private struct MktCampDetailContent: View {
                 }
             }
         }
+        .wsDetailList()
         .overlay { if model.campaign == nil, model.loadError == nil { SkeletonList() } }
         .navigationTitle(model.campaign?.name ?? "Campaign")
         .navigationBarTitleDisplayMode(.inline)

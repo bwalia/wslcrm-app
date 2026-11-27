@@ -124,24 +124,33 @@ struct LeadDetailView: View {
 
     // MARK: Content
 
+    /// The page: the header with the pipeline and the actions; the work (getting in touch, the next step, notes, the
+    /// AI, meetings, the timeline) in the main column; how to reach them, the facts and moving it on beside it on a
+    /// wide window (in the phone's list they keep their places among the work).
     private func content(_ lead: Lead) -> some View {
-        List {
+        let wide = sizeClass != .compact
+        return DetailPage(factsFirst: false) {
             header(lead)
+            // On a phone, calling and emailing are the first rows under the name (big to tap).
+            if !wide { contactRows(lead) }
+        } main: {
             if canWork(lead) { contactGuide(lead) }
             if let notice {
-                Section { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
+                DetailSection { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
             }
-            if let actionError { Section { InlineErrorRow(error: actionError) } }
-            if canWork(lead) { quickActions(lead) }
-            // What the team wrote about this prospect: right under the actions, not at the bottom.
-            if let notes { RecordNotesSection(model: notes) }
+            if let actionError { DetailSection { InlineErrorRow(error: actionError) } }
             banners(lead)
             if lead.isOpen, canWork(lead) { nextStep(lead) }
+            // What the team wrote about this prospect: right under the next step, not at the bottom.
+            if let notes { RecordNotesSection(model: notes) }
+            theirMessage(lead)
             ai(lead)
             meetings(lead)
             referrals(lead)
-            if canWork(lead) { manage(lead) }
-            details(lead)
+            if !wide {
+                if canWork(lead) { manage(lead) }
+                details(lead)
+            }
             qualification(lead)
             LeadShopSections(metadata: lead.metadata)
             // The lead's answers to the workspace's forms (as on the web's lead page).
@@ -155,7 +164,7 @@ struct LeadDetailView: View {
             }
             if !timeline.isEmpty { history }
             if canWork(lead), session.permissions.can(.delete, .crmLeads), lead.stage != .converted {
-                Section {
+                DetailSection {
                     DeleteButton(title: "Delete lead", message: "The lead and its planned steps are removed. This can’t be undone.") {
                         do {
                             try await services.leads.delete(lead.uuid)
@@ -168,15 +177,25 @@ struct LeadDetailView: View {
                 }
             }
             if !canWork(lead) {
-                Section {
+                DetailSection {
                     Label("You can see this lead but not work on it. Ask a manager to give it to you.", systemImage: "person.fill.questionmark")
                         .font(.wsSubheadline).foregroundStyle(.secondaryText)
                 }
             }
+        } side: {
+            if wide {
+                if lead.phone != nil || lead.email != nil {
+                    DetailSection("Contact", systemImage: "person.crop.circle") { contactRows(lead) }
+                }
+                details(lead)
+                if canWork(lead) { manage(lead) }
+            }
         }
-        .listStyle(.insetGrouped)
         .disabled(busy)
     }
+
+    /// A phone's rows are 44pt for thumbs; a card's rows are desktop rows (the card's own spacing between them).
+    private var rowHeight: CGFloat? { sizeClass == .compact ? 44 : nil }
 
     private var aiWorking: Bool {
         state.value?.analysis?.isRunning == true || state.value?.replyDraft?.isRunning == true
@@ -185,33 +204,34 @@ struct LeadDetailView: View {
     private func stageLabel(_ stage: LeadStage) -> String { bundle?.stageLabels[stage.rawValue] ?? stage.label }
 
     private func header(_ lead: Lead) -> some View {
-        Section {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(lead.displayName).font(.wsTitle2.bold())
-                    ShopVipMark(email: lead.email)
+        DetailHeader(lead.displayName, subtitle: headline(lead), avatar: .monogram(lead.displayName)) {
+            LeadStageTrack(stage: lead.stage, label: stageLabel)
+            DetailChips {
+                if let score = lead.aiScore {
+                    StatusBadge(text: "AI score \(score)", systemImage: "sparkles", tone: score >= 70 ? .success : .neutral)
                 }
-                Text(headline(lead)).font(.wsSubheadline).foregroundStyle(.secondaryText)
-                LeadStageTrack(stage: lead.stage, label: stageLabel)
-                HStack {
-                    if let score = lead.aiScore {
-                        StatusBadge(text: "AI score \(score)", systemImage: "sparkles", tone: score >= 70 ? .success : .neutral)
-                    }
-                    if let value = lead.estimatedValue, value > 0,
-                       let text = Formatters.money(value, currency: lead.currency ?? Formatters.defaultCurrency) {
-                        Text(text + (lead.valueFromAI ? " (AI)" : "")).font(.wsHeadline.monospacedDigit())
-                    }
+                if let value = lead.estimatedValue, value > 0,
+                   let text = Formatters.money(value, currency: lead.currency ?? Formatters.defaultCurrency) {
+                    StatusBadge(text: text + (lead.valueFromAI ? " (AI)" : ""), systemImage: "sterlingsign.circle", tone: .neutral)
                 }
-                Text(lead.ownerName.map { "Owner: \($0)" } ?? "No owner yet — it's in the queue")
-                    .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                StatusBadge(text: lead.ownerName.map { "Owner: \($0)" } ?? "No owner yet — it's in the queue",
+                            systemImage: lead.ownerName == nil ? "tray" : "person.fill", tone: lead.ownerName == nil ? .warning : .neutral)
+                // Last: it takes no room until it knows they're a VIP.
+                ShopVipMark(email: lead.email)
             }
-            .padding(.vertical, 4)
-            if let phone = lead.phone {
-                Button { dial(lead) } label: { LeadCallLabel(name: "Call \(lead.firstName.nonEmpty ?? "them")", phone: phone) }
-                    .accessibilityIdentifier("lead.call")
-            }
-            if let email = lead.email { EmailLinkRow(email: email) }
+        } actions: {
+            if canWork(lead) { quickActions(lead) }
         }
+    }
+
+    /// Ring them (the app asks how it went when you're back) and email them.
+    @ViewBuilder
+    private func contactRows(_ lead: Lead) -> some View {
+        if let phone = lead.phone {
+            Button { dial(lead) } label: { LeadCallLabel(name: "Call \(lead.firstName.nonEmpty ?? "them")", phone: phone) }
+                .accessibilityIdentifier("lead.call")
+        }
+        if let email = lead.email { EmailLinkRow(email: email) }
     }
 
     /// What to do now, before anything else: answer a customer who replied, or get in touch with a new lead —
@@ -222,9 +242,9 @@ struct LeadDetailView: View {
         if let repliedAt = lead.lastReplyAt, repliedAt > (lead.lastContactedAt ?? .distantPast) {
             let reply = timeline.filter(\.isCustomerReply).max { ($0.at ?? .distantPast) < ($1.at ?? .distantPast) }
             let subject = reply.map { $0.title.hasPrefix("Replied: ") ? String($0.title.dropFirst(9)) : $0.title }
-            Section {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 6) {
+            DetailSection {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
                         Label("\(first) replied", systemImage: "arrowshape.turn.up.left.fill")
                             .font(.wsHeadline).foregroundStyle(Tone.success.textColor)
                         Text(repliedAt, format: .relative(presentation: .named))
@@ -232,21 +252,18 @@ struct LeadDetailView: View {
                     }
                     if let subject { Text(subject).font(.wsSubheadline.weight(.semibold)) }
                     if let text = reply?.detail?.trimmedOrNil {
-                        Text(text).font(.wsSubheadline).lineLimit(8).textSelection(.enabled)
+                        ExpandableText(text: text, lineLimit: 8, font: .wsSubheadline)
                     }
                     let draft = lead.replyDraft.flatMap { $0.isCurrent ? $0 : nil }
                     if let draft, draft.isReady, let body = draft.body {
                         Divider()
                         Label("The AI wrote an answer. Check it, change anything you like, then send it.", systemImage: "sparkles")
                             .font(.wsSubheadline).foregroundStyle(.secondaryText)
-                        Text(body).font(.wsSubheadline).lineLimit(5)
-                            .padding(10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        draftBlock(body)
                         contactButtons(lead, emailTitle: "Review and send",
                                        subject: draft.subject ?? subject.map(Self.replySubject), body: body)
                         Button { Task { await redraft(lead) } } label: {
-                            Label("Write it again", systemImage: "arrow.clockwise").frame(minHeight: 44)
+                            Label("Write it again", systemImage: "arrow.clockwise").frame(minHeight: rowHeight)
                         }
                         .buttonStyle(.borderless)
                         .accessibilityIdentifier("lead.guide.redraft")
@@ -260,7 +277,7 @@ struct LeadDetailView: View {
                         contactButtons(lead, emailTitle: "Reply by email", subject: subject.map(Self.replySubject), body: nil)
                         if let draft, !draft.isRunning {
                             Button { Task { await redraft(lead) } } label: {
-                                Label("Ask the AI to write an answer", systemImage: "sparkles").frame(minHeight: 44)
+                                Label("Ask the AI to write an answer", systemImage: "sparkles").frame(minHeight: rowHeight)
                             }
                             .buttonStyle(.borderless)
                             .accessibilityIdentifier("lead.guide.redraft")
@@ -273,17 +290,14 @@ struct LeadDetailView: View {
         } else if lead.isOpen, lead.firstContactedAt == nil, lead.email != nil || lead.phone != nil {
             let analysis = lead.analysis
             let draft = analysis?.result?.firstReply
-            Section {
-                VStack(alignment: .leading, spacing: 10) {
-                    Label("Get in touch with \(first)", systemImage: "hand.wave.fill")
-                        .font(.wsHeadline).foregroundStyle(Color.accentColor)
+            DetailSection {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Get in touch with \(first)", systemImage: "paperplane.fill")
+                        .font(.wsHeadline).foregroundStyle(Tone.brand.textColor)
                     if let body = draft?.body, lead.email != nil {
                         Text("The AI wrote a first email for you. Check it, change anything you like, then send it.")
                             .font(.wsSubheadline).foregroundStyle(.secondaryText)
-                        Text(body).font(.wsSubheadline).lineLimit(4)
-                            .padding(10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        draftBlock(body)
                     } else if analysis?.isRunning == true || lead.aiStatus == "pending" || lead.aiStatus == "running" {
                         Label("The AI is writing a first email for you…", systemImage: "sparkles")
                             .font(.wsSubheadline).foregroundStyle(.secondaryText)
@@ -300,11 +314,32 @@ struct LeadDetailView: View {
         }
     }
 
+    /// An email the AI drafted, quoted: a readable width, a few lines on a phone, the lot (with Show more) on a wide one.
+    private func draftBlock(_ body: String) -> some View {
+        Group {
+            if sizeClass == .compact {
+                Text(body).font(.wsSubheadline).lineLimit(5)
+            } else {
+                ExpandableText(text: body, lineLimit: 8, font: .wsSubheadline)
+            }
+        }
+        .padding(sizeClass == .compact ? 10 : 14)
+        .frame(maxWidth: sizeClass == .compact ? .infinity : DetailMetrics.paragraphWidth, alignment: .leading)
+        // On a card, a quiet inset (the canvas colour); on a phone's list row, the system's.
+        .background(sizeClass == .compact ? Color(.secondarySystemBackground) : Palette.canvas,
+                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(alignment: .leading) {
+            if sizeClass != .compact {
+                Capsule().fill(Color.accentColor.opacity(0.6)).frame(width: 3).padding(.vertical, 10)
+            }
+        }
+    }
+
     /// Full-width, one above the other on a phone (big to tap); side by side on an iPad or a Mac.
     @ViewBuilder
     private func contactButtons(_ lead: Lead, emailTitle: String, subject: String?, body: String?) -> some View {
         if sizeClass == .regular {
-            HStack(spacing: 10) { emailButton(lead, emailTitle, subject, body); callButton(lead) }
+            HStack(spacing: 8) { emailButton(lead, emailTitle, subject, body); callButton(lead) }
         } else {
             VStack(spacing: 8) { emailButton(lead, emailTitle, subject, body); callButton(lead) }
         }
@@ -313,24 +348,26 @@ struct LeadDetailView: View {
     @ViewBuilder
     private func emailButton(_ lead: Lead, _ title: String, _ subject: String?, _ body: String?) -> some View {
         if lead.email != nil {
-            Button { sheet = .email(subject: subject, body: body) } label: {
+            let button = Button { sheet = .email(subject: subject, body: body) } label: {
                 Label(title, systemImage: "envelope.fill")
-                    .frame(maxWidth: sizeClass == .regular ? nil : .infinity, minHeight: 44).padding(.horizontal, 6)
+                    .frame(maxWidth: sizeClass == .regular ? nil : .infinity, minHeight: sizeClass == .regular ? nil : 44)
+                    .padding(.horizontal, sizeClass == .regular ? 0 : 6)
             }
-            .buttonStyle(.borderedProminent)
             .accessibilityIdentifier("lead.guide.email")
+            if sizeClass == .regular { button.buttonStyle(.action(prominent: true)) } else { button.buttonStyle(.borderedProminent) }
         }
     }
 
     @ViewBuilder
     private func callButton(_ lead: Lead) -> some View {
         if lead.phone != nil {
-            Button { dial(lead) } label: {
+            let button = Button { dial(lead) } label: {
                 Label("Call \(lead.firstName.nonEmpty ?? "them")", systemImage: "phone.fill")
-                    .frame(maxWidth: sizeClass == .regular ? nil : .infinity, minHeight: 44).padding(.horizontal, 6)
+                    .frame(maxWidth: sizeClass == .regular ? nil : .infinity, minHeight: sizeClass == .regular ? nil : 44)
+                    .padding(.horizontal, sizeClass == .regular ? 0 : 6)
             }
-            .buttonStyle(.bordered)
             .accessibilityIdentifier("lead.guide.call")
+            if sizeClass == .regular { button.buttonStyle(.action) } else { button.buttonStyle(.bordered) }
         }
     }
 
@@ -349,50 +386,46 @@ struct LeadDetailView: View {
         subject.lowercased().hasPrefix("re:") ? subject : "Re: " + subject
     }
 
-    /// The common actions, one tap each, as on the web's action bar.
+    /// The common actions, one tap each, as on the web's action bar: logging a call first, the rest beside it, the
+    /// occasional ones under More.
     private func quickActions(_ lead: Lead) -> some View {
-        Section {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    if lead.stage != .converted {
-                        actionChip("Log a call", "phone.badge.checkmark", id: "call") { sheet = .call }
-                    }
-                    if lead.email != nil {
-                        actionChip("Email", "envelope", id: "email") { sheet = .email(subject: nil, body: nil) }
-                    }
-                    if let whatsApp = LeadContact.whatsAppURL(phone: lead.phone, text: nil) {
-                        actionChip("WhatsApp", "message", id: "whatsapp") { openWhatsApp(whatsApp) }
-                    }
-                    if lead.isOpen {
-                        actionChip("Book a meeting", "calendar.badge.plus", id: "meeting") { sheet = .meeting(nil) }
-                        actionChip("Qualify", "checklist", id: "qualify") { sheet = .qualify }
-                    }
-                    if session.permissions.can(.update, .crmDeals) {
-                        actionChip("Pass to a partner", "arrowshape.turn.up.right", id: "refer") { sheet = .refer(partner: nil) }
-                    }
-                }
-                .padding(.vertical, 4)
+        let whatsApp = LeadContact.whatsAppURL(phone: lead.phone, text: nil)
+        let canRefer = session.permissions.can(.update, .crmDeals)
+        return RecordActionBar(showsMore: whatsApp != nil || canRefer || lead.isOpen) {
+            if lead.stage != .converted {
+                Button { sheet = .call } label: { Label("Log a call", systemImage: "phone.badge.checkmark") }
+                    .buttonStyle(.action(prominent: true))
+                    .accessibilityIdentifier("lead.action.call")
             }
-            .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
+            if lead.email != nil {
+                Button { sheet = .email(subject: nil, body: nil) } label: { Label("Email", systemImage: "envelope") }
+                    .accessibilityIdentifier("lead.action.email")
+            }
+            if lead.isOpen {
+                Button { sheet = .meeting(nil) } label: { Label("Book a meeting", systemImage: "calendar.badge.plus") }
+                    .accessibilityIdentifier("lead.action.meeting")
+                Button { sheet = .qualify } label: { Label("Qualify", systemImage: "checklist") }
+                    .accessibilityIdentifier("lead.action.qualify")
+            }
+        } more: {
+            if let whatsApp {
+                Button("WhatsApp", systemImage: "message") { openWhatsApp(whatsApp) }
+                    .accessibilityIdentifier("lead.action.whatsapp")
+            }
+            if canRefer {
+                Button("Pass to a partner", systemImage: "arrowshape.turn.up.right") { sheet = .refer(partner: nil) }
+                    .accessibilityIdentifier("lead.action.refer")
+            }
+            if lead.isOpen {
+                Button("Plan a step", systemImage: "calendar.badge.clock") { sheet = .step }
+            }
         }
-    }
-
-    private func actionChip(_ title: String, _ image: String, id: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: image)
-                .font(.wsSubheadline.weight(.semibold))
-                .padding(.horizontal, 14)
-                .frame(minHeight: 44)
-                .background(Color(.secondarySystemBackground), in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("lead.action.\(id)")
     }
 
     @ViewBuilder
     private func banners(_ lead: Lead) -> some View {
         if lead.stage == .converted, let deal = lead.convertedDealUuid {
-            Section {
+            DetailSection {
                 NavigationLink { CRMDealDetailView(dealUuid: deal) } label: {
                     Label("Converted to the deal \(lead.convertedDealName ?? "")"
                           + (lead.convertedDealValue.flatMap { Formatters.money($0, currency: lead.currency ?? Formatters.defaultCurrency) }
@@ -402,16 +435,16 @@ struct LeadDetailView: View {
             }
         }
         if lead.stage == .lost, let reason = lead.lostReason {
-            Section { Label("Lost: \(reason)", systemImage: "xmark.circle").foregroundStyle(.secondaryText) }
+            DetailSection { Label("Lost: \(reason)", systemImage: "xmark.circle").foregroundStyle(.secondaryText) }
         }
         if lead.stage == .nurture, let until = lead.nurtureUntil {
-            Section {
+            DetailSection {
                 Label("Comes back on \(CalendarDay(string: until).flatMap { Formatters.day($0.date()) } ?? until) with a call planned.",
                       systemImage: "leaf")
             }
         }
         if let duplicate = lead.duplicateOf, duplicate != lead.uuid {
-            Section {
+            DetailSection {
                 NavigationLink { LeadDetailView(leadUuid: duplicate) } label: {
                     Label("Another open lead has the same email or phone. Look at it before calling, so they aren’t contacted twice.",
                           systemImage: "exclamationmark.triangle")
@@ -423,12 +456,12 @@ struct LeadDetailView: View {
     }
 
     private func nextStep(_ lead: Lead) -> some View {
-        Section("Next step") {
+        DetailSection("Next step", systemImage: "flag") {
             if let due = lead.nextActionAt {
                 Label {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(lead.nextActionNote ?? LeadStepType.label(for: lead.nextActionType)).font(.wsHeadline)
-                        Text("\(Formatters.day(due) ?? "") \(Formatters.time(due) ?? "")")
+                        Text((lead.isOverdue ? "Overdue · " : "") + "\(Formatters.day(due) ?? "") \(Formatters.time(due) ?? "")")
                             .font(.wsSubheadline)
                             .foregroundStyle(lead.isOverdue ? Tone.danger.textColor : Color.secondaryText)
                     }
@@ -440,20 +473,41 @@ struct LeadDetailView: View {
                 Text("Nothing planned. Plan the next step so this lead doesn't go cold.")
                     .font(.wsSubheadline).foregroundStyle(.secondaryText)
             }
-            Button { sheet = .call } label: { Label("Log a call", systemImage: "phone.badge.checkmark") }
-                .buttonStyle(.large(.brand))
-                .listRowSeparator(.hidden)
-                .accessibilityIdentifier("lead.logCall")
-            HStack {
-                Button { sheet = .step } label: { Label("Plan a step", systemImage: "calendar.badge.clock") }
-                Spacer()
-                Button { sheet = .meeting(nil) } label: { Label("Book a meeting", systemImage: "video") }
+            if sizeClass == .compact {
+                Button { sheet = .call } label: { Label("Log a call", systemImage: "phone.badge.checkmark") }
+                    .buttonStyle(.large(.brand))
+                    .listRowSeparator(.hidden)
+                    .accessibilityIdentifier("lead.logCall")
+                HStack {
+                    Button { sheet = .step } label: { Label("Plan a step", systemImage: "calendar.badge.clock") }
+                    Spacer()
+                    Button { sheet = .meeting(nil) } label: { Label("Book a meeting", systemImage: "video") }
+                }
+                .buttonStyle(.borderless)
+                .frame(minHeight: rowHeight)
+            } else {
+                // A desktop's buttons: as wide as their words, not a slab across the page.
+                HStack(spacing: 8) {
+                    Button { sheet = .call } label: { Label("Log a call", systemImage: "phone.badge.checkmark") }
+                        .buttonStyle(.action(prominent: lead.isOverdue, tone: lead.isOverdue ? .danger : .brand))
+                        .accessibilityIdentifier("lead.logCall")
+                    Button { sheet = .step } label: { Label("Plan a step", systemImage: "calendar.badge.clock") }
+                        .buttonStyle(.action)
+                }
             }
-            .buttonStyle(.borderless)
-            .frame(minHeight: 44)
             Text("\(lead.contactAttempts) call\(lead.contactAttempts == 1 ? "" : "s") so far"
                  + (lead.firstContactedAt.map { " · first contact \(Formatters.dateTime($0) ?? "")" } ?? " · not contacted yet"))
                 .font(.wsCaption).foregroundStyle(.secondaryText)
+        }
+    }
+
+    /// What they wrote when they got in touch.
+    @ViewBuilder
+    private func theirMessage(_ lead: Lead) -> some View {
+        if let notes = lead.notes?.trimmedOrNil {
+            DetailSection("Their message", systemImage: "text.quote") {
+                ExpandableText(text: notes, lineLimit: 8)
+            }
         }
     }
 
@@ -461,13 +515,13 @@ struct LeadDetailView: View {
     private func ai(_ lead: Lead) -> some View {
         let analysis = lead.analysis
         let currency = lead.currency ?? Formatters.defaultCurrency
-        Section {
+        DetailSection("AI analysis", systemImage: "sparkles") {
             if analysis?.isRunning == true || lead.aiStatus == "pending" || lead.aiStatus == "running" {
                 Label("The AI is reading this lead and sizing the deal…", systemImage: "hourglass").foregroundStyle(.secondaryText)
             } else if let result = analysis?.result, analysis?.status == "done" || analysis?.status == nil || result.summary != nil {
-                if let summary = result.summary { Text(summary) }
-                if let wants = result.wants { DetailRow(label: "They want", value: wants) }
-                if let origin = result.origin { DetailRow(label: "Where it came from", value: origin) }
+                if let summary = result.summary { Text(summary).wsParagraph() }
+                DetailRow(label: "They want", value: LeadAIText.known(result.wants))
+                DetailRow(label: "Where it came from", value: LeadAIText.known(result.origin))
                 ForEach(result.flags, id: \.self) { flag in
                     Label(LeadAIText.flag(flag), systemImage: "exclamationmark.triangle")
                         .font(.wsSubheadline)
@@ -476,29 +530,28 @@ struct LeadDetailView: View {
                 if let action = result.nextBestAction, let label = action.label {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Suggested: \(label)\(LeadAIText.when(action.when))").font(.wsHeadline)
-                        if let reason = action.reason { Text(reason).font(.wsSubheadline).foregroundStyle(.secondaryText) }
+                        if let reason = action.reason { Text(reason).font(.wsSubheadline).foregroundStyle(.secondaryText).wsParagraph(.wsSubheadline) }
                         if canWork(lead), lead.isOpen, let code = action.action {
                             Button("Do it", systemImage: "wand.and.stars") {
                                 doAI(code, partner: result.partnerSuggestions.first?.partnerUuid, lead: lead)
                             }
                             .buttonStyle(.borderless)
-                            .frame(minHeight: 44)
+                            .frame(minHeight: rowHeight)
                             .accessibilityIdentifier("lead.ai.doIt")
                         }
                     }
                 }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Deal size").font(.wsCaption).foregroundStyle(.secondaryText)
-                    Text(result.estimatedValue.flatMap { Formatters.money($0, currency: currency) } ?? "Not known yet")
-                        .font(.wsHeadline.monospacedDigit())
+                FactGrid {
+                    DetailRow(label: "Deal size", value: result.estimatedValue.flatMap { Formatters.money($0, currency: currency) } ?? "Not known yet",
+                              monospacedDigits: true)
                     if let low = result.valueLow, let high = result.valueHigh,
                        let l = Formatters.money(low, currency: currency), let h = Formatters.money(high, currency: currency) {
-                        Text("Range \(l) – \(h)").font(.wsSubheadline)
+                        DetailRow(label: "Range", value: "\(l) – \(h)", monospacedDigits: true)
                     }
-                    Text(result.valueSource == "web_search" ? "From a web price search" : "Estimated by the AI without a web search")
-                        .font(.wsCaption).foregroundStyle(.secondaryText)
-                    if let basis = result.valueBasis { Text(basis).font(.wsCaption).foregroundStyle(.secondaryText) }
+                    DetailRow(label: "Priced from", value: result.valueSource == "web_search" ? "A web price search"
+                                                                                            : "The AI, without a web search")
                 }
+                if let basis = result.valueBasis { Text(basis).font(.wsCaption).foregroundStyle(.secondaryText).wsParagraph(.wsCaption) }
                 if !result.scoreReasons.isEmpty {
                     DisclosureGroup("Why score \(result.score.map(String.init) ?? "—")") {
                         ForEach(result.scoreReasons, id: \.self) { Text("• \($0)").font(.wsSubheadline) }
@@ -545,7 +598,7 @@ struct LeadDetailView: View {
                 }
                 if let reply = result.firstReply, let body = reply.body {
                     DisclosureGroup("Draft first reply") {
-                        Text([reply.subject, body].compactMap { $0 }.joined(separator: "\n\n")).font(.wsSubheadline).textSelection(.enabled)
+                        Text([reply.subject, body].compactMap { $0 }.joined(separator: "\n\n")).wsParagraph(.wsSubheadline).textSelection(.enabled)
                         HStack {
                             Button("Copy", systemImage: "doc.on.doc") {
                                 UIPasteboard.general.string = [reply.subject, body].compactMap { $0 }.joined(separator: "\n\n")
@@ -560,7 +613,7 @@ struct LeadDetailView: View {
                             }
                         }
                         .buttonStyle(.borderless)
-                        .frame(minHeight: 44)
+                        .frame(minHeight: rowHeight)
                     }
                 }
                 Button {
@@ -568,7 +621,7 @@ struct LeadDetailView: View {
                 } label: {
                     if loadingReport { ProgressView() } else { Label("View the AI report (PDF)", systemImage: "doc.richtext") }
                 }
-                .frame(minHeight: 44)
+                .frame(minHeight: rowHeight)
                 .accessibilityIdentifier("lead.ai.report")
                 Text("\([analysis?.providerName, analysis?.model].compactMap { $0 }.joined(separator: " · ").nonEmpty ?? "AI")"
                      + (analysis?.finishedAt.flatMap { " · \(Formatters.dateTime($0) ?? "")" } ?? "")
@@ -592,17 +645,15 @@ struct LeadDetailView: View {
                         }
                     }
                 } label: { Label("Run the AI again", systemImage: "sparkles") }
-                .frame(minHeight: 44)
+                .frame(minHeight: rowHeight)
             }
-        } header: {
-            Label("AI analysis", systemImage: "sparkles")
         }
     }
 
     @ViewBuilder
     private func meetings(_ lead: Lead) -> some View {
         if !lead.meetings.isEmpty || (lead.isOpen && canWork(lead)) {
-            Section("Meetings") {
+            DetailSection("Meetings", systemImage: "calendar") {
                 if lead.meetings.isEmpty {
                     Text("No meetings yet.").font(.wsSubheadline).foregroundStyle(.secondaryText)
                 }
@@ -614,7 +665,7 @@ struct LeadDetailView: View {
                             .font(.wsSubheadline).foregroundStyle(.secondaryText)
                         if let place = meeting.location { Text(place).font(.wsSubheadline) }
                         if let link = meeting.meetingUrl, let url = URL(string: link) {
-                            Link(destination: url) { Label("Join", systemImage: "video.fill") }.frame(minHeight: 44)
+                            Link(destination: url) { Label("Join", systemImage: "video.fill") }.frame(minHeight: rowHeight)
                         }
                         Text(meetingStatus(meeting)).font(.wsCaption).foregroundStyle(.secondaryText)
                         if meeting.isPlanned, canWork(lead) {
@@ -627,7 +678,7 @@ struct LeadDetailView: View {
                                 Button("Cancel", role: .destructive) { cancelReason = ""; cancellingMeeting = meeting }
                             }
                             .buttonStyle(.borderless)
-                            .frame(minHeight: 44)
+                            .frame(minHeight: rowHeight)
                         }
                     }
                     .padding(.vertical, 2)
@@ -635,7 +686,7 @@ struct LeadDetailView: View {
                 }
                 if lead.isOpen, canWork(lead) {
                     Button("Book a meeting", systemImage: "calendar.badge.plus") { sheet = .meeting(nil) }
-                        .frame(minHeight: 44)
+                        .frame(minHeight: rowHeight)
                 }
             }
         }
@@ -656,7 +707,7 @@ struct LeadDetailView: View {
     @ViewBuilder
     private func referrals(_ lead: Lead) -> some View {
         if !lead.referrals.isEmpty {
-            Section("Passed to partners") {
+            DetailSection("Passed to partners", systemImage: "arrowshape.turn.up.right") {
                 ForEach(lead.referrals) { referral in
                     ReferralRow(referral: referral, canWork: canWork(lead) && session.permissions.can(.update, .crmDeals)) { message in
                         notice = message
@@ -668,7 +719,7 @@ struct LeadDetailView: View {
     }
 
     private func manage(_ lead: Lead) -> some View {
-        Section("Move it on") {
+        DetailSection("Move it on", systemImage: "arrow.right.circle") {
             if lead.isOpen {
                 Menu {
                     ForEach(LeadStage.open.filter { $0 != lead.stage }, id: \.self) { stage in
@@ -677,67 +728,67 @@ struct LeadDetailView: View {
                         }
                     }
                 } label: {
-                    Label("Move to stage…", systemImage: "arrow.right.circle").frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    Label("Move to stage…", systemImage: "arrow.right.circle").frame(maxWidth: .infinity, minHeight: rowHeight, alignment: .leading)
                 }
                 .accessibilityIdentifier("lead.moveStage")
             }
             if lead.stage != .converted, LeadPermissions.showsConvert(lead.permissions, session.permissions) {
                 Button { sheet = .convert } label: { Label("Convert to a deal", systemImage: "briefcase.fill") }
-                    .buttonStyle(.large(.success, prominent: false))
+                    .buttonStyle(.large(.success, prominent: false, fill: sizeClass != .compact))
                     .listRowSeparator(.hidden)
                     .accessibilityIdentifier("lead.convert")
             }
             if lead.isOpen {
                 Button { sheet = .park(.nurture) } label: { Label("Nurture: come back later", systemImage: "leaf") }
-                    .frame(minHeight: 44)
+                    .frame(minHeight: rowHeight)
                 Button(role: .destructive) { sheet = .park(.lost) } label: { Label("Mark lost", systemImage: "xmark.circle") }
-                    .frame(minHeight: 44)
+                    .frame(minHeight: rowHeight)
             } else if lead.stage == .lost || lead.stage == .nurture {
                 Button {
                     Task { await act(notice: "Reopened. A call is planned.") { try await services.leads.move(lead.uuid, LeadStageBody(stage: "contacting")) } }
                 } label: {
                     Label("Reopen", systemImage: "arrow.uturn.backward")
                 }
-                .frame(minHeight: 44)
+                .frame(minHeight: rowHeight)
             }
             if lead.isOpen, lead.permissions?.canAssignAny == true {
                 Button { sheet = .assign } label: { Label(lead.ownerName == nil ? "Give it an owner" : "Change owner", systemImage: "person.crop.circle.badge.plus") }
-                    .frame(minHeight: 44)
+                    .frame(minHeight: rowHeight)
             } else if lead.isOpen, lead.ownerUserUuid == nil, let me = session.user?.uuid {
                 Button { Task { await act(notice: "It's yours now.") { try await services.leads.assign(lead.uuid, to: me) } } } label: {
                     Label("Take this lead", systemImage: "hand.raised")
                 }
-                .frame(minHeight: 44)
+                .frame(minHeight: rowHeight)
             } else if lead.isOpen, lead.ownerUserUuid == session.user?.uuid {
                 Button { Task { await act(notice: "Back in the queue.") { try await services.leads.assign(lead.uuid, to: nil) } } } label: {
                     Label("Hand it back to the queue", systemImage: "tray.and.arrow.up")
                 }
-                .frame(minHeight: 44)
+                .frame(minHeight: rowHeight)
             }
         }
     }
 
+    /// The facts: who they are, where they came from, what it's worth and when they were last spoken to.
     private func details(_ lead: Lead) -> some View {
-        Section("Details") {
-            DetailRow(label: "Email", value: lead.email)
-            DetailRow(label: "Phone", value: lead.phone)
+        DetailSection("Details", systemImage: "list.bullet.rectangle") {
+            DetailRow(label: "Stage", value: stageLabel(lead.stage))
+            DetailRow(label: "Owner", value: lead.ownerName ?? "No owner yet")
+            DetailRow(label: "AI score", value: lead.aiScore.map(String.init), monospacedDigits: true)
+            DetailRow(label: "Value", value: lead.estimatedValue.flatMap { Formatters.money($0, currency: lead.currency ?? Formatters.defaultCurrency) }
+                .map { $0 + (lead.valueFromAI ? " (AI)" : "") }, monospacedDigits: true)
             DetailRow(label: "Company", value: lead.companyName)
             DetailRow(label: "Job title", value: lead.jobTitle)
+            if sizeClass == .compact {
+                DetailRow(label: "Email", value: lead.email)
+                DetailRow(label: "Phone", value: lead.phone)
+            }
             DetailRow(label: "Source", value: lead.source.map(Formatters.humanize))
             DetailRow(label: "Channel", value: lead.channel)
             DetailRow(label: "Campaign", value: lead.campaign)
             DetailRow(label: "Priority", value: lead.priority.map(Formatters.humanize))
-            DetailRow(label: "Value", value: lead.estimatedValue.flatMap { Formatters.money($0, currency: lead.currency ?? Formatters.defaultCurrency) }
-                .map { $0 + (lead.valueFromAI ? " (AI)" : "") })
             DetailRow(label: "Expected close", value: lead.expectedCloseDate.flatMap { CalendarDay(string: $0) }.flatMap { Formatters.day($0.date()) })
             DetailRow(label: "Came in", value: Formatters.dateTime(lead.createdAt))
-            DetailRow(label: "Last contact", value: Formatters.dateTime(lead.lastContactedAt))
-            if let notes = lead.notes {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Their message").font(.wsCaption).foregroundStyle(.secondaryText)
-                    Text(notes).textSelection(.enabled)
-                }
-            }
+            DetailRow(label: "Last contact", value: Formatters.dateTime(lead.lastContactedAt) ?? "Not yet")
         }
     }
 
@@ -745,7 +796,7 @@ struct LeadDetailView: View {
     private func qualification(_ lead: Lead) -> some View {
         let questions = bundle?.settings.qualificationQuestions ?? []
         if !questions.isEmpty || !lead.qualification.isEmpty {
-            Section("Qualification") {
+            DetailSection("Qualification", systemImage: "checklist") {
                 ForEach(questions) { question in
                     LabeledContent(question.label) {
                         Text(lead.qualification[question.key] ?? "Not known")
@@ -756,33 +807,43 @@ struct LeadDetailView: View {
                     DetailRow(label: Formatters.humanize(key), value: lead.qualification[key])
                 }
                 if lead.isOpen, canWork(lead) {
-                    Button("Qualify", systemImage: "checklist") { sheet = .qualify }.frame(minHeight: 44)
+                    Button("Qualify", systemImage: "checklist") { sheet = .qualify }.frame(minHeight: rowHeight)
                 }
             }
         }
     }
 
     private var history: some View {
-        Section("Timeline") {
+        DetailSection("Timeline", systemImage: "clock.arrow.circlepath") {
             ForEach(showsWholeTimeline ? Array(timeline) : Array(timeline.prefix(Self.timelinePreview))) { item in
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Text(item.title).font(.wsSubheadline.weight(.semibold))
-                        if let outcome = item.outcomeLabel { Text(outcome).font(.wsCaption).foregroundStyle(.secondaryText) }
-                        if item.status == "planned" { StatusBadge(text: "Planned", systemImage: "clock", tone: .warning) }
-                        if item.status == "cancelled" { StatusBadge(text: "Cancelled", systemImage: "xmark", tone: .neutral) }
-                    }
-                    Text([Formatters.dateTime(item.at), item.by].compactMap { $0 }.joined(separator: " · "))
-                        .font(.wsCaption).foregroundStyle(.secondaryText)
-                    if let detail = item.detail { Text(detail).font(.wsSubheadline) }
+                TimelineRow(item.title,
+                            meta: [Formatters.dateTime(item.at), item.by].compactMap { $0 }.joined(separator: " · "),
+                            detail: item.detail, systemImage: Self.timelineSymbol(item),
+                            tone: item.isCustomerReply ? .success : item.status == "planned" ? .warning : .neutral) {
+                    if let outcome = item.outcomeLabel { Text(outcome).font(.wsCaption).foregroundStyle(.secondaryText) }
+                    if item.status == "planned" { StatusBadge(text: "Planned", systemImage: "clock", tone: .warning) }
+                    if item.status == "cancelled" { StatusBadge(text: "Cancelled", systemImage: "xmark", tone: .neutral) }
                 }
             }
             if !showsWholeTimeline, timeline.count > Self.timelinePreview {
                 Button("Show all \(timeline.count)") { showsWholeTimeline = true }
-                    .frame(minHeight: 44)
+                    .frame(minHeight: rowHeight)
                     .accessibilityIdentifier("lead.timeline.showAll")
             }
         }
+    }
+
+    /// A symbol for what happened, from its words (the timeline has no type of its own).
+    nonisolated static func timelineSymbol(_ item: LeadTimelineItem) -> String {
+        let title = item.title.lowercased()
+        if item.isCustomerReply { return "arrowshape.turn.up.left.fill" }
+        if title.contains("call") { return "phone.fill" }
+        if title.contains("email") || title.contains("replied") { return "envelope.fill" }
+        if title.contains("meeting") { return "calendar" }
+        if title.contains("note") { return "text.bubble.fill" }
+        if title.contains("stage") || title.contains("moved") || title.contains("qualified") { return "arrow.right" }
+        if title.split(separator: " ").contains("ai") || title.contains("analys") { return "sparkles" }
+        return "circle.fill"
     }
 
     private static let timelinePreview = 50
@@ -1140,6 +1201,13 @@ enum LeadAIText {
         case "out_of_scope": "May be outside what you do"
         default: Formatters.humanize(flag)
         }
+    }
+
+    /// The AI's answer, or nil when it didn't know ("Unknown", "N/A"): the row is left out rather than a wall of
+    /// "Unknown".
+    static func known(_ text: String?) -> String? {
+        guard let text = text?.trimmedOrNil else { return nil }
+        return ["unknown", "not known", "n/a", "na", "none", "-", "—"].contains(text.lowercased()) ? nil : text
     }
 
     static func when(_ when: String?) -> String {

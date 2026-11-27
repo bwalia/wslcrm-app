@@ -55,7 +55,7 @@ struct LeadShopSections: View {
     }
 
     private func surveySection(_ survey: Record) -> some View {
-        Section("“What do I need?” survey") {
+        DetailSection("“What do I need?” survey", systemImage: "list.clipboard") {
             DetailRow(label: "Build", value: survey.string("ref"))
             DetailRow(label: "Recommended", value: survey.string("product_name"))
             ForEach(Self.questions, id: \.0) { key, label, options in
@@ -94,7 +94,7 @@ struct LeadShopSections: View {
         let requirements = shop.object("requirements")
         let shown = Self.requirements.filter { requirements?.string($0.0) != nil }
         if !quotes.isEmpty || !sessions.isEmpty || !shown.isEmpty {
-            Section("From the shop") {
+            DetailSection("From the shop", systemImage: "bag") {
                 ForEach(quotes) { quote in
                     NavigationLink { ShopQuoteDetailView(uuid: quote.string("uuid") ?? "") } label: {
                         LabeledContent("Quote \(quote.string("number") ?? "")") {
@@ -119,7 +119,7 @@ struct LeadShopSections: View {
     private func consentSection(_ consent: Record) -> some View {
         let ticks = consent.records("documents")
         if !ticks.isEmpty {
-            Section {
+            DetailSection {
                 ForEach(ticks) { tick in
                     VStack(alignment: .leading, spacing: 2) {
                         Text([Self.documents[tick.string("key") ?? ""] ?? tick.string("key"), tick.string("version").map { "version \($0)" }]
@@ -129,7 +129,7 @@ struct LeadShopSections: View {
                     }
                 }
             } header: {
-                Text("Ticked on the form")
+                DetailSectionTitle("Ticked on the form", systemImage: "checkmark.seal")
             } footer: {
                 Text("\(when(consent.string("accepted_at")).map { "\($0). " } ?? "")The email was typed into the form, so this isn’t proof "
                      + "the owner of that address agreed.")

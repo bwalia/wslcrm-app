@@ -129,6 +129,7 @@ struct ATSCandidateDetailView: View {
                 Section { InlineErrorRow(error: loadError) { Task { await load() } } }
             }
         }
+        .wsDetailList()
         .overlay { if candidate == nil, loadError == nil { SkeletonList() } }
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: notice) }
         .navigationTitle(candidate?.name ?? "Candidate")

@@ -239,6 +239,7 @@ struct ProductDetailView: View {
     let stores: [Store]
     var catalogCurrency: String?
     var onChange: (Product?) -> Void = { _ in }
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var state: LoadState<Product> = .idle
@@ -281,51 +282,34 @@ struct ProductDetailView: View {
 
     private func content(_ product: Product) -> some View {
         let money = { (value: Decimal) in Formatters.money(value, currency: currency(for: product)) ?? "" }
-        return List {
-            Section {
-                HStack(alignment: .top, spacing: 14) {
-                    ProductThumbnail(url: product.imageURL, size: 72)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(product.name).font(.wsTitle2.bold())
-                        if let short = product.shortDescription { Text(short).font(.wsSubheadline).foregroundStyle(.secondaryText) }
-                        HStack {
-                            StatusBadge(text: product.isActive ? "Active" : "Inactive",
-                                        systemImage: product.isActive ? "checkmark.circle.fill" : "pause.circle",
-                                        tone: product.isActive ? .success : .neutral)
-                            if product.isFeatured { StatusBadge(text: "Featured", systemImage: "star.fill", tone: .info) }
-                            if product.isDigital { StatusBadge(text: "Digital", systemImage: "arrow.down.circle", tone: .neutral) }
-                        }
+        let wide = sizeClass != .compact
+        return DetailPage {
+            HStack(alignment: .top, spacing: 16) {
+                ProductThumbnail(url: product.imageURL, size: wide ? 88 : 72)
+                DetailHeader(product.name, subtitle: product.shortDescription) {
+                    DetailChips {
+                        StatusBadge(text: product.isActive ? "Active" : "Inactive",
+                                    systemImage: product.isActive ? "checkmark.circle.fill" : "pause.circle",
+                                    tone: product.isActive ? .success : .neutral)
+                        if product.isFeatured { StatusBadge(text: "Featured", systemImage: "star.fill", tone: .info) }
+                        if product.isDigital { StatusBadge(text: "Digital", systemImage: "arrow.down.circle", tone: .neutral) }
                     }
+                    Text(money(product.price)).font(.wsTitle2.monospacedDigit())
                 }
-                .padding(.vertical, 4)
             }
+            .padding(.vertical, 4)
+        } main: {
             if let notice {
-                Section { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
+                DetailSection { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
             }
-            Section("Pricing") {
-                DetailRow(label: "Price", value: money(product.price))
-                if let compare = product.comparePrice, compare > product.price { DetailRow(label: "Compare at", value: money(compare)) }
-                if let cost = product.costPrice, cost > 0 { DetailRow(label: "Cost", value: money(cost)) }
-            }
-            Section("Inventory") {
-                DetailRow(label: "SKU", value: product.sku)
-                DetailRow(label: "Barcode", value: product.barcode)
-                DetailRow(label: "In stock", value: product.trackInventory ? String(product.inventoryQuantity) : "Not counted (always available)")
-                if product.trackInventory { DetailRow(label: "Low stock at", value: String(product.lowStockThreshold)) }
-                if product.isLowStock {
-                    Label(product.inventoryQuantity <= 0 ? "Out of stock" : "Low stock", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(product.inventoryQuantity <= 0 ? Tone.danger.textColor : Tone.warning.textColor)
-                }
-                DetailRow(label: "Category", value: product.categoryName)
-                DetailRow(label: "Web address", value: product.slug.map { "/\($0)" })
-            }
+            if !wide { facts(product, money: money) }
             if let description = product.description, !description.isEmpty {
-                Section("Description") { Text(description).textSelection(.enabled) }
+                DetailSection("Description", systemImage: "text.alignleft") { Text(description).wsParagraph().textSelection(.enabled) }
             }
             ProductVariationsSection(product: product, currency: currency(for: product),
                                      canEdit: session.permissions.can(.update, .products))
             if session.permissions.can(.delete, .products) {
-                Section {
+                DetailSection {
                     DeleteButton(title: "Delete product",
                                  message: "This permanently deletes the product and removes it from past orders' item lists. "
                                      + "To stop selling it, tap Edit and switch Active off instead: it stays under "
@@ -342,8 +326,33 @@ struct ProductDetailView: View {
                     if let deleteError { InlineErrorRow(error: deleteError) }
                 }
             }
+        } side: {
+            if wide { facts(product, money: money) }
         }
-        .listStyle(.insetGrouped)
+    }
+
+    /// What it costs and how many there are.
+    @ViewBuilder
+    private func facts(_ product: Product, money: @escaping (Decimal) -> String) -> some View {
+        DetailSection("Pricing", systemImage: "sterlingsign.circle") {
+            DetailRow(label: "Price", value: money(product.price), monospacedDigits: true)
+            if let compare = product.comparePrice, compare > product.price {
+                DetailRow(label: "Compare at", value: money(compare), monospacedDigits: true)
+            }
+            if let cost = product.costPrice, cost > 0 { DetailRow(label: "Cost", value: money(cost), monospacedDigits: true) }
+        }
+        DetailSection("Inventory", systemImage: "cube.box") {
+            DetailRow(label: "SKU", value: product.sku)
+            DetailRow(label: "Barcode", value: product.barcode)
+            DetailRow(label: "In stock", value: product.trackInventory ? String(product.inventoryQuantity) : "Not counted (always available)")
+            if product.trackInventory { DetailRow(label: "Low stock at", value: String(product.lowStockThreshold)) }
+            if product.isLowStock {
+                Label(product.inventoryQuantity <= 0 ? "Out of stock" : "Low stock", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(product.inventoryQuantity <= 0 ? Tone.danger.textColor : Tone.warning.textColor)
+            }
+            DetailRow(label: "Category", value: product.categoryName)
+            DetailRow(label: "Web address", value: product.slug.map { "/\($0)" })
+        }
     }
 
     private func currency(for product: Product) -> String? {
@@ -375,7 +384,7 @@ private struct ProductVariationsSection: View {
     @State private var error: APIError?
 
     var body: some View {
-        Section {
+        DetailSection {
             if let notice { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
             if let error { InlineErrorRow(error: error) }
             switch variants {
@@ -394,7 +403,7 @@ private struct ProductVariationsSection: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack {
-                                    Text(variant.title).font(.wsHeadline).foregroundStyle(.primary)
+                                    Text(variant.title).font(.wsHeadline).foregroundStyle(Color(.label))
                                     if !variant.isActive { StatusBadge(text: "Off", systemImage: "pause.circle", tone: .neutral) }
                                 }
                                 Text([variant.sku.map { "SKU \($0)" }, Formatters.money(variant.effectivePrice, currency: currency),
@@ -412,6 +421,12 @@ private struct ProductVariationsSection: View {
                     .swipeActions(allowsFullSwipe: false) {
                         if canEdit {
                             Button("Delete", role: .destructive) { deleting = variant }
+                        }
+                    }
+                    // A Mac has no swipe: the same as a right-click.
+                    .contextMenu {
+                        if canEdit {
+                            Button("Delete variation", systemImage: "trash", role: .destructive) { deleting = variant }
                         }
                     }
                     .accessibilityIdentifier("product.variant.\(variant.uuid)")
@@ -437,7 +452,7 @@ private struct ProductVariationsSection: View {
                     }
             }
         } header: {
-            Text("Variations")
+            DetailSectionTitle("Variations", systemImage: "square.stack.3d.down.right")
                 .task { await load() }
                 // On the header (one view): on the Section it would be copied onto every row.
                 .confirmationDialog("Delete “\(deleting?.title ?? "")”?", isPresented: .init(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),

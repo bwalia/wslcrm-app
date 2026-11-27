@@ -547,8 +547,11 @@ private struct VisitDetailContent: View {
         let jobOpen = visit.jobStatus != .completed && visit.jobStatus != .cancelled
         return List {
             Section {
+                DetailHeader(visit.jobTitle, subtitle: [visit.jobNumber, visit.customerName].compactMap { $0?.trimmedOrNil }
+                                .joined(separator: " · "),
+                             avatar: .icon("calendar.badge.clock", Palette.tile(for: "field_service_visits"))) {
                 VStack(alignment: .leading, spacing: 10) {
-                    HStack {
+                    DetailChips {
                         visit.status.badge
                             .accessibilityIdentifier("visit.status")
                         if visit.isUrgent { visit.jobPriority.badge }
@@ -556,7 +559,6 @@ private struct VisitDetailContent: View {
                             PendingSyncBadge(failed: model.pendingWrites.contains(where: \.isFailed))
                         }
                     }
-                    Text(visit.jobTitle).font(.wsTitle2.bold())
                     if let start = visit.scheduledStart {
                         Label(scheduleText(start: start, end: visit.scheduledEnd), systemImage: "clock")
                             .font(.wsSubheadline)
@@ -577,7 +579,7 @@ private struct VisitDetailContent: View {
                             .foregroundStyle(Tone.warning.textColor)
                     }
                 }
-                .padding(.vertical, 4)
+                }
                 if session.permissions.can(.read, .fsJobs) {
                     NavigationLink(value: JobRoute(uuid: visit.jobUuid)) {
                         Label("Open job \(visit.jobNumber)", systemImage: "wrench.and.screwdriver")
@@ -635,6 +637,7 @@ private struct VisitDetailContent: View {
 
             itemsSection(detail: detail, visit: visit)
         }
+        .wsDetailList()
         .listStyle(.insetGrouped)
     }
 

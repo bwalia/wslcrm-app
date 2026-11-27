@@ -92,6 +92,7 @@ struct PDTaskDetailView: View {
             notesSection(task)
             attachmentsSection
         }
+        .wsDetailList()
         .wsRefreshable { await load() }
     }
 

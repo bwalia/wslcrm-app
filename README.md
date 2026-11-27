@@ -43,7 +43,16 @@ xcodebuild build -scheme WSLCRM-Int -destination 'platform=macOS,variant=Mac Cat
 What a Mac lacks is handled in `WSLCRM/DesignSystem/MacSupport.swift`: screens refresh with a
 Refresh button or ⌘R (there's no pull to refresh), windows have a minimum size, and camera-only
 features (the till's barcode camera, document and photo capture) hide themselves; a USB barcode
-scanner types into the till's search. The Mac build is sandboxed
+scanner types into the till's search.
+
+A record's page (a lead, a customer, an invoice, an order…) is a `DetailPage`
+(`WSLCRM/DesignSystem/DetailPage.swift`): on a phone it is the usual grouped list; on an iPad or a
+Mac it is cards on the canvas, centred at a readable width, with the record's facts in a narrow
+right-hand column on a wide window. Write each part once with `DetailSection` (it takes
+`Section`'s shapes), the top with `DetailHeader` and `RecordActionBar` (one primary action, the
+rest bordered, destructive ones under More), and facts with `DetailRow`/`FactGrid`. A detail
+screen that is still a `List` gets `.wsDetailList()`, which centres it and keeps labels next to
+their values on a wide window. The Mac build is sandboxed
 (`WSLCRM/Resources/WSLCRM-Mac.entitlements`). CI builds it on every change; TestFlight for Mac is
 in [docs/IOS_RELEASE.md](docs/IOS_RELEASE.md#mac-app).
 

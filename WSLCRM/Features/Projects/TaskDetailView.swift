@@ -209,6 +209,7 @@ struct TaskDetailView: View {
                 Section { InlineErrorRow(error: actionError) { Task { await load() } } }
             }
         }
+        .wsDetailList()
         .disabled(busy)
         .wsRefreshable { await load() }
     }

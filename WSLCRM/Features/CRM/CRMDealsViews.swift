@@ -513,6 +513,7 @@ private struct DealPipelineContent: View {
 
 struct CRMDealDetailView: View {
     let dealUuid: String
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var state: LoadState<CRMDeal> = .idle
@@ -584,39 +585,45 @@ struct CRMDealDetailView: View {
     }
 
     private func content(_ deal: CRMDeal) -> some View {
-        List {
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(deal.name).font(.wsTitle2.bold())
-                    Text(Formatters.money(deal.value, currency: deal.currency) ?? "")
-                        .font(.wsTitle3.monospacedDigit())
-                    HStack {
-                        deal.statusBadge
-                        StatusBadge(text: Formatters.humanize(deal.stage), systemImage: "flag", tone: .progress)
-                    }
+        let wide = sizeClass != .compact
+        return DetailPage {
+            DetailHeader(deal.name,
+                         subtitle: [deal.accountName, deal.contactName].compactMap { $0 }.joined(separator: " · ").nonEmpty,
+                         avatar: .icon("briefcase.fill", Palette.tile(for: "crm_deals"))) {
+                DetailChips {
+                    deal.statusBadge
+                    StatusBadge(text: Formatters.humanize(deal.stage), systemImage: "flag", tone: .progress)
                 }
-                .padding(.vertical, 4)
-            }
-            if let notice {
-                Section { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
-            }
-            if session.canUpdate(.crmDeals) {
-                Section("Stage") {
-                    let stages = deal.pipelineStages.isEmpty ? CRMDefaultStages.all : deal.pipelineStages.map(\.name)
-                    Menu {
-                        ForEach(stages.filter { $0 != deal.stage }, id: \.self) { stage in
-                            Button(Formatters.humanize(stage)) {
-                                Task {
-                                    await update(DealBody(stage: stage, probability: deal.pipelineStages.first { $0.name == stage }?.probability),
-                                                 "Moved to \(Formatters.humanize(stage)).")
-                                }
+                Text(Formatters.money(deal.value, currency: deal.currency) ?? "")
+                    .font(.wsTitle3.monospacedDigit())
+            } actions: {
+                if wide, session.canUpdate(.crmDeals) {
+                    RecordActionBar(showsMore: false) {
+                        if deal.status == .open {
+                            Button { Task { await update(DealBody(stage: wonStage), "Marked as won. Well done!") } } label: {
+                                Label("Mark won", systemImage: "trophy.fill")
+                            }
+                            .buttonStyle(.action(prominent: true, tone: .success))
+                            Button { lostReason = ""; markingLost = true } label: {
+                                Label("Mark lost", systemImage: "xmark.circle")
                             }
                         }
-                    } label: {
-                        Label("Move to stage…", systemImage: "arrow.right.circle")
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    }
-                    .accessibilityIdentifier("crm.deal.moveStage")
+                        stageMenu(deal)
+                            .menuStyle(.button)
+                            .menuIndicator(.hidden)
+                            .fixedSize()
+                    } more: { EmptyView() }
+                    .disabled(busy)
+                }
+            }
+        } main: {
+            if let notice {
+                DetailSection { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
+            }
+            if wide, let actionError { DetailSection { InlineErrorRow(error: actionError) } }
+            if !wide, session.canUpdate(.crmDeals) {
+                DetailSection("Stage") {
+                    stageMenu(deal)
                     if deal.status == .open {
                         Button { Task { await update(DealBody(stage: wonStage), "Marked as won. Well done!") } } label: {
                             Label("Mark won", systemImage: "trophy.fill")
@@ -639,20 +646,10 @@ struct CRMDealDetailView: View {
                 }
                 .disabled(busy)
             }
-            Section("Details") {
-                DetailRow(label: "Account", value: deal.accountName, systemImage: "building.2")
-                DetailRow(label: "Contact", value: deal.contactName, systemImage: "person")
-                if let email = deal.contactEmail { EmailLinkRow(email: email) }
-                DetailRow(label: "Pipeline", value: deal.pipelineName)
-                DetailRow(label: "Probability", value: "\(deal.probability)%")
-                DetailRow(label: "Expected close", value: deal.expectedCloseDate.flatMap { Formatters.day($0.date()) })
-                DetailRow(label: "Closed", value: deal.actualCloseDate.flatMap { Formatters.day($0.date()) })
-                DetailRow(label: "Lost reason", value: deal.lostReason)
-                DetailRow(label: "Added", value: Formatters.day(deal.createdAt))
-            }
+            if !wide { details(deal) }
             CRMActivitiesSection(relation: .deal(id: deal.id, uuid: deal.uuid), reload: reload)
             if session.permissions.can(.read, .crmAccounts) || !referrals.isEmpty {
-                Section("Passed to partners") {
+                DetailSection("Passed to partners", systemImage: "arrowshape.turn.up.right") {
                     ForEach(referrals) { referral in
                         ReferralRow(referral: referral, canWork: session.canUpdate(.crmDeals)) { message in
                             notice = message
@@ -670,7 +667,7 @@ struct CRMDealDetailView: View {
                 }
             }
             if session.canDelete(.crmDeals) {
-                Section {
+                DetailSection {
                     DeleteButton(title: "Delete deal", message: "This removes the deal from the pipeline.") {
                         do {
                             try await services.crm.deleteDeal(deal.uuid)
@@ -682,8 +679,54 @@ struct CRMDealDetailView: View {
                     }
                 }
             }
+        } side: {
+            if wide {
+                details(deal)
+                if session.canUpdate(.crmDeals), deal.status != .open {
+                    DetailSection("Stage", systemImage: "flag") {
+                        Button("Reopen deal", systemImage: "arrow.uturn.backward") {
+                            let first = deal.pipelineStages.first?.name ?? "prospecting"
+                            Task { await update(DealBody(stage: first, status: "open"), "Deal reopened.") }
+                        }
+                        .disabled(busy)
+                    }
+                }
+            }
         }
-        .listStyle(.insetGrouped)
+    }
+
+    /// Move the deal to another of its pipeline's stages.
+    private func stageMenu(_ deal: CRMDeal) -> some View {
+        let stages = deal.pipelineStages.isEmpty ? CRMDefaultStages.all : deal.pipelineStages.map(\.name)
+        return Menu {
+            ForEach(stages.filter { $0 != deal.stage }, id: \.self) { stage in
+                Button(Formatters.humanize(stage)) {
+                    Task {
+                        await update(DealBody(stage: stage, probability: deal.pipelineStages.first { $0.name == stage }?.probability),
+                                     "Moved to \(Formatters.humanize(stage)).")
+                    }
+                }
+            }
+        } label: {
+            Label("Move to stage…", systemImage: "arrow.right.circle")
+                .frame(maxWidth: sizeClass == .compact ? .infinity : nil, minHeight: sizeClass == .compact ? 44 : nil,
+                       alignment: .leading)
+        }
+        .accessibilityIdentifier("crm.deal.moveStage")
+    }
+
+    private func details(_ deal: CRMDeal) -> some View {
+        DetailSection("Details", systemImage: "list.bullet.rectangle") {
+            DetailRow(label: "Account", value: deal.accountName, systemImage: "building.2")
+            DetailRow(label: "Contact", value: deal.contactName, systemImage: "person")
+            if let email = deal.contactEmail { EmailLinkRow(email: email) }
+            DetailRow(label: "Pipeline", value: deal.pipelineName)
+            DetailRow(label: "Probability", value: "\(deal.probability)%")
+            DetailRow(label: "Expected close", value: deal.expectedCloseDate.flatMap { Formatters.day($0.date()) })
+            DetailRow(label: "Closed", value: deal.actualCloseDate.flatMap { Formatters.day($0.date()) })
+            DetailRow(label: "Lost reason", value: deal.lostReason)
+            DetailRow(label: "Added", value: Formatters.day(deal.createdAt))
+        }
     }
 
     private func load() async {

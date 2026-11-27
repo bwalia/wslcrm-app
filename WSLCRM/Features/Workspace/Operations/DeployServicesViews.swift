@@ -332,6 +332,7 @@ struct DeployServiceDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle(service.string("name") ?? "Service")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
@@ -1189,6 +1190,7 @@ private struct DeploymentDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle("Deployment")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }

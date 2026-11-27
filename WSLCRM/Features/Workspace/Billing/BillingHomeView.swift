@@ -472,6 +472,7 @@ struct BillingCouponDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle("Coupon")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

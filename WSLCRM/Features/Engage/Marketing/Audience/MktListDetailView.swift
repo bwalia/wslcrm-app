@@ -69,6 +69,7 @@ struct MktListDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .listStyle(.insetGrouped)
         .overlay { if list == nil, loadError == nil { SkeletonList() } }
         .navigationTitle(list?.name ?? "List")

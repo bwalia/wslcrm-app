@@ -266,6 +266,7 @@ struct CRMAccountDetailView: View {
     let accountUuid: String
     var onChange: (CRMAccount?) -> Void = { _ in }
     @Environment(\.services) private var services
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(SessionStore.self) private var session
     @State private var state: LoadState<CRMAccount> = .idle
     @State private var contacts: [CRMContact] = []
@@ -331,39 +332,37 @@ struct CRMAccountDetailView: View {
     }
 
     private func content(_ account: CRMAccount) -> some View {
-        List {
-            Section {
-                HStack(spacing: 8) {
+        let wide = sizeClass != .compact
+        return DetailPage {
+            DetailHeader(account.name, subtitle: account.industry, avatar: .monogram(account.name)) {
+                DetailChips {
                     StatusBadge(text: Formatters.humanize(account.status), systemImage: "circle.fill",
                                 tone: account.status == "active" ? .success : .neutral)
-                    if let industry = account.industry { Text(industry).foregroundStyle(.secondaryText) }
                 }
-                if let phone = account.phone { PhoneLinkRow(name: account.name, phone: phone) }
-                if let email = account.email { EmailLinkRow(email: email) }
-                if let address = account.address { MapsLinkRow(address: address) }
-                if let website = account.website, let url = URL(string: website.hasPrefix("http") ? website : "https://\(website)") {
-                    Link(destination: url) { Label(website, systemImage: "globe").frame(minHeight: 44) }
+            } actions: {
+                if wide, session.canCreate(.crmContacts) || session.canCreate(.crmDeals) {
+                    RecordActionBar {
+                        if session.canCreate(.crmDeals) {
+                            Button { addingDeal = true } label: { Label("Add a deal", systemImage: "briefcase") }
+                                .buttonStyle(.action(prominent: true))
+                        }
+                        if session.canCreate(.crmContacts) {
+                            Button { addingContact = true } label: { Label("Add a contact", systemImage: "person.badge.plus") }
+                        }
+                    }
                 }
             }
+            if !wide { contactRows(account) }
+        } main: {
             if let notice {
-                Section { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
+                DetailSection { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
             }
-            Section("Summary") {
-                DetailRow(label: "Contacts", value: account.contactCount.map(String.init))
-                DetailRow(label: "Deals", value: account.dealCount.map(String.init))
-                DetailRow(label: "Deal value", value: Formatters.money(account.totalDealValue, currency: nil))
-                DetailRow(label: "Employees", value: account.employeeCount.map(String.init))
-                DetailRow(label: "Annual revenue", value: Formatters.money(account.annualRevenue, currency: nil))
-                DetailRow(label: "Added", value: Formatters.day(account.createdAt))
-            }
+            if !wide { summary(account) }
             if session.permissions.can(.read, .crmContacts) {
-                Section("Contacts") {
+                DetailSection("Contacts", systemImage: "person.2") {
                     ForEach(contacts) { contact in
                         NavigationLink { CRMContactDetailView(contactUuid: contact.uuid) } label: {
-                            VStack(alignment: .leading) {
-                                Text(contact.fullName).font(.wsHeadline)
-                                if let title = contact.jobTitle { Text(title).font(.wsSubheadline).foregroundStyle(.secondaryText) }
-                            }
+                            RelatedRow(title: contact.fullName, subtitle: contact.jobTitle, systemImage: "person")
                         }
                     }
                     if contacts.isEmpty {
@@ -377,9 +376,9 @@ struct CRMAccountDetailView: View {
                 }
             }
             if session.permissions.can(.read, .crmDeals) {
-                Section("Deals") {
+                DetailSection("Deals", systemImage: "briefcase") {
                     ForEach(deals) { deal in
-                        NavigationLink { CRMDealDetailView(dealUuid: deal.uuid) } label: { DealRow(deal: deal) }
+                        NavigationLink { CRMDealDetailView(dealUuid: deal.uuid) } label: { DealRow(deal: deal).foregroundStyle(Color(.label)) }
                     }
                     if deals.isEmpty {
                         Text("No deals with this account yet.").font(.wsSubheadline).foregroundStyle(.secondaryText)
@@ -393,7 +392,7 @@ struct CRMAccountDetailView: View {
             }
             CRMActivitiesSection(relation: .account(id: account.id, uuid: account.uuid), reload: reload)
             if session.canDelete(.crmAccounts) {
-                Section {
+                DetailSection {
                     DeleteButton(title: "Delete account", message: "Contacts and deals keep their link to this account's name.") {
                         do {
                             try await services.crm.deleteAccount(account.uuid)
@@ -407,8 +406,35 @@ struct CRMAccountDetailView: View {
                     if let deleteError { InlineErrorRow(error: deleteError) }
                 }
             }
+        } side: {
+            if wide {
+                if account.phone != nil || account.email != nil || account.address != nil || account.website != nil {
+                    DetailSection("Contact", systemImage: "building.2") { contactRows(account) }
+                }
+                summary(account)
+            }
         }
-        .listStyle(.insetGrouped)
+    }
+
+    @ViewBuilder
+    private func contactRows(_ account: CRMAccount) -> some View {
+        if let phone = account.phone { PhoneLinkRow(name: account.name, phone: phone) }
+        if let email = account.email { EmailLinkRow(email: email) }
+        if let address = account.address { MapsLinkRow(address: address) }
+        if let website = account.website, let url = URL(string: website.hasPrefix("http") ? website : "https://\(website)") {
+            Link(destination: url) { Label(website, systemImage: "globe").frame(minHeight: 44) }
+        }
+    }
+
+    private func summary(_ account: CRMAccount) -> some View {
+        DetailSection("Summary", systemImage: "list.bullet.rectangle") {
+            DetailRow(label: "Contacts", value: account.contactCount.map(String.init))
+            DetailRow(label: "Deals", value: account.dealCount.map(String.init))
+            DetailRow(label: "Deal value", value: Formatters.money(account.totalDealValue, currency: nil), monospacedDigits: true)
+            DetailRow(label: "Employees", value: account.employeeCount.map(String.init))
+            DetailRow(label: "Annual revenue", value: Formatters.money(account.annualRevenue, currency: nil), monospacedDigits: true)
+            DetailRow(label: "Added", value: Formatters.day(account.createdAt))
+        }
     }
 
     private func load() async {
@@ -584,6 +610,7 @@ struct CRMContactsListView: View {
 struct CRMContactDetailView: View {
     let contactUuid: String
     @Environment(\.services) private var services
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(SessionStore.self) private var session
     @State private var state: LoadState<CRMContact> = .idle
     @State private var editing = false
@@ -599,38 +626,31 @@ struct CRMContactDetailView: View {
             case .failed(let error):
                 ErrorStateView(error: error) { Task { await load() } }
             case .loaded(let contact):
-                List {
-                    Section {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(contact.fullName).font(.wsTitle2.bold())
-                            if let line = [contact.jobTitle, contact.department].compactMap({ $0 }).joined(separator: " · ").nonEmpty {
-                                Text(line).foregroundStyle(.secondaryText)
-                            }
-                            if contact.status != "active" {
+                DetailPage {
+                    DetailHeader(contact.fullName,
+                                 subtitle: [contact.jobTitle, contact.department].compactMap({ $0 }).joined(separator: " · ").nonEmpty,
+                                 avatar: .monogram(contact.fullName)) {
+                        if contact.status != "active" {
+                            DetailChips {
                                 StatusBadge(text: Formatters.humanize(contact.status), systemImage: "pause.circle", tone: .neutral)
                             }
                         }
-                        if let account = contact.accountName {
-                            if let accountUuid, session.permissions.can(.read, .crmAccounts) {
-                                NavigationLink { CRMAccountDetailView(accountUuid: accountUuid) } label: {
-                                    Label(account, systemImage: "building.2")
-                                }
-                            } else {
+                    }
+                    if let account = contact.accountName {
+                        if let accountUuid, session.permissions.can(.read, .crmAccounts) {
+                            let link = NavigationLink { CRMAccountDetailView(accountUuid: accountUuid) } label: {
                                 Label(account, systemImage: "building.2")
                             }
+                            // On a wide page the header's button; a phone's list row (with its chevron).
+                            if sizeClass == .compact { link } else { link.buttonStyle(.action) }
+                        } else {
+                            Label(account, systemImage: "building.2")
                         }
                     }
-                    Section("Reach") {
-                        if let mobile = contact.mobile { PhoneLinkRow(name: "Mobile", phone: mobile) }
-                        if let phone = contact.phone { PhoneLinkRow(name: "Phone", phone: phone) }
-                        if let email = contact.email { EmailLinkRow(email: email) }
-                        if contact.mobile == nil && contact.phone == nil && contact.email == nil {
-                            Text("No phone or email yet. Tap Edit to add them.").font(.wsSubheadline).foregroundStyle(.secondaryText)
-                        }
-                    }
+                } main: {
                     CRMActivitiesSection(relation: .contact(id: contact.id, uuid: contact.uuid), reload: reload)
                     if session.canDelete(.crmContacts) {
-                        Section {
+                        DetailSection {
                             DeleteButton(title: "Delete contact", message: "This removes the contact from CRM.") {
                                 do {
                                     try await services.crm.deleteContact(contact.uuid)
@@ -641,6 +661,15 @@ struct CRMContactDetailView: View {
                                 }
                             }
                             if let deleteError { InlineErrorRow(error: deleteError) }
+                        }
+                    }
+                } side: {
+                    DetailSection("Reach", systemImage: "phone") {
+                        if let mobile = contact.mobile { PhoneLinkRow(name: "Mobile", phone: mobile) }
+                        if let phone = contact.phone { PhoneLinkRow(name: "Phone", phone: phone) }
+                        if let email = contact.email { EmailLinkRow(email: email) }
+                        if contact.mobile == nil && contact.phone == nil && contact.email == nil {
+                            Text("No phone or email yet. Tap Edit to add them.").font(.wsSubheadline).foregroundStyle(.secondaryText)
                         }
                     }
                 }

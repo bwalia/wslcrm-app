@@ -381,6 +381,7 @@ private struct AdminWorkspaceDetail: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle(shown.string("name") ?? "Workspace")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }

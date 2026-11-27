@@ -24,7 +24,7 @@ struct ShopOrderPaperworkSection: View {
     }
 
     var body: some View {
-        Section {
+        DetailSection {
             DetailRow(label: "Paid by", value: extras.paymentMethod.map(Self.methodLabel))
             if extras.bankTransferDue {
                 Label("Waiting for a bank transfer" + (extras.daysWaiting.map { " (\($0) day\($0 == 1 ? "" : "s"))" } ?? ""),
@@ -170,7 +170,7 @@ struct ShopMarkPaidForm: View {
 
     var body: some View {
         Form {
-            Section {
+            DetailSection {
                 Picker("Paid by", selection: $method) {
                     Text("Bank transfer").tag("bank_transfer")
                     Text("Cheque").tag("cheque")
@@ -187,16 +187,16 @@ struct ShopMarkPaidForm: View {
                 Text("\(order.orderNumber) for \(ShopMoney.format(order.totalMinor, currency: order.currency) ?? ""). The order goes ahead as paid, the same as a card payment.")
             }
             if amountMinor == nil {
-                Section { Label("Enter the amount that arrived, like 120.00.", systemImage: "exclamationmark.circle")
+                DetailSection { Label("Enter the amount that arrived, like 120.00.", systemImage: "exclamationmark.circle")
                     .foregroundStyle(Tone.warning.textColor) }
             } else if let short = Self.shortfall(amountMinor, total: order.totalMinor) {
-                Section {
+                DetailSection {
                     Label("That's \(ShopMoney.format(short, currency: order.currency) ?? "") less than the order total. "
                           + "Mark it paid once the whole amount has arrived.", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(Tone.warning.textColor)
                 }
             }
-            if let error { Section { InlineErrorRow(error: error) } }
+            if let error { DetailSection { InlineErrorRow(error: error) } }
         }
         .navigationTitle("Mark as paid")
         .navigationBarTitleDisplayMode(.inline)
@@ -242,7 +242,7 @@ struct ShopOrderSignatureSection: View {
     @State private var error: APIError?
 
     var body: some View {
-        Section {
+        DetailSection {
             if let signature = state?.signature {
                 if let image {
                     Image(uiImage: image)
@@ -486,7 +486,7 @@ struct ShopOrderCustomerUpdatesSection: View {
     @State private var error: APIError?
 
     var body: some View {
-        Section {
+        DetailSection {
             if updates.isEmpty {
                 Text("Nothing yet.").foregroundStyle(.secondaryText)
             }
@@ -507,6 +507,12 @@ struct ShopOrderCustomerUpdatesSection: View {
                 .swipeActions(allowsFullSwipe: false) {
                     if update.removable && update.kind == "comment" && session.shopPolicy.canUpdate {
                         Button("Remove", role: .destructive) { removing = update }
+                    }
+                }
+                // A Mac has no swipe: the same as a right-click.
+                .contextMenu {
+                    if update.removable && update.kind == "comment" && session.shopPolicy.canUpdate {
+                        Button("Remove", systemImage: "trash", role: .destructive) { removing = update }
                     }
                 }
             }
@@ -568,14 +574,14 @@ private struct ShopCustomerUpdateForm: View {
 
     var body: some View {
         Form {
-            Section {
+            DetailSection {
                 TextField("e.g. Your server is built and being tested", text: $message, axis: .vertical)
                     .lineLimit(4...10)
                     .accessibilityIdentifier("customerUpdate.message")
             } footer: {
                 Text("Shown to the customer on their order page.")
             }
-            if let error { Section { InlineErrorRow(error: error) } }
+            if let error { DetailSection { InlineErrorRow(error: error) } }
         }
         .navigationTitle("Update for the customer")
         .navigationBarTitleDisplayMode(.inline)
@@ -612,7 +618,7 @@ struct ShopOrderDeliveryChangesSection: View {
     @State private var error: APIError?
 
     var body: some View {
-        Section {
+        DetailSection {
             ForEach(requests.prefix(5)) { request in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {

@@ -161,6 +161,7 @@ struct PDTemplateDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .overlay { if template == nil, loadError == nil { SkeletonList() } }
         .navigationTitle("Template")
         .navigationBarTitleDisplayMode(.inline)

@@ -162,6 +162,7 @@ struct ReportDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle(route.title)
         .navigationBarTitleDisplayMode(.inline)
         .task(id: query) {

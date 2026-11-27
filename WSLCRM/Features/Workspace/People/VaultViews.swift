@@ -846,6 +846,7 @@ private struct VaultSecretDetail: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle(shown.string("name") ?? "Secret")
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadShares() }

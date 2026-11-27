@@ -217,6 +217,7 @@ struct PDSupplierDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .overlay { if supplier == nil, loadError == nil { SkeletonList() } }
         .navigationTitle("Supplier")
         .navigationBarTitleDisplayMode(.inline)

@@ -166,6 +166,7 @@ struct PDApprovalDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle("Approval")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

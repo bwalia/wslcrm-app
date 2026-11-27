@@ -124,6 +124,7 @@ struct JobTypeDetailView: View {
                 content(type)
             }
         }
+        .wsDetailList()
         .environment(\.editMode, $editMode)
         .navigationTitle(state.value?.name ?? "Job type")
         .navigationBarTitleDisplayMode(.inline)
