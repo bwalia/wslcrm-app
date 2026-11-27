@@ -25,6 +25,8 @@ struct DocumentDesign: Sendable, Equatable {
     var logo: Data?
     /// The workspace chose an HTML template (`source: "template"`): the server makes this kind's PDF.
     var usesTemplate = false
+    /// That template's name, to say what a PDF was made with.
+    var templateName: String?
 
     /// The standard design: what a workspace that never changed it gets.
     static func standard(_ kind: Kind) -> DocumentDesign {
@@ -67,6 +69,7 @@ struct DocumentDesign: Sendable, Equatable {
         footer = raw.footer
         logo = Self.logoData(raw.logo)
         usesTemplate = raw.source == "template"
+        templateName = usesTemplate ? raw.templateName?.trimmedOrNil : nil
     }
 
     init(title: String, billToLabel: String) {
@@ -75,12 +78,13 @@ struct DocumentDesign: Sendable, Equatable {
     }
 
     struct Raw: Decodable, Sendable {
-        var style, accent, header, font, title, billToLabel, logoPosition, logoSize, logo, source: String?
+        var style, accent, header, font, title, billToLabel, logoPosition, logoSize, logo, source, templateName: String?
         var show: [String: Bool]?
         var intro, terms, footer: RichNode?
 
         enum CodingKeys: String, CodingKey {
             case style, accent, header, font, title, billToLabel, logoPosition, logoSize, logo, show, intro, terms, footer, source
+            case templateName
         }
 
         // Field by field: one bad value doesn't lose the rest of the design.
@@ -90,6 +94,7 @@ struct DocumentDesign: Sendable, Equatable {
             style = s(.style); accent = s(.accent); header = s(.header); font = s(.font); title = s(.title)
             billToLabel = s(.billToLabel); logoPosition = s(.logoPosition); logoSize = s(.logoSize); logo = s(.logo)
             source = s(.source)
+            templateName = s(.templateName)
             show = try? c.decodeIfPresent([String: Bool].self, forKey: .show)
             intro = try? c.decodeIfPresent(RichNode.self, forKey: .intro)
             terms = try? c.decodeIfPresent(RichNode.self, forKey: .terms)
@@ -141,6 +146,9 @@ enum DocumentDesigns {
         let raw = kind == .invoice ? payload?.invoice : payload?.order
         return raw.map { DocumentDesign(kind: kind, raw: $0) } ?? .standard(kind)
     }
+
+    /// After the design or its template changed here: the next PDF reads it afresh.
+    static func forget() { cache = [:] }
 }
 
 // MARK: - Rich text
@@ -625,13 +633,20 @@ enum DesignedPDF {
 enum WorkspacePDF {
     struct Result {
         let url: URL?
-        /// Said to the person when the template was chosen but the simple design was used.
+        /// Said to the person when the template was chosen but the quick layout was used.
         let notice: String?
+        /// What it was made with ("Made with your template “Classic”").
+        var madeWith: String?
     }
 
     static func make(_ kind: DocumentDesign.Kind, uuid: String, design: DocumentDesign, client: APIClient,
                      filename: String, draw: () -> URL?) async -> Result {
-        guard design.usesTemplate else { return Result(url: draw(), notice: nil) }
+        let quick = "Made with your quick layout"
+        guard design.usesTemplate else { return Result(url: draw(), notice: nil, madeWith: quick) }
+        // Just told there's no PDF service: don't wait for it again.
+        if TemplateThumbnails.shared.serviceDown {
+            return Result(url: draw(), notice: fallbackNotice(TemplatePDFProblem.serviceUnavailable), madeWith: quick)
+        }
         do {
             let path = kind == .invoice ? "/api/v2/invoices/\(uuid)/pdf" : "/api/v2/shop/admin/orders/\(uuid)/pdf"
             var endpoint = Endpoint.get(path)
@@ -640,22 +655,79 @@ enum WorkspacePDF {
             if data.starts(with: Data("%PDF".utf8)) {
                 let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
                 try data.write(to: url, options: .atomic)
-                return Result(url: url, notice: nil)
+                return Result(url: url, notice: nil,
+                              madeWith: design.templateName.map { "Made with your template “\($0)”" } ?? "Made with your template")
             }
-            return Result(url: draw(), notice: fallbackNotice(nil))
+            return Result(url: draw(), notice: fallbackNotice(nil), madeWith: quick)
         } catch {
-            return Result(url: draw(), notice: fallbackNotice(error))
+            if TemplatePDFProblem(error) == .serviceUnavailable { TemplateThumbnails.shared.noteServiceDown() }
+            return Result(url: draw(), notice: fallbackNotice(error), madeWith: quick)
         }
     }
 
-    /// Why the simple design was used, in plain words; nothing when there's nothing to say: the workspace went back
-    /// to the designer since the design was read (409 `DESIGN_NOT_TEMPLATE`), or an older server has no PDF route (404).
+    /// Why the quick layout was used, in plain words; nothing when there's nothing to say: the workspace went back
+    /// to the quick layout since the design was read (409 `DESIGN_NOT_TEMPLATE`), or an older server has no PDF route (404).
     nonisolated static func fallbackNotice(_ error: Error?) -> String? {
-        switch error as? APIError {
-        case .notFound: nil
-        case .validation(let e) where e.status == 409: nil
-        case .server(let e) where e.status == 503: "The PDF service isn't available, so this uses the simple design."
-        default: "The template's PDF couldn't be made, so this uses the simple design."
+        fallbackNotice(TemplatePDFProblem(error))
+    }
+
+    nonisolated static func fallbackNotice(_ problem: TemplatePDFProblem) -> String? {
+        switch problem {
+        case .notTemplate, .notFound: nil
+        case .serviceUnavailable: "The PDF service isn't set up yet, so this uses your quick layout instead of your template."
+        case .mistake(let text, _): "\(text) Until it's fixed in Templates, this uses your quick layout."
+        case .other: "Your template's PDF couldn't be made just now, so this uses your quick layout."
+        }
+    }
+}
+
+/// Why the server couldn't make a template's PDF (`routes/document-pdfs.lua`, `POST /api/v2/templates/preview-pdf`),
+/// in plain words.
+enum TemplatePDFProblem: Equatable, Sendable {
+    /// 422 `TEMPLATE_ERROR`: a mistake in the template, in a sentence that names the line when the server knows it.
+    case mistake(String, line: Int?)
+    /// 503 `PDF_SERVICE_UNAVAILABLE`: the PDF service isn't set up here, or didn't answer.
+    case serviceUnavailable
+    /// 409 `DESIGN_NOT_TEMPLATE`: this kind is drawn with the quick layout (the app draws it).
+    case notTemplate
+    case notFound
+    case other
+
+    init(_ error: Error?) {
+        guard let apiError = error as? APIError, let server = apiError.serverError else {
+            self = .other
+            return
+        }
+        switch (server.status, server.code) {
+        case (_, "TEMPLATE_ERROR"), (422, _):
+            let body = server.rawBody.data(using: .utf8).flatMap { try? JSONDecoder().decode(JSONValue.self, from: $0) }
+            let line = body?["line"]?.intValue
+            self = .mistake(Self.sentence(server.message, line: line), line: line)
+        case (_, "PDF_SERVICE_UNAVAILABLE"), (503, _): self = .serviceUnavailable
+        case (_, "DESIGN_NOT_TEMPLATE"), (409, _): self = .notTemplate
+        case (404, _): self = .notFound
+        default: self = .other
+        }
+    }
+
+    /// "Line 3: {{ is never closed with }}." → "Your template has a mistake on line 3: {{ is never closed with }}."
+    static func sentence(_ message: String, line: Int?) -> String {
+        var rest = message.trimmingCharacters(in: .whitespaces)
+        if let line, rest.lowercased().hasPrefix("line \(line):") {
+            rest = String(rest.dropFirst("line \(line):".count)).trimmingCharacters(in: .whitespaces)
+        }
+        if rest.isEmpty { rest = "part of it can't be read." }
+        if !rest.hasSuffix(".") { rest += "." }
+        return line.map { "Your template has a mistake on line \($0): \(rest)" } ?? "Your template has a mistake: \(rest)"
+    }
+
+    /// What to tell someone looking at a preview.
+    var explanation: String {
+        switch self {
+        case .mistake(let text, _): text
+        case .serviceUnavailable:
+            "The PDF service isn't set up here yet, so templates can't be turned into PDFs. Ask whoever runs your system to switch it on."
+        case .notTemplate, .notFound, .other: "The preview couldn't be made just now. Try again in a minute."
         }
     }
 }

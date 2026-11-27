@@ -55,7 +55,7 @@ struct PDLeadPropertySection: View {
     let startWorkflow: () -> Void
 
     var body: some View {
-        Section {
+        DetailSection {
             if let hot = lead.string("details.hot_reason"), lead.string("details.temperature") == "hot" {
                 Label(hot, systemImage: "flame.fill").foregroundStyle(Tone.danger.textColor)
             }
@@ -87,7 +87,7 @@ struct PDLeadPropertySection: View {
                 }
             }
         } header: {
-            Text("Property Deals")
+            DetailSectionTitle("Property Deals", systemImage: "house")
         }
     }
 }

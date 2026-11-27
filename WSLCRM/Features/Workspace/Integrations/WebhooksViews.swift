@@ -253,6 +253,7 @@ private struct WebhookDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle("Webhook")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

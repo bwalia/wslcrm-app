@@ -175,6 +175,7 @@ struct ATSJobDetailView: View {
             EngageNoticeBar(notice: notice)
             content
         }
+        .wsDetailList()
         .navigationTitle(job?.title ?? "Job")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar }

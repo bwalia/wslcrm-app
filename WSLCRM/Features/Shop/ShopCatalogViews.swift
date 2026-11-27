@@ -345,6 +345,7 @@ struct ShopProductDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .wsRefreshable { await load() }
         .toolbar {
             if policy.canUpdate {

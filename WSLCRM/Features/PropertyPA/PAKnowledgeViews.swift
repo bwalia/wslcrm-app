@@ -304,6 +304,7 @@ struct PAKnowledgeDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .wsRefreshable { await load() }
     }
 

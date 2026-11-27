@@ -186,6 +186,7 @@ final class DocumentDesignTests: XCTestCase {
     /// Asks `WorkspacePDF.make` for an invoice with the server answering `status` (and `body`).
     private func make(_ kind: DocumentDesign.Kind = .invoice, template: Bool = true, status: Int, body: Data,
                       calls: Counter = Counter()) async throws -> (WorkspacePDF.Result, drawn: Bool) {
+        TemplateThumbnails.shared.retry() // a 503 in an earlier case stops the app asking for two minutes
         let client = APIClient(baseURL: URL(string: "https://api.test")!, session: StubURLProtocol.session { request in
             calls.increment(request.url?.path ?? "")
             return StubURLProtocol.Response(status: status, body: body,
@@ -211,6 +212,7 @@ final class DocumentDesignTests: XCTestCase {
         XCTAssertTrue(drawn)
         XCTAssertEqual(calls.value("/api/v2/invoices/inv-1/pdf"), 0)
         XCTAssertNil(result.notice)
+        XCTAssertEqual(result.madeWith, "Made with your quick layout")
     }
 
     func testATemplatePDFComesFromTheServer() async throws {
@@ -220,6 +222,7 @@ final class DocumentDesignTests: XCTestCase {
         XCTAssertEqual(calls.value("/api/v2/invoices/inv-1/pdf"), 1)
         XCTAssertEqual(try Data(contentsOf: try XCTUnwrap(result.url)), Self.serverPDF, "the email attaches these bytes too")
         XCTAssertNil(result.notice)
+        XCTAssertEqual(result.madeWith, "Made with your template")
         let order = Counter()
         _ = try await make(.order, status: 200, body: Self.serverPDF, calls: order)
         XCTAssertEqual(order.value("/api/v2/shop/admin/orders/inv-1/pdf"), 1)
@@ -231,10 +234,10 @@ final class DocumentDesignTests: XCTestCase {
         let cases: [(Int, Data, String?)] = [
             (409, notTemplate, nil),
             (404, Data(#"{"error":"Not found"}"#.utf8), nil),
-            (503, down, "The PDF service isn't available, so this uses the simple design."),
-            (422, Data(#"{"success":false,"code":"TEMPLATE_ERROR","error":"line 3"}"#.utf8),
-             "The template's PDF couldn't be made, so this uses the simple design."),
-            (200, Data("<html>not a pdf</html>".utf8), "The template's PDF couldn't be made, so this uses the simple design."),
+            (503, down, "The PDF service isn't set up yet, so this uses your quick layout instead of your template."),
+            (422, Data(#"{"success":false,"code":"TEMPLATE_ERROR","error":"Line 3: {{ is never closed with }}.","line":3}"#.utf8),
+             "Your template has a mistake on line 3: {{ is never closed with }}. Until it's fixed in Templates, this uses your quick layout."),
+            (200, Data("<html>not a pdf</html>".utf8), "Your template's PDF couldn't be made just now, so this uses your quick layout."),
         ]
         for (status, body, notice) in cases {
             let (result, drawn) = try await make(status: status, body: body)
@@ -244,6 +247,28 @@ final class DocumentDesignTests: XCTestCase {
             XCTAssertNotEqual(data, Self.serverPDF)
             XCTAssertEqual(result.notice, notice, "\(status)")
         }
+    }
+
+    func testAfterA503TheServerIsntAskedAgainForAWhile() async throws {
+        let down = Data(#"{"success":false,"code":"PDF_SERVICE_UNAVAILABLE","error":"PDF service not configured"}"#.utf8)
+        _ = try await make(status: 503, body: down)
+        XCTAssertTrue(TemplateThumbnails.shared.serviceDown)
+        let calls = Counter()
+        var design = DocumentDesign.standard(.invoice)
+        design.usesTemplate = true
+        let client = APIClient(baseURL: URL(string: "https://api.test")!, session: StubURLProtocol.session { request in
+            calls.increment(request.url?.path ?? "")
+            return .json(503, #"{"code":"PDF_SERVICE_UNAVAILABLE"}"#)
+        }, tokenStore: InMemoryTokenStore(AuthTokens(accessToken: "a", refreshToken: "r")), sleep: { _ in })
+        await client.setNamespace("ns")
+        let invoice = try ShopEasyTests.invoice(status: "sent", due: "2099-01-01")
+        let result = await WorkspacePDF.make(.invoice, uuid: "inv-1", design: design, client: client, filename: "x.pdf") {
+            InvoicePDFRenderer.render(invoice, design: design)
+        }
+        XCTAssertEqual(calls.value("/api/v2/invoices/inv-1/pdf"), 0, "drawn here straight away")
+        XCTAssertNotNil(result.url)
+        XCTAssertEqual(result.notice, "The PDF service isn't set up yet, so this uses your quick layout instead of your template.")
+        TemplateThumbnails.shared.retry()
     }
 
     // MARK: Currency

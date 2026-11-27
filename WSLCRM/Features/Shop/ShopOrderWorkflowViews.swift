@@ -20,8 +20,10 @@ struct ShopOrderNextStepSection: View {
     /// One key per receive attempt series, so a retry after a lost reply can't record the goods twice.
     @State private var receiveKey = MoneyRetryKey()
     @State private var printFile: URL?
-    /// Why the simple design was used though the workspace chose a template (the PDF service was down).
+    /// Why the quick layout was used though the workspace chose a template (the PDF service was down).
     @State private var printNotice: String?
+    @State private var printMadeWith: String?
+    @State private var previewing: PDFPreviewItem?
     @State private var notice: String?
     @State private var error: APIError?
 
@@ -34,7 +36,7 @@ struct ShopOrderNextStepSection: View {
         let next = ShopOrderWorkflow.next(status: order.status, orderNumber: order.orderNumber,
                                           paymentMethod: extras.paymentMethod, purchaseOrders: extras.purchaseOrders)
         let po = ShopOrderWorkflow.activePO(extras.purchaseOrders)
-        Section {
+        DetailSection {
             VStack(alignment: .leading, spacing: 4) {
                 Label(next.title, systemImage: icon(next.step)).font(.wsHeadline)
                 Text(next.detail).font(.wsSubheadline).foregroundStyle(.secondaryText)
@@ -70,8 +72,14 @@ struct ShopOrderNextStepSection: View {
                 ShareLink(item: link) { Label("Share the customer’s order link", systemImage: "square.and.arrow.up") }
             }
             if let file = printFile {
-                ShareLink(item: file) { Label("Print or share the order", systemImage: "printer") }
-                    .accessibilityIdentifier("shopOrder.print")
+                // The exact PDF the customer gets, with Share, Print and Save.
+                Button {
+                    previewing = PDFPreviewItem(url: file, title: "Order \(order.orderNumber)", subtitle: printMadeWith,
+                                                notice: printNotice)
+                } label: {
+                    Label("Preview the order", systemImage: "eye")
+                }
+                .accessibilityIdentifier("shopOrder.print")
                 if let printNotice { Label(printNotice, systemImage: "info.circle").foregroundStyle(.secondaryText) }
             }
             if let notice { Label(notice, systemImage: "checkmark.circle").foregroundStyle(Tone.success.textColor) }
@@ -88,6 +96,16 @@ struct ShopOrderNextStepSection: View {
                     }
                     printFile = made.url
                     printNotice = made.notice
+                    printMadeWith = made.madeWith
+                }
+                .sheet(item: $previewing) { item in
+                    PDFPreviewSheet(item: item, extra: {
+                        if TemplateAccess.readDesigns(session.permissions) {
+                            NavigationLink("Change how orders look") { DocumentLookView(initialKind: .order) }
+                                .font(.wsSubheadline)
+                        }
+                    })
+                    .environment(session)
                 }
                 .sheet(isPresented: $raisingPO) {
                     ShopRaisePOSheet(order: order) { created in
@@ -188,7 +206,7 @@ struct ShopOrderTimelineSection: View {
     let items: [ShopOrderWorkflow.TimelineItem]
 
     var body: some View {
-        Section("Progress") {
+        DetailSection("Progress") {
             ForEach(items) { item in
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: item.done ? "checkmark.circle.fill" : "circle")
@@ -213,7 +231,7 @@ struct ShopOrderPurchaseOrdersSection: View {
 
     var body: some View {
         if !purchaseOrders.isEmpty {
-            Section("Supplier purchase orders") {
+            DetailSection("Supplier purchase orders") {
                 ForEach(purchaseOrders) { po in
                     NavigationLink {
                         PurchaseOrderDetailView(uuid: po.uuid)
@@ -247,7 +265,7 @@ struct ShopOrderReferencesSection: View {
     @State private var error: APIError?
 
     var body: some View {
-        Section {
+        DetailSection {
             LabeledContent("Customer PO number", value: extras.customerPoNumber ?? "None")
             if session.shopPolicy.canUpdate {
                 Button {
@@ -346,7 +364,7 @@ struct ShopDeliveryAddressSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
+                DetailSection {
                     field("Recipient name", \.name, .name)
                     field("Company (leave blank for a home address)", \.company, .organizationName)
                     field("Address line 1", \.line1, .streetAddressLine1)
@@ -357,7 +375,7 @@ struct ShopDeliveryAddressSheet: View {
                     field("Phone for the courier", \.phone, .telephoneNumber)
                     field("Email", \.email, .emailAddress)
                 }
-                Section {
+                DetailSection {
                     TextField("Why (internal note, optional)", text: $note, axis: .vertical).lineLimit(1...4)
                     if !openPOs.isEmpty {
                         Toggle("Also change it on the open supplier PO\(openPOs.count == 1 ? "" : "s")", isOn: $updatePOs)
@@ -367,7 +385,7 @@ struct ShopDeliveryAddressSheet: View {
                         Text("A drop-ship PO already sent to the supplier keeps the old address until you tell them.")
                     }
                 }
-                if let error { Section { InlineErrorRow(error: error) } }
+                if let error { DetailSection { InlineErrorRow(error: error) } }
             }
             .navigationTitle("Change delivery address")
             .navigationBarTitleDisplayMode(.inline)
@@ -453,7 +471,7 @@ struct ShopRaisePOSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
+                DetailSection {
                     Picker("Supplier", selection: $supplierUuid) {
                         Text("Choose…").tag("")
                         ForEach(suppliers) { Text($0.name).tag($0.uuid) }
@@ -472,7 +490,7 @@ struct ShopRaisePOSheet: View {
                     Text("Drafted for you to check, then email it to the supplier from the purchase order. The supplier sees the deal code, not the customer.")
                 }
                 if let preview {
-                    Section("Reference and delivery") {
+                    DetailSection("Reference and delivery") {
                         if let code = preview.dealCode { LabeledContent("Reference on the PO", value: code) }
                         Toggle("Drop-ship: the supplier delivers straight to the customer", isOn: $dropShip)
                             .onChange(of: dropShip) { Task { await loadPreview() } }
@@ -486,7 +504,7 @@ struct ShopRaisePOSheet: View {
                                 .foregroundStyle(preview.deliverToText == nil ? Tone.warning.textColor : Color.primary)
                         }
                     }
-                    Section {
+                    DetailSection {
                         ForEach(lines) { line in
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
@@ -513,15 +531,15 @@ struct ShopRaisePOSheet: View {
                         if preview.missingCosts > 0 { Text("Leave a cost empty to fill it in on the PO later.") }
                     }
                     if let printed = preview.notes {
-                        Section("Printed on the PO") { Text(printed).font(.wsFootnote) }
+                        DetailSection("Printed on the PO") { Text(printed).font(.wsFootnote) }
                     }
                 }
-                Section {
+                DetailSection {
                     TextField("Extra notes for the supplier", text: $notes, axis: .vertical).lineLimit(2...6)
                 } footer: {
                     Text("The supplier reads this: never put the customer’s name, email or phone here.")
                 }
-                if let error { Section { InlineErrorRow(error: error) } }
+                if let error { DetailSection { InlineErrorRow(error: error) } }
             }
             .navigationTitle("Raise supplier PO")
             .navigationBarTitleDisplayMode(.inline)
@@ -624,7 +642,7 @@ struct ShopOrderUpdateEmailSection: View {
 
     var body: some View {
         if session.shopPolicy.canUpdate {
-            Section {
+            DetailSection {
                 if let info {
                     if let to = info.to {
                         LabeledContent("Goes to", value: to)
@@ -712,13 +730,13 @@ private struct ShopOrderUpdateEmailComposer: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
+                DetailSection {
                     Picker("Start from", selection: Binding(get: { preset }, set: { choose($0) })) {
                         ForEach(info.presets) { Text($0.label).tag($0.key) }
                     }
                     .accessibilityIdentifier("updateEmail.preset")
                 }
-                Section {
+                DetailSection {
                     TextField("Headline", text: $headline, axis: .vertical)
                         .lineLimit(1...3)
                         .onChange(of: headline) { limit(&headline, info.limits.headlineMax) }
@@ -728,7 +746,7 @@ private struct ShopOrderUpdateEmailComposer: View {
                 } footer: {
                     Text("\(message.count) / \(info.limits.messageMax) characters." + (info.signature.map { " Signed “\($0)”." } ?? ""))
                 }
-                Section("Preview") {
+                DetailSection("Preview") {
                     if let preview {
                         if let subject = preview.subject { LabeledContent("Subject", value: subject) }
                         Text(preview.plainText).font(.wsFootnote).textSelection(.enabled)
@@ -739,7 +757,7 @@ private struct ShopOrderUpdateEmailComposer: View {
                         Text("The email appears here as the customer will read it.").foregroundStyle(.secondaryText)
                     }
                 }
-                Section {
+                DetailSection {
                     Button {
                         Task { await send(test: true) }
                     } label: {

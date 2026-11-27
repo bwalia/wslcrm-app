@@ -240,6 +240,7 @@ private struct RoleDetailView: View {
                 Section { Text("Built-in roles can’t be deleted.").font(.wsFootnote).foregroundStyle(.secondaryText) }
             }
         }
+        .wsDetailList()
         .navigationTitle("Role")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }

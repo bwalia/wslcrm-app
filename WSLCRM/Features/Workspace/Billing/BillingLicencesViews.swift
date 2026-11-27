@@ -217,6 +217,7 @@ private struct BillingLicenceDetail: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle("Licence")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }

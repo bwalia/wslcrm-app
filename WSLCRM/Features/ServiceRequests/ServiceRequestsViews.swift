@@ -350,6 +350,7 @@ struct ServiceRequestDetailView: View {
 
 private struct ServiceRequestDetailContent: View {
     @Bindable var model: ServiceRequestDetailViewModel
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(SessionStore.self) private var session
     @Environment(\.services) private var services
     @State private var pendingStatus: ServiceRequestStatus?
@@ -447,62 +448,68 @@ private struct ServiceRequestDetailContent: View {
     private func loaded(_ detail: ServiceRequestDetail) -> some View {
         let request = detail.request
         let policy = session.policy
-        return List {
-            Section {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(request.title).font(.wsTitle2.bold())
-                    HStack {
-                        request.status.badge
-                        if request.priority != .normal { request.priority.badge }
-                        if request.slaBreached {
-                            StatusBadge(text: "Missed its target", systemImage: "exclamationmark.triangle.fill", tone: .danger)
-                        }
-                    }
-                    if let description = request.description {
-                        Text(description).foregroundStyle(.secondaryText)
+        let canConvert = policy.canConvertServiceRequests && request.status.canConvertToJob
+        let canChange = policy.canUpdateServiceRequests && !detail.allowedTransitions.isEmpty
+        let wide = sizeClass != .compact
+        return DetailPage {
+            DetailHeader(request.title, subtitle: request.customerName,
+                         avatar: .icon("exclamationmark.bubble.fill", Palette.tile(for: "field_service_requests"))) {
+                DetailChips {
+                    request.status.badge
+                    if request.priority != .normal { request.priority.badge }
+                    if request.slaBreached {
+                        StatusBadge(text: "Missed its target", systemImage: "exclamationmark.triangle.fill", tone: .danger)
                     }
                 }
-                .padding(.vertical, 4)
+                if let description = request.description {
+                    Text(description).wsParagraph().foregroundStyle(.secondaryText)
+                }
+            } actions: {
+                if wide, canConvert || canChange {
+                    RecordActionBar(showsMore: false) {
+                        if canConvert { convertButton(detail).buttonStyle(.action(prominent: true)) }
+                        if canChange {
+                            statusMenu(detail)
+                                .menuStyle(.button)
+                                .menuIndicator(.hidden)
+                                .fixedSize()
+                        }
+                    } more: { EmptyView() }
+                }
             }
-
-            if (policy.canConvertServiceRequests && request.status.canConvertToJob)
-                || (policy.canUpdateServiceRequests && !detail.allowedTransitions.isEmpty) {
-                Section {
-                    if policy.canConvertServiceRequests, request.status.canConvertToJob {
-                        Button {
-                            showingConvert = true
-                        } label: {
-                            Label(detail.jobs.isEmpty ? "Convert to job" : "Create another job", systemImage: "arrow.right.doc.on.clipboard")
-                        }
-                        .buttonStyle(.large(.progress))
-                        .disabled(model.busy)
-                        .listRowSeparator(.hidden)
-                        .accessibilityIdentifier("request.convert")
+        } main: {
+            if !wide, canConvert || canChange {
+                DetailSection {
+                    if canConvert {
+                        convertButton(detail)
+                            .buttonStyle(.large(.progress))
+                            .listRowSeparator(.hidden)
                     }
-                    if policy.canUpdateServiceRequests, !detail.allowedTransitions.isEmpty {
-                        Menu {
-                            ForEach(detail.allowedTransitions, id: \.self) { status in
-                                Button(status.actionTitle, systemImage: status.systemImage) {
-                                    if status == .resolved || status == .closed {
-                                        pendingStatus = status
-                                    } else {
-                                        Task { await model.setStatus(status, resolutionNotes: nil) }
-                                    }
-                                }
-                            }
-                        } label: {
-                            Label("Change status", systemImage: "arrow.triangle.swap")
-                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        }
-                        .disabled(model.busy)
-                        .accessibilityIdentifier("request.changeStatus")
-                    }
+                    if canChange { statusMenu(detail) }
                 } header: {
                     Text("Actions")
                 }
             }
 
-            Section("Customer & site") {
+            if !detail.jobs.isEmpty {
+                DetailSection("Jobs", systemImage: "wrench.and.screwdriver") {
+                    ForEach(detail.jobs) { job in
+                        NavigationLink(value: JobRoute(uuid: job.uuid)) {
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text(job.jobNumber ?? "Job").font(.wsHeadline).foregroundStyle(Color(.label))
+                                        .accessibilityIdentifier("request.job")
+                                    Text(job.title ?? "").font(.wsSubheadline).foregroundStyle(.secondaryText)
+                                }
+                                Spacer()
+                                JobStatus(api: job.status).badge
+                            }
+                        }
+                    }
+                }
+            }
+
+            DetailSection("Customer & site", systemImage: "person.crop.circle") {
                 DetailRow(label: "Name", value: request.customerName, systemImage: "person")
                 DetailRow(label: "Site", value: request.siteName, systemImage: "building.2")
                 if let phone = request.customerPhone {
@@ -518,8 +525,16 @@ private struct ServiceRequestDetailContent: View {
                 DetailRow(label: "Unit", value: [request.productName, request.productRef].compactMap { $0 }.joined(separator: " · "),
                           systemImage: "wrench.adjustable")
             }
+            if !wide { handling(request) }
+        } side: {
+            if wide { handling(request) }
+        }
+    }
 
-            Section("Handling") {
+    /// Who handles it and by when, and what happened when.
+    @ViewBuilder
+    private func handling(_ request: ServiceRequest) -> some View {
+            DetailSection("Handling", systemImage: "person.badge.clock") {
                 // Read-only: #611 dropped the separate "assign a manager" step — the engineer is
                 // assigned when the request becomes a job.
                 DetailRow(label: "Manager", value: request.assignedManagerName ?? "Unassigned")
@@ -528,7 +543,7 @@ private struct ServiceRequestDetailContent: View {
                 DetailRow(label: "Resolution", value: request.resolutionNotes)
             }
 
-            Section("Timeline") {
+            DetailSection("Timeline", systemImage: "clock") {
                 DetailRow(label: "Logged", value: Formatters.dateTime(request.createdAt))
                 DetailRow(label: "First response", value: Formatters.dateTime(request.firstResponseAt) ?? "Not yet")
                 if let resolved = request.resolvedAt {
@@ -538,26 +553,36 @@ private struct ServiceRequestDetailContent: View {
                     DetailRow(label: "Closed", value: Formatters.dateTime(closed))
                 }
             }
+    }
 
-            if !detail.jobs.isEmpty {
-                Section("Jobs") {
-                    ForEach(detail.jobs) { job in
-                        NavigationLink(value: JobRoute(uuid: job.uuid)) {
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text(job.jobNumber ?? "Job").font(.wsHeadline)
-                                        .accessibilityIdentifier("request.job")
-                                    Text(job.title ?? "").font(.wsSubheadline).foregroundStyle(.secondaryText)
-                                }
-                                Spacer()
-                                JobStatus(api: job.status).badge
-                            }
-                        }
+    private func convertButton(_ detail: ServiceRequestDetail) -> some View {
+        Button {
+            showingConvert = true
+        } label: {
+            Label(detail.jobs.isEmpty ? "Convert to job" : "Create another job", systemImage: "arrow.right.doc.on.clipboard")
+        }
+        .disabled(model.busy)
+        .accessibilityIdentifier("request.convert")
+    }
+
+    private func statusMenu(_ detail: ServiceRequestDetail) -> some View {
+        Menu {
+            ForEach(detail.allowedTransitions, id: \.self) { status in
+                Button(status.actionTitle, systemImage: status.systemImage) {
+                    if status == .resolved || status == .closed {
+                        pendingStatus = status
+                    } else {
+                        Task { await model.setStatus(status, resolutionNotes: nil) }
                     }
                 }
             }
+        } label: {
+            Label("Change status", systemImage: "arrow.triangle.swap")
+                .frame(maxWidth: sizeClass == .compact ? .infinity : nil, minHeight: sizeClass == .compact ? 44 : nil,
+                       alignment: .leading)
         }
-        .listStyle(.insetGrouped)
+        .disabled(model.busy)
+        .accessibilityIdentifier("request.changeStatus")
     }
 }
 

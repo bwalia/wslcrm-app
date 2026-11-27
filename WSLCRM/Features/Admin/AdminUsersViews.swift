@@ -292,6 +292,7 @@ private struct AdminUserDetail: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle(shown.personName() ?? "User")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }

@@ -156,11 +156,11 @@ struct PurchaseOrderPortalSections: View {
     var body: some View {
         // Modals and loading hang off the header, never the Section (they'd be copied onto every row).
         if !loaded || panel != nil || error != nil {
-            Section {
+            DetailSection {
                 if let error { InlineErrorRow(error: error) { Task { await load() } } }
                 if let panel { summary(panel) } else if !loaded { SkeletonRow() }
             } header: {
-                Text("Supplier portal")
+                DetailSectionTitle("Supplier portal", systemImage: "person.2.badge.key")
                     .task(id: po.id + (po.sentAt?.description ?? "") + po.status.rawValue) { await load() }
                     .alert(alertTitle, isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
                         TextField("Reason", text: $reason)
@@ -236,7 +236,7 @@ struct PurchaseOrderPortalSections: View {
     }
 
     private func documentsSection(_ panel: Record) -> some View {
-        Section("Documents") {
+        DetailSection("Documents", systemImage: "doc") {
             let documents = panel.records("documents", idKeys: ["id"])
             if documents.isEmpty { Text("No documents yet.").font(.wsSubheadline).foregroundStyle(.secondaryText) }
             ForEach(documents) { doc in
@@ -268,7 +268,7 @@ struct PurchaseOrderPortalSections: View {
     }
 
     private func invoicesSection(_ panel: Record, currency: String) -> some View {
-        Section("Supplier invoices") {
+        DetailSection("Supplier invoices", systemImage: "doc.text") {
             let invoices = panel.records("invoices", idKeys: ["id"])
             if invoices.isEmpty { Text("No proforma or invoice yet.").font(.wsSubheadline).foregroundStyle(.secondaryText) }
             ForEach(invoices) { invoice in
@@ -302,7 +302,7 @@ struct PurchaseOrderPortalSections: View {
     }
 
     private func paymentsSection(_ panel: Record, currency: String) -> some View {
-        Section("Payments") {
+        DetailSection("Payments", systemImage: "sterlingsign.circle") {
             let payments = panel.records("payments", idKeys: ["id"])
             if payments.isEmpty { Text("No payments yet.").font(.wsSubheadline).foregroundStyle(.secondaryText) }
             ForEach(payments) { payment in
@@ -349,7 +349,7 @@ struct PurchaseOrderPortalSections: View {
     }
 
     private func shipmentsSection(_ panel: Record) -> some View {
-        Section("Deliveries") {
+        DetailSection("Deliveries", systemImage: "truck.box") {
             let shipments = panel.records("shipments", idKeys: ["id"])
             if shipments.isEmpty { Text("Nothing dispatched yet.").font(.wsSubheadline).foregroundStyle(.secondaryText) }
             ForEach(shipments) { shipment in
@@ -380,7 +380,7 @@ struct PurchaseOrderPortalSections: View {
     }
 
     private func messagesSection(_ panel: Record) -> some View {
-        Section("Messages with the supplier") {
+        DetailSection("Messages with the supplier", systemImage: "bubble.left.and.bubble.right") {
             let messages = panel.records("messages", idKeys: ["id"])
             if messages.isEmpty { Text("No messages yet.").font(.wsSubheadline).foregroundStyle(.secondaryText) }
             ForEach(messages) { item in
@@ -422,7 +422,7 @@ struct PurchaseOrderPortalSections: View {
             return nil
         }
         if !entries.isEmpty {
-            Section {
+            DetailSection {
                 DisclosureGroup("History (\(entries.count))") {
                     ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
                         VStack(alignment: .leading, spacing: 2) {

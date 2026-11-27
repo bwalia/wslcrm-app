@@ -117,6 +117,7 @@ struct CMSMediaDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .safeAreaInset(edge: .top, spacing: 0) { EngageNoticeBar(notice: notice) }
         .navigationTitle(CMSMedia.name(shown))
         .navigationBarTitleDisplayMode(.inline)

@@ -34,37 +34,43 @@ private struct ResourceDetailContent: View {
     }
 
     var body: some View {
-        List {
-            if let loadError, record == nil {
-                Section { InlineErrorRow(error: loadError) { Task { await load() } } }
-            } else if let loadError {
-                // Showing the list row; the full record failed to load.
-                Section { InlineErrorRow(error: loadError) { Task { await load() } } }
-            }
+        DetailPage {
             if let record {
                 header(record)
+            } else if let loadError {
+                InlineErrorRow(error: loadError) { Task { await load() } }
+            }
+        } main: {
+            if let record {
+                if let loadError {
+                    // Showing the list row; the full record failed to load.
+                    DetailSection { InlineErrorRow(error: loadError) { Task { await load() } } }
+                }
                 if let notice {
-                    Section {
+                    DetailSection {
                         Label(notice, systemImage: "checkmark.circle.fill")
                             .foregroundStyle(Tone.success.textColor)
                             .accessibilityIdentifier("resource.notice")
                     }
                 }
-                if let actionError { Section { InlineErrorRow(error: actionError) } }
-                ForEach(sections(for: record)) { section in
+                if let actionError { DetailSection { InlineErrorRow(error: actionError) } }
+                ForEach(mainSections(for: record)) { section in
                     FieldSection(section: section, record: record)
                 }
-                linksSection(record)
-                actionsSection(record)
-                ForEach(descriptor.related) { related in
+                ForEach(descriptor.related.filter { $0.embeddedKey != nil }) { related in
                     RelatedSection(related: related, parent: record)
                 }
+                relatedLinks(record)
                 if canDelete {
-                    Section {
+                    DetailSection {
                         DeleteButton(title: "Delete \(descriptor.noun)",
                                      message: "This can’t be undone.") { await delete(record) }
                     }
                 }
+            }
+        } side: {
+            if let record, let facts = sideSection(for: record) {
+                FieldSection(section: facts, record: record, fallbackTitle: "Details")
             }
         }
         .overlay { if record == nil, loadError == nil { SkeletonList() } }
@@ -115,57 +121,66 @@ private struct ResourceDetailContent: View {
 
     // MARK: - Pieces
 
-    @ViewBuilder
     private func header(_ record: Record) -> some View {
-        Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(descriptor.singleton ? descriptor.title : RecordRow(record: record, list: descriptor.list).title)
-                    .font(.wsTitle3.bold())
-                    .accessibilityAddTraits(.isHeader)
-                if descriptor.singleton, let summary = descriptor.summary {
-                    Text(summary).font(.wsSubheadline).foregroundStyle(.secondaryText)
-                } else if let subtitle = RecordRow(record: record, list: descriptor.list).subtitle {
-                    Text(subtitle).font(.wsSubheadline).foregroundStyle(.secondaryText)
-                }
-                if let badge = descriptor.list.badge, let value = record.string(badge.key) {
-                    FieldBadge(field: badge, value: value)
-                }
+        let row = RecordRow(record: record, list: descriptor.list)
+        let title = descriptor.singleton ? descriptor.title : row.title
+        return DetailHeader(title,
+                            subtitle: descriptor.singleton ? descriptor.summary : row.subtitle,
+                            avatar: .icon(descriptor.systemImage, Palette.tile(for: descriptor.id))) {
+            if let badge = descriptor.list.badge, let value = record.string(badge.key) {
+                DetailChips { FieldBadge(field: badge, value: value) }
             }
-            .padding(.vertical, 4)
+        } actions: {
+            actionBar(record)
         }
     }
 
+    /// The descriptor's actions this person may run on this record: the first one prominent, the rest beside it,
+    /// destructive ones under More.
     @ViewBuilder
-    private func actionsSection(_ record: Record) -> some View {
+    private func actionBar(_ record: Record) -> some View {
         let actions = descriptor.actions.filter { action in
             (action.visibleWhen?.matches(record) ?? true)
                 && session.permissions.allows(action.action, action.module ?? descriptor.permissions.module)
         }
+        let plain = actions.filter { !$0.destructive }
+        let destructive = actions.filter(\.destructive)
         if !actions.isEmpty {
-            Section {
-                ForEach(actions) { action in
-                    Button(role: action.destructive ? .destructive : nil) {
-                        if !action.inputs.isEmpty { running = action }
-                        else if action.confirm != nil || action.destructive { confirming = action }
-                        else { Task { _ = await run(action, on: record, inputs: [:]) } }
-                    } label: {
-                        Label(action.title, systemImage: action.systemImage)
-                    }
-                    .frame(minHeight: 44)
-                    .disabled(busy)
-                    .accessibilityIdentifier("resource.action.\(action.id)")
+            RecordActionBar(showsMore: !destructive.isEmpty) {
+                ForEach(plain) { action in
+                    actionButton(action, record)
+                        .buttonStyle(.action(prominent: action.id == plain.first?.id))
                 }
+            } more: {
+                ForEach(destructive) { action in actionButton(action, record) }
             }
+            .disabled(busy)
         }
     }
 
+    private func actionButton(_ action: ActionSpec, _ record: Record) -> some View {
+        Button(role: action.destructive ? .destructive : nil) {
+            if !action.inputs.isEmpty { running = action }
+            else if action.confirm != nil || action.destructive { confirming = action }
+            else { Task { _ = await run(action, on: record, inputs: [:]) } }
+        } label: {
+            Label(action.title, systemImage: action.systemImage)
+        }
+        .accessibilityIdentifier("resource.action.\(action.id)")
+    }
+
+    /// Other screens this record leads to: the records it points at and its related lists, in one section.
     @ViewBuilder
-    private func linksSection(_ record: Record) -> some View {
+    private func relatedLinks(_ record: Record) -> some View {
         let links = descriptor.links.filter { record.string($0.key) != nil }
-        if !links.isEmpty {
-            Section {
+        let lists = descriptor.related.filter { $0.embeddedKey == nil && ModuleCatalog.descriptor($0.descriptorID) != nil }
+        if !links.isEmpty || !lists.isEmpty {
+            DetailSection("Related", systemImage: "link") {
                 ForEach(links) { link in
                     LinkTargetRow(link: link, id: record.string(link.key) ?? "")
+                }
+                ForEach(lists) { related in
+                    RelatedSection(related: related, parent: record)
                 }
             }
         }
@@ -174,6 +189,17 @@ private struct ResourceDetailContent: View {
     /// The descriptor's sections, or every field the server sent when it describes none.
     private func sections(for record: Record) -> [SectionSpec] {
         descriptor.detail.isEmpty ? [AutoFields.section(for: record)] : descriptor.detail.filter { $0.isVisible(for: record) }
+    }
+
+    /// On a wide page the first section (the record's key facts) sits beside the rest — when there is a rest.
+    private func sideSection(for record: Record) -> SectionSpec? {
+        let all = sections(for: record)
+        return all.count > 1 ? all.first : nil
+    }
+
+    private func mainSections(for record: Record) -> [SectionSpec] {
+        let all = sections(for: record)
+        return all.count > 1 ? Array(all.dropFirst()) : all
     }
 
     private var isWritable: Bool {
@@ -296,14 +322,19 @@ extension LinkTargetRow where RowLabel == EmptyView {
 struct FieldSection: View {
     let section: SectionSpec
     let record: Record
+    /// A card's title when the section has none (a list section stays untitled).
+    var fallbackTitle: String?
+    @Environment(\.detailLayout) private var layout
 
     var body: some View {
         let shown = section.fields.filter { FieldFormatter.text(record, $0) != nil }
         if !shown.isEmpty {
-            Section {
+            DetailSection {
                 ForEach(shown) { field in FieldValueRow(field: field, record: record) }
             } header: {
-                if let title = section.title { Text(title) }
+                if let title = section.title ?? (layout == .cards ? fallbackTitle : nil) {
+                    DetailSectionTitle(title)
+                }
             } footer: {
                 if let footer = section.footer { Text(footer) }
             }
@@ -333,7 +364,7 @@ struct FieldValueRow: View {
         case .multiline, .json:
             VStack(alignment: .leading, spacing: 4) {
                 Text(field.label).font(.wsCaption).foregroundStyle(.secondaryText)
-                Text(text).font(.wsBody).textSelection(.enabled)
+                Text(text).wsParagraph().textSelection(.enabled)
             }
             .padding(.vertical, 2)
             .accessibilityElement(children: .combine)
@@ -358,11 +389,12 @@ private struct RelatedSection: View {
             if let key = related.embeddedKey {
                 let rows = parent.records(key, idKeys: child.api.idKeys)
                 if !rows.isEmpty {
-                    Section(related.title) {
+                    DetailSection(related.title, systemImage: child.systemImage) {
                         ForEach(rows) { row in
                             if child.api.item != nil {
                                 NavigationLink(value: ResourceRoute(descriptorID: child.id, recordID: row.id, seed: row)) {
-                                    RecordRow(record: row, list: child.list)
+                                    // Its own colours in a card too (a card's links are otherwise in the accent).
+                                    RecordRow(record: row, list: child.list).foregroundStyle(Color(.label))
                                 }
                             } else {
                                 RecordRow(record: row, list: child.list)
@@ -371,14 +403,13 @@ private struct RelatedSection: View {
                     }
                 }
             } else {
-                Section {
-                    NavigationLink(value: ResourceListRoute(child.id,
-                                                            query: related.query.mapValues { parent.fill($0) },
-                                                            title: related.title)) {
-                        Label(related.title, systemImage: child.systemImage)
-                    }
-                    .frame(minHeight: 44)
+                // A link to the related list (a row of the page's "Related" section).
+                NavigationLink(value: ResourceListRoute(child.id,
+                                                        query: related.query.mapValues { parent.fill($0) },
+                                                        title: related.title)) {
+                    Label(related.title, systemImage: child.systemImage)
                 }
+                .frame(minHeight: 44)
             }
         }
     }

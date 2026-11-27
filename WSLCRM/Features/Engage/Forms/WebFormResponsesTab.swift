@@ -316,6 +316,7 @@ struct WebFormResponseDetailView: View {
                 InlineErrorRow(error: loadError) { Task { await load() } }
             }
         }
+        .wsDetailList()
         .overlay { if submission == nil && loadError == nil { ProgressView() } }
         .navigationTitle("Response")
         .navigationBarTitleDisplayMode(.inline)

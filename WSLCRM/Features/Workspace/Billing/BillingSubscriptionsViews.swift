@@ -458,6 +458,7 @@ private struct BillingSubscriptionDetail: View {
                 Text("Everything this customer can use in the app right now: their plan, purchases and grants together.")
             }
         }
+        .wsDetailList()
         .navigationTitle("Subscription")
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadAccess() }
@@ -537,6 +538,7 @@ private struct BillingPurchaseDetail: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle("Purchase")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $refunding) {
@@ -663,6 +665,7 @@ private struct BillingGrantDetail: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle("Granted access")
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("Revoke this access?", isPresented: $confirming, titleVisibility: .visible) {

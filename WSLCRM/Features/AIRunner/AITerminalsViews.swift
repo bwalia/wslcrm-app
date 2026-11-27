@@ -230,6 +230,7 @@ struct AITerminalDetailView: View {
             }
             .disabled(busy)
         }
+        .wsDetailList()
         .wsRefreshable { await load() }
         .confirmationDialog(confirm == "rotate" ? "New secret for \(name)?" : "Remove \(name)?",
                             isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }),

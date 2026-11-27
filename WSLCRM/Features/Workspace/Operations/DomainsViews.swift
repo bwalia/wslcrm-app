@@ -404,6 +404,7 @@ struct DomainDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle(domain.string("domain_name") ?? "Domain")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }

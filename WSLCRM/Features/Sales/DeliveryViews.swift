@@ -392,6 +392,7 @@ struct DeliveryPartnerDetailView: View {
                 Text("A partner can’t be removed while they still have orders from this store that aren’t delivered.")
             }
         }
+        .wsDetailList()
         .disabled(busy)
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)
@@ -756,6 +757,7 @@ struct DeliveryRequestDetailView: View {
                 DetailRow(label: "Answered", value: Formatters.dateTime(request.date("responded_at")))
             }
         }
+        .wsDetailList()
         .disabled(busy)
         .navigationTitle(request.string("order.order_number") ?? "Delivery request")
         .navigationBarTitleDisplayMode(.inline)

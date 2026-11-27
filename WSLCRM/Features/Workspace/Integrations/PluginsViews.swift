@@ -251,6 +251,7 @@ private struct PluginDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle(plugin.string("name") ?? "Plugin")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { if original.isEmpty { reset(settings) } }

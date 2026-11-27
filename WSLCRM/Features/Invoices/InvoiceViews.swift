@@ -1,4 +1,3 @@
-import QuickLook
 import SwiftUI
 import UIKit
 
@@ -42,9 +41,22 @@ struct InvoicesListView: View {
         }
         .navigationTitle("Invoices")
         .toolbar {
-            if session.permissions.can(.create, .invoices) || session.permissions.can(.read, moduleName: "tax_rates_config") {
+            if session.permissions.can(.create, .invoices) || session.permissions.can(.read, moduleName: "tax_rates_config")
+                || TemplateAccess.readDesigns(session.permissions) || TemplateAccess.read(session.permissions) {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        if TemplateAccess.readDesigns(session.permissions) {
+                            NavigationLink(value: NativeScreenRoute(WorkspaceScreen.documentDesign)) {
+                                Label("How invoices look", systemImage: "paintpalette")
+                            }
+                            .accessibilityIdentifier("invoices.design")
+                        }
+                        if TemplateAccess.read(session.permissions) {
+                            NavigationLink(value: NativeScreenRoute(WorkspaceScreen.templates)) {
+                                Label("Invoice templates", systemImage: "doc.richtext")
+                            }
+                            .accessibilityIdentifier("invoices.templates")
+                        }
                         if session.permissions.can(.create, .invoices) {
                             Button("Bill hours from timesheets", systemImage: "clock.badge.checkmark") { billingHours = true }
                                 .accessibilityIdentifier("invoices.fromTimesheets")
@@ -276,6 +288,7 @@ struct InvoiceDetailView: View {
     /// What just happened before this screen opened ("Invoice created").
     var opening: String?
     @Environment(\.services) private var services
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var state: LoadState<Invoice> = .idle
@@ -288,9 +301,10 @@ struct InvoiceDetailView: View {
     @State private var confirmDelete = false
     @State private var deletingPayment: InvoicePayment?
     @State private var pdfURL: URL?
-    @State private var previewURL: URL?
-    /// Why the simple design was used though the workspace chose a template (the PDF service was down).
+    @State private var previewing: PDFPreviewItem?
+    /// Why the quick layout was used though the workspace chose a template (the PDF service was down).
     @State private var pdfNotice: String?
+    @State private var pdfMadeWith: String?
     @State private var emailing = false
     @State private var editingHeader = false
     @State private var notice: String?
@@ -320,19 +334,10 @@ struct InvoiceDetailView: View {
         .toolbar {
             if let invoice = state.value {
                 ToolbarItem(placement: .topBarTrailing) {
-                    // One tap shows the PDF; Quick Look has its own share button.
-                    Button("Preview PDF", systemImage: "doc.richtext") {
-                        Task {
-                            if pdfURL == nil {
-                                let made = await InvoicePDFRenderer.make(invoice, company: session.workspace?.name,
-                                                                         services: services, workspace: session.workspace?.uuid)
-                                pdfURL = made.url
-                                pdfNotice = made.notice
-                            }
-                            previewURL = pdfURL
-                        }
-                    }
-                    .accessibilityIdentifier("invoice.pdf")
+                    // The exact PDF the customer gets, with Send, Share, Print and Save.
+                    Button("Preview", systemImage: "eye") { Task { await preview(invoice) } }
+                        .help("See the PDF your customer gets")
+                        .accessibilityIdentifier("invoice.pdf")
                 }
                 if session.permissions.can(.update, .invoices) && invoice.canEditHeader {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -341,7 +346,19 @@ struct InvoiceDetailView: View {
                 }
             }
         }
-        .quickLookPreview($previewURL)
+        .sheet(item: $previewing) { item in
+            let invoice = state.value
+            let canEmail = session.permissions.can(.update, .invoices) && invoice?.canEmail == true
+            PDFPreviewSheet(item: item, sendTitle: canEmail ? invoice?.emailActionTitle : nil,
+                            onSend: canEmail ? { emailing = true } : nil, extra: {
+                if TemplateAccess.readDesigns(session.permissions) {
+                    NavigationLink("Change how invoices look") { DocumentLookView(initialKind: .invoice) }
+                        .font(.wsSubheadline)
+                        .accessibilityIdentifier("invoice.preview.design")
+                }
+            })
+            .environment(session)
+        }
         .sheet(item: $editingItem) { item in
             LineItemSheet(item: item) { body in
                 await mutate("Line saved.") { try await services.invoices.updateItem(invoiceUuid, itemId: item.id, body) }
@@ -358,7 +375,7 @@ struct InvoiceDetailView: View {
         }
         .sheet(isPresented: $emailing) {
             if let invoice = state.value {
-                EmailInvoiceSheet(invoice: invoice, company: session.workspace?.name) { to in
+                EmailInvoiceSheet(invoice: invoice, company: session.workspace?.name, made: madePDF) { to in
                     notice = invoice.displayStatus == .overdue ? "Reminder emailed to \(to)."
                         : invoice.status == .draft ? "Emailed to \(to) and marked as sent." : "Emailed to \(to) again."
                     actionError = nil
@@ -436,8 +453,7 @@ struct InvoiceDetailView: View {
                     Label(invoice.emailActionTitle,
                           systemImage: invoice.displayStatus == .overdue ? "bell.badge.fill" : "envelope.fill")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(invoice.displayStatus == .overdue ? Tone.warning.solidColor : nil)
+                .buttonStyle(.action(prominent: true, tone: invoice.displayStatus == .overdue ? .warning : .brand))
                 .accessibilityIdentifier("invoice.email")
             }
             if permissions.can(.create, .payments) && invoice.canRecordPayment {
@@ -459,13 +475,14 @@ struct InvoiceDetailView: View {
     private func content(_ invoice: Invoice) -> some View {
         let permissions = session.permissions
         let canUpdate = permissions.can(.update, .invoices)
-        return List {
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    invoice.displayStatus.badge
-                    Text(invoice.customerName ?? "No customer").font(.wsTitle2.bold())
-                    if let email = invoice.customerEmail { Text(email).foregroundStyle(.secondaryText) }
-                    HStack(alignment: .firstTextBaseline) {
+        let wide = sizeClass != .compact
+        return DetailPage {
+            DetailHeader(invoice.customerName ?? "No customer",
+                         subtitle: [invoice.displayNumber, invoice.customerEmail].compactMap { $0 }.joined(separator: " · "),
+                         avatar: .icon("doc.text", Palette.tile(for: "invoices"))) {
+                DetailChips { invoice.displayStatus.badge }
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(Formatters.money(invoice.totalAmount, currency: invoice.currency) ?? "").font(.wsTitle.monospacedDigit().bold())
                         if invoice.balanceDue > 0 && invoice.amountPaid > 0 {
                             Text("\(Formatters.money(invoice.balanceDue, currency: invoice.currency) ?? "") due")
@@ -475,29 +492,25 @@ struct InvoiceDetailView: View {
                     Text([invoice.issueDate.map { "Issued \(Formatters.day($0.date()) ?? "")" },
                           invoice.dueDate.map { "Due \(Formatters.day($0.date()) ?? "")" }].compactMap { $0 }.joined(separator: " · "))
                         .font(.wsSubheadline).foregroundStyle(.secondaryText)
-                    if MacSupport.isMac { macActions(invoice) }
                 }
-                .padding(.vertical, 4)
-                if invoice.displayNumber != invoice.invoiceNumber {
-                    DetailRow(label: "Internal number", value: invoice.invoiceNumber)
-                }
-                DetailRow(label: "Customer PO", value: invoice.poNumber)
-                DetailRow(label: "Payment terms", value: invoice.paymentTermsDays.map { "\($0) days" })
-                if let address = invoice.customerAddress { MapsLinkRow(address: address) }
+            } actions: {
+                if wide { macActions(invoice) }
             }
+            if !wide { references(invoice) }
+        } main: {
             if notice != nil || actionError != nil || pdfNotice != nil {
-                Section {
+                DetailSection {
                     if let actionError { InlineErrorRow(error: actionError) }
                     if let notice { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
                     if let pdfNotice { Label(pdfNotice, systemImage: "info.circle").foregroundStyle(.secondaryText) }
                 }
             }
 
-            // The Mac has these in the header (macActions).
-            if !MacSupport.isMac, canUpdate && (invoice.canEmail || invoice.canVoid)
+            // A wide page has these in the header (macActions).
+            if !wide, canUpdate && (invoice.canEmail || invoice.canVoid)
                 || (permissions.can(.create, .payments) && invoice.canRecordPayment)
                 || (permissions.can(.delete, .invoices) && invoice.canDelete) {
-                Section("Actions") {
+                DetailSection("Actions") {
                     if canUpdate && invoice.canEmail {
                         // #611: emailing attaches the PDF this app renders and marks a draft sent.
                         Button { emailing = true } label: {
@@ -533,21 +546,21 @@ struct InvoiceDetailView: View {
                 .disabled(busy)
             }
 
-            Section {
+            DetailSection {
                 ForEach(invoice.lineItems) { item in
                     Button {
                         if canUpdate && invoice.canEditItems { editingItem = item }
                     } label: {
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(item.description).font(.wsBody).foregroundStyle(.primary)
+                                Text(item.description).font(.wsBody).foregroundStyle(Color(.label))
                                 Text("\(item.quantity.formatted()) × \(Formatters.money(item.unitPrice, currency: invoice.currency) ?? "")"
                                      + (item.taxRate > 0 ? " · VAT \(item.taxRate.formatted())%" : "")
                                      + (item.discountPercent > 0 ? " · −\(item.discountPercent.formatted())%" : ""))
                                     .font(.wsCaption).foregroundStyle(.secondaryText)
                             }
                             Spacer()
-                            Text(Formatters.money(item.lineTotal, currency: invoice.currency) ?? "").monospacedDigit().foregroundStyle(.primary)
+                            Text(Formatters.money(item.lineTotal, currency: invoice.currency) ?? "").monospacedDigit().foregroundStyle(Color(.label))
                         }
                     }
                     .disabled(!(canUpdate && invoice.canEditItems))
@@ -557,22 +570,12 @@ struct InvoiceDetailView: View {
                         .frame(minHeight: 44)
                 }
             } header: {
-                Text("Line items")
+                DetailSectionTitle("Line items", systemImage: "list.bullet")
             }
 
-            Section("Totals") {
-                DetailRow(label: "Subtotal", value: Formatters.money(invoice.subtotal, currency: invoice.currency))
-                if invoice.discountAmount > 0 {
-                    DetailRow(label: "Discounts", value: "−" + (Formatters.money(invoice.discountAmount, currency: invoice.currency) ?? ""))
-                }
-                DetailRow(label: "Tax", value: Formatters.money(invoice.taxAmount, currency: invoice.currency))
-                DetailRow(label: "Total", value: Formatters.money(invoice.totalAmount, currency: invoice.currency))
-                DetailRow(label: "Paid", value: Formatters.money(invoice.amountPaid, currency: invoice.currency))
-                DetailRow(label: "Balance due", value: Formatters.money(invoice.balanceDue, currency: invoice.currency))
-            }
-
+            if !wide { totals(invoice) }
             if !invoice.payments.isEmpty {
-                Section("Payments") {
+                DetailSection("Payments", systemImage: "sterlingsign.circle") {
                     ForEach(invoice.payments) { payment in
                         HStack {
                             VStack(alignment: .leading) {
@@ -582,6 +585,14 @@ struct InvoiceDetailView: View {
                                     .font(.wsCaption).foregroundStyle(.secondaryText)
                             }
                             Spacer()
+                            // A wide page has no swipe: the bin is on the row.
+                            if wide, permissions.can(.delete, .payments) {
+                                Button(role: .destructive) { deletingPayment = payment } label: {
+                                    Image(systemName: "trash").accessibilityLabel("Delete payment")
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Delete payment")
+                            }
                         }
                         .swipeActions(allowsFullSwipe: false) {
                             if permissions.can(.delete, .payments) {
@@ -593,30 +604,63 @@ struct InvoiceDetailView: View {
             }
 
             if let method = invoice.paymentMethod, invoice.status != .paid, invoice.status != .void {
-                Section {
+                DetailSection {
                     Text(method.heading).font(.wsHeadline)
                     ForEach(method.rows, id: \.0) { row in CopyableRow(label: row.0, value: row.1) }
                     if let instructions = method.instructions { Text(instructions).font(.wsSubheadline) }
                     CopyableRow(label: "Reference", value: invoice.displayNumber)
                 } header: {
-                    Text("How to pay")
+                    DetailSectionTitle("How to pay", systemImage: "building.columns")
                 } footer: {
                     Text("As printed on the invoice. Change it with Edit › How to pay.")
                 }
             }
 
             if let notes = invoice.notes, !notes.isEmpty {
-                Section("Notes") { Text(notes) }
+                DetailSection("Notes", systemImage: "text.quote") { Text(notes).wsParagraph() }
             }
             if let vat { vatSection(vat) }
+        } side: {
+            if wide {
+                totals(invoice)
+                if invoice.displayNumber != invoice.invoiceNumber || invoice.poNumber != nil || invoice.paymentTermsDays != nil
+                    || invoice.customerAddress != nil {
+                    DetailSection("Details", systemImage: "list.bullet.rectangle") { references(invoice) }
+                }
+            }
         }
-        .listStyle(.insetGrouped)
+    }
+
+    /// What it adds up to, and what's still owed.
+    private func totals(_ invoice: Invoice) -> some View {
+        DetailSection("Totals", systemImage: "sum") {
+            DetailRow(label: "Subtotal", value: Formatters.money(invoice.subtotal, currency: invoice.currency), monospacedDigits: true)
+            if invoice.discountAmount > 0 {
+                DetailRow(label: "Discounts", value: "−" + (Formatters.money(invoice.discountAmount, currency: invoice.currency) ?? ""),
+                          monospacedDigits: true)
+            }
+            DetailRow(label: "Tax", value: Formatters.money(invoice.taxAmount, currency: invoice.currency), monospacedDigits: true)
+            DetailRow(label: "Total", value: Formatters.money(invoice.totalAmount, currency: invoice.currency), monospacedDigits: true)
+            DetailRow(label: "Paid", value: Formatters.money(invoice.amountPaid, currency: invoice.currency), monospacedDigits: true)
+            DetailRow(label: "Balance due", value: Formatters.money(invoice.balanceDue, currency: invoice.currency), monospacedDigits: true)
+        }
+    }
+
+    /// The invoice's references and where it goes.
+    @ViewBuilder
+    private func references(_ invoice: Invoice) -> some View {
+        if invoice.displayNumber != invoice.invoiceNumber {
+            DetailRow(label: "Internal number", value: invoice.invoiceNumber)
+        }
+        DetailRow(label: "Customer PO", value: invoice.poNumber)
+        DetailRow(label: "Payment terms", value: invoice.paymentTermsDays.map { "\($0) days" })
+        if let address = invoice.customerAddress { MapsLinkRow(address: address) }
     }
 
     /// "VAT invoice check": what a valid UK VAT invoice must show and this one is missing, and the e-invoice.
     @ViewBuilder
     private func vatSection(_ vat: VatInvoiceCheck) -> some View {
-        Section {
+        DetailSection {
             Label(vat.ok ? "This is a valid VAT invoice" : "Before sending this as a VAT invoice",
                   systemImage: vat.ok ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                 .foregroundStyle(vat.ok ? Tone.success.textColor : Tone.warning.textColor)
@@ -666,7 +710,7 @@ struct InvoiceDetailView: View {
                 ForEach(einvoice.warnings, id: \.self) { Text($0).font(.wsCaption).foregroundStyle(.secondaryText) }
             }
         } header: {
-            Text("VAT invoice check")
+            DetailSectionTitle("VAT invoice check", systemImage: "checkmark.seal")
         }
     }
 
@@ -695,6 +739,27 @@ struct InvoiceDetailView: View {
                 actionError = apiError
             }
         }
+    }
+
+    /// The PDF already made for this version of the invoice (Preview, then Email, attach the same bytes).
+    private var madePDF: WorkspacePDF.Result? {
+        pdfURL.map { WorkspacePDF.Result(url: $0, notice: pdfNotice, madeWith: pdfMadeWith) }
+    }
+
+    private func preview(_ invoice: Invoice) async {
+        if pdfURL == nil {
+            let made = await InvoicePDFRenderer.make(invoice, company: session.workspace?.name,
+                                                     services: services, workspace: session.workspace?.uuid)
+            pdfURL = made.url
+            pdfNotice = made.notice
+            pdfMadeWith = made.madeWith
+        }
+        guard let pdfURL else {
+            actionError = ResourceService.problem(0, "The invoice PDF couldn't be made. Try again.")
+            return
+        }
+        previewing = PDFPreviewItem(url: pdfURL, title: "Invoice \(invoice.displayNumber)", subtitle: pdfMadeWith,
+                                    notice: pdfNotice)
     }
 
     private func load() async {
@@ -1154,8 +1219,8 @@ enum InvoicePDFRenderer {
 }
 
 
-/// Emails the invoice PDF to the customer (opsapi #611). The PDF is the same one "Share PDF"
-/// produces — the server has no renderer, so the client supplies it.
+/// Emails the invoice PDF to the customer (opsapi #611). The PDF is made when the sheet opens and shown before
+/// anything is sent (a beginner sees what goes out); Send attaches exactly those bytes.
 struct EmailInvoiceSheet: View {
     let invoice: Invoice
     var company: String?
@@ -1170,14 +1235,17 @@ struct EmailInvoiceSheet: View {
     @State private var sending = false
     @State private var sentTo: String?
     @State private var error: APIError?
-    @State private var pdfNotice: String?
+    @State private var made: WorkspacePDF.Result?
+    @State private var pdf: Data?
+    @State private var page: UIImage?
 
-    init(invoice: Invoice, company: String? = nil, onSent: @escaping (String) -> Void = { _ in }) {
+    init(invoice: Invoice, company: String? = nil, made: WorkspacePDF.Result? = nil, onSent: @escaping (String) -> Void = { _ in }) {
         self.invoice = invoice
         self.company = company
         self.onSent = onSent
         _recipient = State(initialValue: invoice.customerEmail ?? "")
         _message = State(initialValue: Self.reminderNote(invoice) ?? "")
+        _made = State(initialValue: made)
     }
 
     /// An overdue invoice's email starts as a polite reminder.
@@ -1197,6 +1265,7 @@ struct EmailInvoiceSheet: View {
                     LabeledContent("Customer", value: invoice.customerName ?? "—")
                     LabeledContent("Total", value: Formatters.money(invoice.totalAmount, currency: invoice.currency) ?? "")
                 }
+                attachment
                 Section {
                     TextField("Customer email", text: $recipient)
                         .keyboardType(.emailAddress)
@@ -1208,16 +1277,13 @@ struct EmailInvoiceSheet: View {
                         .lineLimit(2...5)
                 } footer: {
                     Text(invoice.status == .draft
-                         ? "Attaches the invoice PDF and marks this invoice as sent."
-                         : "Attaches the invoice PDF and emails it again. Its status doesn't change.")
+                         ? "Attaches the invoice PDF above and marks this invoice as sent."
+                         : "Attaches the invoice PDF above and emails it again. Its status doesn't change.")
                 }
-                if sentTo != nil || pdfNotice != nil {
+                if let sentTo {
                     Section {
-                        if let sentTo {
-                            Label("Emailed to \(sentTo)", systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(Tone.success.textColor)
-                        }
-                        if let pdfNotice { Label(pdfNotice, systemImage: "info.circle").foregroundStyle(.secondaryText) }
+                        Label("Emailed to \(sentTo)", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(Tone.success.textColor)
                     }
                 }
                 if let error { Section { InlineErrorRow(error: error) } }
@@ -1228,28 +1294,79 @@ struct EmailInvoiceSheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button(sentTo == nil ? "Cancel" : "Done") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Send") { send() }
-                        .disabled(sending || recipient.trimmedOrNil == nil)
+                        .disabled(sending || pdf == nil || recipient.trimmedOrNil == nil)
                         .accessibilityIdentifier("invoiceEmail.send")
                 }
             }
             .interactiveDismissDisabled(sending)
+            .task { await makePDF() }
         }
     }
 
+    /// What the customer gets: the first page, and the whole PDF one tap away.
+    @ViewBuilder
+    private var attachment: some View {
+        Section {
+            if let pdf, let url = made?.url {
+                NavigationLink {
+                    PDFKitView(data: pdf, accessibilityID: "invoiceEmail.pdf")
+                        .navigationTitle(url.lastPathComponent)
+                        .navigationBarTitleDisplayMode(.inline)
+                } label: {
+                    HStack(spacing: 12) {
+                        Group {
+                            if let page { Image(uiImage: page).resizable().scaledToFit() } else { TemplatePageSketch() }
+                        }
+                        .frame(width: 64, height: 90)
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                        .overlay(RoundedRectangle(cornerRadius: 3).stroke(Palette.hairline))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(url.lastPathComponent).font(.wsHeadline)
+                            if let madeWith = made?.madeWith {
+                                Text(madeWith).font(.wsCaption).foregroundStyle(.secondaryText)
+                            }
+                            Text("Look at the whole PDF").font(.wsSubheadline).foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .accessibilityIdentifier("invoiceEmail.preview")
+            } else if made != nil {
+                Label("The invoice PDF couldn't be made.", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Tone.danger.textColor)
+                Button("Try again", systemImage: "arrow.clockwise") {
+                    made = nil
+                    Task { await makePDF() }
+                }
+            } else {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Making the PDF…").foregroundStyle(.secondaryText)
+                }
+            }
+        } header: {
+            Text("What \(invoice.customerName?.trimmedOrNil ?? "the customer") gets")
+        } footer: {
+            if let notice = made?.notice { Text(notice) }
+        }
+    }
+
+    /// The same PDF as Preview: the workspace's template when it chose one.
+    private func makePDF() async {
+        if made == nil {
+            made = await InvoicePDFRenderer.make(invoice, company: company, services: services, workspace: session.workspace?.uuid)
+        }
+        pdf = made?.url.flatMap { try? Data(contentsOf: $0) }
+        page = pdf.flatMap { PDFThumbnail.image($0, width: 180) }
+    }
+
     private func send() {
+        guard let pdf, let url = made?.url else { return }
         sending = true
         error = nil
         Task {
             defer { sending = false }
-            // The same PDF as Preview: the workspace's template when it chose one.
-            let made = await InvoicePDFRenderer.make(invoice, company: company, services: services,
-                                                     workspace: session.workspace?.uuid)
-            pdfNotice = made.notice
-            guard let url = made.url, let pdf = try? Data(contentsOf: url) else {
-                error = .validation(ServerError(status: 0, message: "The invoice PDF could not be built.",
-                                                fieldErrors: [:], rawBody: ""))
-                return
-            }
             do {
                 let result = try await services.invoices.email(
                     invoice.id, pdf: pdf, filename: url.lastPathComponent, to: recipient, message: message)

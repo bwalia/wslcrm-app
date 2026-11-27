@@ -200,6 +200,7 @@ struct PurchaseOrderDetailView: View {
     var onChange: (PurchaseOrder?) -> Void = { _ in }
     /// What just happened before this screen opened ("Purchase order created").
     var opening: String?
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
@@ -375,34 +376,36 @@ struct PurchaseOrderDetailView: View {
         let canUpdate = permissions.can(.update, .purchaseOrders)
         let canDeleteDraft = permissions.can(.delete, .purchaseOrders) && po.canDelete
         let canBill = PurchaseOrderAccess.canBill(po, permissions)
-        return List {
-            Section {
+        let wide = sizeClass != .compact
+        return DetailPage {
+            DetailHeader(po.supplierName ?? "No supplier", subtitle: po.reference,
+                         avatar: .icon("shippingbox", Palette.tile(for: "purchase_orders"))) {
                 VStack(alignment: .leading, spacing: 8) {
-                    po.status.badge
-                    Text(po.supplierName ?? "No supplier").font(.wsTitle2.bold())
+                    DetailChips { po.status.badge }
                     Text(Formatters.money(po.total, currency: po.currency) ?? "").font(.wsTitle.monospacedDigit().bold())
                     Text([po.issueDate.map { "Raised \(Formatters.day($0.date()) ?? "")" },
                           po.expectedDate.map { "Expected \(Formatters.day($0.date()) ?? "")" }].compactMap { $0 }.joined(separator: " · "))
                         .font(.wsSubheadline)
                         .foregroundStyle(po.isOverdue ? Tone.danger.textColor : .secondaryText)
                 }
-                .padding(.vertical, 4)
                 .accessibilityElement(children: .combine)
-                if let email = po.supplierEmail { EmailLinkRow(email: email) }
-                if let phone = po.supplierPhone { PhoneLinkRow(name: po.supplierName, phone: phone) }
-                if let project = po.projectUuid {
-                    NavigationLink(value: ProjectRoute(uuid: project)) {
-                        Label(po.projectName ?? "Project", systemImage: "square.stack.3d.up")
-                    }
-                }
+            } actions: {
+                if wide { actionBar(po, canUpdate: canUpdate, canDeleteDraft: canDeleteDraft, canBill: canBill) }
             }
+            if !wide { supplierRows(po) }
+        } main: {
             if let notice {
-                Section { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
+                DetailSection { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
             }
 
-            if canUpdate && (po.canSend || po.canEmail || po.canAcknowledge || po.canReceive || po.hasSomethingToBill
+            if wide {
+                if let actionError { DetailSection { InlineErrorRow(error: actionError) } }
+                if canUpdate, po.hasSomethingToBill, po.status != .cancelled, !canBill {
+                    DetailSection { Text(PurchaseOrderAccess.booksBlocked).font(.wsFootnote).foregroundStyle(.secondaryText) }
+                }
+            } else if canUpdate && (po.canSend || po.canEmail || po.canAcknowledge || po.canReceive || po.hasSomethingToBill
                              || po.canCancel || po.canCloseShort) || canDeleteDraft {
-                Section("Actions") {
+                DetailSection("Actions") {
                     if canUpdate && po.canReceive {
                         Button { receiving = true } label: { Label("Record a delivery", systemImage: "shippingbox.fill") }
                             .buttonStyle(.large(.success))
@@ -459,17 +462,17 @@ struct PurchaseOrderDetailView: View {
                 }
                 .disabled(busy)
             } else if let actionError {
-                Section { InlineErrorRow(error: actionError) }
+                DetailSection { InlineErrorRow(error: actionError) }
             }
 
-            Section {
+            DetailSection {
                 ForEach(po.items) { line in
                     Button {
                         if canUpdate && po.canEditItems { editingLine = line }
                     } label: {
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(line.description).foregroundStyle(.primary)
+                                Text(line.description).foregroundStyle(Color(.label))
                                 Text("\(line.quantity.formatted()) × \(Formatters.money(line.unitPrice, currency: po.currency) ?? "")"
                                      + (line.taxRate > 0 ? " · VAT \(line.taxRate.formatted())%" : ""))
                                     .font(.wsCaption).foregroundStyle(.secondaryText)
@@ -482,7 +485,7 @@ struct PurchaseOrderDetailView: View {
                                 }
                             }
                             Spacer()
-                            Text(Formatters.money(line.lineTotal, currency: po.currency) ?? "").monospacedDigit().foregroundStyle(.primary)
+                            Text(Formatters.money(line.lineTotal, currency: po.currency) ?? "").monospacedDigit().foregroundStyle(Color(.label))
                         }
                         .accessibilityElement(children: .combine)
                     }
@@ -494,19 +497,15 @@ struct PurchaseOrderDetailView: View {
                         .accessibilityIdentifier("po.addLine")
                 }
             } header: {
-                Text("Lines")
+                DetailSectionTitle("Lines", systemImage: "list.bullet")
             } footer: {
                 if po.canEditItems && canUpdate { Text("Lines can change until it's sent.") }
             }
 
-            Section("Totals") {
-                DetailRow(label: "Subtotal", value: Formatters.money(po.subtotal, currency: po.currency))
-                DetailRow(label: "VAT", value: Formatters.money(po.taxTotal, currency: po.currency))
-                DetailRow(label: "Total", value: Formatters.money(po.total, currency: po.currency))
-            }
+            if !wide { totals(po) }
 
             if !po.bills.isEmpty {
-                Section("Bills") {
+                DetailSection("Bills", systemImage: "sterlingsign.circle") {
                     ForEach(po.bills) { bill in
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
@@ -541,7 +540,7 @@ struct PurchaseOrderDetailView: View {
             }
 
             if !po.receipts.isEmpty {
-                Section("Goods received") {
+                DetailSection("Goods received", systemImage: "shippingbox.and.arrow.backward") {
                     ForEach(Array(po.receipts.enumerated()), id: \.offset) { _, receipt in
                         VStack(alignment: .leading, spacing: 2) {
                             Text([Formatters.dateTime(receipt.at), receipt.note].compactMap { $0 }.joined(separator: " — ").trimmedOrNil ?? "Delivery")
@@ -556,28 +555,118 @@ struct PurchaseOrderDetailView: View {
                 }
             }
 
-            Section("Details") {
-                DetailRow(label: "Reference", value: po.reference)
-                DetailRow(label: "Deliver to", value: po.deliveryAddress)
-                DetailRow(label: "Supplier address", value: po.supplierAddress)
-                DetailRow(label: "Sent", value: Formatters.dateTime(po.sentAt))
-                DetailRow(label: "Confirmed", value: Formatters.dateTime(po.acknowledgedAt))
-                DetailRow(label: "Received", value: Formatters.dateTime(po.receivedAt))
-                DetailRow(label: "Billed", value: Formatters.dateTime(po.billedAt))
-                DetailRow(label: "Cancelled", value: Formatters.dateTime(po.cancelledAt))
-                if let reason = po.cancelledReason { DetailRow(label: "Why cancelled", value: reason) }
-                if let reason = po.closedReason { DetailRow(label: "Closed short", value: reason) }
+            if !wide { details(po) }
+            if let notes = po.notes {
+                DetailSection("Notes", systemImage: "note.text") { Text(notes).wsParagraph().textSelection(.enabled) }
             }
-            if let notes = po.notes { Section("Notes") { Text(notes).textSelection(.enabled) } }
-            if let terms = po.terms { Section("Terms") { Text(terms).textSelection(.enabled) } }
+            if let terms = po.terms {
+                DetailSection("Terms", systemImage: "doc.plaintext") { Text(terms).wsParagraph().textSelection(.enabled) }
+            }
             if session.permissions.can(.read, .purchaseOrders) {
                 PurchaseOrderPortalSections(po: po, canUpdate: canUpdate) { message in
                     notice = message
                     await load()
                 }
             }
+        } side: {
+            if wide {
+                if po.supplierEmail != nil || po.supplierPhone != nil || po.projectUuid != nil {
+                    DetailSection("Supplier", systemImage: "building.2") { supplierRows(po) }
+                }
+                totals(po)
+                details(po)
+            }
         }
-        .listStyle(.insetGrouped)
+    }
+
+    @ViewBuilder
+    private func supplierRows(_ po: PurchaseOrder) -> some View {
+        if let email = po.supplierEmail { EmailLinkRow(email: email) }
+        if let phone = po.supplierPhone { PhoneLinkRow(name: po.supplierName, phone: phone) }
+        if let project = po.projectUuid {
+            NavigationLink(value: ProjectRoute(uuid: project)) {
+                Label(po.projectName ?? "Project", systemImage: "square.stack.3d.up")
+            }
+        }
+    }
+
+    private func totals(_ po: PurchaseOrder) -> some View {
+        DetailSection("Totals", systemImage: "sum") {
+            DetailRow(label: "Subtotal", value: Formatters.money(po.subtotal, currency: po.currency), monospacedDigits: true)
+            DetailRow(label: "VAT", value: Formatters.money(po.taxTotal, currency: po.currency), monospacedDigits: true)
+            DetailRow(label: "Total", value: Formatters.money(po.total, currency: po.currency), monospacedDigits: true)
+        }
+    }
+
+    private func details(_ po: PurchaseOrder) -> some View {
+        DetailSection("Details", systemImage: "list.bullet.rectangle") {
+            DetailRow(label: "Reference", value: po.reference)
+            DetailRow(label: "Deliver to", value: po.deliveryAddress)
+            DetailRow(label: "Supplier address", value: po.supplierAddress)
+            DetailRow(label: "Sent", value: Formatters.dateTime(po.sentAt))
+            DetailRow(label: "Confirmed", value: Formatters.dateTime(po.acknowledgedAt))
+            DetailRow(label: "Received", value: Formatters.dateTime(po.receivedAt))
+            DetailRow(label: "Billed", value: Formatters.dateTime(po.billedAt))
+            DetailRow(label: "Cancelled", value: Formatters.dateTime(po.cancelledAt))
+            if let reason = po.cancelledReason { DetailRow(label: "Why cancelled", value: reason) }
+            if let reason = po.closedReason { DetailRow(label: "Closed short", value: reason) }
+        }
+    }
+
+    /// The phone's Actions section as the header's action bar on a wide page: the next step prominent, the rest
+    /// beside it, cancelling and deleting under More.
+    @ViewBuilder
+    private func actionBar(_ po: PurchaseOrder, canUpdate: Bool, canDeleteDraft: Bool, canBill: Bool) -> some View {
+        let receive = canUpdate && po.canReceive
+        let bill = canUpdate && po.hasSomethingToBill && po.status != .cancelled && canBill
+        let email = canUpdate && po.canEmail && (po.canSend || po.canAcknowledge)
+        let primary = receive ? "receive" : bill ? "bill" : email ? "email" : ""
+        let more = (canUpdate && po.canCancel) || canDeleteDraft || (canUpdate && po.canCloseShort)
+        if receive || bill || email || (canUpdate && (po.canSend || po.canAcknowledge)) || more {
+            RecordActionBar(showsMore: more) {
+                if receive {
+                    Button { receiving = true } label: { Label("Record a delivery", systemImage: "shippingbox.fill") }
+                        .buttonStyle(.action(prominent: primary == "receive", tone: .success))
+                        .accessibilityIdentifier("po.receive")
+                }
+                if bill {
+                    Button { billing = true } label: { Label("Bill what's arrived", systemImage: "sterlingsign.circle.fill") }
+                        .buttonStyle(.action(prominent: primary == "bill"))
+                        .accessibilityIdentifier("po.bill")
+                }
+                if email {
+                    Button { emailing = true } label: { Label("Email to supplier", systemImage: "envelope.fill") }
+                        .buttonStyle(.action(prominent: primary == "email"))
+                        .accessibilityIdentifier("po.email")
+                }
+                if canUpdate && po.canSend {
+                    Button { Task { await mutate("Marked as sent.") { try await services.purchaseOrders.send(uuid) } } } label: {
+                        Label("Mark as sent", systemImage: "paperplane")
+                    }
+                    .help("Mark as sent without emailing")
+                    .accessibilityIdentifier("po.send")
+                }
+                if canUpdate && po.canAcknowledge {
+                    Button { Task { await mutate("Marked as confirmed by the supplier.") { try await services.purchaseOrders.acknowledge(uuid) } } } label: {
+                        Label("Supplier confirmed it", systemImage: "hand.thumbsup")
+                    }
+                    .accessibilityIdentifier("po.acknowledge")
+                }
+            } more: {
+                if canUpdate && po.canCloseShort {
+                    Button("Close short (the rest won't come)", systemImage: "archivebox") { reason = ""; reasonPrompt = .closeShort }
+                        .accessibilityIdentifier("po.closeShort")
+                }
+                if canUpdate && po.canCancel {
+                    Button("Cancel purchase order", systemImage: "xmark.circle", role: .destructive) { reason = ""; reasonPrompt = .cancel }
+                        .accessibilityIdentifier("po.cancel")
+                }
+                if canDeleteDraft {
+                    Button("Delete draft", systemImage: "trash", role: .destructive) { confirmDelete = true }
+                }
+            }
+            .disabled(busy)
+        }
     }
 
     private func runReason(_ prompt: ReasonPrompt) async {

@@ -242,6 +242,7 @@ struct ShopSupplierDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle("Supplier")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }

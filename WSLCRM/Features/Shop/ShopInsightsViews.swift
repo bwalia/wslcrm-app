@@ -231,6 +231,7 @@ struct ShopMarketDetailView: View {
                 ProgressView().frame(maxWidth: .infinity)
             }
         }
+        .wsDetailList()
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

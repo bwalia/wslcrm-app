@@ -400,6 +400,7 @@ struct MyDeliveryDetailView: View {
             case .loaded(let a): content(a)
             }
         }
+        .wsDetailList()
         .disabled(busy)
         .navigationTitle(state.value?.string("order_number") ?? "Delivery")
         .navigationBarTitleDisplayMode(.inline)

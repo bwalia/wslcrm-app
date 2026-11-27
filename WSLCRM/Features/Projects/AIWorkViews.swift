@@ -569,6 +569,7 @@ struct TaskAIRunDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .disabled(busy)
         .wsRefreshable { await load() }
     }

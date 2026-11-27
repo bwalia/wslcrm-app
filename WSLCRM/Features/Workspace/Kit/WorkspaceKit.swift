@@ -36,7 +36,7 @@ struct FeedbackSection: View {
 
     var body: some View {
         if !feedback.isNone {
-            Section { FeedbackRow(feedback: feedback) }
+            DetailSection { FeedbackRow(feedback: feedback) }
         }
     }
 }
