@@ -143,15 +143,25 @@ extension WorkspaceAPI {
 /// The person's notifications and unread count (the bell on Home): tasks from every workspace and this
 /// workspace's alerts, merged newest first. Each list pages on its own; a server without the alerts list
 /// (notifications not deployed) just shows tasks.
+///
+/// Reading one lowers the count at once, then the server is told and asked again for its counts. When the server
+/// refuses, the mark is undone and the inbox says so (`readProblem`): the count never quietly stays as it was.
 @MainActor
 @Observable
 final class NotificationsModel {
+    /// A notification the server wouldn't mark as read, and what to tell the person.
+    struct ReadProblem: Equatable {
+        let notification: InboxNotification
+        let message: String
+    }
+
     static let perPage = 20
     private(set) var items: [InboxNotification] = []
     private(set) var unread = 0
     private(set) var hasLoaded = false
     private(set) var loadError: APIError?
     private(set) var unreadOnly = false
+    private(set) var readProblem: ReadProblem?
     var feedback: Feedback = .none
 
     private var tasks: [InboxNotification] = []
@@ -162,6 +172,9 @@ final class NotificationsModel {
     private var alertUnread = 0
     private var alertsMore = false
     private var workspace: String?
+    /// Bumped by every load and every change made here: a list asked for before the latest one, or before a mark,
+    /// is out of date by the time it arrives and is dropped (it would put the old count back).
+    private var generation = 0
 
     var canLoadMore: Bool { tasks.count < (unreadOnly ? taskUnread : taskTotal) || alertsMore }
 
@@ -169,22 +182,29 @@ final class NotificationsModel {
         if let unreadOnly { self.unreadOnly = unreadOnly }
         self.workspace = workspace
         let only = self.unreadOnly
+        generation += 1
+        let asked = generation
         async let taskJSON = api.notifications(page: 1, perPage: Self.perPage, unreadOnly: only)
         async let alertJSON: JSONValue? = workspace == nil ? nil
             : try? await api.alerts(workspace: workspace ?? "", limit: Self.perPage, offset: 0, unreadOnly: only)
-        do {
-            let t = InboxNotification.page(try await taskJSON)
+        let taskResult: Result<JSONValue, Error>
+        do { taskResult = .success(try await taskJSON) } catch { taskResult = .failure(error) }
+        let alertResult = await alertJSON
+        guard asked == generation else { return }
+        switch taskResult {
+        case .success(let json):
+            let t = InboxNotification.page(json)
             tasks = t.items
             taskTotal = t.total
             taskUnread = t.unread
             taskPage = 1
             loadError = nil
-        } catch {
+        case .failure(let error):
             let apiError = error.asAPIError
             if case .cancelled = apiError { return }
             loadError = apiError
         }
-        let a = Self.alertPage(await alertJSON)
+        let a = Self.alertPage(alertResult)
         alerts = a.items
         alertUnread = a.unread
         alertsMore = a.items.count == Self.perPage
@@ -213,26 +233,41 @@ final class NotificationsModel {
         merge()
     }
 
-    /// Best effort: opening a notification shouldn't fail because it couldn't be marked read.
-    func markRead(_ notification: InboxNotification, api: WorkspaceAPI) async {
-        guard !notification.isRead else { return }
-        let ok: Bool
-        switch notification.source {
-        case .tasks: ok = (try? await api.markNotificationRead(notification.uuid)) != nil
-        case .alerts: ok = (try? await api.markAlertRead(notification.uuid)) != nil
+    /// Opening one marks it read: the count drops at once, the server is told, then asked for its counts again.
+    /// A refusal undoes the mark and is said in the inbox, with a way round it. True when the server took it.
+    @discardableResult
+    func markRead(_ notification: InboxNotification, api: WorkspaceAPI) async -> Bool {
+        guard !notification.isRead else { return true }
+        setRead(notification, true)
+        do {
+            switch notification.source {
+            case .tasks: try await api.markNotificationRead(notification.uuid)
+            case .alerts: try await api.markAlertRead(notification.uuid)
+            }
+        } catch {
+            setRead(notification, false)
+            let apiError = error.asAPIError
+            if case .cancelled = apiError { return false }
+            readProblem = ReadProblem(notification: notification, message: Self.readProblemMessage(notification, apiError))
+            return false
         }
-        guard ok else { return }
-        setRead(notification)
+        if readProblem?.notification.id == notification.id { readProblem = nil }
+        await load(api, workspace: workspace)
+        return true
     }
 
     func markAllRead(_ api: WorkspaceAPI) async {
         let workspace = workspace
+        let alertsToMark = alertUnread > 0
+        setAllRead()
         if await run(done: "All marked as read.", {
             try await api.markAllNotificationsRead()
-            if let workspace, alertUnread > 0 { try await api.markAllAlertsRead(workspace: workspace) }
+            if let workspace, alertsToMark { try await api.markAllAlertsRead(workspace: workspace) }
         }) {
-            await load(api, workspace: workspace)
+            readProblem = nil
         }
+        // The server's counts, whether or not it took it.
+        await load(api, workspace: workspace)
     }
 
     func delete(_ notification: InboxNotification, api: WorkspaceAPI) async {
@@ -252,7 +287,8 @@ final class NotificationsModel {
                 alerts.removeAll { $0.uuid == notification.uuid }
                 if !notification.isRead { alertUnread = max(0, alertUnread - 1) }
             }
-            merge()
+            if readProblem?.notification.id == notification.id { readProblem = nil }
+            changed()
         }
     }
 
@@ -262,9 +298,25 @@ final class NotificationsModel {
         return (items, WorkspaceAPI.object(json).int("unread_count") ?? 0)
     }
 
+    /// Why a notification still counts as unread, in plain words, and what to do.
+    nonisolated static func readProblemMessage(_ notification: InboxNotification, _ error: APIError) -> String {
+        if error.isConnectivityProblem {
+            return "You're offline, so “\(notification.title)” couldn't be marked as read and still counts as unread. "
+                + "Try again when you're back online."
+        }
+        return "“\(notification.title)” couldn't be marked as read, so it still counts as unread. "
+            + "Try again in a moment, or use Mark all read."
+    }
+
     private func merge() {
         items = (tasks + alerts).sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
         unread = taskUnread + alertUnread
+    }
+
+    /// A change made here: lists already on their way are out of date.
+    private func changed() {
+        generation += 1
+        merge()
     }
 
     private func run(done message: String, _ work: () async throws -> Void) async -> Bool {
@@ -280,18 +332,30 @@ final class NotificationsModel {
         }
     }
 
-    private func setRead(_ notification: InboxNotification) {
-        func mark(_ list: inout [InboxNotification]) -> Bool {
-            guard let index = list.firstIndex(where: { $0.uuid == notification.uuid }), !list[index].isRead else { return false }
-            list[index].isRead = true
-            if unreadOnly { list.remove(at: index) }
+    /// Marks one read or unread here, and its count with it. It stays in the Unread list until the next load, so the
+    /// row doesn't vanish from under the pointer (and comes straight back if the server refuses).
+    private func setRead(_ notification: InboxNotification, _ read: Bool) {
+        func flip(_ list: inout [InboxNotification]) -> Bool {
+            guard let index = list.firstIndex(where: { $0.uuid == notification.uuid }), list[index].isRead != read else {
+                return false
+            }
+            list[index].isRead = read
             return true
         }
+        let step = read ? -1 : 1
         switch notification.source {
-        case .tasks: if mark(&tasks) { taskUnread = max(0, taskUnread - 1) }
-        case .alerts: if mark(&alerts) { alertUnread = max(0, alertUnread - 1) }
+        case .tasks: if flip(&tasks) { taskUnread = max(0, taskUnread + step) }
+        case .alerts: if flip(&alerts) { alertUnread = max(0, alertUnread + step) }
         }
-        merge()
+        changed()
+    }
+
+    private func setAllRead() {
+        for index in tasks.indices { tasks[index].isRead = true }
+        for index in alerts.indices { alerts[index].isRead = true }
+        taskUnread = 0
+        alertUnread = 0
+        changed()
     }
 }
 
@@ -325,6 +389,7 @@ struct NotificationsView: View {
         NavigationStack(path: $path) {
             List {
                 FeedbackSection(feedback: model.feedback)
+                if let problem = model.readProblem { readProblemSection(problem) }
                 Section {
                     Picker("Show", selection: Binding(get: { model.unreadOnly },
                                                       set: { only in Task { await model.load(api, workspace: workspaceUuid,
@@ -447,8 +512,31 @@ struct NotificationsView: View {
         return session.workspaces.first { $0.internalId == id }
     }
 
+    /// The server wouldn't mark one read: say so, with the ways round it (the count is still the server's).
+    private func readProblemSection(_ problem: NotificationsModel.ReadProblem) -> some View {
+        Section {
+            VStack(alignment: .leading, spacing: 10) {
+                Label {
+                    Text(problem.message).font(.wsSubheadline).fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Tone.warning.textColor)
+                }
+                HStack(spacing: 8) {
+                    Button("Try again", systemImage: "arrow.clockwise") {
+                        Task { await model.markRead(problem.notification, api: api) }
+                    }
+                    Button("Mark all read", systemImage: "checkmark.circle") { Task { await model.markAllRead(api) } }
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding(.vertical, 4)
+            .accessibilityIdentifier("notifications.readProblem")
+        }
+    }
+
     private func open(_ notification: InboxNotification) async {
-        await model.markRead(notification, api: api)
+        // Marked read straight away (the count drops); the page opens without waiting for the server.
+        let marking = Task { await model.markRead(notification, api: api) }
         // An alert: its lead, order, quote or invoice.
         if notification.source == .alerts {
             var next = path
@@ -461,7 +549,9 @@ struct NotificationsView: View {
         }
         guard let path = notification.actionPath else { return }
         if let workspace = otherWorkspace(for: notification) {
-            // Its record lives in another workspace: switch, and the new Home opens it.
+            // Its record lives in another workspace: switch, and the new Home opens it. The new Home counts again,
+            // so the mark has to have landed first.
+            _ = await marking.value
             PendingNotificationPage.path = path
             dismiss()
             await session.select(workspace)

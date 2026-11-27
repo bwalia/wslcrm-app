@@ -153,6 +153,142 @@ final class HomeNotificationsTests: XCTestCase {
         XCTAssertNil(model.loadError)
     }
 
+    // MARK: The count (the bell)
+
+    /// A stub server that keeps `is_read` per notification, as the routes do: the counts follow what was marked.
+    private final class InboxServer: @unchecked Sendable {
+        let lock = NSLock()
+        var taskRead: Set<String> = []
+        var alertRead: Set<String> = []
+        var refuseAlertMarks = false
+        /// The second task list is slow and answers what the server had before any mark.
+        var slowSecondList = false
+        var taskGets = 0
+        let seen = Counter()
+
+        func handle(_ request: URLRequest) async throws -> StubURLProtocol.Response {
+            let path = request.url?.path ?? ""
+            let method = request.httpMethod ?? ""
+            seen.increment("\(method) \(path)")
+            switch (method, path) {
+            case ("PUT", let p) where p.hasPrefix("/api/v2/kanban/notifications/") && p.hasSuffix("/read"):
+                lock.withLock { _ = taskRead.insert(p.components(separatedBy: "/")[5]) }
+                return .json(200, #"{"success":true,"data":{"message":"Marked as read"}}"#)
+            case ("PUT", let p) where p.hasPrefix("/api/v2/notifications/") && p.hasSuffix("/read"):
+                // What OpsAPI answers while the route is shadowed (see the report): no such route.
+                if lock.withLock({ refuseAlertMarks }) {
+                    return .json(404, #"{"error":{"code":"NOT_FOUND_404","message":"The requested resource was not found."}}"#)
+                }
+                lock.withLock { _ = alertRead.insert(p.components(separatedBy: "/")[4]) }
+                return .json(200, #"{"message":"Notification marked as read"}"#)
+            case ("GET", "/api/v2/notifications"):
+                let read = lock.withLock { alertRead }
+                let unread = ["a-1"].filter { !read.contains($0) }.count
+                return .json(200, """
+                {"notifications":[{"uuid":"a-1","type":"crm_leads.new_lead","title":"New lead: Priya Shah",
+                  "is_read":\(read.contains("a-1")),"created_at":"2026-11-25 10:00:00",
+                  "data":"{\\"route\\":\\"lead\\",\\"uuid\\":\\"lead-1\\"}"}],"unread_count":\(unread)}
+                """)
+            default:
+                let (read, call, slow) = lock.withLock { taskGets += 1; return (taskRead, taskGets, slowSecondList) }
+                let stale = slow && call == 2
+                if stale { try await Task.sleep(for: .milliseconds(400)) }
+                let ids = ["n-1", "n-2", "n-3"]
+                let unread = stale ? 3 : ids.filter { !read.contains($0) }.count
+                let rows = ids.map { #"{"uuid":"\#($0)","type":"task_assigned","title":"Task \#($0)","is_read":\#(read.contains($0) && !stale)}"# }
+                return .json(200, #"{"success":true,"data":[\#(rows.joined(separator: ","))],"meta":{"total":3,"unread_count":\#(unread)}}"#)
+            }
+        }
+    }
+
+    private func inbox(_ server: InboxServer) -> WorkspaceAPI {
+        client { try await server.handle($0) }
+    }
+
+    @MainActor
+    func testReadingOneLowersTheCountThenTakesTheServersCount() async throws {
+        let server = InboxServer()
+        let api = inbox(server)
+        let model = NotificationsModel()
+        await model.load(api, workspace: "ns-1")
+        XCTAssertEqual(model.unread, 4, "three tasks and one alert")
+
+        let alert = try XCTUnwrap(model.items.first { $0.uuid == "a-1" })
+        let marked = await model.markRead(alert, api: api)
+        XCTAssertTrue(marked)
+        XCTAssertEqual(server.seen.value("PUT /api/v2/notifications/a-1/read"), 1, "an alert is marked through its own list")
+        XCTAssertEqual(server.seen.value("GET /api/v2/notifications"), 2, "the counts are asked again after the mark")
+        XCTAssertEqual(model.unread, 3)
+        XCTAssertNil(model.readProblem)
+        XCTAssertEqual(model.items.first { $0.uuid == "a-1" }?.isRead, true)
+    }
+
+    @MainActor
+    func testARefusedMarkPutsTheCountBackAndSaysWhy() async throws {
+        let server = InboxServer()
+        server.refuseAlertMarks = true
+        let api = inbox(server)
+        let model = NotificationsModel()
+        await model.load(api, workspace: "ns-1")
+        let alert = try XCTUnwrap(model.items.first { $0.uuid == "a-1" })
+
+        let marked = await model.markRead(alert, api: api)
+        XCTAssertFalse(marked)
+        XCTAssertEqual(model.unread, 4, "the server didn't take it, so it still counts")
+        XCTAssertEqual(model.items.first { $0.uuid == "a-1" }?.isRead, false)
+        let problem = try XCTUnwrap(model.readProblem, "the inbox says so instead of keeping quiet")
+        XCTAssertEqual(problem.notification.uuid, "a-1")
+        XCTAssertTrue(problem.message.contains("New lead: Priya Shah"))
+        XCTAssertTrue(problem.message.contains("Mark all read"))
+
+        // Try again once the server takes it: the problem goes and the count drops.
+        server.refuseAlertMarks = false
+        await model.markRead(problem.notification, api: api)
+        XCTAssertNil(model.readProblem)
+        XCTAssertEqual(model.unread, 3)
+    }
+
+    @MainActor
+    func testAListAskedForBeforeAMarkDoesntPutTheOldCountBack() async throws {
+        let server = InboxServer()
+        server.slowSecondList = true
+        let api = inbox(server)
+        let model = NotificationsModel()
+        await model.load(api, workspace: nil)
+        XCTAssertEqual(model.unread, 3)
+        let task = try XCTUnwrap(model.items.first { $0.uuid == "n-1" })
+
+        // A refresh is on its way (slow) when the person opens a notification.
+        async let slowRefresh: Void = model.load(api, workspace: nil)
+        try await Task.sleep(for: .milliseconds(100))
+        await model.markRead(task, api: api)
+        XCTAssertEqual(model.unread, 2)
+        await slowRefresh
+        XCTAssertEqual(model.unread, 2, "the slow list was asked for before the mark, so it is dropped")
+        XCTAssertEqual(server.seen.value("PUT /api/v2/kanban/notifications/n-1/read"), 1)
+    }
+
+    @MainActor
+    func testMarkAllReadClearsTheCountAndAsksAgain() async throws {
+        let server = InboxServer()
+        let api = client { request in
+            if request.httpMethod == "POST" {
+                server.lock.withLock { server.taskRead = ["n-1", "n-2", "n-3"] }
+                return .json(200, #"{"success":true,"data":{"updated_count":3}}"#)
+            }
+            if request.url?.path == "/api/v2/notifications/mark-all-read" {
+                server.lock.withLock { server.alertRead = ["a-1"] }
+                return .json(200, #"{"message":"All notifications marked as read"}"#)
+            }
+            return try await server.handle(request)
+        }
+        let model = NotificationsModel()
+        await model.load(api, workspace: "ns-1")
+        await model.markAllRead(api)
+        XCTAssertEqual(model.unread, 0)
+        XCTAssertTrue(model.items.allSatisfy(\.isRead))
+    }
+
     // MARK: Tax on Home
 
     private func signals(taxReturn: String? = nil, taxQueue: String? = nil) throws -> [HomeSignal] {
