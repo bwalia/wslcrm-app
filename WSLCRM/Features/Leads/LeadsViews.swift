@@ -72,6 +72,9 @@ struct LeadsHomeView: View {
                             Label("Alerts for new leads", systemImage: "bell.badge")
                         }
                     }
+                    NavigationLink(value: NativeScreenRoute(MyTodosScreen.id)) {
+                        Label("My to-dos on customers and leads", systemImage: "checklist")
+                    }
                 } label: {
                     Label("More", systemImage: "ellipsis.circle")
                 }

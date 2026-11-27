@@ -15,6 +15,7 @@ extension ModuleGroup {
             case "crm.partners": AnyView(PartnersHubView())
             case "crm.activities": AnyView(ResourceListView(ModuleCatalog.crmActivities))
             case "leads.settings": AnyView(LeadSettingsView())
+            case MyTodosScreen.id: AnyView(MyTodosView())
             case "invoices.tax_rates": AnyView(ResourceListView(ModuleCatalog.invoiceTaxRates))
             default: nil
             }

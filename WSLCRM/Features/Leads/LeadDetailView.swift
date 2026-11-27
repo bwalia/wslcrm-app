@@ -28,6 +28,8 @@ struct LeadDetailView: View {
     @State private var cancellingMeeting: LeadMeeting?
     @State private var cancelReason = ""
     @State private var showsWholeTimeline = false
+    /// The lead's notes and to-dos (shared with the full thread).
+    @State private var notes: RecordNotesModel?
 
     enum Sheet: Identifiable {
         case edit, call, step, meeting(LeadMeeting?), outcome(LeadMeeting), park(LeadStage), convert, assign
@@ -74,7 +76,11 @@ struct LeadDetailView: View {
             formResponses = await WebFormRecordResponsesSection.load(services: services, session: session,
                                                                      entityType: "lead", entityUUID: leadUuid)
         }
-        .wsRefreshable { await load() }
+        .task(id: leadUuid) { await loadNotes() }
+        .wsRefreshable {
+            await load()
+            await notes?.load()
+        }
         // Back from a call made from this page: ask how it went.
         .onChange(of: scenePhase) { _, phase in
             if callFollowUp.phaseChanged(to: phase), let lead = state.value, canLogCall(lead) { sheet = .call }
@@ -127,6 +133,8 @@ struct LeadDetailView: View {
             }
             if let actionError { Section { InlineErrorRow(error: actionError) } }
             if canWork(lead) { quickActions(lead) }
+            // What the team wrote about this prospect: right under the actions, not at the bottom.
+            if let notes { RecordNotesSection(model: notes) }
             banners(lead)
             if lead.isOpen, canWork(lead) { nextStep(lead) }
             ai(lead)
@@ -965,6 +973,14 @@ struct LeadDetailView: View {
         } catch {
             actionError = error.asAPIError
         }
+    }
+
+    /// Notes need `crm_leads.read`, as on the server; without it the section isn't shown.
+    private func loadNotes() async {
+        guard session.permissions.can(.read, .crmLeads) else { return }
+        if notes?.subjectUUID != leadUuid { notes = RecordNotesModel(subjectType: .lead, subjectUUID: leadUuid) }
+        notes?.connect(services.recordNotes, me: session.user?.uuid)
+        await notes?.load()
     }
 
     private func load() async {

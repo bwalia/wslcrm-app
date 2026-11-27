@@ -307,7 +307,7 @@ struct MainTabView: View {
         case .task(let uuid): path.append(PDTaskRoute(uuid: uuid))
         case .approval(let uuid): path.append(PDApprovalRoute(uuid: uuid))
         case .deal(let uuid): path.append(PDDealRoute(uuid: uuid))
-        case .today, .paCard, .paBrief, .chat, .lead, .order, .quote, .invoice: break
+        case .today, .paCard, .paBrief, .chat, .lead, .customer, .order, .quote, .invoice: break
         }
         return path
     }
@@ -326,12 +326,12 @@ struct MainTabView: View {
     }
 }
 
-/// The records a push or an in-app alert opens: a lead, a shop order, a shop quote, an invoice.
+/// The records a push or an in-app alert opens: a lead, a customer, a shop order, a shop quote, an invoice.
 @MainActor
 enum RecordLinks {
     static func handles(_ target: AppDeepLink.Target) -> Bool {
         switch target {
-        case .lead, .order, .quote, .invoice: true
+        case .lead, .customer, .order, .quote, .invoice: true
         default: false
         }
     }
@@ -340,6 +340,7 @@ enum RecordLinks {
     static func append(_ target: AppDeepLink.Target, to path: inout NavigationPath, permissions: PermissionSet) -> Bool {
         switch target {
         case .lead(let uuid) where permissions.can(.read, .crmLeads): path.append(LeadRoute(uuid: uuid))
+        case .customer(let uuid) where permissions.can(.read, .customers): path.append(CustomerRoute(uuid: uuid))
         case .order(let uuid) where permissions.can(.read, .shop): path.append(ShopOrderRoute(uuid: uuid))
         case .quote(let uuid) where permissions.can(.read, .shop): path.append(ShopQuoteRoute(uuid: uuid))
         case .invoice(let uuid) where permissions.can(.read, .invoices): path.append(InvoiceRoute(uuid: uuid))
