@@ -97,6 +97,7 @@ struct ShopChatDetailView: View {
                 Section { ProgressView("Loading the transcript…").frame(maxWidth: .infinity) }
             }
         }
+        .wsDetailList()
         .listStyle(.insetGrouped)
         .navigationTitle("Chat transcript")
         .navigationBarTitleDisplayMode(.inline)

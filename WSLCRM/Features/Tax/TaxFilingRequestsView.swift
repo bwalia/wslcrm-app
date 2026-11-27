@@ -130,6 +130,7 @@ struct FilingRequestDetailView: View {
             default: Section { HStack { ProgressView(); Text("Loading…") } }
             }
         }
+        .wsDetailList()
         .navigationTitle(detail.value.map { "\($0.string("customer.name") ?? $0.string("customer.email") ?? "Request") — \($0.string("tax_year") ?? "")" } ?? "Request")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }

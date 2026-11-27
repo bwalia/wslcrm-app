@@ -42,6 +42,7 @@ struct AcademyCourseDetailView: View {
                 lessonsSection
             }
         }
+        .wsDetailList()
         .environment(\.editMode, $editMode)
         .overlay { if course == nil, loadError == nil { SkeletonList() } }
         .navigationTitle("Course")

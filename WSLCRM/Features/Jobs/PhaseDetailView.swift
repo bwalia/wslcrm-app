@@ -119,6 +119,7 @@ struct PhaseDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .wsRefreshable { await model.load() }
     }
 

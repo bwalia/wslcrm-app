@@ -179,6 +179,7 @@ struct OrderDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle("Order")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }

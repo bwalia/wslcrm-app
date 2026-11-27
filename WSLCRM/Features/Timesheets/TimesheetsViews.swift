@@ -487,6 +487,7 @@ struct TimesheetDetailView: View {
 
             Section { actions(sheet, isMine: isMine, canChange: canChange) }
         }
+        .wsDetailList()
         .disabled(busy)
         .wsRefreshable { await load() }
     }

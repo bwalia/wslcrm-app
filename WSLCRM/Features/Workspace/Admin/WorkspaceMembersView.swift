@@ -445,6 +445,7 @@ private struct WorkspaceMemberDetailView: View {
             }
             actions
         }
+        .wsDetailList()
         .navigationTitle("Member")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $editingRoles) {

@@ -167,6 +167,7 @@ struct CustomerAssetDetailView: View {
                 content(asset)
             }
         }
+        .wsDetailList()
         .navigationTitle(asset.value?.assetTag ?? "Asset")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }

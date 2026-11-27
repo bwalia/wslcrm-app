@@ -341,6 +341,7 @@ struct AIRunnerDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .wsRefreshable { await load() }
         .confirmationDialog(confirm == "rotate" ? "Make a new token for \(r.name)?" : "Revoke \(r.name)?",
                             isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }),

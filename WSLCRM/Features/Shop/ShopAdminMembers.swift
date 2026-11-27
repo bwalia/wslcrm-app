@@ -221,6 +221,7 @@ struct ShopMemberDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .listStyle(.insetGrouped)
         .navigationTitle(record.string("name") ?? record.string("email") ?? "Member")
         .navigationBarTitleDisplayMode(.inline)

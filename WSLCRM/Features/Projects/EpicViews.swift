@@ -243,6 +243,7 @@ struct EpicDetailView: View {
                         }
                     }
                 }
+                .wsDetailList()
                 .wsRefreshable { await load() }
             }
         }

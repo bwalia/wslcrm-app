@@ -236,6 +236,7 @@ private struct WorkspaceAIProviderDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle("AI model")
         .navigationBarTitleDisplayMode(.inline)
         .task { await reload() }

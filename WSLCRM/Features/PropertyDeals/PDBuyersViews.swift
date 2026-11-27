@@ -175,6 +175,7 @@ struct PDBuyerDetailView: View {
             if let loadError, buyer == nil { InlineErrorRow(error: loadError) { Task { await load() } } }
             if let buyer { content(buyer) }
         }
+        .wsDetailList()
         .overlay { if buyer == nil, loadError == nil { SkeletonList() } }
         .navigationTitle("Buyer")
         .navigationBarTitleDisplayMode(.inline)

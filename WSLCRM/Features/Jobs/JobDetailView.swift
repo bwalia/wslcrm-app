@@ -279,7 +279,7 @@ private struct JobDetailContent: View {
         return RecordActionBar(showsMore: transitions.contains(.cancelled)) {
             ForEach(transitions.filter { $0 != .cancelled }, id: \.self) { status in
                 if status == .completed || status == .inProgress {
-                    statusButton(status).buttonStyle(.borderedProminent).tint(status.tone.solidColor)
+                    statusButton(status).buttonStyle(.action(prominent: true, tone: status.tone))
                 } else {
                     statusButton(status)
                 }
@@ -306,7 +306,6 @@ private struct JobDetailContent: View {
         return List {
             Section {
                 header(detail)
-                if MacSupport.isMac, policy.canChangeJobStatus(detail) { macActions(detail) }
                 if let cachedAt = model.cachedAt {
                     CachedDataNotice(savedAt: cachedAt)
                 }
@@ -432,6 +431,7 @@ private struct JobDetailContent: View {
             }
         }
         .listStyle(.insetGrouped)
+        .wsDetailList()
         .environment(\.editMode, $editMode)
         .onAppear {
             if photos == nil { photos = JobPhotosModel(jobUuid: detail.job.uuid, visitUuid: nil, api: services.fieldService) }
@@ -643,11 +643,18 @@ private struct JobDetailContent: View {
     }
 
     private func header(_ detail: JobDetail) -> some View {
+        DetailHeader(detail.job.title,
+                     subtitle: [detail.job.jobNumber, detail.job.customerName].compactMap { $0?.trimmedOrNil }.joined(separator: " · "),
+                     avatar: .icon("wrench.and.screwdriver.fill", Palette.tile(for: "field_service_jobs"))) {
+            headerDetails(detail)
+        } actions: {
+            if MacSupport.isMac, model.policy.canChangeJobStatus(detail) { macActions(detail) }
+        }
+    }
+
+    private func headerDetails(_ detail: JobDetail) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(detail.job.title)
-                .font(.wsTitle2.bold())
-                .accessibilityAddTraits(.isHeader)
-            HStack(spacing: 8) {
+            DetailChips {
                 detail.job.status.badge
                     .accessibilityIdentifier("job.status")
                 if detail.job.priority != .normal && detail.job.priority != .unknown {
@@ -663,7 +670,7 @@ private struct JobDetailContent: View {
                     .font(.wsSubheadline)
             }
             if let description = detail.job.description, !description.isEmpty {
-                Text(description).font(.wsBody).foregroundStyle(.secondaryText)
+                Text(description).wsParagraph().foregroundStyle(.secondaryText)
             }
             if let type = detail.job.jobTypeName {
                 Label(type, systemImage: "tag").font(.wsSubheadline)

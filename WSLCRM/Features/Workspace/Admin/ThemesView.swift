@@ -353,6 +353,7 @@ private struct ThemeDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle(theme.name)
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }

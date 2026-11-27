@@ -633,6 +633,7 @@ struct TaxTransactionDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .disabled(busy)
         .navigationTitle("Transaction")
         .navigationBarTitleDisplayMode(.inline)

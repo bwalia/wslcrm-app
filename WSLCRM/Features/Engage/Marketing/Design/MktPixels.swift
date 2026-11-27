@@ -270,6 +270,7 @@ struct MktPixelDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .navigationTitle(pixel.name)
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: tab) { _, _ in notice = nil }

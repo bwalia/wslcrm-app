@@ -356,6 +356,7 @@ struct ShopDealDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .wsRefreshable { await load() }
     }
 

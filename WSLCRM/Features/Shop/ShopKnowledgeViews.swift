@@ -203,6 +203,7 @@ private struct ShopKnowledgeDetailView: View {
                 }
             }
         }
+        .wsDetailList()
         .listStyle(.insetGrouped)
         .navigationTitle("Document")
         .navigationBarTitleDisplayMode(.inline)

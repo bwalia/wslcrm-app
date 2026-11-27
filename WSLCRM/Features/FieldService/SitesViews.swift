@@ -257,6 +257,7 @@ struct SiteDetailView: View {
             }
             Section { DetailRow(label: "Jobs at this site", value: String(site.jobCount)) }
         }
+        .wsDetailList()
         .navigationTitle("Site")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
