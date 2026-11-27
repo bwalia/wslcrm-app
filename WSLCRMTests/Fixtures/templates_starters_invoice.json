@@ -1,0 +1,26 @@
+{
+ "data": {
+  "type": "invoice",
+  "starters": [
+   {
+    "footer_html": "<html><head><style>\nhtml, body { margin: 0; padding: 0; }\nbody { font-family: {{ theme.font_stack | raw }}; font-size: 7.5pt; color: #94a3b8; -webkit-print-colo",
+    "name": "Classic",
+    "css": "* { box-sizing: border-box; }\nhtml, body { margin: 0; padding: 0; }\nbody { -webkit-print-color-adjust: exact; print-color-adjust: exact; }\n.doc { font-family: v",
+    "preview_html": "<!doctype html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data:; style-src 'unsafe-inline",
+    "key": "classic",
+    "html": "<div class=\"doc layout-clean\" style=\"--accent: {{ theme.accent }}; --header: {{ theme.header }}; --font: {{ theme.font_stack }}; --logo-h: {{ theme.logo_height ",
+    "description": "White page, your colour on the heading and a fine rule. Calm and traditional."
+   },
+   {
+    "footer_html": "<html><head><style>\nhtml, body { margin: 0; padding: 0; }\nbody { font-family: {{ theme.font_stack | raw }}; font-size: 7.5pt; color: #94a3b8; -webkit-print-colo",
+    "name": "Modern",
+    "css": "* { box-sizing: border-box; }\nhtml, body { margin: 0; padding: 0; }\nbody { -webkit-print-color-adjust: exact; print-color-adjust: exact; }\n.doc { font-family: v",
+    "preview_html": "<!doctype html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data:; style-src 'unsafe-inline",
+    "key": "modern",
+    "html": "<div class=\"doc layout-modern\" style=\"--accent: {{ theme.accent }}; --header: {{ theme.header }}; --font: {{ theme.font_stack }}; --logo-h: {{ theme.logo_height",
+    "description": "The amount due in large type up front, airy spacing, light lines. Like the best online invoices."
+   }
+  ]
+ },
+ "success": true
+}

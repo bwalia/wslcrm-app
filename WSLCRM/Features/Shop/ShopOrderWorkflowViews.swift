@@ -20,8 +20,10 @@ struct ShopOrderNextStepSection: View {
     /// One key per receive attempt series, so a retry after a lost reply can't record the goods twice.
     @State private var receiveKey = MoneyRetryKey()
     @State private var printFile: URL?
-    /// Why the simple design was used though the workspace chose a template (the PDF service was down).
+    /// Why the quick layout was used though the workspace chose a template (the PDF service was down).
     @State private var printNotice: String?
+    @State private var printMadeWith: String?
+    @State private var previewing: PDFPreviewItem?
     @State private var notice: String?
     @State private var error: APIError?
 
@@ -70,8 +72,14 @@ struct ShopOrderNextStepSection: View {
                 ShareLink(item: link) { Label("Share the customer’s order link", systemImage: "square.and.arrow.up") }
             }
             if let file = printFile {
-                ShareLink(item: file) { Label("Print or share the order", systemImage: "printer") }
-                    .accessibilityIdentifier("shopOrder.print")
+                // The exact PDF the customer gets, with Share, Print and Save.
+                Button {
+                    previewing = PDFPreviewItem(url: file, title: "Order \(order.orderNumber)", subtitle: printMadeWith,
+                                                notice: printNotice)
+                } label: {
+                    Label("Preview the order", systemImage: "eye")
+                }
+                .accessibilityIdentifier("shopOrder.print")
                 if let printNotice { Label(printNotice, systemImage: "info.circle").foregroundStyle(.secondaryText) }
             }
             if let notice { Label(notice, systemImage: "checkmark.circle").foregroundStyle(Tone.success.textColor) }
@@ -88,6 +96,16 @@ struct ShopOrderNextStepSection: View {
                     }
                     printFile = made.url
                     printNotice = made.notice
+                    printMadeWith = made.madeWith
+                }
+                .sheet(item: $previewing) { item in
+                    PDFPreviewSheet(item: item, extra: {
+                        if TemplateAccess.readDesigns(session.permissions) {
+                            NavigationLink("Change how orders look") { DocumentLookView(initialKind: .order) }
+                                .font(.wsSubheadline)
+                        }
+                    })
+                    .environment(session)
                 }
                 .sheet(isPresented: $raisingPO) {
                     ShopRaisePOSheet(order: order) { created in

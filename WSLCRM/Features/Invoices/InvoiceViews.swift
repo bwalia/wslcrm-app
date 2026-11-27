@@ -1,4 +1,3 @@
-import QuickLook
 import SwiftUI
 import UIKit
 
@@ -42,9 +41,22 @@ struct InvoicesListView: View {
         }
         .navigationTitle("Invoices")
         .toolbar {
-            if session.permissions.can(.create, .invoices) || session.permissions.can(.read, moduleName: "tax_rates_config") {
+            if session.permissions.can(.create, .invoices) || session.permissions.can(.read, moduleName: "tax_rates_config")
+                || TemplateAccess.readDesigns(session.permissions) || TemplateAccess.read(session.permissions) {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        if TemplateAccess.readDesigns(session.permissions) {
+                            NavigationLink(value: NativeScreenRoute(WorkspaceScreen.documentDesign)) {
+                                Label("How invoices look", systemImage: "paintpalette")
+                            }
+                            .accessibilityIdentifier("invoices.design")
+                        }
+                        if TemplateAccess.read(session.permissions) {
+                            NavigationLink(value: NativeScreenRoute(WorkspaceScreen.templates)) {
+                                Label("Invoice templates", systemImage: "doc.richtext")
+                            }
+                            .accessibilityIdentifier("invoices.templates")
+                        }
                         if session.permissions.can(.create, .invoices) {
                             Button("Bill hours from timesheets", systemImage: "clock.badge.checkmark") { billingHours = true }
                                 .accessibilityIdentifier("invoices.fromTimesheets")
@@ -288,9 +300,10 @@ struct InvoiceDetailView: View {
     @State private var confirmDelete = false
     @State private var deletingPayment: InvoicePayment?
     @State private var pdfURL: URL?
-    @State private var previewURL: URL?
-    /// Why the simple design was used though the workspace chose a template (the PDF service was down).
+    @State private var previewing: PDFPreviewItem?
+    /// Why the quick layout was used though the workspace chose a template (the PDF service was down).
     @State private var pdfNotice: String?
+    @State private var pdfMadeWith: String?
     @State private var emailing = false
     @State private var editingHeader = false
     @State private var notice: String?
@@ -320,19 +333,10 @@ struct InvoiceDetailView: View {
         .toolbar {
             if let invoice = state.value {
                 ToolbarItem(placement: .topBarTrailing) {
-                    // One tap shows the PDF; Quick Look has its own share button.
-                    Button("Preview PDF", systemImage: "doc.richtext") {
-                        Task {
-                            if pdfURL == nil {
-                                let made = await InvoicePDFRenderer.make(invoice, company: session.workspace?.name,
-                                                                         services: services, workspace: session.workspace?.uuid)
-                                pdfURL = made.url
-                                pdfNotice = made.notice
-                            }
-                            previewURL = pdfURL
-                        }
-                    }
-                    .accessibilityIdentifier("invoice.pdf")
+                    // The exact PDF the customer gets, with Send, Share, Print and Save.
+                    Button("Preview", systemImage: "eye") { Task { await preview(invoice) } }
+                        .help("See the PDF your customer gets")
+                        .accessibilityIdentifier("invoice.pdf")
                 }
                 if session.permissions.can(.update, .invoices) && invoice.canEditHeader {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -341,7 +345,19 @@ struct InvoiceDetailView: View {
                 }
             }
         }
-        .quickLookPreview($previewURL)
+        .sheet(item: $previewing) { item in
+            let invoice = state.value
+            let canEmail = session.permissions.can(.update, .invoices) && invoice?.canEmail == true
+            PDFPreviewSheet(item: item, sendTitle: canEmail ? invoice?.emailActionTitle : nil,
+                            onSend: canEmail ? { emailing = true } : nil, extra: {
+                if TemplateAccess.readDesigns(session.permissions) {
+                    NavigationLink("Change how invoices look") { DocumentLookView(initialKind: .invoice) }
+                        .font(.wsSubheadline)
+                        .accessibilityIdentifier("invoice.preview.design")
+                }
+            })
+            .environment(session)
+        }
         .sheet(item: $editingItem) { item in
             LineItemSheet(item: item) { body in
                 await mutate("Line saved.") { try await services.invoices.updateItem(invoiceUuid, itemId: item.id, body) }
@@ -358,7 +374,7 @@ struct InvoiceDetailView: View {
         }
         .sheet(isPresented: $emailing) {
             if let invoice = state.value {
-                EmailInvoiceSheet(invoice: invoice, company: session.workspace?.name) { to in
+                EmailInvoiceSheet(invoice: invoice, company: session.workspace?.name, made: madePDF) { to in
                     notice = invoice.displayStatus == .overdue ? "Reminder emailed to \(to)."
                         : invoice.status == .draft ? "Emailed to \(to) and marked as sent." : "Emailed to \(to) again."
                     actionError = nil
@@ -695,6 +711,27 @@ struct InvoiceDetailView: View {
                 actionError = apiError
             }
         }
+    }
+
+    /// The PDF already made for this version of the invoice (Preview, then Email, attach the same bytes).
+    private var madePDF: WorkspacePDF.Result? {
+        pdfURL.map { WorkspacePDF.Result(url: $0, notice: pdfNotice, madeWith: pdfMadeWith) }
+    }
+
+    private func preview(_ invoice: Invoice) async {
+        if pdfURL == nil {
+            let made = await InvoicePDFRenderer.make(invoice, company: session.workspace?.name,
+                                                     services: services, workspace: session.workspace?.uuid)
+            pdfURL = made.url
+            pdfNotice = made.notice
+            pdfMadeWith = made.madeWith
+        }
+        guard let pdfURL else {
+            actionError = ResourceService.problem(0, "The invoice PDF couldn't be made. Try again.")
+            return
+        }
+        previewing = PDFPreviewItem(url: pdfURL, title: "Invoice \(invoice.displayNumber)", subtitle: pdfMadeWith,
+                                    notice: pdfNotice)
     }
 
     private func load() async {
@@ -1154,8 +1191,8 @@ enum InvoicePDFRenderer {
 }
 
 
-/// Emails the invoice PDF to the customer (opsapi #611). The PDF is the same one "Share PDF"
-/// produces — the server has no renderer, so the client supplies it.
+/// Emails the invoice PDF to the customer (opsapi #611). The PDF is made when the sheet opens and shown before
+/// anything is sent (a beginner sees what goes out); Send attaches exactly those bytes.
 struct EmailInvoiceSheet: View {
     let invoice: Invoice
     var company: String?
@@ -1170,14 +1207,17 @@ struct EmailInvoiceSheet: View {
     @State private var sending = false
     @State private var sentTo: String?
     @State private var error: APIError?
-    @State private var pdfNotice: String?
+    @State private var made: WorkspacePDF.Result?
+    @State private var pdf: Data?
+    @State private var page: UIImage?
 
-    init(invoice: Invoice, company: String? = nil, onSent: @escaping (String) -> Void = { _ in }) {
+    init(invoice: Invoice, company: String? = nil, made: WorkspacePDF.Result? = nil, onSent: @escaping (String) -> Void = { _ in }) {
         self.invoice = invoice
         self.company = company
         self.onSent = onSent
         _recipient = State(initialValue: invoice.customerEmail ?? "")
         _message = State(initialValue: Self.reminderNote(invoice) ?? "")
+        _made = State(initialValue: made)
     }
 
     /// An overdue invoice's email starts as a polite reminder.
@@ -1197,6 +1237,7 @@ struct EmailInvoiceSheet: View {
                     LabeledContent("Customer", value: invoice.customerName ?? "—")
                     LabeledContent("Total", value: Formatters.money(invoice.totalAmount, currency: invoice.currency) ?? "")
                 }
+                attachment
                 Section {
                     TextField("Customer email", text: $recipient)
                         .keyboardType(.emailAddress)
@@ -1208,16 +1249,13 @@ struct EmailInvoiceSheet: View {
                         .lineLimit(2...5)
                 } footer: {
                     Text(invoice.status == .draft
-                         ? "Attaches the invoice PDF and marks this invoice as sent."
-                         : "Attaches the invoice PDF and emails it again. Its status doesn't change.")
+                         ? "Attaches the invoice PDF above and marks this invoice as sent."
+                         : "Attaches the invoice PDF above and emails it again. Its status doesn't change.")
                 }
-                if sentTo != nil || pdfNotice != nil {
+                if let sentTo {
                     Section {
-                        if let sentTo {
-                            Label("Emailed to \(sentTo)", systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(Tone.success.textColor)
-                        }
-                        if let pdfNotice { Label(pdfNotice, systemImage: "info.circle").foregroundStyle(.secondaryText) }
+                        Label("Emailed to \(sentTo)", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(Tone.success.textColor)
                     }
                 }
                 if let error { Section { InlineErrorRow(error: error) } }
@@ -1228,28 +1266,79 @@ struct EmailInvoiceSheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button(sentTo == nil ? "Cancel" : "Done") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Send") { send() }
-                        .disabled(sending || recipient.trimmedOrNil == nil)
+                        .disabled(sending || pdf == nil || recipient.trimmedOrNil == nil)
                         .accessibilityIdentifier("invoiceEmail.send")
                 }
             }
             .interactiveDismissDisabled(sending)
+            .task { await makePDF() }
         }
     }
 
+    /// What the customer gets: the first page, and the whole PDF one tap away.
+    @ViewBuilder
+    private var attachment: some View {
+        Section {
+            if let pdf, let url = made?.url {
+                NavigationLink {
+                    PDFKitView(data: pdf, accessibilityID: "invoiceEmail.pdf")
+                        .navigationTitle(url.lastPathComponent)
+                        .navigationBarTitleDisplayMode(.inline)
+                } label: {
+                    HStack(spacing: 12) {
+                        Group {
+                            if let page { Image(uiImage: page).resizable().scaledToFit() } else { TemplatePageSketch() }
+                        }
+                        .frame(width: 64, height: 90)
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                        .overlay(RoundedRectangle(cornerRadius: 3).stroke(Palette.hairline))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(url.lastPathComponent).font(.wsHeadline)
+                            if let madeWith = made?.madeWith {
+                                Text(madeWith).font(.wsCaption).foregroundStyle(.secondaryText)
+                            }
+                            Text("Look at the whole PDF").font(.wsSubheadline).foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .accessibilityIdentifier("invoiceEmail.preview")
+            } else if made != nil {
+                Label("The invoice PDF couldn't be made.", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Tone.danger.textColor)
+                Button("Try again", systemImage: "arrow.clockwise") {
+                    made = nil
+                    Task { await makePDF() }
+                }
+            } else {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Making the PDF…").foregroundStyle(.secondaryText)
+                }
+            }
+        } header: {
+            Text("What \(invoice.customerName?.trimmedOrNil ?? "the customer") gets")
+        } footer: {
+            if let notice = made?.notice { Text(notice) }
+        }
+    }
+
+    /// The same PDF as Preview: the workspace's template when it chose one.
+    private func makePDF() async {
+        if made == nil {
+            made = await InvoicePDFRenderer.make(invoice, company: company, services: services, workspace: session.workspace?.uuid)
+        }
+        pdf = made?.url.flatMap { try? Data(contentsOf: $0) }
+        page = pdf.flatMap { PDFThumbnail.image($0, width: 180) }
+    }
+
     private func send() {
+        guard let pdf, let url = made?.url else { return }
         sending = true
         error = nil
         Task {
             defer { sending = false }
-            // The same PDF as Preview: the workspace's template when it chose one.
-            let made = await InvoicePDFRenderer.make(invoice, company: company, services: services,
-                                                     workspace: session.workspace?.uuid)
-            pdfNotice = made.notice
-            guard let url = made.url, let pdf = try? Data(contentsOf: url) else {
-                error = .validation(ServerError(status: 0, message: "The invoice PDF could not be built.",
-                                                fieldErrors: [:], rawBody: ""))
-                return
-            }
             do {
                 let result = try await services.invoices.email(
                     invoice.id, pdf: pdf, filename: url.lastPathComponent, to: recipient, message: message)

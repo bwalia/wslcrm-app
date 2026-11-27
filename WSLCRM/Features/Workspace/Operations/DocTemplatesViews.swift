@@ -1,4 +1,3 @@
-import PDFKit
 import SwiftUI
 
 // MARK: - Screen
@@ -17,7 +16,7 @@ struct DocTemplatesScreen: View {
     var body: some View {
         Group {
             switch tab {
-            case .documents: DocTemplatesList()
+            case .documents: DocumentTemplatesLibrary()
             case .layouts: RenderTemplatesList()
             }
         }
@@ -169,266 +168,6 @@ private struct DocTemplateRoute: Hashable, Identifiable {
     var id: String { uuid }
 }
 
-/// The list of document templates: type tabs, search, paging, create, clone, set default, delete.
-struct DocTemplatesList: View {
-    @Environment(\.services) private var services
-    @State private var type = ""
-    @State private var search = ""
-    @State private var pager: OperationsPager?
-    @State private var feedback: Feedback = .none
-    @State private var creating = false
-    @State private var cloning: Record?
-    @State private var deleting: Record?
-    @State private var opened: DocTemplateRoute?
-
-    var body: some View {
-        List {
-            Section {
-                Picker("Type", selection: $type) {
-                    Text("All").tag("")
-                    ForEach(DocTemplateStyle.types) { Text($0.label).tag($0.value) }
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("templates.type")
-            }
-            FeedbackSection(feedback: feedback)
-            Section {
-                if let pager {
-                    switch pager.state {
-                    case .failed(let error):
-                        InlineErrorRow(error: error) { Task { await pager.reload() } }
-                    case .loaded where pager.items.isEmpty:
-                        ContentUnavailableView {
-                            Label(search.isEmpty ? "No templates yet" : "No matching templates", systemImage: "doc.richtext")
-                        } description: {
-                            Text(search.isEmpty
-                                 ? "Templates decide how your invoices and timesheets look. Add one to start from a simple layout."
-                                 : "Try another search.")
-                        }
-                    case .idle, .loading:
-                        if pager.items.isEmpty { SkeletonRow(); SkeletonRow() }
-                    default:
-                        EmptyView()
-                    }
-                    ForEach(pager.items) { template in
-                        Button {
-                            opened = DocTemplateRoute(uuid: template.id)
-                        } label: {
-                            DocTemplateRow(template: template)
-                        }
-                        .contextMenu { actions(for: template) }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button("Delete", role: .destructive) { deleting = template }
-                        }
-                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                            Button("Copy") { cloning = template }.tint(.indigo)
-                            if template.bool("is_default") != true {
-                                Button("Default") { Task { await makeDefault(template) } }.tint(.orange)
-                            }
-                        }
-                        .accessibilityIdentifier("templates.row.\(template.id)")
-                    }
-                    OperationsPagerFooter(pager: pager)
-                }
-            } header: {
-                Text(pager?.total.map { "Templates (\($0))" } ?? "Templates")
-            } footer: {
-                Text("Swipe right to copy a template or make it the default for its type; swipe left to delete. Touch and hold for every action.")
-            }
-        }
-        .searchable(text: $search, prompt: "Search by name")
-        .wsRefreshable { await pager?.reload() }
-        .task(id: "\(type)|\(search)") {
-            if pager != nil, !search.isEmpty { try? await Task.sleep(for: .milliseconds(350)) }
-            guard !Task.isCancelled else { return }
-            pager = makePager()
-            await pager?.reload()
-        }
-        .navigationDestination(item: $opened) { route in
-            DocTemplateEditorView(uuid: route.uuid) { Task { await pager?.reload() } }
-        }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button { creating = true } label: { Label("New template", systemImage: "plus") }
-                    .accessibilityIdentifier("templates.add")
-            }
-        }
-        .sheet(isPresented: $creating) {
-            NavigationStack {
-                DocTemplateCreateView(initialType: type.isEmpty ? "invoice" : type) { created in
-                    feedback = .done("Template created. Edit its layout now.")
-                    Task { await pager?.reload() }
-                    opened = DocTemplateRoute(uuid: created)
-                }
-            }
-        }
-        .sheet(item: $cloning) { template in
-            NavigationStack {
-                DocTemplateCloneView(template: template) { copy in
-                    feedback = .done("Copied as a new template.")
-                    Task { await pager?.reload() }
-                    opened = DocTemplateRoute(uuid: copy)
-                }
-            }
-        }
-        .confirmationDialog("Delete this template?", isPresented: Binding(
-            get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
-            if let template = deleting {
-                Button("Delete \(template.string("name") ?? "template")", role: .destructive) {
-                    Task { await delete(template) }
-                }
-            }
-        } message: {
-            Text("This can’t be undone. Documents already made keep their look.")
-        }
-    }
-
-    @ViewBuilder
-    private func actions(for template: Record) -> some View {
-        Button { opened = DocTemplateRoute(uuid: template.id) } label: { Label("Edit", systemImage: "pencil") }
-        Button { cloning = template } label: { Label("Make a copy", systemImage: "plus.square.on.square") }
-        if template.bool("is_default") != true {
-            Button { Task { await makeDefault(template) } } label: { Label("Make it the default", systemImage: "star") }
-        }
-        Button(role: .destructive) { deleting = template } label: { Label("Delete", systemImage: "trash") }
-    }
-
-    private func makePager() -> OperationsPager {
-        let api = services.workspace()
-        let type = type
-        let search = search
-        return OperationsPager { page in
-            // Document templates page with camelCase `perPage` and send paging under `meta`.
-            let json = try await api.get("/api/v2/templates", query: [
-                "page": String(page), "perPage": "20", "type": type, "search": search,
-            ])
-            return WorkspaceAPI.page(json, page: page, perPage: 20)
-        }
-    }
-
-    private func makeDefault(_ template: Record) async {
-        await perform($feedback, done: "\(template.string("name") ?? "The template") is now the default \(DocTemplateStyle.typeLabel(template.string("type")).lowercased()) template.") {
-            try await services.workspace().send(.post, "/api/v2/templates/\(template.id)/set-default", body: .object([:]))
-        }
-        await pager?.reload()
-    }
-
-    private func delete(_ template: Record) async {
-        await perform($feedback, done: "\(template.string("name") ?? "The template") was deleted.") {
-            try await services.workspace().send(.delete, "/api/v2/templates/\(template.id)")
-        }
-        await pager?.reload()
-    }
-}
-
-private struct DocTemplateRow: View {
-    let template: Record
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(template.string("name") ?? "Template").font(.wsHeadline).foregroundStyle(.primary).lineLimit(1)
-                if template.bool("is_default") == true {
-                    Image(systemName: "star.fill").foregroundStyle(.yellow).accessibilityLabel("Default")
-                }
-                Spacer(minLength: 6)
-                Text("v\(template.int("version") ?? 1)").font(.wsCaption.monospaced()).foregroundStyle(.secondaryText)
-            }
-            if let description = template.string("description") {
-                Text(description).font(.wsSubheadline).foregroundStyle(.secondaryText).lineLimit(2)
-            }
-            HStack(spacing: 8) {
-                StatusBadge(text: DocTemplateStyle.typeLabel(template.string("type")),
-                            systemImage: template.string("type") == "timesheet" ? "clock" : "doc.text",
-                            tone: template.string("type") == "timesheet" ? .success : .info)
-                if template.bool("is_active") == false {
-                    StatusBadge(text: "Not in use", systemImage: "pause.circle", tone: .neutral)
-                }
-                Text("Updated \(Formatters.relative(template.date("updated_at")) ?? "")")
-                    .font(.wsCaption).foregroundStyle(.secondaryText)
-            }
-        }
-        .padding(.vertical, 2)
-        .accessibilityElement(children: .combine)
-    }
-}
-
-/// New template: name, type, description, page size and orientation.
-private struct DocTemplateCreateView: View {
-    let initialType: String
-    let onCreated: (String) -> Void
-    @Environment(\.services) private var services
-    @Environment(\.dismiss) private var dismiss
-    @State private var name = ""
-    @State private var type = "invoice"
-    @State private var detail = ""
-    @State private var pageSize = "A4"
-    @State private var landscape = false
-    @State private var feedback: Feedback = .none
-    @State private var saving = false
-    @State private var prepared = false
-
-    var body: some View {
-        Form {
-            FeedbackSection(feedback: feedback)
-            Section {
-                LabeledContent("Name (needed)") {
-                    TextField("e.g. Standard invoice", text: $name).multilineTextAlignment(.trailing)
-                        .accessibilityIdentifier("templates.create.name")
-                }
-                Picker("Type", selection: $type) {
-                    ForEach(DocTemplateStyle.types) { Text($0.label).tag($0.value) }
-                }
-                TextField("Description (optional)", text: $detail, axis: .vertical).lineLimit(1...4)
-            } footer: {
-                Text("The type can’t change later.")
-            }
-            Section("Page") {
-                Picker("Size", selection: $pageSize) {
-                    ForEach(DocTemplateStyle.pageSizes, id: \.self) { Text($0).tag($0) }
-                }
-                Picker("Orientation", selection: $landscape) {
-                    Text("Portrait").tag(false)
-                    Text("Landscape").tag(true)
-                }
-            }
-        }
-        .navigationTitle("New template")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Create") { Task { await create() } }
-                    .disabled(saving || name.trimmingCharacters(in: .whitespaces).isEmpty)
-                    .accessibilityIdentifier("templates.create.save")
-            }
-        }
-        .onAppear {
-            guard !prepared else { return }
-            prepared = true
-            type = initialType
-        }
-    }
-
-    private func create() async {
-        saving = true
-        defer { saving = false }
-        var uuid: String?
-        let body = JSONValue.fields([
-            "name": .string(name.trimmingCharacters(in: .whitespaces)), "type": .string(type),
-            "description": .text(detail), "page_size": .string(pageSize),
-            "page_orientation": .string(landscape ? "landscape" : "portrait"),
-        ])
-        if await perform($feedback, done: "Created.", {
-            let json = try await services.workspace().send(.post, "/api/v2/templates", body: body)
-            uuid = WorkspaceAPI.record(json)?.string("uuid")
-        }), let uuid {
-            onCreated(uuid)
-            dismiss()
-        }
-    }
-}
-
 /// Copies a template under a new name.
 private struct DocTemplateCloneView: View {
     let template: Record
@@ -502,6 +241,9 @@ struct DocTemplateDraft: Equatable {
     var fontFamily = "Inter, sans-serif"
     var footerText = ""
     var advanced = "{}"
+    /// Not edited here (a designer template's page footer); kept so the server preview prints it.
+    var footerHTML: String?
+    var headerHTML: String?
 
     init() {}
 
@@ -522,6 +264,8 @@ struct DocTemplateDraft: Equatable {
         fontFamily = config["font_family"]?.stringValue ?? "Inter, sans-serif"
         footerText = config["footer_text"]?.stringValue ?? ""
         advanced = Self.pretty(.object(config))
+        footerHTML = template.string("footer_html")
+        headerHTML = template.string("header_html")
     }
 
     static func pretty(_ value: JSONValue) -> String {
@@ -567,6 +311,12 @@ struct DocTemplateDraft: Equatable {
             "margin_right": .string(marginRight),
             "config": .object(config),
         ])
+    }
+
+    /// What `POST /api/v2/templates/preview-pdf` prints for this draft.
+    func pdfSource(_ kind: TemplateKind) -> TemplatePDFSource {
+        TemplatePDFSource(kind: kind, html: html, css: css, footerHTML: footerHTML, headerHTML: headerHTML, pageSize: pageSize,
+                          orientation: orientation, margins: [marginTop, marginBottom, marginLeft, marginRight])
     }
 
     /// The body for `POST /api/v2/templates/preview-raw`.
@@ -699,7 +449,7 @@ struct DocTemplateEditorView: View {
                 }
                 Section {
                     NavigationLink {
-                        DocTemplatePreviewView(draft: draft)
+                        DocTemplatePreviewView(draft: draft, type: type)
                     } label: {
                         Label("Preview with example data", systemImage: "eye")
                     }
@@ -928,10 +678,11 @@ private struct DocTemplateVariablesView: View {
     }
 }
 
-/// Earlier versions of a template, each with Restore.
-private struct DocTemplateVersionsView: View {
+/// Earlier versions of a template, each with Restore (for people who may change templates).
+struct DocTemplateVersionsView: View {
     let uuid: String
     let current: Int
+    var canRestore = true
     let onRestored: (String) -> Void
     @Environment(\.services) private var services
     @Environment(\.dismiss) private var dismiss
@@ -961,7 +712,7 @@ private struct DocTemplateVersionsView: View {
                         if let notes = version.string("change_notes") {
                             Text(notes).font(.wsSubheadline).foregroundStyle(.secondaryText)
                         }
-                        if number != current {
+                        if number != current && canRestore {
                             Button("Restore this version") { restoring = version }
                                 .buttonStyle(.bordered)
                                 .accessibilityIdentifier("templates.version.restore.\(number)")
@@ -1016,20 +767,31 @@ private struct DocTemplateVersionsView: View {
 
 // MARK: - Preview and PDF
 
-/// Renders the draft on the server with example data, then shows it as a page made on the device.
+/// The draft as a PDF with example figures: an invoice or order template exactly as the server prints it
+/// (`preview-pdf`); a timesheet, or when there's no PDF service, laid out on the device from the server's filled-in HTML.
 struct DocTemplatePreviewView: View {
     let draft: DocTemplateDraft
+    var type = "invoice"
     @Environment(\.services) private var services
     @State private var pdf: Data?
-    @State private var html: String?
+    @State private var problem: String?
+    @State private var note: String?
     @State private var error: APIError?
     @State private var shareURL: URL?
 
     var body: some View {
         Group {
-            if let pdf {
-                DocTemplatePDFView(data: pdf)
-                    .background(Color(.secondarySystemBackground))
+            if let problem {
+                ContentUnavailableView {
+                    Label("This template can’t be printed yet", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(problem)
+                } actions: {
+                    Button("Try again", systemImage: "arrow.clockwise") { Task { await render() } }
+                }
+                .accessibilityIdentifier("templates.preview.problem")
+            } else if let pdf {
+                PDFKitView(data: pdf, accessibilityID: "templates.preview.pdf")
             } else if let error {
                 List { InlineErrorRow(error: error) { Task { await render() } } }
             } else {
@@ -1048,7 +810,7 @@ struct DocTemplatePreviewView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            Text("Filled with example data. Your real documents use your own details.")
+            Text(note ?? "Filled with example figures. Your real documents use your own details.")
                 .font(.wsFootnote).foregroundStyle(.secondaryText)
                 .frame(maxWidth: .infinity)
                 .padding(8)
@@ -1058,41 +820,43 @@ struct DocTemplatePreviewView: View {
 
     private func render() async {
         error = nil
+        problem = nil
+        let name = draft.name.isEmpty ? "template" : draft.name
+        if let kind = TemplateKind(rawValue: type), kind.isDocument {
+            do {
+                let data = try await DocTemplatesAPI(services).previewPDF(draft.pdfSource(kind))
+                pdf = data
+                note = nil
+                shareURL = OperationsFile.write(data, named: "\(name) preview.pdf")
+                return
+            } catch {
+                switch TemplatePDFProblem(error) {
+                case .mistake(let text, _):
+                    problem = text
+                    return
+                case .serviceUnavailable:
+                    note = "The PDF service isn’t set up here, so this page is laid out on this device and may differ a little."
+                default:
+                    if case .cancelled = error.asAPIError { return }
+                    self.error = error.asAPIError
+                    return
+                }
+            }
+        }
         do {
             let json = try await services.workspace().send(.post, "/api/v2/templates/preview-raw", body: draft.previewBody())
             let rendered = WorkspaceAPI.record(json)?.string("rendered_html") ?? ""
-            html = rendered
             let data = DocTemplatePDF.make(html: rendered, pageSize: draft.pageSize,
                                            landscape: draft.orientation == "landscape",
                                            margins: DocTemplatePDF.Margins(top: draft.marginTop, bottom: draft.marginBottom,
                                                                            left: draft.marginLeft, right: draft.marginRight))
             pdf = data
-            let name = draft.name.isEmpty ? "template" : draft.name
             shareURL = OperationsFile.write(data, named: "\(name) preview.pdf")
         } catch {
             let apiError = error.asAPIError
             if case .cancelled = apiError { return }
             self.error = apiError
         }
-    }
-}
-
-/// A PDF shown with PDFKit (native, no web view).
-private struct DocTemplatePDFView: UIViewRepresentable {
-    let data: Data
-
-    func makeUIView(context: Context) -> PDFView {
-        let view = PDFView()
-        view.autoScales = true
-        view.displayMode = .singlePageContinuous
-        view.displayDirection = .vertical
-        view.document = PDFDocument(data: data)
-        view.accessibilityIdentifier = "templates.preview.pdf"
-        return view
-    }
-
-    func updateUIView(_ view: PDFView, context: Context) {
-        if view.document?.dataRepresentation() != data { view.document = PDFDocument(data: data) }
     }
 }
 

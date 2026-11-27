@@ -1,0 +1,29 @@
+{
+ "data": [
+  {
+   "updated_at": "2026-11-27 10:20:00.924412",
+   "description": "White page, your colour on the heading and a fine rule. Calm and traditional.",
+   "page_size": "A4",
+   "internal_id": 2,
+   "page_orientation": "portrait",
+   "is_default": false,
+   "version": 1,
+   "created_by_uuid": "4b2fa076-2fe2-4b92-8aab-08928f809e58",
+   "uuid": "4b1bc959-d638-46cb-bcf6-8698371ef2ef",
+   "namespace_id": 37,
+   "is_active": true,
+   "created_at": "2026-11-27 10:20:00.924412",
+   "type": "invoice",
+   "name": "Classic invoice",
+   "version_count": 1,
+   "id": "4b1bc959-d638-46cb-bcf6-8698371ef2ef"
+  }
+ ],
+ "meta": {
+  "total": 1,
+  "perPage": 5,
+  "page": 1,
+  "totalPages": 1
+ },
+ "success": true
+}

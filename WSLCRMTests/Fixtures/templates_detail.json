@@ -1,0 +1,29 @@
+{
+ "data": {
+  "page_size": "A4",
+  "internal_id": 2,
+  "page_orientation": "portrait",
+  "margin_top": "14mm",
+  "uuid": "4b1bc959-d638-46cb-bcf6-8698371ef2ef",
+  "namespace_id": 37,
+  "name": "Classic invoice",
+  "created_by_uuid": "4b2fa076-2fe2-4b92-8aab-08928f809e58",
+  "description": "White page, your colour on the heading and a fine rule. Calm and traditional.",
+  "template_html": "<div class=\"doc layout-clean\" style=\"--accent: {{ theme.accent }}; --header: {{ theme.header }}; --font: {{ theme.font_stack }}; --logo-h: {{ theme.logo_height }};\">\n<header class=\"head\">\n<div class=\"",
+  "template_css": "* { box-sizing: border-box; }\nhtml, body { margin: 0; padding: 0; }\nbody { -webkit-print-color-adjust: exact; print-color-adjust: exact; }\n.doc { font-family: var(--font); color: #1e293b; font-size: 9",
+  "footer_html": "<html><head><style>\nhtml, body { margin: 0; padding: 0; }\nbody { font-family: {{ theme.font_stack | raw }}; font-size: 7.5pt; color: #94a3b8; -webkit-print-color-adjust: exact; }\n.row { box-sizing: bo",
+  "updated_at": "2026-11-27 10:20:00.924412",
+  "variables": [],
+  "version": 1,
+  "is_default": false,
+  "config": [],
+  "margin_right": "16mm",
+  "margin_left": "16mm",
+  "created_at": "2026-11-27 10:20:00.924412",
+  "type": "invoice",
+  "is_active": true,
+  "margin_bottom": "18mm",
+  "id": "4b1bc959-d638-46cb-bcf6-8698371ef2ef"
+ },
+ "success": true
+}

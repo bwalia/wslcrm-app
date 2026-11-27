@@ -14,6 +14,7 @@ extension WorkspacePart {
             case WorkspaceScreen.domains: return AnyView(DomainsScreen())
             case WorkspaceScreen.services: return AnyView(DeployServicesScreen())
             case WorkspaceScreen.templates: return AnyView(DocTemplatesScreen())
+            case WorkspaceScreen.documentDesign: return AnyView(DocumentLookView())
             default: return nil
             }
         })

@@ -182,6 +182,10 @@ struct WorkspaceHomeView: View {
                 }
                 .accessibilityIdentifier("workspace.manage.paymentMethods")
             }
+            if TemplateAccess.readDesigns(p) && (p.shows(.invoices) || p.shows(.shop)) {
+                manageLink("Invoice and order design", "How your invoices and orders look, and their templates",
+                           "doc.richtext", WorkspaceScreen.documentDesign)
+            }
             if WorkspaceManageAccess.namespaceRead(p) {
                 manageLink("AI models", "AI providers this workspace uses", "cpu", WorkspaceAdminCatalog.aiScreen)
                 manageLink("Plugins", "Turn add-ons on or off", "puzzlepiece.extension", WorkspaceScreen.plugins)

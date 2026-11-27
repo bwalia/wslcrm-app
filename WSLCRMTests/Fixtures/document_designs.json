@@ -1,0 +1,65 @@
+{
+ "data": {
+  "order": {
+   "terms": null,
+   "template_uuid": null,
+   "logo": null,
+   "header": "#0f172a",
+   "source": "design",
+   "template_name": null,
+   "bill_to_label": "CUSTOMER",
+   "accent": "#2563eb",
+   "is_custom": false,
+   "updated_at": null,
+   "style": "band",
+   "show": {
+    "tax_id": true,
+    "company_address": true,
+    "company_email": true,
+    "company_phone": true,
+    "delivery_address": true,
+    "status": true,
+    "tax_column": true,
+    "payment_details": true,
+    "item_numbers": true
+   },
+   "title": "ORDER",
+   "font": "helvetica",
+   "intro": null,
+   "logo_position": "left",
+   "footer": null,
+   "logo_size": "medium"
+  },
+  "invoice": {
+   "terms": null,
+   "template_uuid": null,
+   "logo": null,
+   "header": "#0f172a",
+   "source": "design",
+   "template_name": null,
+   "bill_to_label": "BILLED TO",
+   "accent": "#2563eb",
+   "is_custom": false,
+   "updated_at": null,
+   "style": "band",
+   "show": {
+    "tax_id": true,
+    "company_address": true,
+    "company_email": true,
+    "company_phone": true,
+    "payment_details": true,
+    "status": true,
+    "tax_column": true,
+    "notes": true,
+    "item_numbers": true
+   },
+   "title": "INVOICE",
+   "font": "helvetica",
+   "intro": null,
+   "logo_position": "left",
+   "footer": null,
+   "logo_size": "medium"
+  }
+ },
+ "success": true
+}

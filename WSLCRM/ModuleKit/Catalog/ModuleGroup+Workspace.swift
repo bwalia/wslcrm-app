@@ -66,4 +66,6 @@ enum WorkspaceScreen {
     static let domains = "workspace.domains"
     static let services = "workspace.services"
     static let templates = "workspace.templates"
+    /// Invoice and order design (no menu key of its own: opened from Manage, Invoices and Templates).
+    static let documentDesign = "workspace.documentDesign"
 }

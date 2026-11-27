@@ -1,0 +1,18 @@
+{
+ "data": [
+  {
+   "template_css": "* { box-sizing: border-box; }\nhtml, body { margin: 0; padding: 0; }\nbody { -webkit-print-color-adjust: exact; print-colo",
+   "footer_html": "<html><head><style>\nhtml, body { margin: 0; padding: 0; }\nbody { font-family: {{ theme.font_stack | raw }}; font-size: 7",
+   "change_notes": "Initial version",
+   "internal_id": 7,
+   "version": 1,
+   "template_id": 2,
+   "created_at": "2026-11-27 10:20:00.938777",
+   "id": "6e249479-cdab-4902-8abe-b70bd81e2041",
+   "created_by_uuid": "4b2fa076-2fe2-4b92-8aab-08928f809e58",
+   "config": [],
+   "template_html": "<div class=\"doc layout-clean\" style=\"--accent: {{ theme.accent }}; --header: {{ theme.header }}; --font: {{ theme.font_s"
+  }
+ ],
+ "success": true
+}
