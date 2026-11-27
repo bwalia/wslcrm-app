@@ -21,6 +21,7 @@ struct MainTabView: View {
     @State private var appPaths: [String: NavigationPath] = [:]
     @State private var appsPath = NavigationPath()
     @State private var commandFocus = 0
+    @State private var showingSearch = false
 
     var body: some View {
         let policy = NavigationPolicy(session: session)
@@ -44,13 +45,18 @@ struct MainTabView: View {
         }
         .onChange(of: session.workspace?.uuid) { activatePreferences() }
         .onChange(of: router.pending) { openPendingLink() }
-        // ⌘K, from anywhere: Home's command box.
+        // ⌘J, from anywhere: Home's command box. ⌘K: search everything.
         .onReceive(NotificationCenter.default.publisher(for: .wsAskAI)) { _ in focusCommandBox() }
+        .onReceive(NotificationCenter.default.publisher(for: .wsOpenSearch)) { _ in showingSearch.toggle() }
+        .commandPalette(isPresented: $showingSearch) { openFromSearch($0, slots: slots) }
         .background {
             #if !targetEnvironment(macCatalyst)
-            // An iPad with a keyboard (the Mac has it in its menu bar: Edit › Ask AI…).
-            Button("Ask AI", action: focusCommandBox)
+            // An iPad with a keyboard (the Mac has them in its menu bar: Edit › Search… and Ask AI…).
+            Button("Search") { showingSearch.toggle() }
                 .keyboardShortcut("k", modifiers: .command)
+                .hidden()
+            Button("Ask AI", action: focusCommandBox)
+                .keyboardShortcut("j", modifiers: .command)
                 .hidden()
             #endif
         }
@@ -167,7 +173,7 @@ struct MainTabView: View {
                 Group {
                     if let destination = NativeModules.destination(forKey: key) { destination.rootView }
                 }
-                .askAIButton(path: Self.assistantPath(forKey: key, menu: session.menu))
+                .askAIButton(path: Self.assistantPath(forKey: key, menu: session.menu), isShown: key != AppMenu.aiChatKey)
                 .withAppDestinations()
                 .safeAreaInset(edge: .top, spacing: 0) { syncBanner }
             }
@@ -195,6 +201,47 @@ struct MainTabView: View {
             }
         }
         selection = tab
+    }
+
+    /// What was picked in the ⌘K search, opened natively: a record on the stack in front, a page as its own area
+    /// (the Mac sidebar's, or a phone tab when it has one), the assistant on Home.
+    private func openFromSearch(_ action: CommandPaletteItem.Action, slots: [TabSlot]) {
+        switch action {
+        case .recent:
+            return
+        case .ask(let text):
+            selection = .home
+            var path = NavigationPath()
+            path.append(NativeScreenRoute(ChatAssistantRoute.screenID(path: nil, ask: text)))
+            homePath = path
+        case .record(let target):
+            pushInFront(target)
+        case .page(let entry):
+            let hub = NavigationPolicy(session: session).ordered.first { $0.menuKey == entry.key }
+            let tab: AppTab = hub.map { .hub($0) } ?? .app(entry.key)
+            if MacSupport.isMac ? (hub != nil || NativeModules.destination(forKey: entry.key) != nil)
+                : slots.contains(where: { $0.tab == tab }) {
+                showArea(tab)
+            } else if case .menu(let destination) = entry.destination {
+                pushInFront(RecordSearchTarget.page(destination))
+            }
+        }
+    }
+
+    /// Opens a screen on top of the area in front (every area's stack has `withAppDestinations`).
+    private func pushInFront(_ value: RecordSearchTarget) {
+        switch selection {
+        case .home: homePath.append(value)
+        case .apps: appsPath.append(value)
+        case .hub(let hub):
+            var path = hubPaths[hub] ?? NavigationPath()
+            path.append(value)
+            hubPaths[hub] = path
+        case .app(let key):
+            var path = appPaths[key] ?? NavigationPath()
+            path.append(value)
+            appPaths[key] = path
+        }
     }
 
     private func focusCommandBox() {

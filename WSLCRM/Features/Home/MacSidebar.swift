@@ -97,9 +97,7 @@ struct MacSidebar: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { profileFooter }
         .navigationSplitViewColumnWidth(min: 230, ideal: 260, max: 340)
-        .sheet(isPresented: $choosingWorkspace) {
-            NavigationStack { WorkspacePickerView(isInitialChoice: false) }
-        }
+        .sheet(isPresented: $choosingWorkspace) { WorkspacePickerSheet() }
         .sheet(isPresented: $showingProfile) { ProfileSheet() }
         .onReceive(NotificationCenter.default.publisher(for: .wsOpenSettings)) { _ in showingProfile = true }
         .accessibilityIdentifier("mac.sidebar")

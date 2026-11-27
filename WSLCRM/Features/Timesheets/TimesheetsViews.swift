@@ -919,7 +919,7 @@ struct TimesheetTaskPickerSheet: View {
                 }
                 if !loading, results.isEmpty { Text("No tasks found.").foregroundStyle(.secondaryText) }
             }
-            .searchable(text: $search, prompt: "Search tasks")
+            .wsSheetSearchable(text: $search, prompt: "Search tasks")
             .navigationTitle("Task")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
@@ -931,6 +931,7 @@ struct TimesheetTaskPickerSheet: View {
                 loading = false
             }
         }
+        .wsMacSheetSize()
     }
 }
 

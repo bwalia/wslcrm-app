@@ -802,11 +802,12 @@ struct ChatAssistantAreasSheet: View {
                                            description: Text("Your workspace's menu hasn't loaded. Pull down on Home to refresh it."))
                 }
             }
-            .searchable(text: $filter, prompt: "Find a page")
+            .wsSheetSearchable(text: $filter, prompt: "Find a page")
             .navigationTitle("Ask AI about…")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
         }
+        .wsMacSheetSize()
     }
 
     private func row(title: String, systemImage: String, detail: String?, route: ChatAssistantRoute) -> some View {

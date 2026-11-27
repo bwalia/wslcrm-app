@@ -73,6 +73,13 @@ final class WorkspaceFirstRunTests: XCTestCase {
         """))
         XCTAssertTrue(allowed.canCreate)
         XCTAssertEqual(allowed.defaultUuid, "ns-1")
+        XCTAssertTrue(allowed.roles.isEmpty, "no roles listed: the picker falls back to Owner from the membership")
+        let withRoles = WorkspaceDirectory(json: try json("""
+        {"data":[{"id":1,"uuid":"ns-1","name":"Acme","roles":[{"uuid":"r-1","role_name":"owner","display_name":"Owner"}]},
+                 {"id":2,"uuid":"ns-2","name":"Bolt","roles":[{"uuid":"r-2","role_name":"sales_rep","display_name":"Sales rep"},
+                                                             {"uuid":"r-3","role_name":"manager"}]}]}
+        """))
+        XCTAssertEqual(withRoles.roles, ["ns-1": "Owner", "ns-2": "Sales rep · manager"])
         // Absent means no (older servers, and services that don't allow it).
         let older = WorkspaceDirectory(json: try json(#"{"data":[],"total":0}"#))
         XCTAssertFalse(older.canCreate)

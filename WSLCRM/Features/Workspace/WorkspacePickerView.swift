@@ -47,11 +47,18 @@ struct WorkspacePickerView: View {
                         row(workspace)
                     }
                     if shown.isEmpty {
-                        Text("No workspace is called “\(search)”.").foregroundStyle(.secondaryText)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("No workspace is called “\(search)”.").foregroundStyle(.secondaryText)
+                            Button("Show them all") { search = "" }.buttonStyle(.borderless)
+                        }
+                        .padding(.vertical, 6)
                     }
+                } header: {
+                    if session.workspaces.count > 1 { Text("Your workspaces") }
                 } footer: {
-                    Text("Switching workspace reloads jobs, visits and other data for that workspace. Swipe right "
-                         + "on one to make it your default: it opens first when you sign in.")
+                    Text("Switching workspace reloads jobs, visits and other data for that workspace. "
+                         + (MacSupport.isMac ? "Right-click" : "Swipe right on")
+                         + " one to make it your default: it opens first when you sign in.")
                 }
             }
             if directory.canCreate {
@@ -66,7 +73,7 @@ struct WorkspacePickerView: View {
                 }
             }
         }
-        .navigationTitle(isInitialChoice ? "Choose a workspace" : "Workspace")
+        .navigationTitle(isInitialChoice ? "Choose a workspace" : "Workspaces")
         .toolbar {
             if isInitialChoice {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -75,7 +82,7 @@ struct WorkspacePickerView: View {
                 }
             }
         }
-        .searchable(text: $search, prompt: "Find a workspace")
+        .wsSheetSearchable(text: $search, prompt: "Find a workspace", isEnabled: session.workspaces.count > 1)
         .task { await load() }
         .wsRefreshable {
             await session.reloadWorkspaces()
@@ -118,40 +125,23 @@ struct WorkspacePickerView: View {
     }
 
     private func row(_ workspace: Workspace) -> some View {
-        Button {
+        let notes = [directory.roles[workspace.uuid] ?? (workspace.isOwner ? "Owner" : nil),
+                     directory.defaultUuid == workspace.uuid ? "Your default" : nil].compactMap { $0 }
+        return WorkspacePickerRow(workspace: workspace, detail: notes.joined(separator: " · "),
+                                  isCurrent: session.workspace?.uuid == workspace.uuid,
+                                  isSwitching: switchingTo == workspace.uuid) {
             choose(workspace)
-        } label: {
-            HStack(spacing: 14) {
-                Image(systemName: "building.2.fill")
-                    .font(.wsTitle3)
-                    .frame(width: 44, height: 44)
-                    .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(workspace.name).font(.wsHeadline).foregroundStyle(.primary)
-                    let notes = [workspace.isOwner ? "Owner" : nil,
-                                 directory.defaultUuid == workspace.uuid ? "Your default" : nil].compactMap { $0 }
-                    if !notes.isEmpty {
-                        Text(notes.joined(separator: " · ")).font(.wsSubheadline).foregroundStyle(.secondaryText)
-                    }
-                }
-                Spacer()
-                if switchingTo == workspace.uuid {
-                    ProgressView()
-                } else if session.workspace?.uuid == workspace.uuid {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.wsTitle3)
-                        .foregroundStyle(.tint)
-                        .accessibilityLabel("Selected")
-                }
-            }
-            .frame(minHeight: 56)
         }
         .disabled(switchingTo != nil)
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
             if directory.defaultUuid != workspace.uuid {
                 Button("Make default") { Task { await makeDefault(workspace) } }
                     .tint(.accentColor)
+            }
+        }
+        .contextMenu {
+            if directory.defaultUuid != workspace.uuid {
+                Button("Make it my default", systemImage: "star") { Task { await makeDefault(workspace) } }
             }
         }
         .accessibilityIdentifier("workspace.\(workspace.slug ?? workspace.uuid)")
@@ -187,5 +177,85 @@ struct WorkspacePickerView: View {
             await session.select(workspace)
             switchingTo = nil
         }
+    }
+}
+
+/// One workspace in the picker: its logo (or first letter), name, the person's role, and a tick on the one open now.
+/// On the Mac the row lights up under the pointer, as a Mac list does.
+private struct WorkspacePickerRow: View {
+    let workspace: Workspace
+    let detail: String
+    let isCurrent: Bool
+    let isSwitching: Bool
+    let choose: () -> Void
+    @State private var hovering = false
+
+    private var logoSize: CGFloat { MacSupport.isMac ? 36 : 44 }
+
+    var body: some View {
+        Button(action: choose) {
+            HStack(spacing: 12) {
+                WorkspaceLogoImage(raw: workspace.logoUrl, name: workspace.name, size: logoSize)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(workspace.name)
+                        .font(.wsHeadline)
+                        .foregroundStyle(Color(.label))
+                        .lineLimit(2)
+                    if !detail.isEmpty {
+                        Text(detail).font(.wsSubheadline).foregroundStyle(.secondaryText).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 8)
+                if isSwitching {
+                    ProgressView()
+                } else if isCurrent {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.wsTitle3)
+                        .foregroundStyle(.tint)
+                        .accessibilityLabel("Open now")
+                }
+            }
+            .frame(minHeight: MacSupport.isMac ? 44 : 56)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowInsets(EdgeInsets(top: 8, leading: MacSupport.isMac ? 12 : 16, bottom: 8, trailing: MacSupport.isMac ? 12 : 16))
+        .listRowBackground(background)
+        .onHover { hovering = $0 }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isCurrent ? .isSelected : [])
+        .accessibilityHint(isCurrent ? "The workspace open now" : "Switches to this workspace")
+    }
+
+    private var background: some View {
+        Palette.card.overlay {
+            if isCurrent {
+                Color.accentColor.opacity(0.10)
+            } else if hovering {
+                Color.primary.opacity(0.05)
+            }
+        }
+    }
+}
+
+/// The picker in a sheet of its own (the Mac sidebar's workspace, Home's workspace button): a title bar with Done,
+/// a fixed size on the Mac.
+struct WorkspacePickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            WorkspacePickerView(isInitialChoice: false)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                            .accessibilityIdentifier("workspace.done")
+                    }
+                }
+                // ⌘R still refreshes; the title bar keeps to the title and Done.
+                .environment(\.macRefreshButtonHidden, true)
+        }
+        .wsMacSheetSize(width: 520, height: 600)
     }
 }

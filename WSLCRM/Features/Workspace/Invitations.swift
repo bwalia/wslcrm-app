@@ -47,6 +47,8 @@ struct MyInvitation: Identifiable, Equatable, Sendable {
 struct WorkspaceDirectory: Equatable, Sendable {
     var canCreate = false
     var defaultUuid: String?
+    /// The person's role in each workspace, by uuid ("Owner", "Sales rep · Manager"), from `data[].roles`.
+    var roles: [String: String] = [:]
 
     init(canCreate: Bool = false, defaultUuid: String? = nil) {
         self.canCreate = canCreate
@@ -57,6 +59,13 @@ struct WorkspaceDirectory: Equatable, Sendable {
         let root = WorkspaceAPI.object(json)
         canCreate = root.bool("can_create_workspace") ?? false
         defaultUuid = root.string("settings.default_namespace_uuid")
+        for row in WorkspaceAPI.records(json, idKeys: ["uuid"]) {
+            guard let uuid = row.string("uuid") else { continue }
+            let names = row.records("roles", idKeys: ["uuid", "role_name"]).compactMap {
+                $0.string("display_name")?.trimmedOrNil ?? $0.string("role_name")?.trimmedOrNil
+            }
+            if !names.isEmpty { roles[uuid] = names.joined(separator: " · ") }
+        }
     }
 }
 

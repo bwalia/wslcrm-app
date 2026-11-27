@@ -38,6 +38,7 @@ struct RecordSearchGroup: Identifiable, Equatable, Sendable {
 enum RecordSearchTarget: Hashable {
     case customer(String), lead(String), crmAccount(String), shopProduct(String), storeOrder(String)
     case invoice(String), purchaseOrder(String), project(String)
+    case shopOrder(String), shopQuote(String), shopDeal(String)
     case page(MenuDestination)
 
     static func resolve(_ path: String, menu: AppMenu) -> RecordSearchTarget? {
@@ -55,9 +56,13 @@ enum RecordSearchTarget: Hashable {
             case "purchase-orders": return .purchaseOrder(id)
             case "projects": return .project(id)
             case "shop/products": return .shopProduct(id)
+            case "shop/orders": return .shopOrder(id)
+            case "shop/quotes": return .shopQuote(id)
             default: break
             }
         }
+        // `/dashboard/shop/deals/<code>`: a deal is found by its code, not a uuid.
+        if rest.count == 3, rest[0] == "shop", rest[1] == "deals", !rest[2].isEmpty { return .shopDeal(rest[2]) }
         if rest == ["orders"], let order = components.queryItems?.first(where: { $0.name == "order" })?.value,
            !order.isEmpty {
             return .storeOrder(order)
@@ -69,7 +74,7 @@ enum RecordSearchTarget: Hashable {
     }
 }
 
-/// The screen for a record found by search (pushed by value from Apps).
+/// The screen for a record found by search (pushed by value from Apps and the ⌘K search; `withAppDestinations`).
 struct RecordSearchDestination: View {
     let target: RecordSearchTarget
 
@@ -83,6 +88,9 @@ struct RecordSearchDestination: View {
         case .invoice(let uuid): InvoiceDetailView(invoiceUuid: uuid)
         case .purchaseOrder(let uuid): PurchaseOrderDetailView(uuid: uuid)
         case .project(let uuid): ProjectDetailView(uuid: uuid)
+        case .shopOrder(let uuid): ShopOrderDetailView(uuid: uuid)
+        case .shopQuote(let uuid): ShopQuoteDetailView(uuid: uuid)
+        case .shopDeal(let code): ShopDealDetailView(code: code)
         case .page(let destination): destination.rootView
         }
     }
@@ -96,7 +104,7 @@ final class RecordSearchModel {
     private(set) var isSearching = false
     private(set) var error: APIError?
 
-    static let minimumLength = 2
+    nonisolated static let minimumLength = 2
 
     func search(_ text: String, api: WorkspaceAPI) async {
         let query = text.trimmingCharacters(in: .whitespacesAndNewlines)

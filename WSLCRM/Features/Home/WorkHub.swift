@@ -139,18 +139,20 @@ extension NavigationPolicy.Home {
 extension View {
     /// "Ask AI" in the navigation bar of a tab's first screen: that area's assistant, which knows the page, can
     /// answer questions about it and do the work in it. Hidden for anyone without the assistant in their menu.
-    func askAIButton(path: String?) -> some View {
-        modifier(AskAIButton(path: path))
+    /// `isShown: false` on the AI chat's own area, which is the assistant already.
+    func askAIButton(path: String?, isShown: Bool = true) -> some View {
+        modifier(AskAIButton(path: path, isShown: isShown))
     }
 }
 
 private struct AskAIButton: ViewModifier {
     let path: String?
+    let isShown: Bool
     @Environment(SessionStore.self) private var session
 
     func body(content: Content) -> some View {
         content.toolbar {
-            if session.permissions.menuKeys.contains(AppMenu.aiChatKey) {
+            if isShown, session.permissions.menuKeys.contains(AppMenu.aiChatKey) {
                 ToolbarItem(placement: .topBarLeading) {
                     NavigationLink(value: NativeScreenRoute(ChatAssistantRoute.screenID(path: path))) {
                         Label("Ask AI", systemImage: "sparkles")
@@ -158,7 +160,14 @@ private struct AskAIButton: ViewModifier {
                             .font(.brandCallout.weight(.semibold))
                             .foregroundStyle(Color.accentColor)
                     }
+                    .help("Ask the AI assistant about this page")
                     .accessibilityIdentifier("tab.askAI")
+                }
+                if MacSupport.isMac {
+                    if #available(iOS 26.0, *) {
+                        // On the Mac the screen's own buttons sit beside it: keep a gap so they don't run together.
+                        ToolbarSpacer(.fixed, placement: .topBarLeading)
+                    }
                 }
             }
         }

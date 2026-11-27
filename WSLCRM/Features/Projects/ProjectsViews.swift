@@ -640,7 +640,7 @@ struct WorkCustomerPickerSheet: View {
                     Text("No customers found.").foregroundStyle(.secondaryText)
                 }
             }
-            .searchable(text: $search, prompt: "Search customers")
+            .wsSheetSearchable(text: $search, prompt: "Search customers")
             .navigationTitle("Customer")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
@@ -652,6 +652,7 @@ struct WorkCustomerPickerSheet: View {
                 loading = false
             }
         }
+        .wsMacSheetSize()
     }
 }
 
