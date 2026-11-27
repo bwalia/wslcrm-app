@@ -546,11 +546,12 @@ struct NoteAssigneePicker: View {
                     .accessibilityIdentifier("notes.person.\(person.uuid)")
                 }
             }
-            .searchable(text: $search, prompt: "Name or email")
+            .wsSheetSearchable(text: $search, prompt: "Name or email")
             .navigationTitle("Give it to")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
         }
+        .wsMacSheetSize()
         .presentationDetents([.medium, .large])
     }
 

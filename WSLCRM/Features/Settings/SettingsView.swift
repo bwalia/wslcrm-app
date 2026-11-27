@@ -6,6 +6,7 @@ struct SettingsView: View {
     @State private var biometricEnabled = BiometricGate().isEnabled
     /// Module names as people know them (`crm_accounts` → "CRM Accounts"), from `/api/v2/modules/available`.
     @State private var moduleNames: [String: String] = [:]
+    @AppStorage(Formatters.currencyKey) private var currency = Formatters.standardCurrency
 
     var body: some View {
         Form {
@@ -27,6 +28,15 @@ struct SettingsView: View {
                 Text("Personalise")
             } footer: {
                 Text("Light or dark, your colour, home screen icon and logo; and the shortcuts you use most between Home and Apps.")
+            }
+            Section {
+                Picker("Currency", selection: $currency) {
+                    ForEach(CatalogCurrencies.all, id: \.0) { code, name in Text(name).tag(code) }
+                }
+                .accessibilityIdentifier("settings.currency")
+            } footer: {
+                Text("For new records and totals that have no currency of their own. An invoice or order in another "
+                     + "currency always shows its own.")
             }
             if session.permissions.can(.read, moduleName: "themes") {
                 Section {

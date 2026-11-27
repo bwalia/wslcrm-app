@@ -52,7 +52,10 @@ struct AppCatalog: Equatable {
 
     func entry(forKey key: String) -> Entry? { groups.lazy.flatMap(\.entries).first { $0.key == key } }
 
-    func filtered(_ query: String) -> [Group] {
+    func filtered(_ query: String) -> [Group] { Self.filter(groups, query) }
+
+    /// The groups whose name, or whose apps' names, contain `query` (a matching group keeps all its apps).
+    static func filter(_ groups: [Group], _ query: String) -> [Group] {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return groups }
         return groups.compactMap { group in

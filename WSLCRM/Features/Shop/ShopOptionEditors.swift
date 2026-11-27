@@ -130,11 +130,11 @@ struct ShopOptionEditor: View {
                 TextField("Description (optional)", text: $option.description, axis: .vertical).lineLimit(1...4)
             }
             Section {
-                LabeledContent("Price difference (£ ex VAT)") {
+                LabeledContent("Price difference (\(Formatters.currencySymbol) ex VAT)") {
                     TextField("0.00", text: $option.priceDelta).keyboardType(.numbersAndPunctuation).multilineTextAlignment(.trailing)
                         .accessibilityIdentifier("shopOption.delta")
                 }
-                LabeledContent("Cost (£ ex VAT)") {
+                LabeledContent("Cost (\(Formatters.currencySymbol) ex VAT)") {
                     TextField("unknown", text: $option.cost).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                 }
                 if let cost = option.componentCostMinor {

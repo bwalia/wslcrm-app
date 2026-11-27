@@ -289,6 +289,8 @@ struct InvoiceDetailView: View {
     @State private var deletingPayment: InvoicePayment?
     @State private var pdfURL: URL?
     @State private var previewURL: URL?
+    /// Why the simple design was used though the workspace chose a template (the PDF service was down).
+    @State private var pdfNotice: String?
     @State private var emailing = false
     @State private var editingHeader = false
     @State private var notice: String?
@@ -322,8 +324,10 @@ struct InvoiceDetailView: View {
                     Button("Preview PDF", systemImage: "doc.richtext") {
                         Task {
                             if pdfURL == nil {
-                                let design = await DocumentDesigns.get(.invoice, services: services, workspace: session.workspace?.uuid)
-                                pdfURL = InvoicePDFRenderer.render(invoice, company: session.workspace?.name, design: design)
+                                let made = await InvoicePDFRenderer.make(invoice, company: session.workspace?.name,
+                                                                         services: services, workspace: session.workspace?.uuid)
+                                pdfURL = made.url
+                                pdfNotice = made.notice
                             }
                             previewURL = pdfURL
                         }
@@ -481,10 +485,11 @@ struct InvoiceDetailView: View {
                 DetailRow(label: "Payment terms", value: invoice.paymentTermsDays.map { "\($0) days" })
                 if let address = invoice.customerAddress { MapsLinkRow(address: address) }
             }
-            if notice != nil || actionError != nil {
+            if notice != nil || actionError != nil || pdfNotice != nil {
                 Section {
                     if let actionError { InlineErrorRow(error: actionError) }
                     if let notice { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
+                    if let pdfNotice { Label(pdfNotice, systemImage: "info.circle").foregroundStyle(.secondaryText) }
                 }
             }
 
@@ -625,7 +630,9 @@ struct InvoiceDetailView: View {
             }
             ForEach(vat.breakdown, id: \.self) { rate in
                 LabeledContent(rate.label) {
-                    Text("net \(Formatters.money(rate.net, currency: "GBP") ?? "") · VAT \(Formatters.money(rate.vat, currency: "GBP") ?? "")")
+                    // The invoice's own currency.
+                    let currency = state.value?.currency
+                    Text("net \(Formatters.money(rate.net, currency: currency) ?? "") · VAT \(Formatters.money(rate.vat, currency: currency) ?? "")")
                         .font(.wsSubheadline.monospacedDigit())
                 }
             }
@@ -696,6 +703,7 @@ struct InvoiceDetailView: View {
             let invoice = try await services.invoices.invoice(invoiceUuid)
             state = .loaded(invoice)
             pdfURL = nil
+            pdfNotice = nil
             einvoiceURL = nil
             vat = try? await services.invoices.vatCheck(invoiceUuid)
         } catch {
@@ -723,6 +731,7 @@ struct InvoiceDetailView: View {
             actionError = nil
             notice = success
             pdfURL = nil
+            pdfNotice = nil
             onChange(updated)
             return true
         } catch {
@@ -894,7 +903,7 @@ struct InvoiceCreateSheet: View {
     @State private var customerAddress: String
     @State private var issueDate = Date()
     @State private var terms = 30
-    @State private var currency = Formatters.fallbackCurrency
+    @State private var currency = Formatters.defaultCurrency
     @State private var poNumber = ""
     @State private var methodUuid = ""
     @State private var methods: [PaymentMethodInfo] = []
@@ -1052,7 +1061,7 @@ struct InvoiceCreateSheet: View {
 
 // MARK: - PDF
 
-/// The API has no PDF download, so invoices are rendered on device for sharing.
+/// Invoices are drawn here for sharing, unless the workspace chose an HTML template (`make`).
 enum InvoicePDFRenderer {
     /// The totals printed under the lines; discounts are shown so the figures add up.
     static func totals(_ invoice: Invoice, money: (Decimal) -> String) -> [(String, String)] {
@@ -1072,6 +1081,17 @@ enum InvoicePDFRenderer {
         case .partiallyPaid: UIColor(red: 202 / 255, green: 138 / 255, blue: 4 / 255, alpha: 1)
         case .overdue: UIColor(red: 220 / 255, green: 38 / 255, blue: 38 / 255, alpha: 1)
         default: DesignedPage.muted
+        }
+    }
+
+    /// The invoice's PDF as the workspace chose it: its HTML template from the server, or drawn here (`WorkspacePDF`).
+    @MainActor
+    static func make(_ invoice: Invoice, company: String?, services: Services, workspace: String?) async -> WorkspacePDF.Result {
+        let design = await DocumentDesigns.get(.invoice, services: services, workspace: workspace)
+        let number = invoice.displayNumber
+        return await WorkspacePDF.make(.invoice, uuid: invoice.id, design: design, client: services.client,
+                                       filename: "\(number.isEmpty ? "invoice" : number).pdf") {
+            render(invoice, company: company, design: design)
         }
     }
 
@@ -1150,6 +1170,7 @@ struct EmailInvoiceSheet: View {
     @State private var sending = false
     @State private var sentTo: String?
     @State private var error: APIError?
+    @State private var pdfNotice: String?
 
     init(invoice: Invoice, company: String? = nil, onSent: @escaping (String) -> Void = { _ in }) {
         self.invoice = invoice
@@ -1190,10 +1211,13 @@ struct EmailInvoiceSheet: View {
                          ? "Attaches the invoice PDF and marks this invoice as sent."
                          : "Attaches the invoice PDF and emails it again. Its status doesn't change.")
                 }
-                if let sentTo {
+                if sentTo != nil || pdfNotice != nil {
                     Section {
-                        Label("Emailed to \(sentTo)", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(Tone.success.textColor)
+                        if let sentTo {
+                            Label("Emailed to \(sentTo)", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(Tone.success.textColor)
+                        }
+                        if let pdfNotice { Label(pdfNotice, systemImage: "info.circle").foregroundStyle(.secondaryText) }
                     }
                 }
                 if let error { Section { InlineErrorRow(error: error) } }
@@ -1217,9 +1241,11 @@ struct EmailInvoiceSheet: View {
         error = nil
         Task {
             defer { sending = false }
-            let design = await DocumentDesigns.get(.invoice, services: services, workspace: session.workspace?.uuid)
-            guard let url = InvoicePDFRenderer.render(invoice, company: company, design: design),
-                  let pdf = try? Data(contentsOf: url) else {
+            // The same PDF as Preview: the workspace's template when it chose one.
+            let made = await InvoicePDFRenderer.make(invoice, company: company, services: services,
+                                                     workspace: session.workspace?.uuid)
+            pdfNotice = made.notice
+            guard let url = made.url, let pdf = try? Data(contentsOf: url) else {
                 error = .validation(ServerError(status: 0, message: "The invoice PDF could not be built.",
                                                 fieldErrors: [:], rawBody: ""))
                 return

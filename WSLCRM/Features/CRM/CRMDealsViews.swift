@@ -743,7 +743,7 @@ struct CRMDealForm: View {
         self.save = save
         _name = State(initialValue: deal?.name ?? "")
         _value = State(initialValue: deal?.value ?? 0)
-        _currency = State(initialValue: deal?.currency ?? Formatters.fallbackCurrency)
+        _currency = State(initialValue: deal?.currency ?? Formatters.defaultCurrency)
         _probability = State(initialValue: deal?.probability ?? 10)
         _accountId = State(initialValue: deal?.accountId ?? presetAccountId)
         _contactId = State(initialValue: deal?.contactId)

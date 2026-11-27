@@ -405,8 +405,8 @@ struct PDNewBuyerSheet: View {
                     Picker("Funding", selection: $funding) {
                         ForEach(PDBuyerWords.funding) { Text($0.label).tag($0.value) }
                     }
-                    TextField("Budget from (£)", text: $priceMin).keyboardType(.decimalPad)
-                    TextField("Budget to (£)", text: $priceMax).keyboardType(.decimalPad)
+                    TextField("Budget from (\(Formatters.currencySymbol))", text: $priceMin).keyboardType(.decimalPad)
+                    TextField("Budget to (\(Formatters.currencySymbol))", text: $priceMax).keyboardType(.decimalPad)
                     TextField("Minimum yield (%)", text: $minYield).keyboardType(.decimalPad)
                     Picker("Refurb appetite", selection: $refurb) {
                         Text("Not said").tag("")

@@ -15,6 +15,8 @@ import uk.co.workstation.wslcrm.core.networking.JsonDecodable
 import uk.co.workstation.wslcrm.core.networking.OpsJson
 import uk.co.workstation.wslcrm.core.permissions.NavigationPolicy
 import uk.co.workstation.wslcrm.core.permissions.PermissionSet
+import uk.co.workstation.wslcrm.designsystem.Formatters
+import java.math.BigDecimal
 
 /**
  * The shop back office, against the same fixtures as ShopTests.swift (`../WSLCRMTests/Fixtures`),
@@ -124,6 +126,19 @@ class ShopModelsTest {
         val json = OpsJson.parse(OpsJson.encoder.encodeToString(ShopProductBody.serializer(), body)).jsonObject
         assertEquals("option_groups and rules must never be sent: the server would replace them",
             setOf("base_price_minor", "price_verified", "category_uuid"), json.keys)
+    }
+
+    /** One app currency, pounds, as on iPhone and Mac; a quote or order with its own currency keeps it. */
+    @Test fun theAppCurrencyIsPoundsAndADocumentKeepsItsOwn() {
+        assertEquals("GBP", Formatters.defaultCurrency)
+        fun quote(currency: String?) = OpsJson.decode(ShopQuote, (
+            """{"uuid":"q-1","quote_number":"WSQ-1","status":"sent","total_minor":1250""" +
+                (currency?.let { ""","currency":"$it"""" } ?: "") + "}").toByteArray())
+        assertEquals("GBP", quote(null).currency)
+        assertEquals("EUR", quote("EUR").currency)
+        assertEquals(Formatters.money(BigDecimal("12.50"), "GBP"), ShopMoney.format(1250, null))
+        assertEquals(Formatters.money(BigDecimal("12.50"), "EUR"), ShopMoney.format(1250, "EUR"))
+        assertEquals(Formatters.money(BigDecimal("12.50"), "GBP"), Formatters.money(BigDecimal("12.50"), null))
     }
 
     @Test fun moneyParsing() {

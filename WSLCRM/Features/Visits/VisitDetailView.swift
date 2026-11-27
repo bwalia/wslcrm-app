@@ -473,14 +473,14 @@ private struct VisitDetailContent: View {
         }
         .sheet(item: $editingItem) { item in
             if let detail = model.detail {
-                JobItemFormSheet(jobUuid: detail.visit.jobUuid, currency: detail.visit.jobCurrency ?? "GBP",
+                JobItemFormSheet(jobUuid: detail.visit.jobUuid, currency: detail.visit.jobCurrency ?? Formatters.defaultCurrency,
                                  phases: detail.phase.map { [$0] } ?? [], item: item,
                                  showsPrices: model.showsPrices) { message in model.itemSaved(message) }
             }
         }
         .sheet(isPresented: $addingLine) {
             if let detail = model.detail {
-                JobItemFormSheet(jobUuid: detail.visit.jobUuid, currency: detail.visit.jobCurrency ?? "GBP",
+                JobItemFormSheet(jobUuid: detail.visit.jobUuid, currency: detail.visit.jobCurrency ?? Formatters.defaultCurrency,
                                  phases: detail.phase.map { [$0] } ?? [], item: nil, visitUuid: detail.visit.uuid,
                                  showsPrices: model.showsPrices) { message in model.itemSaved(message) }
             }
@@ -754,7 +754,7 @@ private struct VisitDetailContent: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.description)
                             Text([Formatters.humanize(item.itemType), "Qty \(item.quantity.formatted())",
-                                  model.showsPrices ? Formatters.money(item.lineTotal, currency: visit.jobCurrency ?? "GBP") : nil]
+                                  model.showsPrices ? Formatters.money(item.lineTotal, currency: visit.jobCurrency ?? Formatters.defaultCurrency) : nil]
                                 .compactMap { $0 }.joined(separator: " · "))
                                 .font(.wsCaption).foregroundStyle(.secondaryText)
                         }

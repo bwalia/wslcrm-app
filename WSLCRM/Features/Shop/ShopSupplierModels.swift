@@ -108,7 +108,7 @@ struct ShopSupplier: Identifiable, Hashable, Sendable, Decodable {
         changeThresholdPct = c.decodeFlexibleDecimal(forKey: .changeThresholdPct).map { NSDecimalNumber(decimal: $0).doubleValue }
         updateLeadTimes = c.decodeFlexibleBool(forKey: .updateLeadTimes) ?? true
         syncHours = c.decodeFlexibleInt(forKey: .syncHours)
-        currency = c.decodeFlexibleString(forKey: .currency) ?? "GBP"
+        currency = c.decodeFlexibleString(forKey: .currency) ?? Formatters.defaultCurrency
         itemCounts = (try? c.decodeIfPresent(ShopSupplierItemCounts.self, forKey: .itemCounts)) ?? ShopSupplierItemCounts()
     }
 
@@ -396,7 +396,7 @@ struct ShopDealQuote: Identifiable, Hashable, Sendable, Decodable {
         kind = c.decodeFlexibleString(forKey: .kind)
         status = ShopQuoteStatus(api: c.decodeFlexibleString(forKey: .status))
         totalMinor = c.decodeFlexibleInt(forKey: .totalMinor)
-        currency = c.decodeFlexibleString(forKey: .currency) ?? "GBP"
+        currency = c.decodeFlexibleString(forKey: .currency) ?? Formatters.defaultCurrency
         createdAt = c.decodeDate(forKey: .createdAt)
         superseded = c.decodeFlexibleBool(forKey: .superseded) ?? false
         orderUuid = c.decodeFlexibleString(forKey: .orderUuid)
@@ -422,7 +422,7 @@ struct ShopDealOrder: Identifiable, Hashable, Sendable, Decodable {
         orderNumber = c.decodeFlexibleString(forKey: .orderNumber) ?? "—"
         status = ShopOrderStatus(api: c.decodeFlexibleString(forKey: .status))
         totalMinor = c.decodeFlexibleInt(forKey: .totalMinor)
-        currency = c.decodeFlexibleString(forKey: .currency) ?? "GBP"
+        currency = c.decodeFlexibleString(forKey: .currency) ?? Formatters.defaultCurrency
         paidAt = c.decodeDate(forKey: .paidAt)
         createdAt = c.decodeDate(forKey: .createdAt)
     }
@@ -448,7 +448,7 @@ struct ShopDealPurchaseOrder: Identifiable, Hashable, Sendable, Decodable {
         status = c.decodeFlexibleString(forKey: .status)
         supplierName = c.decodeFlexibleString(forKey: .supplierName)
         total = (try? c.decodeIfPresent(Double.self, forKey: .total)) ?? c.decodeFlexibleString(forKey: .total).flatMap(Double.init)
-        currency = c.decodeFlexibleString(forKey: .currency) ?? "GBP"
+        currency = c.decodeFlexibleString(forKey: .currency) ?? Formatters.defaultCurrency
         dropShip = c.decodeFlexibleBool(forKey: .dropShip) ?? false
         legacyDropShip = c.decodeFlexibleBool(forKey: .legacyDropShip) ?? false
     }
@@ -569,7 +569,7 @@ struct ShopDeal: Sendable, Decodable {
     }
 
     /// The deal's money is in the quotes' (or orders') currency.
-    var currency: String { quotes.first?.currency ?? orders.first?.currency ?? "GBP" }
+    var currency: String { quotes.first?.currency ?? orders.first?.currency ?? Formatters.defaultCurrency }
 }
 
 // MARK: - Stock enquiries (kept on the product)

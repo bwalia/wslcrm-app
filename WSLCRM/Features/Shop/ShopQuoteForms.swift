@@ -102,7 +102,7 @@ struct ShopOrderTermsFields: View {
                     }
                     Text(vip != nil
                          ? "Worked out from the membership terms (order value tiers and the yearly cap) each time you save."
-                         : "The customer has no membership in force, so this will be £0 unless they join.")
+                         : "The customer has no membership in force, so this will be \(Formatters.currencySymbol)0 unless they join.")
                         .font(.wsFootnote).foregroundStyle(.secondaryText)
                     if tradeDiscountMinor > 0 {
                         Text("Currently \(ShopMoney.format(tradeDiscountMinor) ?? "") ex VAT.").font(.wsFootnote).foregroundStyle(.secondaryText)
@@ -110,7 +110,7 @@ struct ShopOrderTermsFields: View {
                 }
             }
             .accessibilityIdentifier("shopTerms.trade")
-            LabeledContent("Extra discount (£ ex VAT)") {
+            LabeledContent("Extra discount (\(Formatters.currencySymbol) ex VAT)") {
                 TextField("0.00", text: $terms.discount).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                     .accessibilityIdentifier("shopTerms.discount")
             }

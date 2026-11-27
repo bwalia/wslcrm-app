@@ -102,8 +102,11 @@ struct MacCommands: Commands {
                 .keyboardShortcut("r", modifiers: .command)
         }
         CommandGroup(after: .textEditing) {
-            Button("Ask AI…") { NotificationCenter.default.post(name: .wsAskAI, object: nil) }
+            // As on the web: ⌘K searches everything, ⌘J asks the assistant.
+            Button("Search…") { NotificationCenter.default.post(name: .wsOpenSearch, object: nil) }
                 .keyboardShortcut("k", modifiers: .command)
+            Button("Ask AI…") { NotificationCenter.default.post(name: .wsAskAI, object: nil) }
+                .keyboardShortcut("j", modifiers: .command)
             Button("Search This List") { find?.action() }
                 .keyboardShortcut("f", modifiers: .command)
                 .disabled(find == nil)
@@ -188,8 +191,10 @@ private struct MacRefreshButton: View {
 #endif
 
 extension Notification.Name {
-    /// "Ask AI" from anywhere (⌘K): Home's command box takes the focus.
+    /// "Ask AI" from anywhere (⌘J): Home's command box takes the focus.
     static let wsAskAI = Notification.Name("ws.askAI")
+    /// Search everything (⌘K, the search buttons): the command palette opens, or closes when it's open.
+    static let wsOpenSearch = Notification.Name("ws.openSearch")
     static let wsOpenSettings = Notification.Name("ws.openSettings")
 }
 

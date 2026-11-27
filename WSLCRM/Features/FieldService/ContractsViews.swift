@@ -161,7 +161,7 @@ struct ContractsSummary: Sendable, Equatable {
     }
 
     var sentence: String {
-        let value = Formatters.money(activeAnnualValue, currency: "GBP") ?? "£0"
+        let value = Formatters.money(activeAnnualValue, currency: nil) ?? ""
         return "\(count) contract\(count == 1 ? "" : "s") · \(value) a year under active contract · "
             + "\(renewingSoon) up for renewal within 90 days"
     }
@@ -197,7 +197,7 @@ struct ContractRow: View {
                 }
                 Spacer(minLength: 8)
                 if let value = contract.decimal("annual_value"),
-                   let text = Formatters.money(value, currency: contract.string("currency") ?? "GBP") {
+                   let text = Formatters.money(value, currency: contract.string("currency") ?? Formatters.defaultCurrency) {
                     Text("\(text) a year").font(.wsSubheadline.monospacedDigit().weight(.semibold))
                         .multilineTextAlignment(.trailing)
                 }

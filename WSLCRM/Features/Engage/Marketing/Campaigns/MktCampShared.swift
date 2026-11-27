@@ -391,6 +391,6 @@ enum MktCampFormat {
     /// The plugin sends rates already as percentages (12.5 = 12.5%).
     static func pct(_ value: Double?) -> String { EngageFormat.percent(value, alreadyPercent: true) }
     static func money(_ value: Double?, currency: String? = nil) -> String {
-        EngageFormat.money(value ?? 0, currency: currency ?? "GBP")
+        EngageFormat.money(value ?? 0, currency: currency ?? Formatters.defaultCurrency)
     }
 }

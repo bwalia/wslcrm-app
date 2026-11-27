@@ -554,7 +554,7 @@ struct ShopProductDraft: Equatable, Sendable {
             "category_uuid": categoryUuid.isEmpty ? .null : .string(categoryUuid),
             "short_description": .string(shortDescription.shopTrimmed), "description": .string(description),
             "tags": .array(tags.split(separator: ",").map { String($0).shopTrimmed }.filter { !$0.isEmpty }.map { .string($0) }),
-            "base_price_minor": .number(Double(base ?? 0)), "cost_minor": ShopJSON.number(costMinor), "currency": .string("GBP"),
+            "base_price_minor": .number(Double(base ?? 0)), "cost_minor": ShopJSON.number(costMinor), "currency": .string(Formatters.defaultCurrency),
             "vat_rate": .number(((vat ?? 20) * 100).rounded() / 10_000),
             "low_stock_threshold": .number(Double(max(0, Self.int(lowStockThreshold, 2)))),
             "lead_time_days": .number(Double(max(0, Self.int(leadTimeDays, 10)))),

@@ -11,7 +11,7 @@ struct CommandCenter: View {
     /// The person's last request to the all-round assistant, to pick up where they left off.
     let lastRequest: String?
     let agentBusy: Bool
-    /// A pending "put the cursor in the box" (⌘K, Ask AI), cleared once done. A request made while switching to Home
+    /// A pending "put the cursor in the box" (⌘J, Ask AI), cleared once done. A request made while switching to Home
     /// (the Mac rebuilds Home on a sidebar switch) is picked up when this view appears, not lost.
     @Binding var focusRequest: Int
     let onOpen: (CommandRouter.Place) -> Void
@@ -116,6 +116,7 @@ struct CommandCenter: View {
             if text.trimmedOrNil != nil {
                 Button("Clear", systemImage: "xmark.circle.fill") { text = "" }
                     .labelStyle(.iconOnly)
+                    .help("Clear")
                     .foregroundStyle(Palette.onDarkMuted)
             }
             Button(action: submit) {

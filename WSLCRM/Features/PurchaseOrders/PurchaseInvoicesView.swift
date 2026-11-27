@@ -32,7 +32,7 @@ struct PurchaseInvoiceTotals: Equatable, Sendable {
 
     /// One amount per currency ("£1,200.00 + €300.00"); "£0.00" when there is nothing.
     func text(_ value: KeyPath<Currency, Decimal>) -> String {
-        guard !currencies.isEmpty else { return Formatters.money(0, currency: "GBP") ?? "0" }
+        guard !currencies.isEmpty else { return Formatters.money(0, currency: Formatters.defaultCurrency) ?? "0" }
         return currencies.map { Formatters.money($0[keyPath: value], currency: $0.code) ?? "" }.joined(separator: " + ")
     }
 

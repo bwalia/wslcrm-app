@@ -904,6 +904,7 @@ extension View {
             .navigationDestination(for: CustomerRoute.self) { CustomerDetailView(customerUuid: $0.uuid) }
             .navigationDestination(for: ShopOrderRoute.self) { ShopOrderDetailView(uuid: $0.uuid) }
             .navigationDestination(for: ShopQuoteRoute.self) { ShopQuoteDetailView(uuid: $0.uuid) }
+            .navigationDestination(for: RecordSearchTarget.self) { RecordSearchDestination(target: $0) }
             .navigationDestination(for: FieldServiceArea.self) { area in
                 switch area {
                 case .requests: ServiceRequestsListView()

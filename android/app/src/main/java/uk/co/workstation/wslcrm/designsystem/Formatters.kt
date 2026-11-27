@@ -38,11 +38,12 @@ object Formatters {
     }
 
     /**
-     * Used when a total carries no currency of its own (dashboard roll-ups). The server sends no
-     * workspace currency, so the device's own is a better guess than assuming sterling.
+     * The app's one currency, pounds sterling, as on iPhone and Mac. OpsAPI has no workspace currency, so this is
+     * used wherever an amount carries none of its own (a new record, a roll-up); an amount that comes with its own
+     * currency (an order in EUR) always shows that one.
      */
-    val fallbackCurrency: String
-        get() = runCatching { Currency.getInstance(Locale.getDefault()).currencyCode }.getOrNull() ?: "GBP"
+    // ponytail: fixed GBP; read a stored setting here when Android gets a Settings screen (iOS: Settings › Currency).
+    const val defaultCurrency = "GBP"
 
     /**
      * The common currencies plus whatever this record already uses, so a tenant billing in, say,
@@ -50,7 +51,7 @@ object Formatters {
      */
     fun currencyChoices(including: String?): List<String> {
         val codes = mutableListOf("GBP", "EUR", "USD")
-        for (code in listOfNotNull(fallbackCurrency, including?.uppercase())) {
+        for (code in listOfNotNull(defaultCurrency, including?.uppercase())) {
             if (code !in codes) codes.add(0, code)
         }
         return codes
@@ -58,7 +59,7 @@ object Formatters {
 
     fun money(amount: BigDecimal?, currency: String?, locale: Locale = Locale.getDefault()): String? {
         amount ?: return null
-        val code = (currency?.takeIf { it.isNotEmpty() } ?: fallbackCurrency).uppercase()
+        val code = (currency?.takeIf { it.isNotEmpty() } ?: defaultCurrency).uppercase()
         val format = NumberFormat.getCurrencyInstance(locale)
         runCatching { format.currency = Currency.getInstance(code) }
         return format.format(amount)

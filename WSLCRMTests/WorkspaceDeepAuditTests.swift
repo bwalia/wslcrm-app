@@ -172,8 +172,11 @@ final class WorkspaceDeepAuditTests: XCTestCase {
         XCTAssertEqual(RecordSearchTarget.resolve("/dashboard/projects/\(uuid)", menu: menu), .project(uuid))
         XCTAssertEqual(RecordSearchTarget.resolve("/dashboard/shop/products/\(uuid)", menu: menu), .shopProduct(uuid))
         XCTAssertEqual(RecordSearchTarget.resolve("/dashboard/orders?order=\(uuid)", menu: menu), .storeOrder(uuid))
-        // No screen for one quote by itself: the list it's in.
-        XCTAssertEqual(RecordSearchTarget.resolve("/dashboard/shop/quotes/\(uuid)", menu: menu),
+        XCTAssertEqual(RecordSearchTarget.resolve("/dashboard/shop/orders/\(uuid)", menu: menu), .shopOrder(uuid))
+        XCTAssertEqual(RecordSearchTarget.resolve("/dashboard/shop/quotes/\(uuid)", menu: menu), .shopQuote(uuid))
+        XCTAssertEqual(RecordSearchTarget.resolve("/dashboard/shop/deals/AB12%20CD", menu: menu), .shopDeal("AB12 CD"))
+        // No screen for one supplier by itself: the list it's in.
+        XCTAssertEqual(RecordSearchTarget.resolve("/dashboard/shop/suppliers", menu: menu),
                        .page(NativeModules.destination(forKey: "shop")!))
         // Nothing in the menu for it: shown without a link.
         XCTAssertNil(RecordSearchTarget.resolve("/dashboard/employees", menu: menu))

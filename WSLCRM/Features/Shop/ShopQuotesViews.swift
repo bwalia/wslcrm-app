@@ -748,7 +748,7 @@ extension ShopQuoteDetailView {
     /// Opened from a link that only carries the uuid (an order's quote).
     init(uuid: String) {
         self.init(summary: ShopQuote(uuid: uuid, quoteNumber: "…", status: .unknown, customer: ShopCustomer(), lines: [],
-                                     subtotalMinor: 0, vatMinor: 0, shippingMinor: 0, totalMinor: 0, currency: "GBP"))
+                                     subtotalMinor: 0, vatMinor: 0, shippingMinor: 0, totalMinor: 0, currency: Formatters.defaultCurrency))
     }
 }
 

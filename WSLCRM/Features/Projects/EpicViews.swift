@@ -337,7 +337,7 @@ struct ProjectTaskPickerSheet: View {
                     .accessibilityAddTraits(isOn ? [.isSelected] : [])
                 }
             }
-            .searchable(text: $search, prompt: "Search cards")
+            .wsSheetSearchable(text: $search, prompt: "Search cards")
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -369,6 +369,7 @@ struct ProjectTaskPickerSheet: View {
                 loaded = true
             }
         }
+        .wsMacSheetSize()
     }
 }
 

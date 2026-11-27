@@ -327,7 +327,7 @@ struct SalesLedgerView: View {
             HStack {
                 Text(inv.string("invoice_number") ?? "—").font(.wsHeadline)
                 Spacer()
-                Text(inv.money("total_amount", currency: inv.string("currency") ?? "GBP")).font(.wsBody.monospacedDigit())
+                Text(inv.money("total_amount", currency: inv.string("currency") ?? Formatters.defaultCurrency)).font(.wsBody.monospacedDigit())
             }
             Text([inv.string("customer_name"), inv.day("issue_date")].compactMap { $0 }.joined(separator: " · "))
                 .font(.wsFootnote).foregroundStyle(.secondaryText)

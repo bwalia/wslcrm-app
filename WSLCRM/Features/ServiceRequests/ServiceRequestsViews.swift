@@ -594,7 +594,7 @@ struct EngineerPickerSheet: View {
                     }
                 }
             }
-            .searchable(text: $search)
+            .wsSheetSearchable(text: $search, prompt: "Find an engineer")
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
@@ -603,6 +603,7 @@ struct EngineerPickerSheet: View {
                 await load()
             }
         }
+        .wsMacSheetSize()
     }
 
     private func load() async {

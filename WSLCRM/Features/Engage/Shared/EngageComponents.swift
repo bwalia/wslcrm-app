@@ -189,7 +189,7 @@ enum EngageFormat {
         return "\(percent.formatted(.number.precision(.fractionLength(0...1))))%"
     }
 
-    static func money(_ value: Double?, currency: String? = "GBP", minorUnits: Bool = false) -> String {
+    static func money(_ value: Double?, currency: String? = Formatters.defaultCurrency, minorUnits: Bool = false) -> String {
         guard let value else { return "—" }
         let amount = Decimal(minorUnits ? value / 100 : value)
         return Formatters.money(amount, currency: currency) ?? "—"

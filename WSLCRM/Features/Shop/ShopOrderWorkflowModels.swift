@@ -317,7 +317,7 @@ struct ShopOrderPOPreview: Sendable, Decodable {
         notes = c.decodeFlexibleString(forKey: .notes)?.trimmedOrNil
         lines = c.decodeLossyArray(Line.self, forKey: .lines)
         missingCosts = c.decodeFlexibleInt(forKey: .missingCosts) ?? 0
-        currency = c.decodeFlexibleString(forKey: .currency) ?? "GBP"
+        currency = c.decodeFlexibleString(forKey: .currency) ?? Formatters.defaultCurrency
     }
 }
 

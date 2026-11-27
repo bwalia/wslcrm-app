@@ -194,7 +194,7 @@ extension Job: Decodable {
         dueDate = c.decodeDay(forKey: .dueDate)
         estimatedHours = c.decodeFlexibleDecimal(forKey: .estimatedHours)
         hourlyRate = c.decodeFlexibleDecimal(forKey: .hourlyRate)
-        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? Formatters.fallbackCurrency
+        currency = (try? c.decodeIfPresent(String.self, forKey: .currency)) ?? Formatters.defaultCurrency
         startedAt = c.decodeDate(forKey: .startedAt)
         completedAt = c.decodeDate(forKey: .completedAt)
         cancelledReason = try? c.decodeIfPresent(String.self, forKey: .cancelledReason)

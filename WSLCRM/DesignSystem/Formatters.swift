@@ -18,15 +18,28 @@ enum Formatters {
         return date.formatted(.relative(presentation: .named))
     }
 
-    /// Used when a total carries no currency of its own (dashboard roll-ups). The server sends
-    /// no workspace currency, so the device's own is a better guess than assuming sterling.
-    static let fallbackCurrency = Locale.current.currency?.identifier ?? "GBP"
+    /// The app's one currency (Settings › Currency), pounds sterling unless the person changes it. OpsAPI
+    /// has no workspace currency, so this is used wherever an amount carries none of its own: a new record,
+    /// a roll-up, a form's label. An amount that comes with its own currency (an invoice in EUR) shows that.
+    static var defaultCurrency: String {
+        UserDefaults.standard.string(forKey: currencyKey)?.trimmedOrNil?.uppercased() ?? standardCurrency
+    }
+    static let currencyKey = "app.currency"
+    static let standardCurrency = "GBP"
+
+    /// `defaultCurrency`'s symbol for labels such as "Price (£)".
+    static var currencySymbol: String {
+        let format = NumberFormatter()
+        format.numberStyle = .currency
+        format.currencyCode = defaultCurrency
+        return format.currencySymbol
+    }
 
     /// The common currencies plus whatever this record already uses, so a tenant billing in,
     /// say, AED never has to change it to something from a fixed list.
     static func currencyChoices(including current: String?) -> [String] {
         var codes = ["GBP", "EUR", "USD"]
-        for code in [fallbackCurrency, current?.uppercased()].compactMap({ $0 }) where !codes.contains(code) {
+        for code in [defaultCurrency, current?.uppercased()].compactMap({ $0 }) where !codes.contains(code) {
             codes.insert(code, at: 0)
         }
         return codes
@@ -34,7 +47,7 @@ enum Formatters {
 
     static func money(_ amount: Decimal?, currency: String?) -> String? {
         guard let amount else { return nil }
-        let code = (currency?.isEmpty == false ? currency! : Self.fallbackCurrency).uppercased()
+        let code = (currency?.isEmpty == false ? currency! : Self.defaultCurrency).uppercased()
         return amount.formatted(.currency(code: code))
     }
 

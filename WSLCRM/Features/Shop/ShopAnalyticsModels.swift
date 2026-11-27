@@ -542,11 +542,11 @@ enum ShopAnalyticsFormat {
     /// Whole pounds for headline figures.
     static func pounds(_ minor: Int?) -> String {
         guard let minor else { return "—" }
-        return (Decimal(minor) / 100).formatted(.currency(code: "GBP").precision(.fractionLength(0)).locale(Locale(identifier: "en_GB")))
+        return (Decimal(minor) / 100).formatted(.currency(code: Formatters.defaultCurrency).precision(.fractionLength(0)).locale(Locale(identifier: "en_GB")))
     }
 
     /// Pence shown exactly (tables and breakdowns).
-    static func money(_ minor: Int?, currency: String = "GBP") -> String {
+    static func money(_ minor: Int?, currency: String = Formatters.defaultCurrency) -> String {
         ShopMoney.format(minor, currency: currency) ?? "—"
     }
 
@@ -557,11 +557,11 @@ enum ShopAnalyticsFormat {
         func short(_ value: Double, _ suffix: String) -> String {
             var text = String(format: "%.1f", value)
             if text.hasSuffix(".0") { text.removeLast(2) }
-            return "\(sign)£\(text)\(suffix)"
+            return "\(sign)\(Formatters.currencySymbol)\(text)\(suffix)"
         }
         if size >= 1_000_000 { return short(size / 1_000_000, "m") }
         if size >= 1_000 { return short(size / 1_000, "k") }
-        return "\(sign)£\(Int(size.rounded()))"
+        return "\(sign)\(Formatters.currencySymbol)\(Int(size.rounded()))"
     }
 
     static func count(_ value: Int?) -> String {

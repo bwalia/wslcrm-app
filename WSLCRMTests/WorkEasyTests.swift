@@ -215,7 +215,7 @@ final class WorkEasyTests: XCTestCase {
         XCTAssertNil(ProjectMoney.amount("abc"))
         XCTAssertEqual(ProjectMoney.text(Decimal(string: "75.50")), "75.5")
         XCTAssertEqual(ProjectMoney.text(0), "", "an unset amount leaves the field empty")
-        XCTAssertEqual(ProjectMoney.defaultCurrency, "GBP")
+        XCTAssertEqual(Formatters.defaultCurrency, "GBP")
     }
 
     /// The billing customer's name comes from the customer record, or the timesheet lookup without the grant.

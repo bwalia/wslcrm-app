@@ -249,7 +249,7 @@ struct ShopLineDraftEditor: View {
                         .accessibilityIdentifier("shopLine.name")
                     TextField("Description (optional)", text: $line.description, axis: .vertical).lineLimit(1...4)
                     Stepper("Quantity: \(line.qty)", value: $line.qty, in: 1...10_000)
-                    LabeledContent("Unit price (£ ex VAT)") {
+                    LabeledContent("Unit price (\(Formatters.currencySymbol) ex VAT)") {
                         TextField("0.00", text: $line.unitPrice).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                             .accessibilityIdentifier("shopLine.unitPrice")
                     }
@@ -278,7 +278,7 @@ struct ShopLineDraftEditor: View {
                     .accessibilityIdentifier("shopLine.configure")
                 }
                 Section {
-                    LabeledContent("Unit price override (£ ex VAT)") {
+                    LabeledContent("Unit price override (\(Formatters.currencySymbol) ex VAT)") {
                         TextField(line.fromPriceMinor.map(ShopMoney.plain) ?? "worked out", text: $line.override)
                             .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                             .accessibilityIdentifier("shopLine.override")

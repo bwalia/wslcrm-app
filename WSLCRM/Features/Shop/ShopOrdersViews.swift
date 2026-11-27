@@ -404,7 +404,7 @@ extension ShopOrderDetailView {
 extension ShopOrder {
     static func placeholder(uuid: String) -> ShopOrder {
         ShopOrder(uuid: uuid, orderNumber: "…", status: .unknown, lines: [], subtotalMinor: 0, vatMinor: 0,
-                  shippingMinor: 0, totalMinor: 0, currency: "GBP")
+                  shippingMinor: 0, totalMinor: 0, currency: Formatters.defaultCurrency)
     }
 }
 

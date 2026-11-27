@@ -19,7 +19,9 @@ struct MainTabView: View {
     @State private var homePath = NavigationPath()
     @State private var hubPaths: [NavigationPolicy.Home: NavigationPath] = [:]
     @State private var appPaths: [String: NavigationPath] = [:]
+    @State private var appsPath = NavigationPath()
     @State private var commandFocus = 0
+    @State private var showingSearch = false
 
     var body: some View {
         let policy = NavigationPolicy(session: session)
@@ -43,13 +45,18 @@ struct MainTabView: View {
         }
         .onChange(of: session.workspace?.uuid) { activatePreferences() }
         .onChange(of: router.pending) { openPendingLink() }
-        // ⌘K, from anywhere: Home's command box.
+        // ⌘J, from anywhere: Home's command box. ⌘K: search everything.
         .onReceive(NotificationCenter.default.publisher(for: .wsAskAI)) { _ in focusCommandBox() }
+        .onReceive(NotificationCenter.default.publisher(for: .wsOpenSearch)) { _ in showingSearch.toggle() }
+        .commandPalette(isPresented: $showingSearch) { openFromSearch($0, slots: slots) }
         .background {
             #if !targetEnvironment(macCatalyst)
-            // An iPad with a keyboard (the Mac has it in its menu bar: Edit › Ask AI…).
-            Button("Ask AI", action: focusCommandBox)
+            // An iPad with a keyboard (the Mac has them in its menu bar: Edit › Search… and Ask AI…).
+            Button("Search") { showingSearch.toggle() }
                 .keyboardShortcut("k", modifiers: .command)
+                .hidden()
+            Button("Ask AI", action: focusCommandBox)
+                .keyboardShortcut("j", modifiers: .command)
                 .hidden()
             #endif
         }
@@ -113,9 +120,10 @@ struct MainTabView: View {
         // The Go menu (⌘1–⌘9) walks the sidebar in its order.
         let tabs: [(String, AppTab)] = [("Home", .home)] + pinned.map { ($0.title, $0.tab) }
             + hubs.map { ($0.title, .hub($0)) } + groups.flatMap(\.entries).map { ($0.name, .app($0.key)) }
-        let areas = tabs.map { title, tab in MacArea(title: title) { selection = tab } }
+        let areas = tabs.map { title, tab in MacArea(title: title) { showArea(tab) } }
         return NavigationSplitView {
-            MacSidebar(selection: $selection, pinned: pinned, hubs: hubs, groups: groups, failedCount: sync.failedCount)
+            MacSidebar(selection: Binding(get: { selection }, set: { showArea($0) }),
+                       pinned: pinned, hubs: hubs, groups: groups, failedCount: sync.failedCount)
         } detail: {
             Group {
                 switch selection {
@@ -142,7 +150,7 @@ struct MainTabView: View {
     }
 
     private var appsStack: some View {
-        NavigationStack {
+        NavigationStack(path: $appsPath) {
             AppsView()
                 .askAIButton(path: nil)
                 .withAppDestinations()
@@ -165,7 +173,7 @@ struct MainTabView: View {
                 Group {
                     if let destination = NativeModules.destination(forKey: key) { destination.rootView }
                 }
-                .askAIButton(path: Self.assistantPath(forKey: key, menu: session.menu))
+                .askAIButton(path: Self.assistantPath(forKey: key, menu: session.menu), isShown: key != AppMenu.aiChatKey)
                 .withAppDestinations()
                 .safeAreaInset(edge: .top, spacing: 0) { syncBanner }
             }
@@ -178,6 +186,61 @@ struct MainTabView: View {
             selection = tab
         } else if case .hub(let hub) = tab {
             homePath.append(HubScreenRoute(hub: hub))
+        }
+    }
+
+    /// The Mac sidebar and Go menu: Home is always the Home dashboard, wherever the person went from it, and choosing
+    /// the area already shown goes back to its first screen, as a Mac sidebar does.
+    private func showArea(_ tab: AppTab) {
+        if tab == .home || tab == selection {
+            switch tab {
+            case .home: homePath = NavigationPath()
+            case .apps: appsPath = NavigationPath()
+            case .hub(let hub): hubPaths[hub] = nil
+            case .app(let key): appPaths[key] = nil
+            }
+        }
+        selection = tab
+    }
+
+    /// What was picked in the ⌘K search, opened natively: a record on the stack in front, a page as its own area
+    /// (the Mac sidebar's, or a phone tab when it has one), the assistant on Home.
+    private func openFromSearch(_ action: CommandPaletteItem.Action, slots: [TabSlot]) {
+        switch action {
+        case .recent:
+            return
+        case .ask(let text):
+            selection = .home
+            var path = NavigationPath()
+            path.append(NativeScreenRoute(ChatAssistantRoute.screenID(path: nil, ask: text)))
+            homePath = path
+        case .record(let target):
+            pushInFront(target)
+        case .page(let entry):
+            let hub = NavigationPolicy(session: session).ordered.first { $0.menuKey == entry.key }
+            let tab: AppTab = hub.map { .hub($0) } ?? .app(entry.key)
+            if MacSupport.isMac ? (hub != nil || NativeModules.destination(forKey: entry.key) != nil)
+                : slots.contains(where: { $0.tab == tab }) {
+                showArea(tab)
+            } else if case .menu(let destination) = entry.destination {
+                pushInFront(RecordSearchTarget.page(destination))
+            }
+        }
+    }
+
+    /// Opens a screen on top of the area in front (every area's stack has `withAppDestinations`).
+    private func pushInFront(_ value: RecordSearchTarget) {
+        switch selection {
+        case .home: homePath.append(value)
+        case .apps: appsPath.append(value)
+        case .hub(let hub):
+            var path = hubPaths[hub] ?? NavigationPath()
+            path.append(value)
+            hubPaths[hub] = path
+        case .app(let key):
+            var path = appPaths[key] ?? NavigationPath()
+            path.append(value)
+            appPaths[key] = path
         }
     }
 

@@ -98,7 +98,7 @@ struct LeadShopSections: View {
                 ForEach(quotes) { quote in
                     NavigationLink { ShopQuoteDetailView(uuid: quote.string("uuid") ?? "") } label: {
                         LabeledContent("Quote \(quote.string("number") ?? "")") {
-                            Text(quote.decimal("total_minor").flatMap { Formatters.money($0 / 100, currency: "GBP") } ?? "")
+                            Text(quote.decimal("total_minor").flatMap { Formatters.money($0 / 100, currency: Formatters.defaultCurrency) } ?? "")
                         }
                     }
                 }
@@ -225,7 +225,7 @@ struct LeadSettingsView: View {
             Section {
                 intField("Call within (minutes)", \.firstResponseMinutes)
                 intField("Tell managers when late by (minutes)", \.escalateAfterMinutes)
-                TextField("Currency", text: binding(\.currency, "GBP")).textInputAutocapitalization(.characters)
+                TextField("Currency", text: binding(\.currency, Formatters.defaultCurrency)).textInputAutocapitalization(.characters)
                 LabeledContent("Opens at") { TextField("09:00", text: binding(\.workingHours.start, "09:00")).multilineTextAlignment(.trailing) }
                 LabeledContent("Closes at") { TextField("17:30", text: binding(\.workingHours.end, "17:30")).multilineTextAlignment(.trailing) }
                 LabeledContent("Time zone") {

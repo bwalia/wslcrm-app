@@ -47,7 +47,7 @@ enum DeliveryWords {
     }
 
     static func money(_ record: Record, _ key: String, currency: String?) -> String? {
-        Formatters.money(record.decimal(key), currency: currency ?? "GBP")
+        Formatters.money(record.decimal(key), currency: currency ?? Formatters.defaultCurrency)
     }
 
     /// What the store owner may do with a delivery at each step (the partner marks picked up and delivered).
@@ -886,7 +886,7 @@ struct DeliveryAskSheet: View {
     private func orderLabel(_ order: Record) -> String {
         let customer = [order.string("customer_first_name"), order.string("customer_last_name")].compactMap { $0 }.joined(separator: " ")
         return [order.string("order_number") ?? "Order", customer.isEmpty ? nil : customer,
-                Formatters.money(order.decimal("total_amount"), currency: order.string("currency") ?? "GBP")]
+                Formatters.money(order.decimal("total_amount"), currency: order.string("currency") ?? Formatters.defaultCurrency)]
             .compactMap { $0 }.joined(separator: " · ")
     }
 

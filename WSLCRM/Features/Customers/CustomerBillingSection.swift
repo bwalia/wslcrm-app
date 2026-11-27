@@ -60,7 +60,7 @@ struct CustomerBillingSection: View {
                 }
                 ForEach(billing.purchases) { row in
                     line(CustomerBilling.product(row), "Bought",
-                         [row.decimal("amount").flatMap { Formatters.money($0, currency: row.string("currency") ?? "GBP") },
+                         [row.decimal("amount").flatMap { Formatters.money($0, currency: row.string("currency") ?? Formatters.defaultCurrency) },
                           Formatters.humanize(row.string("status")),
                           row.date("access_until").flatMap { Formatters.day($0) }.map { "until \($0)" }])
                 }

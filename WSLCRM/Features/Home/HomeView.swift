@@ -7,7 +7,7 @@ struct HomeView: View {
     let open: (AppTab) -> Void
     /// Home's navigation stack: the command box opens screens and the assistant on it.
     @Binding var path: NavigationPath
-    /// Bumped by ⌘K ("Ask AI…") to put the cursor in the command box.
+    /// Bumped by ⌘J ("Ask AI…") to put the cursor in the command box.
     @Binding var focusRequest: Int
 
     @Environment(\.services) private var services
@@ -76,7 +76,13 @@ struct HomeView: View {
             isDeliveryPartner = await MyDeliveries.isPartner(services)
         }
         // Each time Home comes back into view: the agent may have finished while the person was elsewhere.
-        .onAppear { Task { await loadLastRequest() } }
+        .onAppear {
+            Task { await loadLastRequest() }
+            // Back from elsewhere: what arrived, or was read on another device, since. (The first time, `.task` loads.)
+            if notifications.hasLoaded {
+                Task { await notifications.load(services.workspace(), workspace: session.workspace?.uuid) }
+            }
+        }
         .sheet(isPresented: $showingNotifications) {
             NotificationsView(model: notifications)
                 // A Mac sheet is small by default, which cramped the list.
@@ -421,9 +427,7 @@ private struct HomeHeader: View {
             }
         }
         .padding(.top, 12)
-        .sheet(isPresented: $choosingWorkspace) {
-            NavigationStack { WorkspacePickerView(isInitialChoice: false) }
-        }
+        .sheet(isPresented: $choosingWorkspace) { WorkspacePickerSheet() }
     }
 
     private var identity: some View {
@@ -473,6 +477,19 @@ private struct HomeHeader: View {
 
     private var controls: some View {
         HStack(spacing: 10) {
+            // Search everything: records, pages and the assistant (⌘K).
+            Button { NotificationCenter.default.post(name: .wsOpenSearch, object: nil) } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color(.label))
+                    .frame(width: 44, height: 44)
+                    .background(Palette.card, in: Circle())
+                    .overlay(Circle().stroke(Palette.hairline))
+            }
+            .buttonStyle(.plain)
+            .help("Search customers, leads, invoices and pages (⌘K)")
+            .accessibilityLabel("Search")
+            .accessibilityIdentifier("home.search")
             Button { showingNotifications = true } label: {
                 Image(systemName: unread > 0 ? "bell.badge.fill" : "bell")
                     .font(.system(size: 17, weight: .semibold))
@@ -493,6 +510,7 @@ private struct HomeHeader: View {
                     }
             }
             .buttonStyle(.plain)
+            .help(unread > 0 ? "Notifications: \(unread) unread" : "Notifications")
             .accessibilityLabel(unread > 0 ? "Notifications, \(unread) unread" : "Notifications")
             .accessibilityIdentifier("home.notifications")
             if !MacSupport.isMac {
@@ -504,6 +522,7 @@ private struct HomeHeader: View {
                     .background(Color.accentColor, in: Circle())
             }
             .buttonStyle(.plain)
+            .help("Profile and settings")
             .accessibilityLabel("Profile and settings")
             .accessibilityIdentifier("home.profile")
             }

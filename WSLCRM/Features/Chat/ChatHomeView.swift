@@ -211,7 +211,7 @@ struct ChatHomeView: View {
                         .accessibilityIdentifier("chat.channel")
                 }
             } header: {
-                sectionHeader("Channels", add: "Create a channel") { showingCreate = true }
+                sectionHeader("Channels", add: "Create a channel", status: MacSupport.isMac) { showingCreate = true }
             }
 
             Section {
@@ -239,7 +239,10 @@ struct ChatHomeView: View {
         }
         .navigationTitle(title)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) { ChatConnectionBadge(status: hub.status) }
+            // On the Mac the status sits with the channels, as plain words, not among the toolbar's buttons.
+            if !MacSupport.isMac {
+                ToolbarItem(placement: .topBarLeading) { ChatConnectionBadge(status: hub.status) }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button("New channel", systemImage: "number") { showingCreate = true }
@@ -353,12 +356,15 @@ struct ChatHomeView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func sectionHeader(_ text: String, add label: String, action: @escaping () -> Void) -> some View {
-        HStack {
+    private func sectionHeader(_ text: String, add label: String, status: Bool = false,
+                               action: @escaping () -> Void) -> some View {
+        HStack(spacing: 12) {
             Text(text)
             Spacer()
+            if status { ChatConnectionBadge(status: hub.status).textCase(nil) }
             Button(label, systemImage: "plus.circle", action: action)
                 .labelStyle(.iconOnly)
+                .help(label)
                 .font(.title3)
                 .textCase(nil)
         }

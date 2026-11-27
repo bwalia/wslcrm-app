@@ -397,7 +397,7 @@ struct ProjectFormSheet: View {
     @State private var customerUuid: String?
     @State private var customerName: String?
     @State private var pickingCustomer = false
-    @State private var currency = ProjectMoney.defaultCurrency
+    @State private var currency = Formatters.defaultCurrency
     @State private var budget = ""
     @State private var hourlyRate = ""
     @State private var busy = false
@@ -542,7 +542,7 @@ struct ProjectFormSheet: View {
         if let day = project.startDay { hasStart = true; start = day.date() }
         if let day = project.dueDay { hasDue = true; due = day.date() }
         customerUuid = project.customerUuid
-        currency = project.budgetCurrency?.uppercased() ?? ProjectMoney.defaultCurrency
+        currency = project.budgetCurrency?.uppercased() ?? Formatters.defaultCurrency
         budget = ProjectMoney.text(project.budget)
         hourlyRate = ProjectMoney.text(project.hourlyRate)
     }
@@ -579,7 +579,6 @@ struct ProjectFormSheet: View {
 
 /// A project's money: the web's currencies (GBP first, the app's default) and amounts typed as text.
 enum ProjectMoney {
-    static let defaultCurrency = "GBP"
     static let currencies = ["GBP", "EUR", "USD", "INR", "CAD", "AUD", "JPY", "CNY"]
 
     /// "5,000.50" or "£75" → 5000.50 / 75; nil for anything that isn't a non-negative amount.
@@ -641,7 +640,7 @@ struct WorkCustomerPickerSheet: View {
                     Text("No customers found.").foregroundStyle(.secondaryText)
                 }
             }
-            .searchable(text: $search, prompt: "Search customers")
+            .wsSheetSearchable(text: $search, prompt: "Search customers")
             .navigationTitle("Customer")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
@@ -653,6 +652,7 @@ struct WorkCustomerPickerSheet: View {
                 loading = false
             }
         }
+        .wsMacSheetSize()
     }
 }
 

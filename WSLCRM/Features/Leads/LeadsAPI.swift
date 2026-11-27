@@ -6,9 +6,6 @@ import Foundation
 struct LeadsAPI: Sendable {
     let client: APIClient
     static let base = "/api/v2/crm/leads"
-    /// Leads without a currency of their own are in the workspace's, which defaults to pounds.
-    // ponytail: fixed GBP fallback; read `GET /leads/settings` currency if a workspace sells in another one.
-    static let defaultCurrency = "GBP"
 
     enum Owner: String, Sendable, CaseIterable, Identifiable {
         case mine = "me", unassigned, everyone = ""

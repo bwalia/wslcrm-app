@@ -353,7 +353,7 @@ private struct EmployeeDetail: View {
             Section("Work") {
                 DetailRow(label: "Employee code", value: shown.string("employee_code"))
                 DetailRow(label: "Team", value: shown.string("region"))
-                DetailRow(label: "Hourly cost", value: shown.decimal("hourly_cost_rate").flatMap { Formatters.money($0, currency: "GBP") })
+                DetailRow(label: "Hourly cost", value: shown.decimal("hourly_cost_rate").flatMap { Formatters.money($0, currency: Formatters.defaultCurrency) })
                 let skills = shown.array("skills").compactMap(\.stringValue)
                 if !skills.isEmpty { DetailRow(label: "Skills", value: skills.joined(separator: ", ")) }
                 if fieldService { DetailRow(label: "F-Gas certificate", value: shown.string("fgas_certificate_no")) }
@@ -469,7 +469,7 @@ private struct EmployeeEditForm: View {
                 TextField("Job title", text: $draft.jobTitle).accessibilityIdentifier("employees.form.job_title")
                 TextField("Employee code", text: $draft.code).accessibilityIdentifier("employees.form.code")
                 TextField("Team", text: $draft.team).accessibilityIdentifier("employees.form.team")
-                LabeledContent("Hourly cost (£)") {
+                LabeledContent("Hourly cost (\(Formatters.currencySymbol))") {
                     TextField("0.00", text: $draft.hourlyCost).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                         .accessibilityIdentifier("employees.form.hourly_cost")
                 }
@@ -654,7 +654,7 @@ private struct EmployeeTeamMemberForm: View {
                     if draft.isEngineer {
                         TextField("Skills, separated by commas", text: $draft.skills)
                         TextField("F-Gas certificate number", text: $draft.fgas)
-                        LabeledContent("Hourly cost (£)") {
+                        LabeledContent("Hourly cost (\(Formatters.currencySymbol))") {
                             TextField("0.00", text: $draft.hourlyCost).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                         }
                     }
