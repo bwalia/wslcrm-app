@@ -20,6 +20,7 @@ struct TemplateOverviewView: View {
     @State private var editing = false
     @State private var fullPreview: PDFPreviewItem?
     @State private var openedCopy: DocTemplate?
+    @State private var redesigning: (key: String, kind: BuilderKind)?
 
     enum Preview {
         case idle, loading
@@ -67,6 +68,14 @@ struct TemplateOverviewView: View {
             Button("Delete template", role: .destructive) { Task { await delete() } }
         } message: {
             if let t = template.value { Text(DocumentTemplatesLibrary.deleteMessage(t, inUse: designs?.inUse(t.id) ?? [])) }
+        }
+        .confirmationDialog("Design this template by dragging?", isPresented: Binding(
+            get: { redesigning != nil }, set: { if !$0 { redesigning = nil } }), titleVisibility: .visible) {
+            if let (key, kind) = redesigning {
+                Button("Start designing") { Task { await redesign(key, kind) } }
+            }
+        } message: {
+            Text("The page is replaced by a ready-made design you can move around and restyle. Your current HTML stays in Earlier versions.")
         }
         .confirmationDialog(using.map { "Use this template for your \($0.plural)?" } ?? "",
                             isPresented: Binding(get: { using != nil }, set: { if !$0 { using = nil } }),
@@ -241,6 +250,15 @@ struct TemplateOverviewView: View {
                         Button { Task { await makeDefault(t) } } label: { Label("Make it the default", systemImage: "star") }
                     }
                     Button { showingVersions = true } label: { Label("Earlier versions", systemImage: "clock.arrow.circlepath") }
+                    if let kind = t.builderKind, !t.isDesigned, TemplateAccess.update(p) {
+                        Menu {
+                            ForEach(BuilderPresets.all, id: \.key) { preset in
+                                Button(preset.name) { redesigning = (preset.key, kind) }
+                            }
+                        } label: {
+                            Label("Design it by dragging instead", systemImage: "square.on.square.dashed")
+                        }
+                    }
                     if TemplateAccess.delete(p) {
                         Divider()
                         Button(role: .destructive) { confirmDelete = true } label: { Label("Delete", systemImage: "trash") }
@@ -324,6 +342,18 @@ struct TemplateOverviewView: View {
         }
     }
 
+    private func redesign(_ key: String, _ kind: BuilderKind) async {
+        guard let t = template.value else { return }
+        let fields = TemplateCompiler.templateFields(BuilderPresets.make(key, kind), config: t.record.objectMap("config"))
+        if await perform($feedback, done: "Now a drag-and-drop design. Move and restyle anything.", {
+            _ = try await api.update(uuid, fields)
+        }) {
+            await load()
+            onChange()
+            editing = true
+        }
+    }
+
     private func makeDefault(_ t: DocTemplate) async {
         if await perform($feedback, done: "This is now the default timesheet template.", { try await api.makeDefault(t.id) }) {
             await load()
@@ -354,12 +384,16 @@ private struct FlowBadges: View {
     }
 }
 
-/// Where Edit goes: the HTML and CSS editor.
+/// Where Edit goes: the designer for a page made with it, else the HTML and CSS editor.
 struct TemplateEditorRoute: View {
     let template: DocTemplate
     let onChange: () -> Void
 
     var body: some View {
-        DocTemplateEditorView(uuid: template.id, onChange: onChange)
+        if template.isDesigned {
+            TemplateDesignerView(uuid: template.id, onChange: onChange)
+        } else {
+            DocTemplateEditorView(uuid: template.id, onChange: onChange)
+        }
     }
 }

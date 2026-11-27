@@ -30,6 +30,8 @@ enum TemplateKind: String, CaseIterable, Identifiable, Sendable {
     /// Invoices and orders are printed from their template on the server (and chosen in Invoice and order design).
     var isDocument: Bool { self != .timesheet }
     var designKind: DocumentDesign.Kind? { self == .invoice ? .invoice : self == .order ? .order : nil }
+    /// The designer makes invoices and orders.
+    var builderKind: BuilderKind? { self == .invoice ? .invoice : self == .order ? .order : nil }
 }
 
 /// One template, as `GET /api/v2/templates` lists it (and `GET /api/v2/templates/:uuid` returns it, with its HTML).
@@ -44,8 +46,10 @@ struct DocTemplate: Identifiable, Hashable, Sendable {
     var isDefault: Bool { record.bool("is_default") == true }
     var isActive: Bool { record.bool("is_active") != false }
     var updatedAt: Date? { record.date("updated_at") }
-    /// Made with the drag-and-drop designer (`config.builder`); only the full template has its config.
-    var isDesigned: Bool { record.objectMap("config")["builder"]?.objectValue != nil }
+    /// Made with the drag-and-drop designer (`config.builder`, one this app can read); only the full template has its config.
+    var isDesigned: Bool { builder != nil }
+    var builder: BuilderDoc? { BuilderDoc.read(record.objectMap("config")) }
+    var builderKind: BuilderKind? { kind?.builderKind }
 
     init(_ record: Record) { self.record = record }
 
@@ -193,9 +197,15 @@ struct DocTemplatesAPI: Sendable {
         try made(try await api.send(.post, "/api/v2/templates/from-design/\(kind.rawValue)", body: .object(["name": .string(name)])))
     }
 
-    /// A template from its parts (a blank page, or one made with the designer).
+    /// A template from its parts (a blank page, one made with the designer, a copy).
     func create(_ body: [String: JSONValue]) async throws -> DocTemplate {
-        try made(try await api.send(.post, "/api/v2/templates", body: .object(body)))
+        var body = body
+        // The server writes the first version's `config` as it arrives: an object fails there
+        // (lapis/queries/DocumentTemplateQueries.lua:83), the same JSON as a string is stored fine.
+        if let config = body["config"], case .object = config, let data = try? JSONEncoder.sorted.encode(config) {
+            body["config"] = .string(String(decoding: data, as: UTF8.self))
+        }
+        return try made(try await api.send(.post, "/api/v2/templates", body: .object(body)))
     }
 
     /// An empty page for people who write HTML (not empty: the server fills an empty one with its own heading).
@@ -209,8 +219,32 @@ struct DocTemplatesAPI: Sendable {
         try made(try await api.send(.put, "/api/v2/templates/\(uuid)", body: .object(body)))
     }
 
+    /// A copy under a new name, made here from the template's parts.
+    /// ponytail: the server's own copy (`POST /api/v2/templates/:uuid/clone`) fails for every template with a config
+    /// (DocumentTemplateQueries.lua:343, a decoded jsonb table passed back to the insert); use it again once fixed.
     func duplicate(_ uuid: String, name: String) async throws -> DocTemplate {
-        try made(try await api.send(.post, "/api/v2/templates/\(uuid)/clone", body: .object(["name": .string(name)])))
+        let t = try await template(uuid)
+        var body: [String: JSONValue] = ["name": .string(name), "type": .string(t.typeName),
+                                         "config": .object(t.record.objectMap("config"))]
+        for key in ["description", "template_html", "template_css", "header_html", "footer_html", "page_size", "page_orientation",
+                    "margin_top", "margin_bottom", "margin_left", "margin_right"] {
+            if let value = t.record.string(key) { body[key] = .string(value) }
+        }
+        return try await create(body)
+    }
+
+    /// Back to an earlier version: its HTML, CSS, header, footer and settings saved as the newest version (what's there
+    /// now is kept as a version too, as the server's restore does).
+    /// ponytail: done here because `POST /api/v2/templates/:uuid/restore/:version` fails the same way
+    /// (DocumentTemplateQueries.lua:517 and :529); use it again once fixed.
+    func restore(_ uuid: String, version: Int) async throws {
+        let versions = WorkspaceAPI.records(try await api.get("/api/v2/templates/\(uuid)/versions"))
+        guard let v = versions.first(where: { $0.int("version") == version }) else {
+            throw ResourceService.problem(404, "That version isn’t there any more.")
+        }
+        var body: [String: JSONValue] = ["config": .object(v.objectMap("config"))]
+        for key in ["template_html", "template_css", "header_html", "footer_html"] { body[key] = .string(v.string(key) ?? "") }
+        _ = try await update(uuid, body)
     }
 
     func delete(_ uuid: String) async throws { try await api.send(.delete, "/api/v2/templates/\(uuid)") }
@@ -344,11 +378,14 @@ struct TemplateThumbnail: View {
     var kind: TemplateKind = .invoice
     /// Makes the preview PDF; nil for a page that has none (timesheets): the drawn page shows.
     let make: (@Sendable () async throws -> Data)?
+    /// A designer page, drawn here until (or instead of) its picture.
+    var doc: BuilderDoc?
     private var store = TemplateThumbnails.shared
 
-    init(key: String, kind: TemplateKind = .invoice, make: (@Sendable () async throws -> Data)?) {
+    init(key: String, kind: TemplateKind = .invoice, doc: BuilderDoc? = nil, make: (@Sendable () async throws -> Data)?) {
         self.key = key
         self.kind = kind
+        self.doc = doc
         self.make = make
     }
 
@@ -357,7 +394,9 @@ struct TemplateThumbnail: View {
             if let image = store.images[key] {
                 Image(uiImage: image).resizable().scaledToFit()
             } else {
-                TemplatePageSketch(kind: kind)
+                Group {
+                    if let doc { BuilderCanvas(doc: doc).padding(0) } else { TemplatePageSketch(kind: kind) }
+                }
                     .overlay(alignment: .bottom) {
                         if make != nil && store.failed[key] == nil && !store.serviceDown {
                             ProgressView().padding(8)

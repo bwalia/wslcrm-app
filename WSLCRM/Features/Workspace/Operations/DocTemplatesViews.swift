@@ -757,7 +757,7 @@ struct DocTemplateVersionsView: View {
     private func restore(_ version: Record) async {
         let number = version.int("version") ?? 0
         if await perform($feedback, done: "Restored.", {
-            try await services.workspace().send(.post, "/api/v2/templates/\(uuid)/restore/\(number)", body: .object([:]))
+            try await DocTemplatesAPI(services).restore(uuid, version: number)
         }) {
             onRestored("Version \(number) restored. It’s now the latest version.")
             dismiss()

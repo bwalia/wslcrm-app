@@ -401,6 +401,7 @@ struct NewTemplateSheet: View {
     @State private var prepared = false
 
     enum Choice: Hashable {
+        case preset(String)
         case starter(TemplateStarter)
         case fromDesign
         case blank
@@ -448,8 +449,24 @@ struct NewTemplateSheet: View {
 
     @ViewBuilder
     private var gallery: some View {
+        if let builderKind = kind.builderKind {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Design by dragging").font(.wsHeadline)
+                Text("Move, resize and restyle every piece: your logo, details, totals and bank details.")
+                    .font(.wsSubheadline).foregroundStyle(.secondaryText)
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 20) {
+                    ForEach(BuilderPresets.all, id: \.key) { preset in
+                        let doc = BuilderPresets.make(preset.key, builderKind)
+                        option(.preset(preset.key), title: preset.name, text: preset.description) {
+                            TemplateThumbnail(key: "preset-\(workspace ?? "")-\(kind.rawValue)-\(preset.key)-\(stamp)",
+                                              kind: kind, doc: doc, make: { [api, source = Self.source(doc, kind)] in try await api.previewPDF(source) })
+                        }
+                    }
+                }
+            }
+        }
         VStack(alignment: .leading, spacing: 10) {
-            Text(kind.isDocument ? "Ready-made looks" : "Start").font(.wsHeadline)
+            Text(kind.isDocument ? "More ways to start" : "Start").font(.wsHeadline)
             Text("Pick a starting point. You can change everything afterwards.")
                 .font(.wsSubheadline).foregroundStyle(.secondaryText)
             LazyVGrid(columns: columns, alignment: .leading, spacing: 20) {
@@ -525,8 +542,16 @@ struct NewTemplateSheet: View {
         .accessibilityIdentifier("newTemplate.option.\(Self.id(value))")
     }
 
+    /// A designer page's preview: compiled with the designer's placeholders (an empty logo box …).
+    static func source(_ doc: BuilderDoc, _ kind: TemplateKind) -> TemplatePDFSource {
+        let c = TemplateCompiler.compile(doc, editor: true)
+        return TemplatePDFSource(kind: kind, html: c.html, css: c.css, footerHTML: c.footerHTML, pageSize: doc.page.paper,
+                                 orientation: "portrait", margins: [c.marginTB, c.marginTB, c.marginLR, c.marginLR])
+    }
+
     static func id(_ choice: Choice) -> String {
         switch choice {
+        case .preset(let key): "preset.\(key)"
         case .starter(let s): "starter.\(s.key)"
         case .fromDesign: "fromDesign"
         case .blank: "blank"
@@ -537,6 +562,7 @@ struct NewTemplateSheet: View {
 
     func defaultName(_ value: Choice) -> String {
         switch value {
+        case .preset(let key): "\(BuilderPresets.all.first { $0.key == key }?.name ?? "My") \(noun)"
         case .starter(let s): "\(s.name) \(noun)"
         case .fromDesign: "My \(noun) design"
         case .blank: "My \(noun) template"
@@ -557,7 +583,7 @@ struct NewTemplateSheet: View {
             Button {
                 Task { await create() }
             } label: {
-                if busy { ProgressView() } else { Label("Create template", systemImage: "plus") }
+                if busy { ProgressView() } else { Label("Create", systemImage: "plus").lineLimit(1) }
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
@@ -587,6 +613,9 @@ struct NewTemplateSheet: View {
         defer { busy = false }
         do {
             let made: DocTemplate = switch choice {
+            case .preset(let key):
+                try await api.create(TemplateCompiler.templateFields(BuilderPresets.make(key, kind.builderKind ?? .invoice))
+                    .merging(["name": .string(name), "type": .string(kind.rawValue)]) { _, new in new })
             case .starter(let s): try await api.fromStarter(kind, starter: s.key, name: name)
             case .fromDesign: try await api.fromDesign(kind, name: name)
             case .blank: try await api.createBlank(kind, name: name)

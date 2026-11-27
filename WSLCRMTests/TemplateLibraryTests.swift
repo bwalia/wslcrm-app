@@ -37,8 +37,11 @@ final class TemplateLibraryTests: XCTestCase {
         XCTAssertNil(body["header_html"], "an empty part isn't sent")
 
         let designed = DocTemplate(Record(["uuid": .string("t"), "type": .string("order"),
-                                           "config": .object(["builder": .object(["v": .number(1)])])]))
+                                           "config": .object(["builder": BuilderPresets.make("classic", .order).json])]))
         XCTAssertTrue(designed.isDesigned)
+        XCTAssertFalse(DocTemplate(Record(["uuid": .string("t"), "type": .string("order"),
+                                           "config": .object(["builder": .object(["v": .number(1)])])])).isDesigned,
+                       "a page this app can't read opens in the code editor")
         XCTAssertEqual(designed.kind, .order)
         XCTAssertNil(DocTemplate(Record(["uuid": .string("t"), "type": .string("timesheet")])).pdfSource,
                      "a timesheet has no server PDF")
@@ -205,6 +208,46 @@ final class TemplateLibraryTests: XCTestCase {
         XCTAssertEqual(sent.body?["bill_to_label"] as? String, "BILLED TO", "keys stay snake_case (no key conversion)")
     }
 
+    func testDuplicateAndRestoreAreMadeFromTheTemplatesParts() async throws {
+        // The server's clone and restore fail on any template with a config (DocumentTemplateQueries.lua:343, :517),
+        // so the app copies and restores from the parts.
+        let calls = Box()
+        let detail = String(decoding: try JSONEncoder().encode(try fixture("templates_detail")), as: UTF8.self)
+            .replacingOccurrences(of: #""config":[]"#, with: ##""config":{"builder":{"v":1},"primary_color":"#123456"}"##)
+        let versions = String(decoding: try JSONEncoder().encode(try fixture("templates_versions")), as: UTF8.self)
+        let api = DocTemplatesAPI(api: WorkspaceAPI(client: try await client { request in
+            let path = request.url?.path ?? ""
+            calls.log.append("\(request.httpMethod ?? "") \(path)")
+            if request.httpMethod != "GET" { calls.bodies.append(request.jsonBody ?? [:]) }
+            if path.hasSuffix("/versions") { return .json(200, versions) }
+            if request.httpMethod == "GET" { return .json(200, detail) }
+            return .json(201, #"{"success":true,"data":{"uuid":"new","type":"invoice","name":"Copy"}}"#)
+        }))
+        let copy = try await api.duplicate("4b1bc959-d638-46cb-bcf6-8698371ef2ef", name: "Copy")
+        XCTAssertEqual(copy.id, "new")
+        XCTAssertEqual(calls.log, ["GET /api/v2/templates/4b1bc959-d638-46cb-bcf6-8698371ef2ef", "POST /api/v2/templates"])
+        let sent = try XCTUnwrap(calls.bodies.first)
+        XCTAssertEqual(sent["name"] as? String, "Copy")
+        XCTAssertEqual(sent["type"] as? String, "invoice")
+        XCTAssertEqual(sent["margin_top"] as? String, "14mm")
+        XCTAssertTrue((sent["template_html"] as? String)?.hasPrefix("<div class=\"doc") == true)
+        let config = try XCTUnwrap(sent["config"] as? String, "config goes as a JSON string")
+        XCTAssertTrue(config.contains(##""primary_color":"#123456""##))
+
+        calls.log = []
+        calls.bodies = []
+        try await api.restore("t-1", version: 1)
+        XCTAssertEqual(calls.log, ["GET /api/v2/templates/t-1/versions", "PUT /api/v2/templates/t-1"])
+        XCTAssertTrue((calls.bodies.first?["template_css"] as? String)?.hasPrefix("* { box-sizing") == true)
+        XCTAssertNotNil(calls.bodies.first?["config"] as? [String: Any], "an update takes the config as an object")
+        do {
+            try await api.restore("t-1", version: 9)
+            XCTFail("a version that isn't there")
+        } catch {
+            XCTAssertEqual(error.asAPIError.serverError?.status, 404)
+        }
+    }
+
     // MARK: Helpers
 
     static let pdf: Data = {
@@ -229,6 +272,8 @@ final class TemplateLibraryTests: XCTestCase {
     }
 
     private final class Box: @unchecked Sendable {
+        var log: [String] = []
+        var bodies: [[String: Any]] = []
         var body: [String: Any]?
         var path: String?
         var method: String?

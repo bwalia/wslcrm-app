@@ -51,6 +51,7 @@ struct PDFPreviewSheet<Extra: View>: View {
     var onSend: (() -> Void)?
     @ViewBuilder var extra: Extra
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var data: Data?
     @State private var saving = false
     @State private var saved: String?
@@ -117,26 +118,21 @@ struct PDFPreviewSheet<Extra: View>: View {
         }
     }
 
+    /// Wide: Share, Print, Save on the left and the main action on the right. Narrow (iPhone): the main action across
+    /// the width, the file buttons under it.
     private var actions: some View {
-        HStack(spacing: 8) {
-            ViewThatFits(in: .horizontal) {
-                fileButtons(labelled: true)
-                fileButtons(labelled: false)
-            }
-            Spacer(minLength: 0)
-            if let onSend, let sendTitle {
-                Button {
-                    dismiss()
-                    // After this sheet has gone: a sheet can't open while another is closing.
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(450))
-                        onSend()
-                    }
-                } label: {
-                    Label(sendTitle, systemImage: "envelope.fill").frame(minHeight: MacSupport.isMac ? 24 : 32)
+        Group {
+            if sizeClass == .compact {
+                VStack(spacing: 8) {
+                    sendButton.frame(maxWidth: .infinity)
+                    HStack(spacing: 8) { fileButtons }
                 }
-                .buttonStyle(.borderedProminent)
-                .accessibilityIdentifier("pdfPreview.send")
+            } else {
+                HStack(spacing: 8) {
+                    fileButtons
+                    Spacer(minLength: 0)
+                    sendButton
+                }
             }
         }
         .controlSize(.large)
@@ -146,25 +142,39 @@ struct PDFPreviewSheet<Extra: View>: View {
         .disabled(data == nil)
     }
 
-    private func fileButtons(labelled: Bool) -> some View {
-        HStack(spacing: 8) {
-            ShareLink(item: item.url) { fileLabel("Share", "square.and.arrow.up", labelled) }
+    @ViewBuilder
+    private var sendButton: some View {
+        if let onSend, let sendTitle {
+                Button {
+                    dismiss()
+                    // After this sheet has gone: a sheet can't open while another is closing.
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(450))
+                        onSend()
+                    }
+                } label: {
+                    Label(sendTitle, systemImage: "envelope.fill").lineLimit(1)
+                        .frame(maxWidth: sizeClass == .compact ? .infinity : nil, minHeight: MacSupport.isMac ? 24 : 32)
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("pdfPreview.send")
+        }
+    }
+
+    private var fileButtons: some View {
+        Group {
+            ShareLink(item: item.url) { fileLabel("Share", "square.and.arrow.up") }
                 .accessibilityIdentifier("pdfPreview.share")
-            Button { print() } label: { fileLabel("Print", "printer", labelled) }
+            Button { print() } label: { fileLabel("Print", "printer") }
                 .accessibilityIdentifier("pdfPreview.print")
-            Button { saving = true } label: { fileLabel("Save", "square.and.arrow.down", labelled) }
+            Button { saving = true } label: { fileLabel("Save", "square.and.arrow.down") }
                 .accessibilityIdentifier("pdfPreview.save")
         }
         .buttonStyle(.bordered)
     }
 
-    @ViewBuilder
-    private func fileLabel(_ title: String, _ image: String, _ labelled: Bool) -> some View {
-        if labelled {
-            Label(title, systemImage: image).frame(minHeight: MacSupport.isMac ? 24 : 32)
-        } else {
-            Image(systemName: image).frame(minWidth: 32, minHeight: 32).accessibilityLabel(title)
-        }
+    private func fileLabel(_ title: String, _ image: String) -> some View {
+        Label(title, systemImage: image).lineLimit(1).frame(minHeight: MacSupport.isMac ? 24 : 32)
     }
 
     private func print() {
