@@ -9,6 +9,7 @@ struct StoreOrderDetailView: View {
     /// What just happened before this screen opened ("Order created").
     var opening: String?
     @Environment(\.services) private var services
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(SessionStore.self) private var session
     @State private var state: LoadState<StoreOrder> = .idle
     @State private var actionError: APIError?
@@ -28,11 +29,46 @@ struct StoreOrderDetailView: View {
     private var canUpdate: Bool { session.permissions.can(.update, .orders) }
 
     var body: some View {
-        List {
+        let wide = sizeClass != .compact
+        DetailPage {
             if let order = state.value {
-                content(order)
+                header(order)
+                if !wide, let notice { Label(notice, systemImage: "checkmark.circle").foregroundStyle(Tone.success.textColor) }
             } else if let error = state.error {
-                Section { InlineErrorRow(error: error) { Task { await load() } } }
+                InlineErrorRow(error: error) { Task { await load() } }
+            }
+        } main: {
+            if let order = state.value {
+                if wide {
+                    if let notice {
+                        DetailSection { Label(notice, systemImage: "checkmark.circle").foregroundStyle(Tone.success.textColor) }
+                    }
+                    if let actionError { DetailSection { InlineErrorRow(error: actionError) } }
+                    signatureSection(order)
+                    itemsSection(order)
+                    partnerSection(order)
+                    notesSection(order)
+                    historySection(order)
+                } else {
+                    // The phone's order: what to do first, then the order top to bottom.
+                    if canUpdate { actionsSection(order) }
+                    signatureSection(order)
+                    customerSection(order)
+                    itemsSection(order)
+                    totalsSection(order)
+                    deliverySection(order)
+                    partnerSection(order)
+                    notesSection(order)
+                    sellerSection(order)
+                    historySection(order)
+                }
+            }
+        } side: {
+            if wide, let order = state.value {
+                customerSection(order)
+                totalsSection(order)
+                deliverySection(order)
+                sellerSection(order)
             }
         }
         .overlay { if state.value == nil && state.error == nil { SkeletonList() } }
@@ -82,36 +118,35 @@ struct StoreOrderDetailView: View {
         }
     }
 
-    @ViewBuilder
-    private func content(_ order: StoreOrder) -> some View {
+    private func header(_ order: StoreOrder) -> some View {
         let cur = order.currency
-        Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(order.orderNumber).font(.wsTitle3.bold().monospaced())
-                HStack {
-                    StatusBadge(text: Formatters.humanize(order.status), systemImage: "shippingbox", tone: Self.tone(order.status))
-                    if let financial = order.financialStatus {
-                        StatusBadge(text: Formatters.humanize(financial), systemImage: "creditcard",
-                                    tone: financial == "paid" ? .success : .neutral)
-                    }
+        return DetailHeader(order.orderNumber,
+                            subtitle: [order.customerName,
+                                       order.createdAt.map { "Placed \(Formatters.dateTime($0) ?? "")" },
+                                       order.channel.map { SalesOrderChannel(rawValue: $0)?.label ?? Formatters.humanize($0) },
+                                       order.record.string("store.name")].compactMap { $0 }.joined(separator: " · "),
+                            avatar: .icon("bag", Palette.tile(for: "orders"))) {
+            DetailChips {
+                StatusBadge(text: Formatters.humanize(order.status), systemImage: "shippingbox", tone: Self.tone(order.status))
+                if let financial = order.financialStatus {
+                    StatusBadge(text: Formatters.humanize(financial), systemImage: "creditcard",
+                                tone: financial == "paid" ? .success : .neutral)
                 }
-                Text(SalesMoney.format(order.money("total_amount") ?? 0, cur)).font(.wsTitle2.monospacedDigit())
-                Text([order.createdAt.map { "Placed \(Formatters.dateTime($0) ?? "")" },
-                      order.channel.map { SalesOrderChannel(rawValue: $0)?.label ?? Formatters.humanize($0) },
-                      order.record.string("store.name")].compactMap { $0 }.joined(separator: " · "))
-                    .font(.wsFootnote).foregroundStyle(.secondaryText)
             }
-            .padding(.vertical, 4)
-            if let notice { Label(notice, systemImage: "checkmark.circle").foregroundStyle(Tone.success.textColor) }
+            Text(SalesMoney.format(order.money("total_amount") ?? 0, cur)).font(.wsTitle2.monospacedDigit())
+        } actions: {
+            if canUpdate, sizeClass != .compact { updateBar(order) }
         }
+    }
 
-        if canUpdate { actionsSection(order) }
-
+    private func signatureSection(_ order: StoreOrder) -> some View {
         StoreOrderSignatureSection(state: signature, image: signatureImage, canUpdate: canUpdate,
                                    courier: order.record.string("delivery_partner.company_name"), courierImage: courierImage,
                                    sign: { signing = false }, void: { reason in await voidSignature(reason) })
+    }
 
-        Section("Customer") {
+    private func customerSection(_ order: StoreOrder) -> some View {
+        DetailSection("Customer", systemImage: "person.crop.circle") {
             DetailRow(label: "Name", value: order.customerName)
             if let email = order.record.string("customer.email") { EmailLinkRow(email: email) }
             if let phone = order.record.string("customer.phone") { PhoneLinkRow(name: order.customerName, phone: phone) }
@@ -121,8 +156,11 @@ struct StoreOrderDetailView: View {
             }
             DetailRow(label: "Their note", value: order.record.string("customer_notes"))
         }
+    }
 
-        Section("Items") {
+    private func itemsSection(_ order: StoreOrder) -> some View {
+        let cur = order.currency
+        return DetailSection("Items", systemImage: "shippingbox") {
             if order.items.isEmpty { Text("No items").foregroundStyle(.secondaryText) }
             ForEach(order.items) { item in
                 HStack(alignment: .firstTextBaseline) {
@@ -139,8 +177,11 @@ struct StoreOrderDetailView: View {
                 .accessibilityElement(children: .combine)
             }
         }
+    }
 
-        Section("Totals") {
+    private func totalsSection(_ order: StoreOrder) -> some View {
+        let cur = order.currency
+        return DetailSection("Totals", systemImage: "sum") {
             LabeledContent("Subtotal", value: SalesMoney.format(order.money("subtotal") ?? 0, cur))
             if let tax = order.money("tax_amount"), tax > 0 { LabeledContent("Tax", value: SalesMoney.format(tax, cur)) }
             if let shipping = order.money("shipping_amount"), shipping > 0 {
@@ -153,8 +194,11 @@ struct StoreOrderDetailView: View {
             DetailRow(label: "Paid by", value: order.paymentMethod.map(Self.methodLabel))
             DetailRow(label: "Payment reference", value: order.record.string("payment_details.reference"))
         }
+        .monospacedDigit()
+    }
 
-        Section("Delivery") {
+    private func deliverySection(_ order: StoreOrder) -> some View {
+        DetailSection("Delivery", systemImage: "truck.box") {
             if let address = Self.address(order.record["shipping_address"]) {
                 MapsLinkRow(address: address)
             } else {
@@ -180,9 +224,13 @@ struct StoreOrderDetailView: View {
                 }
             }
         }
+    }
 
+    @ViewBuilder
+    private func partnerSection(_ order: StoreOrder) -> some View {
+        let cur = order.currency
         if order.record.object("delivery_partner") != nil {
-            Section("Delivery partner") {
+            DetailSection("Delivery partner", systemImage: "person.2") {
                 DetailRow(label: "Company", value: order.record.string("delivery_partner.company_name"))
                 DetailRow(label: "Contact", value: order.record.string("delivery_partner.contact_person_name"))
                 if let phone = order.record.string("delivery_partner.contact_person_phone") {
@@ -198,36 +246,46 @@ struct StoreOrderDetailView: View {
                 DetailRow(label: "Delivered", value: Formatters.dateTime(order.record.date("delivery_assignment.actual_delivery_time")))
             }
         }
+    }
 
-        Section {
+    @ViewBuilder
+    private func notesSection(_ order: StoreOrder) -> some View {
+        // Nothing to read and nothing this person may write: no empty card.
+        if canUpdate || order.record.string("internal_notes") != nil {
+        DetailSection {
             DetailRow(label: "Internal notes", value: order.record.string("internal_notes"))
             if canUpdate {
                 Button { editing = .notes(order) } label: { Label("Edit notes", systemImage: "square.and.pencil") }
                     .accessibilityIdentifier("storeOrder.editNotes")
             }
         } header: {
-            Text("Notes")
+            DetailSectionTitle("Notes", systemImage: "note.text")
         } footer: {
             Text("Internal notes aren’t shown to the customer.")
         }
+        }
+    }
 
+    @ViewBuilder
+    private func sellerSection(_ order: StoreOrder) -> some View {
         if let seller = order.record.string("seller.email") {
-            Section("Seller") {
+            DetailSection("Seller", systemImage: "person.badge.shield.checkmark") {
                 DetailRow(label: "Name", value: order.record.string("seller.full_name")?.trimmedOrNil)
                 EmailLinkRow(email: seller)
             }
         }
+    }
 
+    @ViewBuilder
+    private func historySection(_ order: StoreOrder) -> some View {
         if !order.history.isEmpty {
-            Section("History") {
+            DetailSection("History", systemImage: "clock.arrow.circlepath") {
                 ForEach(order.history) { entry in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(Self.historyLine(entry)).font(.wsSubheadline)
-                        Text([Formatters.dateTime(entry.date("created_at")), entry.string("notes")].compactMap { $0 }
-                            .joined(separator: " · "))
-                            .font(.wsCaption).foregroundStyle(.secondaryText)
-                    }
-                    .accessibilityElement(children: .combine)
+                    TimelineRow(Self.historyLine(entry),
+                                meta: [Formatters.dateTime(entry.date("created_at")), entry.string("notes")].compactMap { $0 }
+                                    .joined(separator: " · "),
+                                systemImage: "clock")
+                        .accessibilityElement(children: .combine)
                 }
             }
         }
@@ -239,7 +297,7 @@ struct StoreOrderDetailView: View {
         let unpaid = order.financialStatus != "paid" && !["cancelled", "refunded"].contains(order.status)
         let unfulfilled = order.fulfillmentStatus != "fulfilled" && !["cancelled", "refunded"].contains(order.status)
         if !next.isEmpty || unpaid || unfulfilled {
-            Section("Update") {
+            DetailSection("Update", systemImage: "arrow.triangle.2.circlepath") {
                 ForEach(next) { status in
                     Button {
                         changeNote = ""
@@ -284,6 +342,65 @@ struct StoreOrderDetailView: View {
                 }
                 if let actionError { InlineErrorRow(error: actionError) }
             }
+        }
+    }
+
+    /// The same updates as the phone's Update section, as the header's action bar on a wide page: the next status
+    /// first, then payment and handing over.
+    @ViewBuilder
+    private func updateBar(_ order: StoreOrder) -> some View {
+        let next = StoreOrderStatus.next(after: order.status)
+        let unpaid = order.financialStatus != "paid" && !["cancelled", "refunded"].contains(order.status)
+        let unfulfilled = order.fulfillmentStatus != "fulfilled" && !["cancelled", "refunded"].contains(order.status)
+        let forward = next.filter { $0 != .cancelled && $0 != .refunded }
+        let backward = next.filter { $0 == .cancelled || $0 == .refunded }
+        if !next.isEmpty || unpaid || unfulfilled {
+            RecordActionBar(showsMore: !backward.isEmpty) {
+                ForEach(forward) { status in
+                    Button {
+                        changeNote = ""
+                        pendingChange = StoreOrderStatusChange(status: status)
+                    } label: {
+                        Label(Self.title(StoreOrderStatusChange(status: status)), systemImage: Self.symbol(status))
+                    }
+                    .buttonStyle(.action(prominent: status == forward.first))
+                    .accessibilityIdentifier("storeOrder.status.\(status.rawValue)")
+                }
+                if unpaid {
+                    Button {
+                        changeNote = ""
+                        pendingChange = StoreOrderStatusChange(financialStatus: "paid")
+                    } label: {
+                        Label("Mark paid", systemImage: "checkmark.circle")
+                    }
+                    .accessibilityIdentifier("storeOrder.markPaid")
+                }
+                if unfulfilled {
+                    if signature?.needsSignature == true {
+                        Button { signing = true } label: { Label("Customer signs and hand over", systemImage: "signature") }
+                            .accessibilityIdentifier("storeOrder.signAndHandOver")
+                    }
+                    Button {
+                        changeNote = ""
+                        pendingChange = StoreOrderStatusChange(fulfillmentStatus: "fulfilled")
+                    } label: {
+                        Label(signature?.needsSignature == true ? "Hand over without a signature" : "Mark handed over",
+                              systemImage: "hand.raised")
+                    }
+                    .accessibilityIdentifier("storeOrder.markFulfilled")
+                }
+            } more: {
+                ForEach(backward) { status in
+                    Button(role: .destructive) {
+                        changeNote = ""
+                        pendingChange = StoreOrderStatusChange(status: status)
+                    } label: {
+                        Label(Self.title(StoreOrderStatusChange(status: status)), systemImage: Self.symbol(status))
+                    }
+                    .accessibilityIdentifier("storeOrder.status.\(status.rawValue)")
+                }
+            }
+            .disabled(busy)
         }
     }
 

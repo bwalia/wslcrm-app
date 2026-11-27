@@ -48,7 +48,7 @@ struct CustomerBillingSection: View {
 
     var body: some View {
         if billing.canSeeSales || billing.canSeeLicences {
-            Section {
+            DetailSection {
                 if billing.isEmpty {
                     Text("No subscriptions, purchases, access or licences for this customer yet.")
                         .font(.wsSubheadline).foregroundStyle(.secondaryText)
@@ -83,7 +83,7 @@ struct CustomerBillingSection: View {
                     }
                 }
             } header: {
-                Text("Apps and licences")
+                DetailSectionTitle("Apps and licences", systemImage: "app.badge")
             } footer: {
                 Text("Choose this customer there to sell a plan, move them to another plan, give access or issue a licence.")
             }

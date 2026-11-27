@@ -692,6 +692,7 @@ struct ProjectEntryView: View {
 /// A project's home: the board(s), the plan (sprints, epics), insight and the team.
 struct ProjectDetailView: View {
     let uuid: String
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var state: LoadState<KanbanProject> = .idle
@@ -759,26 +760,25 @@ struct ProjectDetailView: View {
 
     @ViewBuilder
     private func content(_ project: KanbanProject) -> some View {
-        List {
-            Section {
+        let wide = sizeClass != .compact
+        DetailPage {
+            DetailHeader(project.name, avatar: .icon("folder.fill", Color(hexString: project.color) ?? .accentColor)) {
                 VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 8) {
-                        Circle().fill(Color(hexString: project.color) ?? .accentColor).frame(width: 12, height: 12)
-                            .accessibilityHidden(true)
+                    DetailChips {
                         StatusBadge(text: project.status.label, systemImage: project.status.systemImage, tone: project.status.tone)
                         if let visibility = project.visibility {
                             Label(visibility.label, systemImage: visibility == .private ? "lock" : "eye")
                                 .font(.wsCaption).foregroundStyle(.secondaryText)
                         }
-                        Spacer()
                         if let role = project.role {
                             Text("You: \(role.label)").font(.wsCaption).foregroundStyle(.secondaryText)
                         }
                     }
                     if let description = project.description, !description.isEmpty {
-                        Text(RichText.plain(description)).font(.wsSubheadline)
+                        Text(RichText.plain(description)).wsParagraph(.wsSubheadline)
                     }
                     ProgressView(value: project.progress)
+                        .frame(maxWidth: wide ? 420 : nil)
                         .accessibilityLabel("Progress")
                         .accessibilityValue("\(Int(project.progress * 100)) percent")
                     HStack(spacing: 10) {
@@ -786,24 +786,22 @@ struct ProjectDetailView: View {
                         WorkSummaryTile(title: "Done", value: String(project.completedTaskCount))
                         WorkSummaryTile(title: "People", value: String(max(project.memberCount, members.count)))
                     }
+                    .frame(maxWidth: wide ? 420 : nil)
                     if project.startDate != nil || project.dueDate != nil {
                         Label("\(project.startDate?.shortDay ?? "—") → \(project.dueDate?.shortDay ?? "—")", systemImage: "calendar")
                             .font(.wsCaption).foregroundStyle(.secondaryText)
                     }
                 }
-                .padding(.vertical, 4)
                 .accessibilityIdentifier("project.summary")
             }
-
-            Section {
+        } main: {
+            DetailSection {
                 if boards.isEmpty {
                     Text("No boards yet.").foregroundStyle(.secondaryText)
                 }
                 ForEach(boards) { board in
                     NavigationLink(value: BoardRoute(uuid: board.uuid, name: board.name)) {
-                        LabeledContent {
-                            Text("\(board.taskCount)").accessibilityLabel("\(board.taskCount) cards")
-                        } label: {
+                        HStack {
                             Label {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(board.name)
@@ -812,29 +810,54 @@ struct ProjectDetailView: View {
                             } icon: {
                                 Image(systemName: "rectangle.split.3x1")
                             }
+                            Spacer(minLength: 8)
+                            Text("\(board.taskCount)").foregroundStyle(.secondaryText)
+                                .accessibilityLabel("\(board.taskCount) cards")
                         }
                     }
                     .accessibilityIdentifier("board.row.\(board.name)")
-                    .swipeActions(allowsFullSwipe: false) {
-                        if access.canAdmin {
-                            if !board.isDefault {
-                                Button("Archive", systemImage: "archivebox", role: .destructive) { archivingBoard = board }
-                            }
-                            Button("Edit", systemImage: "pencil") { editingBoard = board }.tint(.blue)
-                        }
-                    }
+                    .swipeActions(allowsFullSwipe: false) { boardActions(board) }
+                    // A Mac has no swipe: the same as a right-click.
+                    .contextMenu { boardActions(board) }
                 }
                 if access.canAdmin {
                     Button("New board", systemImage: "plus") { creatingBoard = true }
                         .accessibilityIdentifier("project.newBoard")
                 }
             } header: {
-                Text("Boards")
+                DetailSectionTitle("Boards", systemImage: "rectangle.split.3x1")
             } footer: {
-                if access.canAdmin, !boards.isEmpty { Text("Swipe a board to rename or archive it.") }
+                if access.canAdmin, !boards.isEmpty {
+                    Text(wide ? "Right-click a board to rename or archive it." : "Swipe a board to rename or archive it.")
+                }
             }
 
-            Section("Plan and track") {
+            let running = sprints.filter { $0.status == .active || $0.status.isPlanned }
+            if !running.isEmpty {
+                DetailSection("Sprints", systemImage: "flag.checkered") {
+                    ForEach(running) { sprint in
+                        NavigationLink(value: WorkScreen.sprints(project: uuid, sprint: sprint.uuid).route) {
+                            SprintRow(sprint: sprint).foregroundStyle(Color(.label))
+                        }
+                        .accessibilityIdentifier("sprint.row.\(sprint.name)")
+                    }
+                }
+            }
+
+            if !members.isEmpty {
+                DetailSection("Team", systemImage: "person.2") {
+                    ForEach(members) { member in
+                        HStack {
+                            ActorChip(actor: member.actor, compact: false)
+                            Spacer()
+                            Text(member.memberRole?.label ?? member.role.capitalized)
+                                .font(.wsCaption).foregroundStyle(.secondaryText)
+                        }
+                    }
+                }
+            }
+        } side: {
+            DetailSection("Plan and track", systemImage: "map") {
                 NavigationLink(value: WorkScreen.sprints(project: uuid, sprint: nil).route) {
                     Label("Sprints", systemImage: "flag.checkered")
                 }
@@ -856,33 +879,18 @@ struct ProjectDetailView: View {
                 }
                 .accessibilityIdentifier("project.membersSettings")
             }
-
-            let running = sprints.filter { $0.status == .active || $0.status.isPlanned }
-            if !running.isEmpty {
-                Section("Sprints") {
-                    ForEach(running) { sprint in
-                        NavigationLink(value: WorkScreen.sprints(project: uuid, sprint: sprint.uuid).route) {
-                            SprintRow(sprint: sprint)
-                        }
-                        .accessibilityIdentifier("sprint.row.\(sprint.name)")
-                    }
-                }
-            }
-
-            if !members.isEmpty {
-                Section("Team") {
-                    ForEach(members) { member in
-                        HStack {
-                            ActorChip(actor: member.actor, compact: false)
-                            Spacer()
-                            Text(member.memberRole?.label ?? member.role.capitalized)
-                                .font(.wsCaption).foregroundStyle(.secondaryText)
-                        }
-                    }
-                }
-            }
         }
         .wsRefreshable { await load() }
+    }
+
+    @ViewBuilder
+    private func boardActions(_ board: KanbanBoard) -> some View {
+        if access.canAdmin {
+            if !board.isDefault {
+                Button("Archive", systemImage: "archivebox", role: .destructive) { archivingBoard = board }
+            }
+            Button("Edit", systemImage: "pencil") { editingBoard = board }.tint(.blue)
+        }
     }
 
     private func load() async {

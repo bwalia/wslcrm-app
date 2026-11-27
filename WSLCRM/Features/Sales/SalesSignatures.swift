@@ -171,7 +171,7 @@ struct StoreOrderSignatureSection: View {
 
     var body: some View {
         if let state {
-            Section {
+            DetailSection {
                 if let signature = state.signature {
                     SignatureProofRows(signature: signature, image: image)
                     if canUpdate {
@@ -192,7 +192,7 @@ struct StoreOrderSignatureSection: View {
                     Text("Not signed for.").foregroundStyle(.secondaryText)
                 }
             } header: {
-                Text("Proof of delivery")
+                DetailSectionTitle("Proof of delivery", systemImage: "signature")
                     // On the header (one view): on the Section it would be copied onto every row.
                     .alert("Void this signature?", isPresented: $voiding) {
                         TextField("Why (e.g. wrong person signed)", text: $reason)

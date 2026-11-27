@@ -127,6 +127,7 @@ struct ShopQuoteRoute: Hashable { let uuid: String }
 struct ShopQuoteDetailView: View {
     let summary: ShopQuote
     var onChange: ((ShopQuote) -> Void)?
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.services) private var services
     @Environment(SessionStore.self) private var session
     @State private var quote: ShopQuote?
@@ -178,15 +179,51 @@ struct ShopQuoteDetailView: View {
         }
     }
 
+    /// Discounts, totals and notes: beside the work on a wide page.
+    @ViewBuilder
+    private var moneySections: some View {
+        if current.tradeDiscountMinor > 0 || current.discountMinor > 0 {
+            DetailSection("Discounts (ex VAT)") {
+                DetailRow(label: "Subtotal before discount", value: ShopMoney.format(current.listSubtotalMinor ?? current.subtotalMinor, currency: current.currency))
+                if current.tradeDiscountMinor > 0 {
+                    DetailRow(label: "VIP Trade discount", value: "−" + (ShopMoney.format(current.tradeDiscountMinor, currency: current.currency) ?? ""))
+                }
+                if current.discountMinor > 0 {
+                    DetailRow(label: current.discountLabel ?? "Discount", value: "−" + (ShopMoney.format(current.discountMinor, currency: current.currency) ?? ""))
+                }
+            }
+        }
+
+        ShopTotalsSection(subtotal: current.subtotalMinor, vat: current.vatMinor, shipping: current.shippingMinor,
+                          total: current.totalMinor, currency: current.currency)
+
+        DetailSection("Notes") {
+            DetailRow(label: "For the customer", value: current.notes)
+            DetailRow(label: "Internal", value: current.internalNotes)
+            if current.notes?.trimmedOrNil == nil, current.internalNotes?.trimmedOrNil == nil {
+                Text("No notes").foregroundStyle(.secondaryText)
+            }
+            if canUpdate {
+                Button {
+                    editingDetails = true
+                } label: {
+                    Label("Edit validity, shipping & notes", systemImage: "square.and.pencil")
+                }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("shopQuote.editDetails")
+            }
+        }
+    }
+
     private var details: some View {
-        List {
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    if current.isOrderAuthorisation {
-                        Text("Order Authorisation").font(.wsCaption.weight(.semibold)).foregroundStyle(.secondaryText)
-                    }
-                    Text(current.quoteNumber).font(.wsTitle3.bold().monospacedDigit())
-                    current.status.badge
+        let wide = sizeClass != .compact
+        return DetailPage {
+            DetailHeader(current.quoteNumber,
+                         subtitle: [current.isOrderAuthorisation ? "Order Authorisation" : nil,
+                                    current.customer.company ?? current.customer.name].compactMap { $0 }.joined(separator: " · "),
+                         avatar: .icon("doc.text", Palette.tile(for: "shop_quotes"))) {
+                VStack(alignment: .leading, spacing: 6) {
+                    DetailChips { current.status.badge }
                     Text(ShopMoney.format(current.totalMinor, currency: current.currency) ?? "").font(.wsTitle2.monospacedDigit())
                     if let validUntil = current.validUntil {
                         Text((current.isExpired ? "Expired " : "Valid until ") + (Formatters.day(validUntil) ?? ""))
@@ -204,18 +241,17 @@ struct ShopQuoteDetailView: View {
                             .font(.wsFootnote.weight(.semibold)).foregroundStyle(Tone.success.textColor)
                     }
                 }
-                .padding(.vertical, 4)
-                if let loadError { InlineErrorRow(error: loadError) { Task { await load() } } }
             }
-
+            if let loadError { InlineErrorRow(error: loadError) { Task { await load() } } }
+        } main: {
             if let notice {
-                Section { Label(notice, systemImage: "checkmark.circle").font(.wsFootnote).foregroundStyle(Tone.success.textColor) }
+                DetailSection { Label(notice, systemImage: "checkmark.circle").font(.wsFootnote).foregroundStyle(Tone.success.textColor) }
             }
 
             ShopQuoteProgressSection(quote: current)
 
             if current.isLocked {
-                Section {
+                DetailSection {
                     Label(lockedWhy, systemImage: "lock").font(.wsFootnote)
                     if let next = current.supersededBy {
                         NavigationLink {
@@ -233,7 +269,7 @@ struct ShopQuoteDetailView: View {
 
             if (session.shopPolicy.canCreate && !current.isOrderAuthorisation && current.status != .cancelled)
                 || (canUpdate && sendable) {
-                Section {
+                DetailSection {
                     if session.shopPolicy.canCreate && !current.isOrderAuthorisation && current.status != .cancelled {
                         Button {
                             confirmingOrder = true
@@ -279,7 +315,7 @@ struct ShopQuoteDetailView: View {
 
             let targets = canUpdate ? current.status.manualTargets : []
             if !targets.isEmpty {
-                Section("Update status") {
+                DetailSection("Update status") {
                     ForEach(targets, id: \.self) { status in
                         Button {
                             pendingStatus = status
@@ -293,46 +329,18 @@ struct ShopQuoteDetailView: View {
                     if let actionError { InlineErrorRow(error: actionError) }
                 }
             } else if let actionError {
-                Section { InlineErrorRow(error: actionError) }
+                DetailSection { InlineErrorRow(error: actionError) }
             }
 
             suppliersAndCustomerSections
 
             termsAndLinesSections
 
-            if current.tradeDiscountMinor > 0 || current.discountMinor > 0 {
-                Section("Discounts (ex VAT)") {
-                    DetailRow(label: "Subtotal before discount", value: ShopMoney.format(current.listSubtotalMinor ?? current.subtotalMinor, currency: current.currency))
-                    if current.tradeDiscountMinor > 0 {
-                        DetailRow(label: "VIP Trade discount", value: "−" + (ShopMoney.format(current.tradeDiscountMinor, currency: current.currency) ?? ""))
-                    }
-                    if current.discountMinor > 0 {
-                        DetailRow(label: current.discountLabel ?? "Discount", value: "−" + (ShopMoney.format(current.discountMinor, currency: current.currency) ?? ""))
-                    }
-                }
-            }
-
-            ShopTotalsSection(subtotal: current.subtotalMinor, vat: current.vatMinor, shipping: current.shippingMinor,
-                              total: current.totalMinor, currency: current.currency)
-
-            Section("Notes") {
-                DetailRow(label: "For the customer", value: current.notes)
-                DetailRow(label: "Internal", value: current.internalNotes)
-                if current.notes?.trimmedOrNil == nil, current.internalNotes?.trimmedOrNil == nil {
-                    Text("No notes").foregroundStyle(.secondaryText)
-                }
-                if canUpdate {
-                    Button {
-                        editingDetails = true
-                    } label: {
-                        Label("Edit validity, shipping & notes", systemImage: "square.and.pencil")
-                    }
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("shopQuote.editDetails")
-                }
-            }
+            if !wide { moneySections }
 
             linksSections
+        } side: {
+            if wide { moneySections }
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
@@ -430,7 +438,7 @@ struct ShopQuoteDetailView: View {
             let canMessage = session.shopPolicy.canCreate && session.shopPolicy.canUpdate && current.status != .cancelled
             let canLinkDeal = session.shopPolicy.canUpdate && current.status != .cancelled
             if canMessage || canLinkDeal || current.dealCode != nil {
-                Section {
+                DetailSection {
                     if canMessage {
                         Button {
                             messaging = .priceRequest(quoteUuid: current.uuid)
@@ -489,7 +497,7 @@ struct ShopQuoteDetailView: View {
                 }
             }
 
-            Section("Customer") {
+            DetailSection("Customer") {
                 DetailRow(label: "Name", value: current.customer.name)
                 DetailRow(label: "Company", value: current.customer.company)
                 if let email = current.customer.email { EmailLinkRow(email: email) }
@@ -516,7 +524,7 @@ struct ShopQuoteDetailView: View {
 
     @ViewBuilder
     private var termsAndLinesSections: some View {
-            Section("Order terms") {
+            DetailSection("Order terms") {
                 DetailRow(label: "Document", value: title)
                 DetailRow(label: "VIP Trade discount",
                           value: current.tradeDiscountMinor > 0 ? "\(ShopMoney.format(current.tradeDiscountMinor, currency: current.currency) ?? "") ex VAT" : "None")
@@ -536,7 +544,7 @@ struct ShopQuoteDetailView: View {
             ShopLinesSection(lines: current.lines, currency: current.currency,
                              onEdit: editable ? { _ in editingLines = true } : nil)
             if editable {
-                Section {
+                DetailSection {
                     Button { editingLines = true } label: { Label("Add, change or reorder lines", systemImage: "list.bullet.rectangle") }
                         .frame(minHeight: 44)
                         .accessibilityIdentifier("shopQuote.editLines")
@@ -546,7 +554,7 @@ struct ShopQuoteDetailView: View {
 
     @ViewBuilder
     private var linksSections: some View {
-            Section("Links") {
+            DetailSection("Links") {
                 if let link = current.publicUrl.flatMap(URL.init(string:)), link.scheme != nil {
                     ShareLink(item: link, subject: Text("\(title) \(current.quoteNumber)")) {
                         Label(current.isOrderAuthorisation ? "Share order link with customer" : "Share quote link with customer",
@@ -608,7 +616,7 @@ struct ShopQuoteDetailView: View {
             }
 
             if current.revisions.count > 1 {
-                Section("Revisions") {
+                DetailSection("Revisions") {
                     ForEach(current.revisions) { revision in
                         NavigationLink {
                             ShopQuoteDetailView(uuid: revision.uuid)
@@ -774,7 +782,7 @@ private struct ShopQuoteDetailsForm: View {
 
     var body: some View {
         Form {
-            Section {
+            DetailSection {
                 DatePicker("Valid until", selection: $validUntil, displayedComponents: .date)
                 if quote.linesEditable {
                     TextField("Shipping ex VAT", text: $shippingText)
@@ -782,10 +790,10 @@ private struct ShopQuoteDetailsForm: View {
                         .monospacedDigit()
                 }
             }
-            Section("Notes for the customer") {
+            DetailSection("Notes for the customer") {
                 TextField("Shown on the quote", text: $notes, axis: .vertical).lineLimit(3...8)
             }
-            Section("Internal notes") {
+            DetailSection("Internal notes") {
                 TextField("Only staff see these", text: $internalNotes, axis: .vertical).lineLimit(3...8)
             }
             if failed {
@@ -867,7 +875,7 @@ struct ShopQuoteProgressSection: View {
     var body: some View {
         let step = Self.nextStep(quote)
         if quote.status != .unknown {
-            Section("Next step") {
+            DetailSection("Next step") {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(step.title).font(.wsHeadline).foregroundStyle(step.tone.textColor)
                     if !step.detail.isEmpty { Text(step.detail).font(.wsFootnote).foregroundStyle(.secondaryText) }

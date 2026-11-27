@@ -125,6 +125,7 @@ struct CustomerDetailView: View {
     let customerUuid: String
     var onChange: (Customer?) -> Void = { _ in }
     @Environment(\.services) private var services
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(SessionStore.self) private var session
     @State private var state: LoadState<Customer> = .idle
     @State private var editing = false
@@ -207,7 +208,7 @@ struct CustomerDetailView: View {
         RecordActionBar(showsMore: false) {
             if session.permissions.can(.create, .invoices) {
                 Button { newInvoice = true } label: { Label("New invoice", systemImage: "doc.badge.plus") }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.action(prominent: true))
                     .accessibilityIdentifier("customer.newInvoice")
             }
             if session.permissions.can(.create, .orders) {
@@ -227,30 +228,34 @@ struct CustomerDetailView: View {
     }
 
     private func content(_ customer: Customer) -> some View {
-        List {
-            Section {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(customer.displayName).font(.wsTitle2.bold())
-                    HStack {
-                        let state = customer.state ?? "enabled"
-                        StatusBadge(text: Formatters.humanize(state), systemImage: state == "enabled" ? "checkmark.circle" : "pause.circle",
-                                    tone: state == "enabled" ? .success : .neutral)
-                        if customer.taxExempt { StatusBadge(text: "Tax exempt", systemImage: "percent", tone: .info) }
-                    }
-                    if MacSupport.isMac, canStartSale { macActions(customer) }
+        let wide = sizeClass != .compact
+        return DetailPage {
+            DetailHeader(customer.displayName, subtitle: subtitle(customer), avatar: .monogram(customer.displayName)) {
+                DetailChips {
+                    let state = customer.state ?? "enabled"
+                    StatusBadge(text: Formatters.humanize(state), systemImage: state == "enabled" ? "checkmark.circle" : "pause.circle",
+                                tone: state == "enabled" ? .success : .neutral)
+                    if customer.taxExempt { StatusBadge(text: "Tax exempt", systemImage: "percent", tone: .info) }
                 }
-                .padding(.vertical, 4)
-                if let phone = customer.phone { PhoneLinkRow(name: customer.displayName, phone: phone) }
-                if !customer.email.isEmpty { EmailLinkRow(email: customer.email) }
+            } actions: {
+                if wide, canStartSale { macActions(customer) }
             }
+            if !wide { contactRows(customer) }
+        } main: {
             if let notice {
-                Section { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
+                DetailSection { Label(notice, systemImage: "checkmark.circle.fill").foregroundStyle(Tone.success.textColor) }
+            }
+            // The numbers first: on a wide page as tiles of their own (no card around cards).
+            if wide {
+                stats(customer)
+            } else {
+                DetailSection { stats(customer) }
             }
             // What the team wrote about them: visible as soon as the customer opens, not under "Details".
             if let notes { RecordNotesSection(model: notes) }
-            // The Mac has these in the header (macActions).
-            if canStartSale, !MacSupport.isMac {
-                Section {
+            // A wide page has these in the header (macActions).
+            if canStartSale, !wide {
+                DetailSection {
                     if session.permissions.can(.create, .invoices) {
                         Button { newInvoice = true } label: { Label("New invoice", systemImage: "doc.badge.plus") }
                             .frame(minHeight: 44)
@@ -275,30 +280,11 @@ struct CustomerDetailView: View {
                     Text("Their name, email and address are filled in for you.")
                 }
             }
-            Section {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 10)], spacing: 10) {
-                    if canSeeOrders && !customer.email.isEmpty {
-                        NavigationLink {
-                            SalesOrdersView(search: customer.email)
-                        } label: {
-                            StatTile(title: "Orders", value: "\(customer.ordersCount)", systemImage: "bag")
-                                .accessibilityHint("Shows this customer's orders")
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("customer.orders")
-                    } else {
-                        StatTile(title: "Orders", value: "\(customer.ordersCount)", systemImage: "bag")
-                    }
-                    StatTile(title: "Total spent", value: Formatters.money(customer.totalSpent, currency: nil) ?? "0",
-                             systemImage: "sterlingsign.circle")
-                    StatTile(title: "Average order", value: Formatters.money(customer.averageOrderValue ?? 0, currency: nil) ?? "0",
-                             systemImage: "chart.bar")
-                    StatTile(title: "Last order", value: Formatters.day(customer.lastOrderDate) ?? "—", systemImage: "calendar")
-                }
-                .padding(.vertical, 4)
+            if let notes = customer.notes, !notes.isEmpty {
+                DetailSection("About them", systemImage: "text.quote") { ExpandableText(text: notes) }
             }
             if !customer.addresses.isEmpty {
-                Section("Addresses") {
+                DetailSection("Addresses", systemImage: "mappin.and.ellipse") {
                     ForEach(customer.addresses, id: \.self) { address in
                         VStack(alignment: .leading, spacing: 2) {
                             if address.isDefault == true { Text("Primary").font(.wsCaption).foregroundStyle(.secondaryText) }
@@ -307,22 +293,12 @@ struct CustomerDetailView: View {
                     }
                 }
             }
-            Section("Details") {
-                DetailRow(label: "Date of birth", value: customer.dateOfBirth.flatMap { Formatters.day($0.date()) })
-                DetailRow(label: "Tags", value: customer.tags)
-                DetailRow(label: "Marketing", value: customer.acceptsMarketing ? "Opted in" : "Not opted in")
-                DetailRow(label: "Opt-in level", value: customer.marketingOptInLevel.map(Formatters.humanize))
-                DetailRow(label: "Email verified", value: customer.verifiedEmail ? "Yes" : "No")
-                DetailRow(label: "Customer since", value: Formatters.day(customer.createdAt))
-            }
-            if let notes = customer.notes, !notes.isEmpty {
-                Section("Notes") { Text(notes).textSelection(.enabled) }
-            }
             CustomerBillingSection(billing: billing)
             // What this customer told us in the workspace's forms (as on the web's customer page).
             WebFormRecordResponsesSection(items: formResponses)
+            if !wide { details(customer) }
             if session.permissions.can(.delete, .customers) {
-                Section {
+                DetailSection {
                     DeleteButton(title: "Delete customer",
                                  message: "This permanently deletes the customer. Their orders are kept but unlinked.") {
                         do {
@@ -337,8 +313,61 @@ struct CustomerDetailView: View {
                     if let deleteError { InlineErrorRow(error: deleteError) }
                 }
             }
+        } side: {
+            if wide {
+                if customer.phone != nil || !customer.email.isEmpty {
+                    DetailSection("Contact", systemImage: "person.crop.circle") { contactRows(customer) }
+                }
+                details(customer)
+            }
         }
-        .listStyle(.insetGrouped)
+    }
+
+    /// "Customer since 3 Mar 2025 · 12 orders".
+    private func subtitle(_ customer: Customer) -> String {
+        [Formatters.day(customer.createdAt).map { "Customer since \($0)" },
+         customer.ordersCount > 0 ? "\(customer.ordersCount) order\(customer.ordersCount == 1 ? "" : "s")" : nil]
+            .compactMap { $0 }.joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private func contactRows(_ customer: Customer) -> some View {
+        if let phone = customer.phone { PhoneLinkRow(name: customer.displayName, phone: phone) }
+        if !customer.email.isEmpty { EmailLinkRow(email: customer.email) }
+    }
+
+    private func stats(_ customer: Customer) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 10)], spacing: 10) {
+            if canSeeOrders && !customer.email.isEmpty {
+                NavigationLink {
+                    SalesOrdersView(search: customer.email)
+                } label: {
+                    StatTile(title: "Orders", value: "\(customer.ordersCount)", systemImage: "bag")
+                        .accessibilityHint("Shows this customer's orders")
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("customer.orders")
+            } else {
+                StatTile(title: "Orders", value: "\(customer.ordersCount)", systemImage: "bag")
+            }
+            StatTile(title: "Total spent", value: Formatters.money(customer.totalSpent, currency: nil) ?? "0",
+                     systemImage: "sterlingsign.circle")
+            StatTile(title: "Average order", value: Formatters.money(customer.averageOrderValue ?? 0, currency: nil) ?? "0",
+                     systemImage: "chart.bar")
+            StatTile(title: "Last order", value: Formatters.day(customer.lastOrderDate) ?? "—", systemImage: "calendar")
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func details(_ customer: Customer) -> some View {
+        DetailSection("Details", systemImage: "list.bullet.rectangle") {
+            DetailRow(label: "Date of birth", value: customer.dateOfBirth.flatMap { Formatters.day($0.date()) })
+            DetailRow(label: "Tags", value: customer.tags)
+            DetailRow(label: "Marketing", value: customer.acceptsMarketing ? "Opted in" : "Not opted in")
+            DetailRow(label: "Opt-in level", value: customer.marketingOptInLevel.map(Formatters.humanize))
+            DetailRow(label: "Email verified", value: customer.verifiedEmail ? "Yes" : "No")
+            DetailRow(label: "Customer since", value: Formatters.day(customer.createdAt))
+        }
     }
 
     private var canQuote: Bool {
