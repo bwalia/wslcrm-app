@@ -109,7 +109,11 @@ struct StatusBadge: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        Label {
+        // Not a `Label`: in a phone's list row a label's icon gets the row's wide icon column, which left a gap
+        // inside the pill.
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+                .imageScale(.small)
             Text(text)
                 .font(.wsSubheadline.weight(.semibold))
                 // At accessibility sizes the pill wraps rather than truncating to "On…".
@@ -117,9 +121,6 @@ struct StatusBadge: View {
                 .minimumScaleFactor(0.75)
                 .allowsTightening(true)
                 .fixedSize(horizontal: false, vertical: true)
-        } icon: {
-            Image(systemName: systemImage)
-                .imageScale(.small)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
@@ -184,6 +185,64 @@ struct LargeButtonStyle: ButtonStyle {
 extension ButtonStyle where Self == LargeButtonStyle {
     static func large(_ tone: Tone = .brand, prominent: Bool = true, fill: Bool = false) -> LargeButtonStyle {
         LargeButtonStyle(tone: tone, prominent: prominent, fill: fill)
+    }
+}
+
+/// A button in a record's action bar: the same height for every button (34pt on a Mac, 44pt on a phone), an icon and
+/// its words. The one primary action is filled with the theme colour (`prominent`); the others are bordered and
+/// neutral, so the accent marks only what matters most.
+struct ActionButtonStyle: ButtonStyle {
+    var prominent = false
+    var tone: Tone = .brand
+
+    func makeBody(configuration: Configuration) -> some View {
+        ActionButtonBody(configuration: configuration, prominent: prominent, tone: tone)
+    }
+
+    private struct ActionButtonBody: View {
+        let configuration: Configuration
+        let prominent: Bool
+        let tone: Tone
+        @Environment(\.isEnabled) private var isEnabled
+        @State private var hovering = false
+
+        private var foreground: Color {
+            if prominent { return .white }
+            return configuration.role == .destructive ? Tone.danger.textColor : Color(.label)
+        }
+
+        var body: some View {
+            let shape = RoundedRectangle(cornerRadius: MacSupport.isMac ? 8 : 10, style: .continuous)
+            configuration.label
+                .font(.wsSubheadline.weight(.semibold))
+                .lineLimit(1)
+                .foregroundStyle(foreground)
+                .padding(.horizontal, MacSupport.isMac ? 12 : 14)
+                .frame(minHeight: MacSupport.isMac ? 34 : 44)
+                .background {
+                    if prominent {
+                        shape.fill(tone.solidColor)
+                    } else {
+                        shape.fill(Palette.card)
+                        shape.fill(Color(.label).opacity(configuration.isPressed ? 0.10 : hovering ? 0.05 : 0))
+                    }
+                }
+                .overlay { if !prominent { shape.strokeBorder(Color(.separator), lineWidth: 1) } }
+                .brightness(prominent && hovering && isEnabled ? 0.06 : 0)
+                .opacity(isEnabled ? (prominent && configuration.isPressed ? 0.8 : 1) : 0.45)
+                .contentShape(shape)
+                .onHover { hovering = $0 }
+                .animation(.easeOut(duration: 0.12), value: hovering)
+        }
+    }
+}
+
+extension ButtonStyle where Self == ActionButtonStyle {
+    /// A secondary action in a record's action bar.
+    static var action: ActionButtonStyle { ActionButtonStyle() }
+    /// The record's one primary action.
+    static func action(prominent: Bool, tone: Tone = .brand) -> ActionButtonStyle {
+        ActionButtonStyle(prominent: prominent, tone: tone)
     }
 }
 
@@ -407,16 +466,22 @@ struct CopyableRow: View {
 
 // MARK: - Rows
 
-/// A label/value row used on detail screens.
+/// A label/value row used on detail screens. Nothing is shown when there is no value. On a phone's list the value sits
+/// at the right; in a card or a wide list it sits next to its label (`detailFactStyle`).
 struct DetailRow: View {
     let label: String
     let value: String?
     var systemImage: String?
+    /// Money and other numbers: digits the same width, so amounts line up.
+    var monospacedDigits = false
+    @Environment(\.detailFactStyle) private var factStyle
 
     var body: some View {
         if let value, !value.isEmpty {
             LabeledContent {
-                Text(value).multilineTextAlignment(.trailing).textSelection(.enabled)
+                (monospacedDigits ? Text(value).monospacedDigit() : Text(value))
+                    .multilineTextAlignment(factStyle == .automatic ? .trailing : .leading)
+                    .textSelection(.enabled)
             } label: {
                 if let systemImage {
                     Label(label, systemImage: systemImage)

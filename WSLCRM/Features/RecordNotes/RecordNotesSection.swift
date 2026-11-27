@@ -8,7 +8,7 @@ struct RecordNotesSection: View {
 
     var body: some View {
         if !model.unavailable {
-            Section {
+            DetailSection {
                 content
                 NavigationLink {
                     RecordNotesView(model: model, focusOnOpen: true)
@@ -27,9 +27,7 @@ struct RecordNotesSection: View {
                     .accessibilityIdentifier("notes.openAll")
                 }
             } header: {
-                HStack {
-                    Text("Notes and to-dos")
-                    Spacer()
+                DetailSectionTitle("Notes and to-dos", systemImage: "text.bubble") {
                     if model.openTodos > 0 {
                         Label(model.openTodos == 1 ? "1 to do" : "\(model.openTodos) to do", systemImage: "checklist")
                             .font(.wsCaption.weight(.semibold))

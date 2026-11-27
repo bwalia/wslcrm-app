@@ -260,18 +260,19 @@ struct WebFormRecordResponsesSection: View {
     var body: some View {
         Group {
             if !items.isEmpty {
-                Section("Form responses") {
+                DetailSection("Form responses", systemImage: "doc.text") {
                     ForEach(items) { response in
                         NavigationLink {
                             WebFormRecordResponseView(response: response)
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(response.formTitle).font(.wsHeadline)
+                                Text(response.formTitle).font(.wsHeadline).foregroundStyle(Color(.label))
                                 Text(WebFormText.ago(response.createdAt)
                                      + (response.outcome == "created" ? " · created this record" : ""))
                                     .font(.wsFootnote).foregroundStyle(.secondaryText)
                                 ForEach(Array(response.answers.prefix(6).enumerated()), id: \.offset) { _, answer in
-                                    Text("\(answer.label): \(answer.value)").font(.wsSubheadline).lineLimit(2)
+                                    Text("\(answer.label): \(answer.value)").font(.wsSubheadline).foregroundStyle(Color(.label))
+                                        .lineLimit(2)
                                 }
                             }
                         }
