@@ -89,8 +89,9 @@ struct InvoicesAPI: Sendable {
         return try await invoice(invoiceUuid)
     }
 
-    func recordPayment(_ invoiceUuid: String, _ body: PaymentBody) async throws -> Invoice {
-        try await client.sendDiscardingBody(.post("\(Self.base)/\(invoiceUuid)/payments", json: body))
+    /// Records a payment; a draft is issued first (nothing is emailed). The reply holds only the payment and totals.
+    func markPaid(_ invoiceUuid: String, _ body: PaymentBody) async throws -> Invoice {
+        try await client.sendDiscardingBody(.post("\(Self.base)/\(invoiceUuid)/mark-paid", json: body))
         return try await invoice(invoiceUuid)
     }
 

@@ -336,7 +336,8 @@ final class ShopEasyTests: XCTestCase {
     func testPlainWordsForPaymentMethods() {
         XCTAssertEqual(PaymentSheet.methodLabel("check"), "Cheque")
         XCTAssertEqual(PaymentSheet.methodLabel("paypal"), "PayPal")
-        XCTAssertEqual(PaymentSheet.methodLabel("credit_card"), "Card")
+        XCTAssertEqual(PaymentSheet.methodLabel("credit_card"), "Credit card")
+        XCTAssertEqual(PaymentSheet.methodLabel("stripe"), "Card (Stripe)")
     }
 
     func testQuoteDealCodeLinksOrStartsADeal() async throws {

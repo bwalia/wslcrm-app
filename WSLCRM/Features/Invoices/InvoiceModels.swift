@@ -55,10 +55,21 @@ struct InvoicePayment: Identifiable, Hashable, Sendable {
     var referenceNumber: String?
     var paymentDate: CalendarDay?
     var notes: String?
+    /// Who paid (`payer_name`); newer servers only.
+    var payerName: String?
+    /// The Stripe payment (`pi_…`) when it was paid through Stripe.
+    var stripePaymentIntentId: String?
+    /// Where it was recorded: api, staff, agent or shop.
+    var source: String?
+
+    /// The bank reference, else the Stripe payment's id.
+    var displayReference: String? { referenceNumber?.trimmedOrNil ?? stripePaymentIntentId?.trimmedOrNil }
 }
 
 extension InvoicePayment: Decodable {
-    enum CodingKeys: String, CodingKey { case id, uuid, amount, paymentMethod, referenceNumber, paymentDate, notes }
+    enum CodingKeys: String, CodingKey {
+        case id, uuid, amount, paymentMethod, referenceNumber, paymentDate, notes, payerName, stripePaymentIntentId, source
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -71,6 +82,9 @@ extension InvoicePayment: Decodable {
         referenceNumber = c.decodeFlexibleString(forKey: .referenceNumber)
         paymentDate = c.decodeDay(forKey: .paymentDate)
         notes = try? c.decodeIfPresent(String.self, forKey: .notes)
+        payerName = (try? c.decodeIfPresent(String.self, forKey: .payerName))?.trimmedOrNil
+        stripePaymentIntentId = (try? c.decodeIfPresent(String.self, forKey: .stripePaymentIntentId))?.trimmedOrNil
+        source = (try? c.decodeIfPresent(String.self, forKey: .source))?.trimmedOrNil
     }
 }
 
@@ -142,7 +156,11 @@ struct Invoice: Identifiable, Hashable, Sendable {
     }
     var canVoid: Bool { status != .void }
     var canDelete: Bool { status == .draft }
-    var canRecordPayment: Bool { status != .draft && status != .void && balanceDue > 0 }
+    /// `POST /invoices/:uuid/mark-paid` also takes a draft: the server issues it (nothing is emailed), then records it.
+    var canRecordPayment: Bool {
+        status != .paid && status != .void && status != .cancelled && status != .unknown && balanceDue > 0
+    }
+    var paymentActionTitle: String { status == .draft ? "Mark as paid" : "Record payment" }
 }
 
 extension Invoice: Decodable {
@@ -436,12 +454,15 @@ struct LineItemBody: Encodable, Sendable, Equatable, Hashable {
     var discountPercent: Decimal?
 }
 
+/// `POST /api/v2/invoices/:uuid/mark-paid`. Empty optional fields are left out (nil isn't encoded).
 struct PaymentBody: Encodable, Sendable, Equatable {
     var amount: Decimal
     var paymentMethod: String
-    /// `reference_number` — the server ignores `reference`.
-    var referenceNumber: String?
+    /// The bank reference or Stripe `pi_…`.
+    var reference: String?
     var paymentDate: CalendarDay
+    /// Who paid.
+    var payerName: String?
     var notes: String?
 }
 

@@ -394,8 +394,8 @@ struct InvoiceDetailView: View {
         .sheet(isPresented: $recordingPayment) {
             if let invoice = state.value {
                 PaymentSheet(invoice: invoice) { body in
-                    await mutate(Self.paymentNotice(body.amount, currency: invoice.currency)) {
-                        try await services.invoices.recordPayment(invoiceUuid, body)
+                    await mutate(Self.paymentNotice(body.amount, currency: invoice.currency, issued: invoice.status == .draft)) {
+                        try await services.invoices.markPaid(invoiceUuid, body)
                     }
                 }
                 .moneySheetError(actionError)
@@ -457,7 +457,7 @@ struct InvoiceDetailView: View {
                 .accessibilityIdentifier("invoice.email")
             }
             if permissions.can(.create, .payments) && invoice.canRecordPayment {
-                Button { recordingPayment = true } label: { Label("Record payment", systemImage: "sterlingsign.circle") }
+                Button { recordingPayment = true } label: { Label(invoice.paymentActionTitle, systemImage: "sterlingsign.circle") }
             }
             if canUpdate && invoice.canSend {
                 Button { Task { _ = await mutate("Marked as sent.") { try await services.invoices.send(invoiceUuid) } } } label: {
@@ -529,7 +529,7 @@ struct InvoiceDetailView: View {
                     }
                     if permissions.can(.create, .payments) && invoice.canRecordPayment {
                         Button { recordingPayment = true } label: {
-                            Label("Record payment", systemImage: "sterlingsign.circle.fill")
+                            Label(invoice.paymentActionTitle, systemImage: "sterlingsign.circle.fill")
                         }
                         .buttonStyle(.large(.success))
                         .listRowSeparator(.hidden)
@@ -580,9 +580,7 @@ struct InvoiceDetailView: View {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(Formatters.money(payment.amount, currency: invoice.currency) ?? "").font(.wsHeadline.monospacedDigit())
-                                Text([payment.paymentMethod.map(PaymentSheet.methodLabel), payment.referenceNumber,
-                                      payment.paymentDate.flatMap { Formatters.day($0.date()) }].compactMap { $0 }.joined(separator: " · "))
-                                    .font(.wsCaption).foregroundStyle(.secondaryText)
+                                Text(Self.paymentDetail(payment)).font(.wsCaption).foregroundStyle(.secondaryText)
                             }
                             Spacer()
                             // A wide page has no swipe: the bin is on the row.
@@ -782,8 +780,16 @@ struct InvoiceDetailView: View {
         return "Delete this \(Formatters.money(payment.amount, currency: currency) ?? payment.amount.formatted()) payment?"
     }
 
-    static func paymentNotice(_ amount: Decimal, currency: String) -> String {
-        "Payment of \(Formatters.money(amount, currency: currency) ?? amount.formatted()) recorded."
+    static func paymentNotice(_ amount: Decimal, currency: String, issued: Bool = false) -> String {
+        let money = Formatters.money(amount, currency: currency) ?? amount.formatted()
+        return issued ? "Invoice issued and payment of \(money) recorded. Nothing was emailed." : "Payment of \(money) recorded."
+    }
+
+    /// A payment's second line: method, who paid, reference and date, as far as they're known.
+    static func paymentDetail(_ payment: InvoicePayment) -> String {
+        [payment.paymentMethod.map(PaymentSheet.methodLabel), payment.payerName.map { "Paid by \($0)" },
+         payment.displayReference, payment.paymentDate.flatMap { Formatters.day($0.date()) }]
+            .compactMap { $0 }.joined(separator: " · ")
     }
 
     /// Runs a mutation that returns the refreshed invoice, then says what happened. Returns success.
@@ -895,16 +901,25 @@ struct PaymentSheet: View {
     @State private var method = "bank_transfer"
     @State private var reference = ""
     @State private var date = Date()
+    @State private var payerName = ""
     @State private var notes = ""
     @State private var saving = false
 
-    private let methods = ["bank_transfer", "credit_card", "cash", "check", "paypal", "other"]
+    static let methods = ["bank_transfer", "stripe", "credit_card", "cash", "check", "paypal", "other"]
+
+    /// The request body; blank optional fields are left out.
+    static func body(amount: Decimal, method: String, date: Date, reference: String, payerName: String,
+                     notes: String) -> PaymentBody {
+        PaymentBody(amount: amount, paymentMethod: method, reference: reference.trimmedOrNil,
+                    paymentDate: CalendarDay(date: date), payerName: payerName.trimmedOrNil, notes: notes.trimmedOrNil)
+    }
 
     /// The stored codes in plain UK words.
     static func methodLabel(_ code: String) -> String {
         switch code {
         case "bank_transfer": "Bank transfer"
-        case "credit_card": "Card"
+        case "stripe": "Card (Stripe)"
+        case "credit_card": "Credit card"
         case "cash": "Cash"
         case "check": "Cheque"
         case "paypal": "PayPal"
@@ -926,16 +941,22 @@ struct PaymentSheet: View {
                     TextField("Amount", value: $amount, format: .number).keyboardType(.decimalPad)
                         .font(.wsTitle2.monospacedDigit())
                     Picker("Method", selection: $method) {
-                        ForEach(methods, id: \.self) { Text(Self.methodLabel($0)).tag($0) }
+                        ForEach(Self.methods, id: \.self) { Text(Self.methodLabel($0)).tag($0) }
                     }
-                    TextField("Reference", text: $reference)
                     DatePicker("Date", selection: $date, displayedComponents: .date)
+                    TextField("Reference (optional)", text: $reference)
+                    TextField("Paid by (optional)", text: $payerName).textContentType(.name)
                     TextField("Notes (optional)", text: $notes, axis: .vertical)
                 } footer: {
-                    Text("Balance due: \(Formatters.money(invoice.balanceDue, currency: invoice.currency) ?? "")")
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Balance due: \(Formatters.money(invoice.balanceDue, currency: invoice.currency) ?? "")")
+                        if invoice.status == .draft {
+                            Text("This invoice will be issued and marked paid. Nothing is emailed.")
+                        }
+                    }
                 }
             }
-            .navigationTitle("Record payment")
+            .navigationTitle(invoice.paymentActionTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -943,9 +964,8 @@ struct PaymentSheet: View {
                     Button("Save") {
                         saving = true
                         Task {
-                            let ok = await save(PaymentBody(amount: amount, paymentMethod: method,
-                                                            referenceNumber: reference.isEmpty ? nil : reference,
-                                                            paymentDate: CalendarDay(date: date), notes: notes.trimmedOrNil))
+                            let ok = await save(Self.body(amount: amount, method: method, date: date, reference: reference,
+                                                          payerName: payerName, notes: notes))
                             saving = false
                             if ok { dismiss() }
                         }
