@@ -12,6 +12,7 @@ struct InvoiceEditSheet: View {
     @State private var customerName: String
     @State private var customerEmail: String
     @State private var customerAddress: String
+    @State private var customerVatNumber: String
     @State private var issueDate: Date
     @State private var dueDate: Date
     @State private var currency: String
@@ -29,6 +30,7 @@ struct InvoiceEditSheet: View {
         _customerName = State(initialValue: invoice.customerName ?? "")
         _customerEmail = State(initialValue: invoice.customerEmail ?? "")
         _customerAddress = State(initialValue: invoice.customerAddress ?? "")
+        _customerVatNumber = State(initialValue: invoice.customerVatNumber ?? "")
         _issueDate = State(initialValue: invoice.issueDate?.date() ?? Date())
         _dueDate = State(initialValue: invoice.dueDate?.date() ?? Date())
         _currency = State(initialValue: invoice.currency)
@@ -41,7 +43,7 @@ struct InvoiceEditSheet: View {
 
     static func body(invoice: Invoice, customerName: String, customerEmail: String, customerAddress: String, issueDate: Date,
                      dueDate: Date, currency: String, terms: String, customerNumber: String, poNumber: String,
-                     methodUuid: String, notes: String) -> InvoiceHeaderBody {
+                     methodUuid: String, notes: String, customerVatNumber: String = "") -> InvoiceHeaderBody {
         InvoiceHeaderBody(
             customerName: customerName.trimmingCharacters(in: .whitespaces),
             customerEmail: customerEmail.trimmingCharacters(in: .whitespaces),
@@ -50,7 +52,8 @@ struct InvoiceEditSheet: View {
             poNumber: poNumber.trimmingCharacters(in: .whitespaces), paymentMethodUuid: methodUuid,
             // Only a draft's number can change; "" puts the internal number back.
             customerInvoiceNumber: invoice.status == .draft ? customerNumber.trimmingCharacters(in: .whitespaces) : nil,
-            customerAddress: customerAddress.trimmingCharacters(in: .whitespacesAndNewlines))
+            customerAddress: customerAddress.trimmingCharacters(in: .whitespacesAndNewlines),
+            customerVatNumber: customerVatNumber.trimmingCharacters(in: .whitespaces))
     }
 
     var body: some View {
@@ -61,6 +64,9 @@ struct InvoiceEditSheet: View {
                         .accessibilityIdentifier("invoiceEdit.customer")
                     TextField("Email", text: $customerEmail).keyboardType(.emailAddress).textInputAutocapitalization(.never)
                     TextField("Address", text: $customerAddress, axis: .vertical).lineLimit(2...4)
+                    TextField("Customer VAT number", text: $customerVatNumber)
+                        .textInputAutocapitalization(.characters).autocorrectionDisabled()
+                        .accessibilityIdentifier("invoiceEdit.vatNumber")
                 }
                 Section("Dates and terms") {
                     DatePicker("Issued", selection: $issueDate, displayedComponents: .date)
@@ -111,7 +117,7 @@ struct InvoiceEditSheet: View {
                         let body = Self.body(invoice: invoice, customerName: customerName, customerEmail: customerEmail,
                                              customerAddress: customerAddress, issueDate: issueDate, dueDate: dueDate,
                                              currency: currency, terms: terms, customerNumber: customerNumber, poNumber: poNumber,
-                                             methodUuid: methodUuid, notes: notes)
+                                             methodUuid: methodUuid, notes: notes, customerVatNumber: customerVatNumber)
                         Task {
                             let ok = await save(body)
                             saving = false

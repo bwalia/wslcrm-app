@@ -5,6 +5,8 @@ import SwiftUI
 
 /// The customer's details in the shapes the sales forms use.
 struct PickedCustomer: Equatable, Sendable {
+    /// The customer record's uuid (`customer_uuid` on a new invoice).
+    var uuid: String
     var name: String
     var firstName: String
     var lastName: String
@@ -17,9 +19,11 @@ struct PickedCustomer: Equatable, Sendable {
     var county: String
     var postcode: String
     var country: String
+    var vatNumber: String
 
     init(_ customer: Customer) {
         let address = customer.primaryAddress
+        uuid = customer.uuid
         name = customer.displayName
         firstName = customer.firstName?.trimmedOrNil ?? ""
         lastName = customer.lastName?.trimmedOrNil ?? ""
@@ -32,6 +36,7 @@ struct PickedCustomer: Equatable, Sendable {
         county = address?.province?.trimmedOrNil ?? ""
         postcode = address?.zip?.trimmedOrNil ?? ""
         country = address?.country?.trimmedOrNil ?? ""
+        vatNumber = customer.vatNumber?.trimmedOrNil ?? ""
     }
 
     /// One line per part, for an invoice's "Bill to".

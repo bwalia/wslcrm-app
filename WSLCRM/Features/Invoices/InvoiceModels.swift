@@ -106,6 +106,8 @@ struct Invoice: Identifiable, Hashable, Sendable {
     /// "How to pay" as printed: the invoice's own method, else the workspace's default bank account.
     var paymentMethod: PaymentMethodInfo?
     var customerAddress: String?
+    /// The invoice's own copy of the customer's VAT number (editing the customer doesn't change it).
+    var customerVatNumber: String?
 
     /// What the customer sees as the invoice's number.
     var displayNumber: String { customerInvoiceNumber?.trimmedOrNil ?? invoiceNumber }
@@ -148,7 +150,7 @@ extension Invoice: Decodable {
         case id, uuid, invoiceNumber, status, customerName, customerEmail, issueDate, dueDate, currency, subtotal
         case taxAmount, totalAmount, amountPaid, balanceDue, notes, paymentTermsDays, sentAt, paidAt, voidedAt
         case createdAt, lineItems, payments, customerInvoiceNumber, poNumber, paymentMethodUuid, paymentMethod
-        case customerAddress
+        case customerAddress, customerVatNumber
     }
 
     init(from decoder: Decoder) throws {
@@ -182,6 +184,7 @@ extension Invoice: Decodable {
         paymentMethodUuid = (try? c.decodeIfPresent(String.self, forKey: .paymentMethodUuid))?.trimmedOrNil
         paymentMethod = try? c.decodeIfPresent(PaymentMethodInfo.self, forKey: .paymentMethod)
         customerAddress = (try? c.decodeIfPresent(String.self, forKey: .customerAddress))?.trimmedOrNil
+        customerVatNumber = c.decodeFlexibleString(forKey: .customerVatNumber)?.trimmedOrNil
     }
 }
 
@@ -419,6 +422,10 @@ struct InvoiceHeaderBody: Encodable, Sendable, Equatable {
     /// The number the customer sees; drafts only ("" = the internal number).
     var customerInvoiceNumber: String?
     var customerAddress: String?
+    /// The server tidies it ("gb 123 4567 89" → "GB123456789"); "" clears it.
+    var customerVatNumber: String?
+    /// New invoices only: the customer record it's for. Without `customer_vat_number` the server copies theirs.
+    var customerUuid: String?
 }
 
 struct LineItemBody: Encodable, Sendable, Equatable, Hashable {

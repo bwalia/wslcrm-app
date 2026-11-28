@@ -44,6 +44,8 @@ struct Customer: Identifiable, Hashable, Sendable {
     var verifiedEmail: Bool
     var taxExempt: Bool
     var averageOrderValue: Decimal?
+    /// Cleaned by the server ("GB123456789"); older servers don't send it.
+    var vatNumber: String?
 
     /// The address marked default, else the first.
     var primaryAddress: CustomerAddress? { addresses.first { $0.isDefault == true } ?? addresses.first }
@@ -63,7 +65,7 @@ extension Customer: Decodable {
     enum CodingKeys: String, CodingKey {
         case uuid, email, firstName, lastName, phone, notes, addresses, acceptsMarketing, state, ordersCount
         case totalSpent, lastOrderDate, createdAt, dateOfBirth, tags, marketingOptInLevel, verifiedEmail, taxExempt
-        case averageOrderValue
+        case averageOrderValue, vatNumber
     }
 
     init(from decoder: Decoder) throws {
@@ -99,6 +101,7 @@ extension Customer: Decodable {
         verifiedEmail = c.decodeFlexibleBool(forKey: .verifiedEmail) ?? false
         taxExempt = c.decodeFlexibleBool(forKey: .taxExempt) ?? false
         averageOrderValue = c.decodeFlexibleDecimal(forKey: .averageOrderValue)
+        vatNumber = c.decodeFlexibleString(forKey: .vatNumber)?.trimmedOrNil
         state = Customer.clean(state)
     }
 }
@@ -119,6 +122,8 @@ struct CustomerBody: Encodable, Sendable, Equatable {
     var taxExempt: Bool?
     var marketingOptInLevel: String?
     var state: String?
+    /// The server tidies it ("gb 123 4567 89" → "GB123456789"); "" clears it.
+    var vatNumber: String?
 
     struct AddressBody: Encodable, Sendable, Equatable {
         var name: String?
