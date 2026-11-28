@@ -624,7 +624,7 @@ struct InvoiceDetailView: View {
             if wide {
                 totals(invoice)
                 if invoice.displayNumber != invoice.invoiceNumber || invoice.poNumber != nil || invoice.paymentTermsDays != nil
-                    || invoice.customerAddress != nil {
+                    || invoice.customerAddress != nil || invoice.customerVatNumber != nil {
                     DetailSection("Details", systemImage: "list.bullet.rectangle") { references(invoice) }
                 }
             }
@@ -655,6 +655,7 @@ struct InvoiceDetailView: View {
         DetailRow(label: "Customer PO", value: invoice.poNumber)
         DetailRow(label: "Payment terms", value: invoice.paymentTermsDays.map { "\($0) days" })
         if let address = invoice.customerAddress { MapsLinkRow(address: address) }
+        DetailRow(label: "Customer VAT number", value: invoice.customerVatNumber)
     }
 
     /// "VAT invoice check": what a valid UK VAT invoice must show and this one is missing, and the e-invoice.
@@ -966,6 +967,9 @@ struct InvoiceCreateSheet: View {
     @State private var customerName: String
     @State private var customerEmail: String
     @State private var customerAddress: String
+    @State private var customerVatNumber: String
+    /// The customer record picked (or the one this invoice was started from).
+    @State private var customerUuid: String?
     @State private var issueDate = Date()
     @State private var terms = 30
     @State private var currency = Formatters.defaultCurrency
@@ -987,6 +991,8 @@ struct InvoiceCreateSheet: View {
         _customerName = State(initialValue: prefill?.name ?? "")
         _customerEmail = State(initialValue: prefill?.email ?? "")
         _customerAddress = State(initialValue: prefill?.addressText ?? "")
+        _customerVatNumber = State(initialValue: prefill?.vatNumber ?? "")
+        _customerUuid = State(initialValue: prefill?.uuid)
     }
 
     /// For callers that don't pass the key on (it's still one per form, but the server never sees it).
@@ -1002,14 +1008,19 @@ struct InvoiceCreateSheet: View {
 
     /// The body `POST /api/v2/invoices` reads; blank fields are left out.
     static func body(name: String, email: String, address: String, issued: Date, terms: Int, currency: String,
-                     notes: String, poNumber: String, methodUuid: String, items: [LineItemBody]) -> InvoiceHeaderBody {
+                     notes: String, poNumber: String, methodUuid: String, items: [LineItemBody], vatNumber: String = "",
+                     customerUuid: String? = nil) -> InvoiceHeaderBody {
         let lines = items.filter { !$0.description.trimmingCharacters(in: .whitespaces).isEmpty }
         return InvoiceHeaderBody(customerName: name.trimmingCharacters(in: .whitespaces),
                                  customerEmail: email.trimmedOrNil, issueDate: CalendarDay(date: issued),
                                  dueDate: CalendarDay(date: dueDate(issued: issued, terms: terms)), currency: currency,
                                  notes: notes.trimmedOrNil, paymentTermsDays: terms, lineItems: lines.isEmpty ? nil : lines,
                                  poNumber: poNumber.trimmedOrNil, paymentMethodUuid: methodUuid.trimmedOrNil,
-                                 customerAddress: address.trimmingCharacters(in: .whitespacesAndNewlines).trimmedOrNil)
+                                 customerAddress: address.trimmingCharacters(in: .whitespacesAndNewlines).trimmedOrNil,
+                                 // With a picked customer a blank number is sent as "", so the server doesn't copy
+                                 // back one the person removed.
+                                 customerVatNumber: vatNumber.trimmedOrNil ?? (customerUuid == nil ? nil : ""),
+                                 customerUuid: customerUuid)
     }
 
     var body: some View {
@@ -1022,11 +1033,16 @@ struct InvoiceCreateSheet: View {
                         customerName = picked.name
                         customerEmail = picked.email
                         customerAddress = picked.addressText
+                        customerVatNumber = picked.vatNumber
+                        customerUuid = picked.uuid
                     }
                     TextField("Customer name (needed)", text: $customerName).textContentType(.organizationName)
                         .accessibilityIdentifier("invoiceCreate.customer")
                     TextField("Email", text: $customerEmail).keyboardType(.emailAddress).textInputAutocapitalization(.never)
                     TextField("Address", text: $customerAddress, axis: .vertical).lineLimit(2...4)
+                    TextField("Customer VAT number (optional)", text: $customerVatNumber)
+                        .textInputAutocapitalization(.characters).autocorrectionDisabled()
+                        .accessibilityIdentifier("invoiceCreate.vatNumber")
                 }
                 Section {
                     DatePicker("Issued", selection: $issueDate, displayedComponents: .date)
@@ -1110,7 +1126,7 @@ struct InvoiceCreateSheet: View {
         error = nil
         let body = Self.body(name: customerName, email: customerEmail, address: customerAddress, issued: issueDate,
                              terms: terms, currency: currency, notes: notes, poNumber: poNumber, methodUuid: methodUuid,
-                             items: items.map(\.body))
+                             items: items.map(\.body), vatNumber: customerVatNumber, customerUuid: customerUuid)
         Task {
             defer { saving = false }
             do {
@@ -1177,7 +1193,8 @@ enum InvoicePDFRenderer {
                         ("Due date", invoice.dueDate.flatMap { Formatters.day($0.date()) } ?? "—")]
             if let po = invoice.poNumber?.trimmedOrNil { meta.append(("Your PO number", po)) }
             page.parties(label: d.billToLabel, name: invoice.customerName?.trimmedOrNil ?? "Customer",
-                         lines: [invoice.customerEmail, invoice.customerAddress].compactMap { $0?.trimmedOrNil },
+                         lines: [invoice.customerEmail, invoice.customerAddress,
+                                 invoice.customerVatNumber?.trimmedOrNil.map { "VAT number: \($0)" }].compactMap { $0?.trimmedOrNil },
                          meta: meta, callout: ("Amount due", money(invoice.balanceDue)))
 
             let numW: CGFloat = d.shows("item_numbers") ? 26 : 0

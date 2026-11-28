@@ -362,6 +362,7 @@ struct CustomerDetailView: View {
     private func details(_ customer: Customer) -> some View {
         DetailSection("Details", systemImage: "list.bullet.rectangle") {
             DetailRow(label: "Date of birth", value: customer.dateOfBirth.flatMap { Formatters.day($0.date()) })
+            DetailRow(label: "VAT number", value: customer.vatNumber)
             DetailRow(label: "Tags", value: customer.tags)
             DetailRow(label: "Marketing", value: customer.acceptsMarketing ? "Opted in" : "Not opted in")
             DetailRow(label: "Opt-in level", value: customer.marketingOptInLevel.map(Formatters.humanize))
@@ -424,7 +425,8 @@ struct CustomerForm: View {
             email: customer?.email ?? "", firstName: customer?.firstName, lastName: customer?.lastName, phone: customer?.phone,
             notes: customer?.notes, tags: customer?.tags, acceptsMarketing: customer?.acceptsMarketing ?? false,
             verifiedEmail: customer?.verifiedEmail ?? false, taxExempt: customer?.taxExempt ?? false,
-            marketingOptInLevel: customer?.marketingOptInLevel ?? "single_opt_in", state: customer?.state ?? "enabled"))
+            marketingOptInLevel: customer?.marketingOptInLevel ?? "single_opt_in", state: customer?.state ?? "enabled",
+            vatNumber: customer?.vatNumber))
         _hasBirthday = State(initialValue: customer?.dateOfBirth != nil)
         _birthday = State(initialValue: customer?.dateOfBirth?.date() ?? Calendar.current.date(byAdding: .year, value: -30, to: Date()) ?? Date())
         let primary = customer?.primaryAddress
@@ -472,6 +474,15 @@ struct CustomerForm: View {
                     OptionalTextField("County or state", text: $address.province).textContentType(.addressState)
                     OptionalTextField("Postcode", text: $address.zip).textContentType(.postalCode)
                     OptionalTextField("Country", text: $address.country).textContentType(.countryName)
+                }
+                Section {
+                    OptionalTextField("VAT number, e.g. GB123456789", text: $body_.vatNumber)
+                        .textInputAutocapitalization(.characters).autocorrectionDisabled()
+                        .accessibilityIdentifier("customerForm.vatNumber")
+                } header: {
+                    Text("Business")
+                } footer: {
+                    Text("Printed on their invoices. Leave it blank if they aren’t VAT registered.")
                 }
                 Section("Preferences") {
                     OptionalTextField("Tags, e.g. vip, wholesale", text: $body_.tags)

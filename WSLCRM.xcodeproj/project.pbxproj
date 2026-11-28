@@ -423,6 +423,7 @@
 		A1747D1B7293D71C2DED1670 /* TimesheetModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B612B1896EDF8B7715B84985 /* TimesheetModels.swift */; };
 		A17EF02417A0D37117291FC9 /* MktCampShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 252261CFD2B12B663E40C138 /* MktCampShared.swift */; };
 		A19BA26486C5CA54CEA128AE /* WorkspaceAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BCFBBB4681E270253E2FFA5 /* WorkspaceAPI.swift */; };
+		A22A04BC5D7E6FB3A77985BD /* CustomerVatNumberTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 885F30D1E589A222408CA9F8 /* CustomerVatNumberTests.swift */; };
 		A25BAEE927A0A08AEFD0593E /* ShopHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDFF4BCDC24F3314D5662B9C /* ShopHomeView.swift */; };
 		A289723695E5DBB9DC25F58C /* templates_versions.json in Resources */ = {isa = PBXBuildFile; fileRef = 4155F3E86B9092587547F038 /* templates_versions.json */; };
 		A3699C9735804AC6A897ABCE /* PLDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6939674F4C136EA5C848CD3 /* PLDashboardView.swift */; };
@@ -1050,6 +1051,7 @@
 		87ED06B20EDA608E34918AA3 /* RichTextLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RichTextLinks.swift; sourceTree = "<group>"; };
 		87FB7B056A14718797F10881 /* FieldServiceHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldServiceHubView.swift; sourceTree = "<group>"; };
 		88194111B978F070ED4A1E08 /* shop_order_signature.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = shop_order_signature.json; sourceTree = "<group>"; };
+		885F30D1E589A222408CA9F8 /* CustomerVatNumberTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomerVatNumberTests.swift; sourceTree = "<group>"; };
 		887B837E0EE8238B7B720334 /* Poppins-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Poppins-Bold.ttf"; sourceTree = "<group>"; };
 		88D7212095AA35F4ED894794 /* SSOViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSOViews.swift; sourceTree = "<group>"; };
 		891C1572D9B11E74486D7928 /* FGasCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FGasCard.swift; sourceTree = "<group>"; };
@@ -1698,6 +1700,7 @@
 				951B32952E6609562E8CED2D /* CommandRouterTests.swift */,
 				1E07F58A4CEB2C15EFF44CB1 /* CoreDeepAuditTests.swift */,
 				B211F28142EC1E9114C5D7EC /* CRMModuleTests.swift */,
+				885F30D1E589A222408CA9F8 /* CustomerVatNumberTests.swift */,
 				4F83D52CBD654863A2F6AC8B /* DetailPageTests.swift */,
 				C7D08FF826102950AC2D052D /* DocumentDesignTests.swift */,
 				F076F94CA5BBD73055952056 /* EasyCRMTests.swift */,
@@ -3364,6 +3367,7 @@
 				6C7ACFC9A70C877CE60BB920 /* CommandPaletteTests.swift in Sources */,
 				3FB756B8553EB80F20026DC7 /* CommandRouterTests.swift in Sources */,
 				1D8B70F66D2F31D90F560489 /* CoreDeepAuditTests.swift in Sources */,
+				A22A04BC5D7E6FB3A77985BD /* CustomerVatNumberTests.swift in Sources */,
 				E181ABDB9E720071CD365B6E /* DetailPageTests.swift in Sources */,
 				2B091682AE840DD8132CCF31 /* DocumentDesignTests.swift in Sources */,
 				69BC90E80CAEAE78443149C0 /* EasyCRMTests.swift in Sources */,
